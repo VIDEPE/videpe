@@ -1,6 +1,8 @@
 ﻿import { useNavigate } from 'react-router-dom';
 import { Link } from 'react-router-dom';
 import { ThemeToggle } from '../components/ThemeToggle';
+import { CenteredLayout } from '../components/CenteredLayout';
+import { Footer } from '../components/Footer';
 
 // Icons & Logos
 import { Globe } from 'lucide-react';
@@ -28,22 +30,22 @@ export const LandingPage = () => {
   const navigate = useNavigate();
 
   return (
-    <div className="min-h-dvh">
+    <CenteredLayout>
       {/*Theme Toggle Button for switching themes */}
       <ThemeToggle />
 
-      <section className="flex flex-col items-center justify-center gap-8 flex-grow px-5 py-12">
+      {/*Landing Page main body */}
+      <section id="hero" className="flex flex-col items-center justify-center gap-8 px-5 py-10">
         <Logo className="w-48 app-logo" aria-label="VIDÉPÉ logo" />
         <button type="button" className="button" onClick={() => navigate('/analysis')}>
           Get Started
         </button>
       </section>
       <hr></hr>
-      <section id="documentation_section" className="grid grid-cols-1 md:grid-cols-2">
-        <div id="docs">
-          <Globe size={22} className="icon" />
+      <section id="documentation_section" className="grid grid-cols-1 md:grid-cols-2 mt-4">
+        <div id="docs" className="flex flex-col items-center">
           <h2>Documentation</h2>
-          <ul>
+          <ul className="list-none p-0 flex flex-col items-center gap-2 mt-4">
             <li>
               <a href={DOCS_URL}>Documentation</a>
             </li>
@@ -58,28 +60,36 @@ export const LandingPage = () => {
           </ul>
         </div>
 
-        <div id="social">
-          <GithubIcon size={22} className="icon" />
+        <div className="flex flex-col items-center">
           <h2>Connect with us</h2>
-          <ul>
+          <ul className="list-none p-0 flex flex-col items-center gap-2 mt-4">
             <li>
-              <a href={GITHUB_URL} target="_blank">
-                <GithubIcon size={18} aria-hidden="true" />
+              <a
+                href={GITHUB_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-2"
+              >
+                <GithubIcon size={18} style={{ fill: 'var(--c-primary)' }} />
                 GitHub
               </a>
             </li>
             <li>
-              <a href={UNIGE_URL} target="_blank" rel="noreferrer">
-                <Globe size={18} aria-hidden="true" />
+              <a
+                href={UNIGE_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-2"
+              >
+                <Globe size={18} style={{ stroke: 'var(--c-primary)' }} />
                 UNIGE
               </a>
             </li>
           </ul>
         </div>
       </section>
-
-      <div className="ticks" />
-      <div id="spacer" />
-    </div>
+      {/*Footer with copyright and scroll to top button */}
+      <Footer />
+    </CenteredLayout>
   );
 };

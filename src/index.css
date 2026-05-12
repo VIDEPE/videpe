@@ -1,28 +1,28 @@
-@import 'tailwindcss';
+﻿@import 'tailwindcss';
 
 /* Light mode defaults */
 :root {
-  --c-text: rgba(107, 99, 117, 1);
-  --c-text-h: rgba(8, 6, 13, 1);
-  --c-bg: rgba(255, 255, 255, 1);
-  --c-border: rgb(23, 72, 177);
-  --c-code-bg: rgba(244, 243, 236, 1);
-  --c-accent: rgba(71, 118, 219, 1);
-  --c-icon-toggle: rgba(29, 78, 216, 1);
-
-  --accent-bg: rgba(59, 79, 255, 0.1);
-  --accent-border: rgba(59, 62, 255, 0.5);
-  --shadow: rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+  --c-foreground: rgb(56, 55, 56); /* body text */
+  --c-heading: rgba(8, 6, 13, 1); /* headings, buttons */
+  --c-background: rgba(255, 255, 255, 1); /* page background */
+  --c-border: rgba(229, 228, 231, 1); /* borders, dividers */
+  --c-surface: rgba(244, 243, 236, 1); /* cards, panels, code blocks */
+  --c-primary: rgba(71, 118, 219, 1); /* brand / accent color */
+  --c-secondary: rgb(1, 52, 161); /* outlines */
+  --c-shadow:
+    rgba(0, 0, 0, 0.4) 0 6px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 8px -2px; /* box shadows */
 
   font: 18px/145% var(--font-sans);
   letter-spacing: 0.18px;
   color-scheme: light dark;
-  color: var(--color-text);
-  background: var(--color-bg);
+  color: var(--color-foreground);
+  background: var(--color-background);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+
+  --animate-fade-in: fade-in 0.7s ease-out forwards;
 
   @media (max-width: 1024px) {
     font-size: 16px;
@@ -31,28 +31,26 @@
 
 /* Dark mode — set by inline script in index.html on load, toggled by ThemeToggle.jsx */
 .dark {
-  --c-text: rgba(156, 163, 175, 1);
-  --c-text-h: rgba(243, 244, 246, 1);
-  --c-bg: rgba(22, 23, 29, 1);
-  --c-border: rgba(46, 48, 58, 1);
-  --c-code-bg: rgba(31, 32, 40, 1);
-  --c-accent: rgba(132, 204, 252, 1);
-  --c-icon-toggle: rgba(253, 224, 71, 1);
-
-  --accent-bg: rgba(132, 214, 252, 0.15);
-  --accent-border: rgba(132, 198, 252, 0.5);
-  --shadow: rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
+  --c-foreground: rgba(156, 163, 175, 1); /* body text */
+  --c-heading: rgba(243, 244, 246, 1); /* headings, buttons */
+  --c-background: rgba(22, 23, 29, 1); /* page background */
+  --c-border: rgba(46, 48, 58, 1); /* borders, dividers */
+  --c-surface: rgba(31, 32, 40, 1); /* cards, panels, code blocks */
+  --c-primary: rgba(132, 204, 252, 1); /* brand / accent color */
+  --c-secondary: rgb(22, 73, 184); /* outlines */
+  --c-shadow:
+    rgba(255, 255, 255, 0.4) 0 6px 15px -3px, rgba(255, 255, 255, 0.25) 0 4px 8px -2px; /* box shadows color x y blur spread*/
 }
 
-/* Tailwind utilities — maps --c-* to clean class names like color-text, color-bg, etc */
+/* Tailwind utilities — maps --c-* to clean class names like text-foreground, bg-background, text-heading, etc */
 @theme inline {
-  --color-text: var(--c-text);
-  --color-text-h: var(--c-text-h);
-  --color-bg: var(--c-bg);
+  --color-foreground: var(--c-foreground);
+  --color-heading: var(--c-heading);
+  --color-background: var(--c-background);
   --color-border: var(--c-border);
-  --color-code-bg: var(--c-code-bg);
-  --color-accent: var(--c-accent);
-
+  --color-surface: var(--c-surface);
+  --color-primary: var(--c-primary);
+  --color-secondary: var(--c-secondary);
   --font-sans: system-ui, 'Segoe UI', Roboto, sans-serif;
   --font-mono: ui-monospace, Consolas, monospace;
 }
@@ -61,22 +59,10 @@ body {
   margin: 0;
 }
 
-#root {
-  width: 1126px;
-  max-width: 100%;
-  margin: 0 auto;
-  text-align: center;
-  border-inline: 1px solid var(--color-border);
-  min-height: 100svh;
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
-}
-
 h1,
 h2 {
   font-weight: 500;
-  color: var(--color-text-h);
+  color: var(--color-heading);
 }
 
 h1 {
@@ -107,46 +93,11 @@ code {
   font-family: var(--font-mono);
   display: inline-flex;
   border-radius: 4px;
-  color: var(--color-text-h);
+  color: var(--color-heading);
   font-size: 15px;
   line-height: 135%;
   padding: 4px 8px;
-  background: var(--color-code-bg);
-}
-
-.button {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 24px;
-  border-radius: 9999px;
-  font-weight: 500;
-  color: var(--color-bg);
-  background: var(--color-accent);
-  border: none;
-  cursor: pointer;
-  transition:
-    background-color 0.2s ease,
-    box-shadow 0.2s ease;
-
-  &:hover {
-    background-color: var(--color-accent);
-    box-shadow: var(--shadow);
-  }
-}
-.button-colored {
-  .button {
-    color: var(--color-accent);
-    background-color: var(--color-bg);
-    transition:
-      background-color 0.2s ease,
-      box-shadow 0.2s ease;
-
-    &:hover {
-      background-color: var(--color-bg);
-      box-shadow: var(--shadow);
-    }
-  }
+  background: var(--color-surface);
 }
 
 .app-logo {
@@ -156,4 +107,69 @@ code {
 
 .dark .app-logo {
   filter: invert(1);
+}
+
+/* ============================================
+   Animation Styles
+   ============================================ */
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border-radius: 9999px;
+  font-weight: 500;
+  color: var(--color-background);
+  background: var(--color-primary);
+  border: none;
+  cursor: pointer;
+  transition:
+    background-color 0.2s ease,
+    box-shadow 0.2s ease;
+
+  &:hover {
+    box-shadow: var(--c-shadow);
+    outline: var(--c-secondary);
+  }
+}
+
+.button-colored {
+  .button {
+    color: var(--color-primary);
+    background-color: var(--color-background);
+    transition:
+      background-color 0.2s ease,
+      box-shadow 0.2s ease;
+
+    &:hover {
+      background-color: var(--color-background);
+      box-shadow: var(--c-shadow);
+    }
+  }
+}
+
+/* ============================================
+   Animation Styles
+   ============================================ */
+
+.animate-bounce-up {
+  animation: animate-bounce-up 1s infinite;
+}
+
+.animate-fade-in {
+  animation: var(--animate-fade-in);
+}
+
+@keyframes animate-bounce-up {
+  0%,
+  100% {
+    transform: translateY(25%);
+    animation-timing-function: cubic-bezier(0.8, 0, 1, 1);
+  }
+
+  50% {
+    transform: none;
+    animation-timing-function: cubic-bezier(0, 0, 0.2, 1);
+  }
 }
