@@ -1,8 +1,10 @@
+﻿import { CenteredLayout } from '../components/CenteredLayout';
+
 export const AboutPage = () => {
   return (
-    <document>
+    <CenteredLayout>
       <h1>About Page</h1>
       <p>Nothing here yet, stay tuned!</p>
-    </document>
+    </CenteredLayout>
   );
 };
