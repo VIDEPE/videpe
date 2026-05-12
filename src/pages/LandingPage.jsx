@@ -1,5 +1,8 @@
 ﻿import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
+import { ThemeToggle } from '../components/ThemeToggle';
 
+// Icons & Logos
 import { Globe } from 'lucide-react';
 const GithubIcon = ({ size = 24, ...props }) => (
   <svg
@@ -14,8 +17,8 @@ const GithubIcon = ({ size = 24, ...props }) => (
   </svg>
 );
 import Logo from '../assets/logo.svg?react';
-import { ThemeToggle } from '../components/ThemeToggle';
 
+// Links
 const GITHUB_URL = 'https://github.com/VIDEPE/videpe'; // Link to github page
 const UNIGE_URL =
   'https://www.unige.ch/medecine/neucli/groupes-de-recherche/serge-vulliemoz/open-science/videpe2';
@@ -30,13 +33,13 @@ export const LandingPage = () => {
       <ThemeToggle />
 
       <section className="flex flex-col items-center justify-center gap-8 flex-grow px-5 py-12">
-        <Logo className="w-48" aria-label="VIDÉPÉ logo" />
+        <Logo className="w-48 app-logo" aria-label="VIDÉPÉ logo" />
         <button type="button" className="button" onClick={() => navigate('/analysis')}>
           Get Started
         </button>
       </section>
-
-      <section id="documentation_section" className="grid grid-cols-2 sm:grid-cols-1">
+      <hr></hr>
+      <section id="documentation_section" className="grid grid-cols-1 md:grid-cols-2">
         <div id="docs">
           <Globe size={22} className="icon" />
           <h2>Documentation</h2>
@@ -45,9 +48,12 @@ export const LandingPage = () => {
               <a href={DOCS_URL}>Documentation</a>
             </li>
             <li>
-              <a href={`${GITHUB_URL}#readme`} target="_blank" rel="noreferrer">
+              <a href={`${GITHUB_URL}#readme`} target="_blank">
                 README
               </a>
+            </li>
+            <li>
+              <Link to="/about">About</Link>
             </li>
           </ul>
         </div>
@@ -57,7 +63,7 @@ export const LandingPage = () => {
           <h2>Connect with us</h2>
           <ul>
             <li>
-              <a href={GITHUB_URL} target="_blank" rel="noreferrer">
+              <a href={GITHUB_URL} target="_blank">
                 <GithubIcon size={18} aria-hidden="true" />
                 GitHub
               </a>
