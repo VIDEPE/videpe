@@ -1,0 +1,153 @@
+@import "tailwindcss";
+
+/* Color picker works here — light mode defaults */
+:root {
+  --c-text:     rgba(107, 99, 117, 1);
+  --c-text-h:   rgba(8, 6, 13, 1);
+  --c-bg:       rgba(255, 255, 255, 1);
+  --c-border:   rgba(229, 228, 231, 1);
+  --c-code-bg:  rgba(244, 243, 236, 1);
+  --c-accent:   rgba(71, 118, 219, 1);
+
+  --accent-bg:     rgba(59, 79, 255, 0.1);
+  --accent-border: rgba(59, 62, 255, 0.5);
+  --shadow:        rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+
+  font: 18px/145% var(--font-sans);
+  letter-spacing: 0.18px;
+  color-scheme: light dark;
+  color: var(--color-text);
+  background: var(--color-bg);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  @media (max-width: 1024px) {
+    font-size: 16px;
+  }
+}
+
+/* Dark mode — OS preference or manual .dark class on <html> */
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    --c-text:        rgba(156, 163, 175, 1);
+    --c-text-h:      rgba(243, 244, 246, 1);
+    --c-bg:          rgba(22, 23, 29, 1);
+    --c-border:      rgba(46, 48, 58, 1);
+    --c-code-bg:     rgba(31, 32, 40, 1);
+    --c-accent:      rgba(132, 204, 252, 1);
+    --accent-bg:     rgba(132, 214, 252, 0.15);
+    --accent-border: rgba(132, 198, 252, 0.5);
+    --shadow:        rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
+  }
+}
+
+.dark {
+  --c-text:        rgba(156, 163, 175, 1);
+  --c-text-h:      rgba(243, 244, 246, 1);
+  --c-bg:          rgba(22, 23, 29, 1);
+  --c-border:      rgba(46, 48, 58, 1);
+  --c-code-bg:     rgba(31, 32, 40, 1);
+  --c-accent:      rgba(132, 204, 252, 1);
+  --accent-bg:     rgba(132, 214, 252, 0.15);
+  --accent-border: rgba(132, 198, 252, 0.5);
+  --shadow:        rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
+}
+
+/* Tailwind utilities — maps --c-* to clean class names like text-accent, bg-bg */
+@theme inline {
+  --color-text:     var(--c-text);
+  --color-text-h:   var(--c-text-h);
+  --color-bg:       var(--c-bg);
+  --color-border:   var(--c-border);
+  --color-code-bg:  var(--c-code-bg);
+  --color-accent:   var(--c-accent);
+
+  --font-sans: system-ui, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: ui-monospace, Consolas, monospace;
+}
+
+body {
+  margin: 0;
+}
+
+#root {
+  width: 1126px;
+  max-width: 100%;
+  margin: 0 auto;
+  text-align: center;
+  border-inline: 1px solid var(--color-border);
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+h1,
+h2 {
+  font-weight: 500;
+  color: var(--color-text-h);
+}
+
+h1 {
+  font-size: 56px;
+  letter-spacing: -1.68px;
+  margin: 32px 0;
+  @media (max-width: 1024px) {
+    font-size: 36px;
+    margin: 20px 0;
+  }
+}
+
+h2 {
+  font-size: 24px;
+  line-height: 118%;
+  letter-spacing: -0.24px;
+  margin: 0 0 8px;
+  @media (max-width: 1024px) {
+    font-size: 20px;
+  }
+}
+
+p {
+  margin: 0;
+}
+
+code {
+  font-family: var(--font-mono);
+  display: inline-flex;
+  border-radius: 4px;
+  color: var(--color-text-h);
+  font-size: 15px;
+  line-height: 135%;
+  padding: 4px 8px;
+  background: var(--color-code-bg);
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border-radius: 9999px;
+  font-weight: 500;
+  color: var(--color-bg);
+  background: var(--color-accent);
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+
+  &:hover {
+    background-color: var(--color-accent);
+    box-shadow: var(--shadow);
+  }
+}
+
+.button-colored {
+  .button {
+    color: var(--color-accent);
+    background-color: var(--color-bg);
+  }
+}
+
