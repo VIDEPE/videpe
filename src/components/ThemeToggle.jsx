@@ -34,9 +34,11 @@ export const ThemeToggle = () => {
       className="fixed top-5 right-5 z-50 p-2 rounded-full"
       aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
     >
-      <span className={isDark ? 'text-yellow-300' : 'text-blue-900'}>
-        {isDark ? <Moon className="h-7 w-7" /> : <Sun className="h-7 w-7" />}
-      </span>
+      {isDark ? (
+        <Moon className="h-7 w-7" style={{ stroke: 'rgba(253, 224, 71, 1)' }} />
+      ) : (
+        <Sun className="h-7 w-7" style={{ stroke: 'rgba(29, 78, 216, 1)' }} />
+      )}
     </button>
   );
 };
