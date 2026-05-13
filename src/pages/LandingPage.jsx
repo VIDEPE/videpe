@@ -5,7 +5,7 @@ import { CenteredLayout } from '../components/CenteredLayout';
 import { Footer } from '../components/Footer';
 
 // Icons & Logos
-import { Globe } from 'lucide-react';
+import { Globe, BookMarked, BookOpenText, Info } from 'lucide-react';
 const GithubIcon = ({ size = 24, ...props }) => (
   <svg
     width={size}
@@ -20,7 +20,7 @@ const GithubIcon = ({ size = 24, ...props }) => (
 );
 import Logo from '../assets/logo.svg?react';
 
-// Links
+// Links"
 const GITHUB_URL = 'https://github.com/VIDEPE/videpe'; // Link to github page
 const UNIGE_URL =
   'https://www.unige.ch/medecine/neucli/groupes-de-recherche/serge-vulliemoz/open-science/videpe2';
@@ -28,7 +28,7 @@ const DOCS_URL = '#'; // TODO: add when available
 
 export const LandingPage = () => {
   const navigate = useNavigate();
-
+  const iconSize = 24;
   return (
     <CenteredLayout>
       {/*Theme Toggle Button for switching themes */}
@@ -45,24 +45,31 @@ export const LandingPage = () => {
       <section id="documentation_section" className="grid grid-cols-1 md:grid-cols-2 mt-4">
         <div id="docs" className="flex flex-col items-center">
           <h2>Documentation</h2>
-          <ul className="list-none p-0 flex flex-col items-center gap-2 mt-4">
+          <ul className="list-none p-0 flex flex-col gap-2 mt-4 w-fit mx-auto">
             <li>
-              <a href={DOCS_URL}>Documentation</a>
+              <a href={DOCS_URL} className="flex items-center gap-2">
+                <BookMarked size={iconSize} style={{ stroke: 'var(--c-primary)' }} />
+                Documentation (coming soonish)
+              </a>
             </li>
             <li>
-              <a href={`${GITHUB_URL}#readme`} target="_blank">
+              <a href={`${GITHUB_URL}#readme`} target="_blank" className="flex items-center gap-2">
+                <BookOpenText size={iconSize} style={{ stroke: 'var(--c-primary)' }} />
                 README
               </a>
             </li>
             <li>
-              <Link to="/about">About</Link>
+              <a className="flex items-center gap-2">
+                <Info size={iconSize} style={{ stroke: 'var(--c-primary)' }} />
+                <Link to="/about">About</Link>
+              </a>
             </li>
           </ul>
         </div>
 
-        <div className="flex flex-col items-center">
+        <div id="connect" className="flex flex-col items-center">
           <h2>Connect with us</h2>
-          <ul className="list-none p-0 flex flex-col items-center gap-2 mt-4">
+          <ul className="list-none p-0 flex flex-col gap-2 mt-4 w-fit mx-auto">
             <li>
               <a
                 href={GITHUB_URL}
@@ -70,7 +77,14 @@ export const LandingPage = () => {
                 rel="noreferrer"
                 className="flex items-center gap-2"
               >
-                <GithubIcon size={18} style={{ fill: 'var(--c-primary)' }} />
+                <GithubIcon
+                  size={iconSize}
+                  style={{
+                    fill: 'var(--c-primary)',
+                    strokeWidth: 1,
+                    stroke: 'var(--c-background)',
+                  }}
+                />
                 GitHub
               </a>
             </li>
@@ -81,7 +95,7 @@ export const LandingPage = () => {
                 rel="noreferrer"
                 className="flex items-center gap-2"
               >
-                <Globe size={18} style={{ stroke: 'var(--c-primary)' }} />
+                <Globe size={iconSize} style={{ stroke: 'var(--c-primary)' }} />
                 UNIGE
               </a>
             </li>

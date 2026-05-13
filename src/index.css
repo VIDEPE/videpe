@@ -2,13 +2,13 @@
 
 /* Light mode defaults */
 :root {
-  --c-foreground: rgb(56, 55, 56); /* body text */
+  --c-foreground: rgb(56, 55, 56, 1); /* body text */
   --c-heading: rgba(8, 6, 13, 1); /* headings, buttons */
   --c-background: rgba(255, 255, 255, 1); /* page background */
-  --c-border: rgba(229, 228, 231, 1); /* borders, dividers */
-  --c-surface: rgba(244, 243, 236, 1); /* cards, panels, code blocks */
+  --c-border: rgb(226, 226, 226, 1); /* borders, dividers */
+  --c-surface: rgb(224, 224, 224, 1); /* cards, panels, code blocks */
   --c-primary: rgba(71, 118, 219, 1); /* brand / accent color */
-  --c-secondary: rgb(1, 52, 161); /* outlines */
+  --c-secondary: rgb(1, 52, 161, 1); /* outlines */
   --c-shadow:
     rgba(0, 0, 0, 0.4) 0 6px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 8px -2px; /* box shadows */
 
