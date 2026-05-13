@@ -1,0 +1,48 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+METHOD:PUBLISH
+CALSCALE:GREGORIAN
+PRODID:-//WordPress - MECv7.32.0//EN
+X-ORIGINAL-URL:https://cibm.ch/
+X-WR-CALNAME:CIBM  |  Center for Biomedical Imaging
+X-WR-CALDESC:
+X-WR-TIMEZONE:Europe/Zurich
+BEGIN:VTIMEZONE
+TZID:Europe/Zurich
+X-LIC-LOCATION:Europe/Zurich
+BEGIN:DAYLIGHT
+TZOFFSETFROM:+0100
+TZOFFSETTO:+0200
+TZNAME:CEST
+DTSTART:20260329T030000
+RRULE:FREQ=YEARLY;BYMONTH=03;BYDAY=-1SU
+END:DAYLIGHT
+BEGIN:STANDARD
+TZOFFSETFROM:+0200
+TZOFFSETTO:+0100
+TZNAME:CET
+DTSTART:20261025T020000
+RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=4SU
+END:STANDARD
+END:VTIMEZONE
+REFRESH-INTERVAL;VALUE=DURATION:PT1H
+X-PUBLISHED-TTL:PT1H
+X-MS-OLK-FORCEINSPECTOROPEN:TRUE
+BEGIN:VEVENT
+CLASS:PUBLIC
+UID:MEC-3654931f0cd92dc81d286bea428667a7@cibm.ch
+DTSTART;TZID=Europe/Zurich:20260608T000000
+DTEND;TZID=Europe/Zurich:20260609T000000
+DTSTAMP:20260319T144838Z
+CREATED:20260319
+LAST-MODIFIED:20260429
+PRIORITY:5
+SEQUENCE:0
+TRANSP:OPAQUE
+SUMMARY:EEG Research Day 2026
+DESCRIPTION:															\nWe are delighted to announce the EEG Research Day 2026 that will be held on June 8, 2026 at the Charlotte Olivier auditorium, CHUV Lausanne. \nThe one-day event brings together the EEG community across the CIBM founding partner institutions CHUV, UNIL, EPFL, UNIGE and HUG. The aim is to provide new opportunities for collaborations and improve the visibility of the EEG research in the Lemanic region.\nHave a look at the EEG Research Day 2025 ( https://cibm.ch/inaugural-eeg-research-day-sparks-collaboration-across-cibm-institutions/ ).\n					\n									POSTER SUBMISSION HERE\n					\nREGISTER NOW!\n				\n PROGRAMME\n8h45   Registration \n9h15   Welcome address\n\n9h20   Session 1\n\nEduardo Martin Moraud (CHUV – EPFL)\nMichael Herzog (EPFL)\nAndria Pelentritou CHUV\nChristian Mikutta (UNIGE)\n\n\n10h50 Coffee Break\n\n11h20   Session 2\n\nAngela Ingrid Renton (EPFL)\nGuillaume Legendre (UNIGE)\nLaurent Sheybani (HUG)\nPierre Lavenex (UNIL)\n\n\n12h40 Lunch break\n\n14h00   Session 3 \n\nAndrea Rossetti (CHUV)\nJacinthe Cataldi (CHUV)\nFiorenzo Artoni (UNIGE)\nCharles Quairiaux (UNIGE)\n\n\n15h10 Coffee Break\n\n15h40   Session 4\n\nNicolas Roehri (UNIGE)\nLucie Brechet (UNIGE)\nDamien Bénis et Vanessa Fleury (HUG)\nQiaoyue Ren (EPFL)\n\n\n17h30   Closing\n\nREGISTER NOW!\n\n
+URL:https://cibm.ch/event/eeg-research-day-2026/
+CATEGORIES:Public event,Seminars
+LOCATION:Charlotte Olivier auditorium, CHUV Lausanne
+END:VEVENT
+END:VCALENDAR
