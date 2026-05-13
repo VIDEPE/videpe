@@ -18,7 +18,7 @@ export const Footer = () => {
       )}
     >
       <p className="text-sm text-foreground">
-        &copy; {new Date().getFullYear()} Jeroen Buil. All rights reserved.
+        &copy; {new Date().getFullYear()} Clinical NeuroScience Department HUG. All rights reserved.
       </p>
 
       <a
