@@ -1,0 +1,175 @@
+﻿@import 'tailwindcss';
+
+/* Light mode defaults */
+:root {
+  --c-foreground: rgb(56, 55, 56, 1); /* body text */
+  --c-heading: rgba(8, 6, 13, 1); /* headings, buttons */
+  --c-background: rgba(255, 255, 255, 1); /* page background */
+  --c-border: rgb(226, 226, 226, 1); /* borders, dividers */
+  --c-surface: rgb(224, 224, 224, 1); /* cards, panels, code blocks */
+  --c-primary: rgba(71, 118, 219, 1); /* brand / accent color */
+  --c-secondary: rgb(1, 52, 161, 1); /* outlines */
+  --c-shadow:
+    rgba(0, 0, 0, 0.4) 0 6px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 8px -2px; /* box shadows */
+
+  font: 18px/145% var(--font-sans);
+  letter-spacing: 0.18px;
+  color-scheme: light dark;
+  color: var(--color-foreground);
+  background: var(--color-background);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  --animate-fade-in: fade-in 0.7s ease-out forwards;
+
+  @media (max-width: 1024px) {
+    font-size: 16px;
+  }
+}
+
+/* Dark mode — set by inline script in index.html on load, toggled by ThemeToggle.jsx */
+.dark {
+  --c-foreground: rgba(156, 163, 175, 1); /* body text */
+  --c-heading: rgba(243, 244, 246, 1); /* headings, buttons */
+  --c-background: rgba(22, 23, 29, 1); /* page background */
+  --c-border: rgba(46, 48, 58, 1); /* borders, dividers */
+  --c-surface: rgba(31, 32, 40, 1); /* cards, panels, code blocks */
+  --c-primary: rgba(132, 204, 252, 1); /* brand / accent color */
+  --c-secondary: rgb(22, 73, 184); /* outlines */
+  --c-shadow:
+    rgba(255, 255, 255, 0.4) 0 6px 15px -3px, rgba(255, 255, 255, 0.25) 0 4px 8px -2px; /* box shadows color x y blur spread*/
+}
+
+/* Tailwind utilities — maps --c-* to clean class names like text-foreground, bg-background, text-heading, etc */
+@theme inline {
+  --color-foreground: var(--c-foreground);
+  --color-heading: var(--c-heading);
+  --color-background: var(--c-background);
+  --color-border: var(--c-border);
+  --color-surface: var(--c-surface);
+  --color-primary: var(--c-primary);
+  --color-secondary: var(--c-secondary);
+  --font-sans: system-ui, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: ui-monospace, Consolas, monospace;
+}
+
+body {
+  margin: 0;
+}
+
+h1,
+h2 {
+  font-weight: 500;
+  color: var(--color-heading);
+}
+
+h1 {
+  font-size: 56px;
+  letter-spacing: -1.68px;
+  margin: 32px 0;
+  @media (max-width: 1024px) {
+    font-size: 36px;
+    margin: 20px 0;
+  }
+}
+
+h2 {
+  font-size: 24px;
+  line-height: 118%;
+  letter-spacing: -0.24px;
+  margin: 0 0 8px;
+  @media (max-width: 1024px) {
+    font-size: 20px;
+  }
+}
+
+p {
+  margin: 0;
+}
+
+code {
+  font-family: var(--font-mono);
+  display: inline-flex;
+  border-radius: 4px;
+  color: var(--color-heading);
+  font-size: 15px;
+  line-height: 135%;
+  padding: 4px 8px;
+  background: var(--color-surface);
+}
+
+.app-logo {
+  filter: invert(0);
+  transition: filter 0.2s ease;
+}
+
+.dark .app-logo {
+  filter: invert(1);
+}
+
+/* ============================================
+   Animation Styles
+   ============================================ */
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border-radius: 9999px;
+  font-weight: 500;
+  color: var(--color-background);
+  background: var(--color-primary);
+  border: none;
+  cursor: pointer;
+  transition:
+    background-color 0.2s ease,
+    box-shadow 0.2s ease;
+
+  &:hover {
+    box-shadow: var(--c-shadow);
+    outline: var(--c-secondary);
+  }
+}
+
+.button-colored {
+  .button {
+    color: var(--color-primary);
+    background-color: var(--color-background);
+    transition:
+      background-color 0.2s ease,
+      box-shadow 0.2s ease;
+
+    &:hover {
+      background-color: var(--color-background);
+      box-shadow: var(--c-shadow);
+    }
+  }
+}
+
+/* ============================================
+   Animation Styles
+   ============================================ */
+
+.animate-bounce-up {
+  animation: animate-bounce-up 1s infinite;
+}
+
+.animate-fade-in {
+  animation: var(--animate-fade-in);
+}
+
+@keyframes animate-bounce-up {
+  0%,
+  100% {
+    transform: translateY(25%);
+    animation-timing-function: cubic-bezier(0.8, 0, 1, 1);
+  }
+
+  50% {
+    transform: none;
+    animation-timing-function: cubic-bezier(0, 0, 0.2, 1);
+  }
+}
