@@ -1,38 +1,20 @@
 ﻿import { useRef, useEffect, useState } from 'react';
 import { Niivue, SHOW_RENDER } from '@niivue/niivue';
-import { cn } from '@/lib/utils';
-
-const getInitialVisibility = (volumes) => {
-  const visible = volumes.map(() => true);
-  visible[1] = false; // PET starts hidden — MRI (0) and PET (1) are mutually exclusive
-  return visible;
-};
+import { getInitialVisibility, applyToggle } from './NiiViewer.utils';
 
 export const NiiViewer = ({ volumes = [] }) => {
+  // visible is an array of booleans indicating whether each volume is currently visible
   const [visible, setVisible] = useState(() => getInitialVisibility(volumes));
 
   const toggleVolume = (index) => {
-    // Toggles visibility of the volume at the given index, and if it's MRI or PET, also toggles the other one off
-
-    // Guard clause — if NiiVue hasn't finished loading yet, nvRef.current is null. Calling .setOpacity() on null would crash, so we exit early.
-    if (!nvRef.current) return;
-
-    // Create a copy of the visible array using the spread operator.
-    // In React you never mutate state directly — you create a new array, modify that, then pass it to setVisible.
-    //  If you did visible[index] = !visible[index] directly, React wouldn't detect the change and the UI wouldn't update.
-    const newVisible = [...visible];
-    //Flip visibility
-    newVisible[index] = !newVisible[index];
-    nvRef.current.setOpacity(index, newVisible[index] ? 1 : 0);
-
-    // MRI (0) and PET (1) are mutually exclusive — turning one on turns the other off
-    const linked_index = index === 0 ? 1 : index === 1 ? 0 : null;
-    if (linked_index !== null) {
-      newVisible[linked_index] = false;
-      nvRef.current.setOpacity(linked_index, 0);
+    const next = applyToggle(volumes, visible, index);
+    setVisible(next);
+    if (nvRef.current) {
+      // Only update opacity for volumes whose visibility changed
+      next.forEach((isVisible, i) => {
+        if (isVisible !== visible[i]) nvRef.current.setOpacity(i, isVisible ? 1 : 0);
+      });
     }
-
-    setVisible(newVisible);
   };
 
   const canvas = useRef();
@@ -61,8 +43,8 @@ export const NiiViewer = ({ volumes = [] }) => {
         });
         nvRef.current = nv;
         setLoading(false);
-      } catch (e) {
-        setError(`Failed to load image: ${e.message}`);
+      } catch (error) {
+        setError(`Failed to load image: ${error.message}`);
         setLoading(false);
       }
     }
@@ -83,9 +65,9 @@ export const NiiViewer = ({ volumes = [] }) => {
             type="button"
             onClick={() => toggleVolume(i)}
             className={'thin-button' + (visible[i] ? '' : ' thin-button-toggled')}
-            aria-label={`Toggle ${volume.label} visibility`}
+            aria-label={`Toggle ${volume.type} visibility`}
           >
-            {volume.label ?? `Volume ${i + 1}`}
+            {volume.type ?? `Volume ${i + 1}`}
           </button>
         ))}
       </div>

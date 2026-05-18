@@ -2,6 +2,7 @@
 import { ThemeToggle } from '../components/ThemeToggle';
 import { EegViewer } from '../components/EegViewer';
 import { NiiViewer } from '../components/NiiViewer';
+import { type } from '@testing-library/user-event/dist/cjs/utility/type.js';
 
 // Sample data — replace with real EEG data
 const N = 1000;
@@ -23,18 +24,18 @@ const channelNames = ['ch1', 'ch2', 'ch3', 'ch4'];
 const mri = {
   url: 'dataset1/IRM/patT1.nii',
   colormap: 'gray',
-  label: 'MRI',
+  type: 'MRI',
 }; // needs to be located in /public => served as absolute path by Vite
 const pet = {
   url: 'dataset1/MN/pat_PET_aligned.nii',
   colormap: 'viridis',
-  label: 'PET',
+  type: 'PET',
 };
 const spect = {
   url: 'dataset1/MN/pat_siscom_17-13.nii',
   urlImgType: 'nii',
   colormap: 'hot',
-  label: 'SPECT',
+  type: 'SPECT',
 };
 
 const niiVolumeList = [mri, pet, spect];
