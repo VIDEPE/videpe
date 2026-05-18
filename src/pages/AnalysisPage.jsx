@@ -18,6 +18,9 @@ const sampleData = [
 
 const channelNames = ['ch1', 'ch2', 'ch3', 'ch4'];
 
+// Sample NIfTI image URL (replace with actual path to your .nii.gz file)
+const sampleNiiPath = 'dataset1/IRM/patT1.nii'; // needs to be located in /public => served as absolute path by Vite
+
 export const AnalysisPage = () => {
   return (
     <FullWidthLayout>
@@ -31,8 +34,7 @@ export const AnalysisPage = () => {
         </div>
         <div className="text-center">
           <h2>MRI + Spect Analysis</h2>
-          <p>Placeholder for NiiVue visualizations</p>
-          <
+          <NiiViewer imageUrl={sampleNiiPath} />
         </div>
       </div>
     </FullWidthLayout>
