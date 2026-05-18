@@ -149,6 +149,33 @@ code {
   }
 }
 
+.thin-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 10px;
+  border-radius: 9999px;
+  font-weight: bold;
+  font-size: 12px;
+  color: var(--color-background);
+  background: var(--color-primary);
+  border: none;
+  cursor: pointer;
+  transition:
+    background-color 0.2s ease,
+    box-shadow 0.2s ease;
+
+  &:hover {
+    box-shadow: var(--c-shadow);
+    outline: var(--c-secondary);
+  }
+}
+
+.thin-button-toggled {
+  background: var(--color-background);
+  color: var(--color-primary);
+  border: 2px solid var(--color-primary);
+}
 /* ============================================
    Animation Styles
    ============================================ */
