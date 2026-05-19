@@ -43,7 +43,7 @@ export const PatientView = () => {
   return (
     <FullWidthLayout>
       {/* Top bar: load actions on the left, theme toggle on the right */}
-      <div className="shrink-0 flex items-center justify-between px-4 py-2 border-b border-border mt-8">
+      <div className="shrink-0 relative flex items-center justify-between px-4 py-2 border-b border-border mt-8">
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -56,6 +56,9 @@ export const PatientView = () => {
           {/* Future: "Load EEG…" and "Load MRI…" file-picker buttons go here */}
           {error && <span className="text-sm text-red-500">{error}</span>}
         </div>
+        <h1 className="absolute left-1/2 -translate-x-1/2 pb-8 text-lg font-semibold pointer-events-none">
+          Patient Viewer
+        </h1>
         <ThemeToggle />
       </div>
 
