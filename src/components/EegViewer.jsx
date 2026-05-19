@@ -86,7 +86,7 @@ export const EegViewer = ({ data, channelNames }) => {
   };
 
   return (
-    // h-full fills the flex column in AnalysisPage; flex-col stacks the plot row above the controls
+    // h-full fills the flex column in PatientView; flex-col stacks the plot row above the controls
     <div className="w-full h-full flex flex-col">
       {/* Plot row: sidebar + channel plots side by side; flex-1 so controls sit below */}
       <div className="flex-1 min-h-0 flex flex-row">

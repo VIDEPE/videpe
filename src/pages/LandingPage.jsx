@@ -40,7 +40,7 @@ export const LandingPage = () => {
         <button
           type="button"
           className="button w-40 flex justify-center text"
-          onClick={() => navigate('/analysis')}
+          onClick={() => navigate('/patient-view')}
         >
           Get Started
         </button>

@@ -3,7 +3,7 @@ import { ThemeProvider } from './components/ThemeContext';
 import { LandingPage } from './pages/LandingPage';
 import { AboutPage } from './pages/AboutPage';
 import { NotFoundPage } from './pages/NotFoundPage';
-import { AnalysisPage } from './pages/AnalysisPage';
+import { PatientView } from './pages/PatientView';
 
 function App() {
   return (
@@ -11,7 +11,7 @@ function App() {
       <HashRouter>
         <Routes>
           <Route path="/" element={<LandingPage />} />
-          <Route path="/analysis" element={<AnalysisPage />} />
+          <Route path="/patient-view" element={<PatientView />} />
           <Route path="/about" element={<AboutPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>

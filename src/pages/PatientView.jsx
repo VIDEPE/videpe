@@ -16,7 +16,7 @@ const DEMO_VOLUMES = [
   { url: 'dataset1/MN/pat_siscom_17-13.nii',    colormap: 'hot',     type: 'SPECT', urlImgType: 'nii' },
 ];
 
-export const AnalysisPage = () => {
+export const PatientView = () => {
   const [eeg, setEeg] = useState(null);           // { data, channelNames }
   const [volumes, setVolumes] = useState([]);
   const [loading, setLoading] = useState(false);
