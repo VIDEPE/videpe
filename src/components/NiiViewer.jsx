@@ -29,12 +29,11 @@ export const NiiViewer = ({ volumes = [] }) => {
       try {
         const nv = new Niivue({
           isOrientCube: true,
-          dragAndDropEnabled: true,
-          clipToVolumeBox: true,
-          clipPlaneEnabled: false,
+          dragAndDropEnabled: false,
+          show3Dcrosshair: true,
         });
         nv.setSliceType(nv.sliceTypeMultiplanar); // show all 3 planes + 3D render
-        nv.opts.multiplanarShowRender = SHOW_RENDER.ALWAYS;
+        nv.opts.multiplanarShowRender = SHOW_RENDER.ALWAYS; // force the 3D render to show
         nv.attachToCanvas(canvas.current);
         await nv.loadVolumes(volumes);
         // Set initial visibility based on getInitialVisibility
