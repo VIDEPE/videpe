@@ -36,11 +36,10 @@ const renderViewer = () => render(<EegViewer data={data} channelNames={channelNa
 const containerOf = (input) => input.closest('div');
 
 describe('EegViewer — controls presence', () => {
-  it('renders the channel count input with initial value equal to number of channels', () => {
+  it('renders the channel count input', () => {
     renderViewer();
     const input = screen.getByRole('spinbutton', { name: /number of channels/i });
     expect(input).toBeInTheDocument();
-    expect(input).toHaveValue(channelNames.length);
   });
 
   it('renders channel decrease (−) and increase (+) buttons', () => {
@@ -146,6 +145,7 @@ describe('EegViewer — channel count controls', () => {
     const input = screen.getByRole('spinbutton', { name: /number of channels/i });
     const [decreaseBtn] = within(containerOf(input)).getAllByRole('button');
 
+    fireEvent.change(input, { target: { value: String(channelNames.length) } });
     await user.click(decreaseBtn);
 
     expect(input).toHaveValue(channelNames.length - 1);

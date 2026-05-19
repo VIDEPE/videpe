@@ -18,7 +18,6 @@ const buildChannelOptions = ({
 }) => {
   const axisColor = isDarkMode ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.8)';
   const gridColor = isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
-  // Spread hues evenly across channels so each has a distinct colour
   const stroke = `hsl(${(channelIndex * 360) / totalChannels}, 70%, 55%)`;
 
   return {
@@ -49,7 +48,7 @@ export const EegViewer = ({ data, channelNames }) => {
   const containerRef = useRef(null); // channel plot panel — measures both plot width and available height
   const [plotWidth, setPlotWidth] = useState(0); // passed to uPlot options to fill the space
   const [channelAreaHeight, setChannelAreaHeight] = useState(0); // used to compute per-channel plot height
-  const [visibleChannelCount, setVisibleChannelCount] = useState(() => channelNames.length); // how many channels fit in view at once
+  const [visibleChannelCount, setVisibleChannelCount] = useState(30); // how many channels fit in view at once
   const [windowSize, setWindowSize] = useState(20); // seconds visible in the x-range
   const [startTime, setStartTime] = useState(0); // start of the visible x-range
   const [shiftTimeStepSize, setShiftTimeStepSize] = useState(1); // start of the visible x-range
