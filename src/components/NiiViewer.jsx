@@ -34,8 +34,10 @@ export const NiiViewer = ({ volumes = [] }) => {
         });
         nv.setSliceType(nv.sliceTypeMultiplanar); // show all 3 planes + 3D render
         nv.opts.multiplanarShowRender = SHOW_RENDER.ALWAYS; // force the 3D render to show
+
         nv.attachToCanvas(canvas.current);
         await nv.loadVolumes(volumes);
+
         // Set initial visibility based on getInitialVisibility
         getInitialVisibility(volumes).forEach((visibility, i) => {
           if (!visibility) nv.setOpacity(i, 0);

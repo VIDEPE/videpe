@@ -1,70 +1,40 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { ThemeToggle } from '@/components/ThemeToggle';
 
-const matchMediaMock = (matches) =>
-  vi.fn().mockImplementation((query) => ({
-    matches,
-    media: query,
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-  }));
+// Mock the useTheme hook to control the theme state in tests
+// This says: whenever anything in this test file imports from @/components/ThemeContext,
+// give them { useTheme: vi.fn() } instead of the real module
+vi.mock('@/components/ThemeContext', () => ({
+  useTheme: vi.fn(),
+}));
 
-beforeEach(() => {
-  localStorage.clear();
-  document.documentElement.classList.remove('dark', 'light');
-});
+// Only now that we've mocked useTheme can we import it to set its return value in our tests
+import { useTheme } from '@/components/ThemeContext';
 
-describe('ThemeToggle — initial state', () => {
-  it('defaults to dark when OS prefers dark and no localStorage', () => {
-    window.matchMedia = matchMediaMock(true);
+describe('ThemeToggle', () => {
+  it('shows switch-to-light label in dark mode', () => {
+    // mockReturnValue says "when this fake function is called, return this object with isDarkMode: true"
+    useTheme.mockReturnValue({ isDarkMode: true });
     render(<ThemeToggle />);
-    expect(document.documentElement.classList.contains('dark')).toBe(true);
+    // Check that the button has the correct label for dark mode
+    expect(screen.getByRole('button', { name: /switch to light mode/i })).toBeInTheDocument();
   });
 
-  it('defaults to light when OS prefers light and no localStorage', () => {
-    window.matchMedia = matchMediaMock(false);
+  it('shows switch-to-dark label in light mode', () => {
+    // Set the mock to return light mode
+    useTheme.mockReturnValue({ isDarkMode: false });
     render(<ThemeToggle />);
-    expect(document.documentElement.classList.contains('light')).toBe(true);
+    // Check that the button has the correct label for light mode
+    expect(screen.getByRole('button', { name: /switch to dark mode/i })).toBeInTheDocument();
   });
 
-  it('respects saved dark preference in localStorage', () => {
-    localStorage.setItem('theme', 'dark');
-    window.matchMedia = matchMediaMock(false);
+  it('calls toggleTheme when clicked', () => {
+    // Create a mock function for toggleTheme so we can check if it was called
+    const toggleTheme = vi.fn();
+    useTheme.mockReturnValue({ toggleTheme });
     render(<ThemeToggle />);
-    expect(document.documentElement.classList.contains('dark')).toBe(true);
-  });
-
-  it('respects saved light preference in localStorage', () => {
-    localStorage.setItem('theme', 'light');
-    window.matchMedia = matchMediaMock(true);
-    render(<ThemeToggle />);
-    expect(document.documentElement.classList.contains('light')).toBe(true);
-  });
-});
-
-describe('ThemeToggle — toggle behaviour', () => {
-  it('toggles from dark to light on click', () => {
-    localStorage.setItem('theme', 'dark');
-    window.matchMedia = matchMediaMock(false);
-    render(<ThemeToggle />);
-
     fireEvent.click(screen.getByRole('button'));
-
-    expect(document.documentElement.classList.contains('light')).toBe(true);
-    expect(document.documentElement.classList.contains('dark')).toBe(false);
-    expect(localStorage.getItem('theme')).toBe('light');
-  });
-
-  it('toggles from light to dark on click', () => {
-    localStorage.setItem('theme', 'light');
-    window.matchMedia = matchMediaMock(false);
-    render(<ThemeToggle />);
-
-    fireEvent.click(screen.getByRole('button'));
-
-    expect(document.documentElement.classList.contains('dark')).toBe(true);
-    expect(document.documentElement.classList.contains('light')).toBe(false);
-    expect(localStorage.getItem('theme')).toBe('dark');
+    expect(toggleTheme).toHaveBeenCalledOnce();
   });
 });
