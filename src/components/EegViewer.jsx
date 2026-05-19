@@ -1,59 +1,85 @@
-import { useEffect, useRef } from 'react';
-import uPlot from 'uplot';
+import { useMemo, useRef, useState, useEffect } from 'react';
+import UplotReact from 'uplot-react';
 import 'uplot/dist/uPlot.min.css';
+import { useTheme } from '@/components/ThemeContext';
 
-const CHANNEL_SPACING = 150; // vertical distance between channels in µV units
+const PLOT_HEIGHT = 90; // px per channel row
 
-function buildSeries(channelNames) {
-  return [
-    { label: 'Time' },
-    ...channelNames.map((name, i) => ({
-      label: name,
-      stroke: `hsl(${(i * 360) / channelNames.length}, 70%, 55%)`,
-      width: 1,
-    })),
-  ];
-}
+// Builds uPlot options for a single channel. Called once per channel on each render.
+const buildChannelOptions = (
+  channelName,
+  channelIndex,
+  totalChannels,
+  isDarkMode,
+  syncKey,
+  width,
+  isLastChannel
+) => {
+  const axisColor = isDarkMode ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.8)';
+  const gridColor = isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
+  // Spread hues evenly across channels so each has a distinct colour
+  const stroke = `hsl(${(channelIndex * 360) / totalChannels}, 70%, 55%)`;
 
-function offsetChannels(data) {
-  // data[0] = timestamps, data[1..n] = channel signals
-  // offset each channel so they appear stacked vertically
-  return [
-    data[0],
-    ...data.slice(1).map((ch, i) => ch.map((v) => v - i * CHANNEL_SPACING)),
-  ];
-}
+  return {
+    width,
+    height: PLOT_HEIGHT,
+    // All plots share the same syncKey — panning/zooming one moves all others
+    cursor: { sync: { key: syncKey } },
+    scales: { x: { time: false } },
+    axes: [
+      // x-axis label and ticks only shown on the bottom plot to save space
+      {
+        show: isLastChannel,
+        stroke: axisColor,
+        label: isLastChannel ? 'Time (s)' : undefined,
+        grid: { stroke: gridColor },
+      },
+      { label: channelName, stroke: axisColor, size: 60, grid: { stroke: gridColor } },
+    ],
+    series: [{}, { stroke, width: 1 }],
+  };
+};
 
-export const EegViewer = ({ data, channelNames, width = 800 }) => {
-  const containerRef = useRef(null);
-  const plotRef = useRef(null);
+export const EegViewer = ({ data, channelNames }) => {
+  const { isDarkMode } = useTheme();
+  const syncKey = 'eeg-sync'; // this sync key is shared across all channels to link their interactions
+  const containerRef = useRef(null); // Ref to the div that wraps all channels — used to measure available width for responsive resizing
+  const [plotWidth, setPlotWidth] = useState(0); // Measured width of the container div, passed to uPlot options to make it fill the space
 
   useEffect(() => {
-    if (!containerRef.current || !data || data.length < 2) return;
+    if (!containerRef.current) return;
+    // ResizeObserver fires whenever the container changes size and updates plotWidth,
+    // which causes uPlot to redraw at the correct pixel width
+    const observer = new ResizeObserver((entries) => {
+      setPlotWidth(Math.floor(entries[0].contentRect.width));
+    });
 
-    const opts = {
-      width,
-      height: channelNames.length * 80 + 40,
-      series: buildSeries(channelNames),
-      scales: {
-        x: { time: false },
-        y: { auto: true },
-      },
-      axes: [
-        { label: 'Time (s)' },
-        { label: 'Amplitude (µV)', size: 60 },
-      ],
-      cursor: { drag: { x: true, y: false } },
-      legend: { show: true },
-    };
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
 
-    plotRef.current = new uPlot(opts, offsetChannels(data), containerRef.current);
-
-    return () => {
-      plotRef.current?.destroy();
-      plotRef.current = null;
-    };
-  }, [data, channelNames, width]);
-
-  return <div ref={containerRef} />;
+  return (
+    // w-full fills the grid column; px-4 adds side margins; ref lets ResizeObserver measure it
+    <div ref={containerRef} className="w-full px-4">
+      {/* Wait for the first measurement before rendering — avoids zero-width flash */}
+      {plotWidth > 0 &&
+        channelNames.map((name, i) => (
+          <UplotReact
+            key={name}
+            options={buildChannelOptions(
+              name,
+              i,
+              channelNames.length,
+              isDarkMode,
+              syncKey,
+              plotWidth,
+              i === channelNames.length - 1
+            )}
+            data={[data[0], data[i + 1]]} // data[0] = timestamps, data[i+1] = this channel
+            onCreate={() => {}}
+            onDelete={() => {}}
+          />
+        ))}
+    </div>
+  );
 };
