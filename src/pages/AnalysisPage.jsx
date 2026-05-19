@@ -44,7 +44,7 @@ export const AnalysisPage = () => {
   return (
     <FullWidthLayout>
       <ThemeToggle />
-      <h1>Analysis Page</h1>
+      <h1 className="text-center">Analysis Page (WIP)</h1>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
         <div className="text-center">
