@@ -1,0 +1,32 @@
+<!DOCTYPE AnyWaveSetup>
+<AnyWaveDisplaySetup2.0>
+   <Name></Name>
+   <SynchronizedViews>true</SynchronizedViews>
+   <Orientation>Horizontal</Orientation>
+   <View>
+      <SecondsPerCm>0.5</SecondsPerCm>
+      <ShowMarkers>false</ShowMarkers>
+      <BaseLineVisible>false</BaseLineVisible>
+      <GridVisible>true</GridVisible>
+      <DisplaySeconds>true</DisplaySeconds>
+      <OverlayChannels>false</OverlayChannels>
+      <ShowSensors>true</ShowSensors>
+      <LimitNumberOfChannels NumberOfChannels="40">true</LimitNumberOfChannels>
+      <MarkersBar>Show</MarkersBar>
+      <MarkersBarMode>Global</MarkersBarMode>
+      <GridTimingRepresentation>ShowRelativeTime</GridTimingRepresentation>
+      <Filters>
+         <Filter>0</Filter>
+         <Filter>1</Filter>
+         <Filter>2</Filter>
+         <Filter>10</Filter>
+         <Filter>11</Filter>
+         <Filter>13</Filter>
+      </Filters>
+      <GainLevels>
+         <GainLevel value="130">0</GainLevel>
+      </GainLevels>
+      <TimeScaleMode>0</TimeScaleMode>
+      <TimeScaleFixedPageDuration>30</TimeScaleFixedPageDuration>
+   </View>
+</AnyWaveDisplaySetup2.0>
