@@ -9,15 +9,14 @@ function App() {
   return (
     <ThemeProvider>
       <HashRouter>
-      <Routes>
-        <Route path="/" element={<LandingPage />} />
-        <Route path="/analysis" element={<AnalysisPage />} />
-        <Route path="/about" element={<AboutPage />} />
-        <Route path="*" element={<NotFoundPage />} />
-      </Routes>
+        <Routes>
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/analysis" element={<AnalysisPage />} />
+          <Route path="/about" element={<AboutPage />} />
+          <Route path="*" element={<NotFoundPage />} />
+        </Routes>
       </HashRouter>
     </ThemeProvider>
-  )
-
+  );
 }
-export default App
+export default App;

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, useEffect } from 'react';
+﻿import { useMemo, useRef, useState, useEffect } from 'react';
 import UplotReact from 'uplot-react';
 import 'uplot/dist/uPlot.min.css';
 import { useTheme } from '@/components/ThemeContext';
@@ -6,15 +6,15 @@ import { useTheme } from '@/components/ThemeContext';
 const PLOT_HEIGHT = 90; // px per channel row
 
 // Builds uPlot options for a single channel. Called once per channel on each render.
-const buildChannelOptions = (
+const buildChannelOptions = ({
   channelName,
   channelIndex,
   totalChannels,
   isDarkMode,
   syncKey,
   width,
-  isLastChannel
-) => {
+  isLastChannel,
+}) => {
   const axisColor = isDarkMode ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.8)';
   const gridColor = isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
   // Spread hues evenly across channels so each has a distinct colour
@@ -37,23 +37,23 @@ const buildChannelOptions = (
       { label: channelName, stroke: axisColor, size: 60, grid: { stroke: gridColor } },
     ],
     series: [{}, { stroke, width: 1 }],
+    legend: { show: false },
   };
 };
 
 export const EegViewer = ({ data, channelNames }) => {
   const { isDarkMode } = useTheme();
-  const syncKey = 'eeg-sync'; // this sync key is shared across all channels to link their interactions
-  const containerRef = useRef(null); // Ref to the div that wraps all channels — used to measure available width for responsive resizing
-  const [plotWidth, setPlotWidth] = useState(0); // Measured width of the container div, passed to uPlot options to make it fill the space
+  const syncKey = 'eeg-sync'; // shared across all channels to link their interactions
+  const containerRef = useRef(null); // used to measure available width for responsive resizing
+  const [plotWidth, setPlotWidth] = useState(0); // passed to uPlot options to fill the space
 
   useEffect(() => {
     if (!containerRef.current) return;
     // ResizeObserver fires whenever the container changes size and updates plotWidth,
     // which causes uPlot to redraw at the correct pixel width
     const observer = new ResizeObserver((entries) => {
-      setPlotWidth(Math.floor(entries[0].contentRect.width));
+      setPlotWidth(Math.floor(entries[0].contentRect.width)); // floor avoids sub-pixel artefacts
     });
-
     observer.observe(containerRef.current);
     return () => observer.disconnect();
   }, []);
@@ -66,16 +66,16 @@ export const EegViewer = ({ data, channelNames }) => {
         channelNames.map((name, i) => (
           <UplotReact
             key={name}
-            options={buildChannelOptions(
-              name,
-              i,
-              channelNames.length,
+            options={buildChannelOptions({
+              channelName: name,
+              channelIndex: i,
+              totalChannels: channelNames.length,
               isDarkMode,
               syncKey,
-              plotWidth,
-              i === channelNames.length - 1
-            )}
-            data={[data[0], data[i + 1]]} // data[0] = timestamps, data[i+1] = this channel
+              width: plotWidth,
+              isLastChannel: i === channelNames.length - 1,
+            })}
+            data={[data[0], data[i + 1]]}
             onCreate={() => {}}
             onDelete={() => {}}
           />
