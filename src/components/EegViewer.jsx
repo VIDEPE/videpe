@@ -1,7 +1,8 @@
-﻿import { useRef, useState, useEffect } from 'react';
+﻿import { useRef, useState, useEffect, useMemo } from 'react';
 import UplotReact from 'uplot-react';
 import 'uplot/dist/uPlot.min.css';
 import { useTheme } from '@/components/ThemeContext';
+import { minMaxDownsample } from '@/utils/downsample';
 
 // Builds uPlot options for a single channel. Called once per channel on each render.
 const buildChannelOptions = ({
@@ -15,6 +16,7 @@ const buildChannelOptions = ({
   isLastChannel,
   windowSize,
   startTime,
+  yScale,
 }) => {
   const axisColor = isDarkMode ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.8)';
   const gridColor = isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
@@ -25,7 +27,10 @@ const buildChannelOptions = ({
     height,
     // All plots share the same syncKey — panning/zooming one moves all others
     cursor: { sync: { key: syncKey } },
-    scales: { x: { time: false, range: [startTime, startTime + windowSize] } },
+    scales: {
+      x: { time: false, range: [startTime, startTime + windowSize] },
+      y: { range: [-yScale, yScale] },
+    },
     axes: [
       // x-axis label and ticks only shown on the bottom plot to save space
       {
@@ -51,13 +56,25 @@ export const EegViewer = ({ data, channelNames }) => {
   const [visibleChannelCount, setVisibleChannelCount] = useState(30); // how many channels fit in view at once
   const [windowSize, setWindowSize] = useState(20); // seconds visible in the x-range
   const [startTime, setStartTime] = useState(0); // start of the visible x-range
-  const [shiftTimeStepSize, setShiftTimeStepSize] = useState(1); // start of the visible x-range
+  const [shiftTimeStepSize, setShiftTimeStepSize] = useState(5);
+  const [yScale, setYScale] = useState(100); // y-axis half-range in µV; all channels share this
 
   const clampChannelCount = (n) => Math.max(1, Math.min(channelNames.length, n));
   const X_AXIS_EXTRA = 40; // px reserved for x-axis ticks + label on the last channel
   // plotHeight divides the remaining area evenly; last channel gets X_AXIS_EXTRA on top
   const plotHeight =
     channelAreaHeight > 0 ? Math.floor((channelAreaHeight - X_AXIS_EXTRA) / visibleChannelCount) : 0;
+
+  // Downsample each channel to 2×plotWidth points for the visible window.
+  // Re-runs only when the window or plot dimensions change, not on every render.
+  const sampledData = useMemo(() => {
+    if (plotWidth === 0) return null;
+    const endTime = startTime + windowSize;
+    const target = plotWidth * 2;
+    return channelNames.map((_, i) =>
+      minMaxDownsample(data[0], data[i + 1], startTime, endTime, target)
+    );
+  }, [data, startTime, windowSize, plotWidth, channelNames]);
 
   useEffect(() => {
     // ResizeObserver fires whenever the container changes size and updates plotWidth/channelAreaHeight,
@@ -148,8 +165,9 @@ export const EegViewer = ({ data, channelNames }) => {
                         isLastChannel: isLast,
                         windowSize,
                         startTime,
+                        yScale,
                       })}
-                      data={[data[0], data[i + 1]]}
+                      data={sampledData ? sampledData[i] : [data[0], data[i + 1]]}
                       onCreate={() => {}}
                       onDelete={() => {}}
                     />
@@ -162,13 +180,13 @@ export const EegViewer = ({ data, channelNames }) => {
 
       {/* shrink-0 pins the controls at the bottom, never squeezed by the channel area */}
       <div className="shrink-0 flex flex-wrap justify-center gap-4 py-2">
-        {/* Zoom: scale the y-axis */}
+        {/* Zoom: shrink/expand the shared y-range (all channels) */}
         <div className="flex items-center gap-1">
-          <button type="button" className="thin-button">
+          <button type="button" className="thin-button" onClick={() => setYScale((s) => s * 1.5)}>
             −
           </button>
           <span className="text-sm px-1">Zoom</span>
-          <button type="button" className="thin-button">
+          <button type="button" className="thin-button" onClick={() => setYScale((s) => s / 1.5)}>
             +
           </button>
         </div>

@@ -67,11 +67,11 @@ describe('EegViewer — controls presence', () => {
     expect(buttons[1]).toHaveTextContent('+');
   });
 
-  it('renders the shift step input with default value of 1', () => {
+  it('renders the shift step input with default value of 5', () => {
     renderViewer();
     const input = screen.getByRole('spinbutton', { name: /shift step/i });
     expect(input).toBeInTheDocument();
-    expect(input).toHaveValue(1);
+    expect(input).toHaveValue(5);
   });
 
   it('renders shift backward (<) and forward (>) buttons', () => {
@@ -246,5 +246,58 @@ describe('EegViewer — plot rendering', () => {
 
     const xAxisVisibility = UplotReactMock.mock.calls.map((call) => call[0].options.axes[0].show);
     expect(xAxisVisibility).toEqual([false, false, true]);
+  });
+
+  it('all channels receive the same initial y-range of [-100, 100]', async () => {
+    const { default: UplotReactMock } = await import('uplot-react');
+    UplotReactMock.mockClear();
+
+    renderViewer();
+
+    const yRanges = UplotReactMock.mock.calls.map((call) => call[0].options.scales.y.range);
+    yRanges.forEach((range) => expect(range).toEqual([-100, 100]));
+  });
+});
+
+describe('EegViewer — zoom controls', () => {
+  it('zoom + shrinks the y-range (zoom in)', async () => {
+    const { default: UplotReactMock } = await import('uplot-react');
+    const user = userEvent.setup();
+    renderViewer();
+
+    const [, zoomInBtn] = within(containerOf(screen.getByText('Zoom'))).getAllByRole('button');
+    UplotReactMock.mockClear();
+    await user.click(zoomInBtn);
+
+    const [lo, hi] = UplotReactMock.mock.calls[0][0].options.scales.y.range;
+    expect(lo).toBeCloseTo(-100 / 1.5, 3);
+    expect(hi).toBeCloseTo(100 / 1.5, 3);
+  });
+
+  it('zoom − expands the y-range (zoom out)', async () => {
+    const { default: UplotReactMock } = await import('uplot-react');
+    const user = userEvent.setup();
+    renderViewer();
+
+    const [zoomOutBtn] = within(containerOf(screen.getByText('Zoom'))).getAllByRole('button');
+    UplotReactMock.mockClear();
+    await user.click(zoomOutBtn);
+
+    const [lo, hi] = UplotReactMock.mock.calls[0][0].options.scales.y.range;
+    expect(lo).toBeCloseTo(-100 * 1.5, 3);
+    expect(hi).toBeCloseTo(100 * 1.5, 3);
+  });
+
+  it('all channels share the same y-range after zooming', async () => {
+    const { default: UplotReactMock } = await import('uplot-react');
+    const user = userEvent.setup();
+    renderViewer();
+
+    const [, zoomInBtn] = within(containerOf(screen.getByText('Zoom'))).getAllByRole('button');
+    UplotReactMock.mockClear();
+    await user.click(zoomInBtn);
+
+    const yRanges = UplotReactMock.mock.calls.map((call) => call[0].options.scales.y.range);
+    yRanges.forEach((range) => expect(range).toEqual(yRanges[0]));
   });
 });
