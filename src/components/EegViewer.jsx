@@ -193,6 +193,9 @@ export const EegViewer = ({ data, channelNames }) => {
 
         {/* Shift: move the x-range forward/backward by a user-defined step */}
         <div className="flex items-center gap-1">
+          <button type="button" className="thin-button" onClick={() => setStartTime(0)}>
+            {'|<'}
+          </button>
           <button type="button" className="thin-button" onClick={backwardshiftStartTime}>
             {'<'}
           </button>
@@ -205,6 +208,9 @@ export const EegViewer = ({ data, channelNames }) => {
           />
           <button type="button" className="thin-button" onClick={forwardshiftStartTime}>
             {'>'}
+          </button>
+          <button type="button" className="thin-button" onClick={() => setStartTime(data[0][data[0].length - 1] - windowSize)}>
+            {'>|'}
           </button>
         </div>
 

@@ -74,13 +74,15 @@ describe('EegViewer — controls presence', () => {
     expect(input).toHaveValue(5);
   });
 
-  it('renders shift backward (<) and forward (>) buttons', () => {
+  it('renders all four shift buttons in order: |< < > >|', () => {
     renderViewer();
     const input = screen.getByRole('spinbutton', { name: /shift step/i });
     const buttons = within(containerOf(input)).getAllByRole('button');
-    expect(buttons).toHaveLength(2);
-    expect(buttons[0]).toHaveTextContent('<');
-    expect(buttons[1]).toHaveTextContent('>');
+    expect(buttons).toHaveLength(4);
+    expect(buttons[0]).toHaveTextContent('|<');
+    expect(buttons[1]).toHaveTextContent('<');
+    expect(buttons[2]).toHaveTextContent('>');
+    expect(buttons[3]).toHaveTextContent('>|');
   });
 
   it('renders the Zoom label and its two buttons', () => {
@@ -195,6 +197,41 @@ describe('EegViewer — channel count controls', () => {
     fireEvent.change(input, { target: { value: '2' } });
 
     expect(input).toHaveValue(2);
+  });
+});
+
+describe('EegViewer — start/end navigation', () => {
+  const shiftButtons = () => {
+    const input = screen.getByRole('spinbutton', { name: /shift step/i });
+    return within(containerOf(input)).getAllByRole('button');
+    // order: [|<,  <,  >,  >|]
+  };
+
+  it('|< resets start time to 0', async () => {
+    const { default: UplotReactMock } = await import('uplot-react');
+    const user = userEvent.setup();
+    renderViewer();
+
+    await user.click(shiftButtons()[2]); // > to move away from 0
+    UplotReactMock.mockClear();
+    await user.click(shiftButtons()[0]); // |<
+
+    const range = UplotReactMock.mock.calls[0][0].options.scales.x.range;
+    expect(range[0]).toBe(0);
+  });
+
+  it('>| sets the window end to the last timestamp of the recording', async () => {
+    const { default: UplotReactMock } = await import('uplot-react');
+    const user = userEvent.setup();
+    renderViewer();
+
+    UplotReactMock.mockClear();
+    await user.click(shiftButtons()[3]); // >|
+
+    const range = UplotReactMock.mock.calls[0][0].options.scales.x.range;
+    const lastTimestamp = data[0][data[0].length - 1];
+    // range[1] = startTime + windowSize = (lastTs - windowSize) + windowSize = lastTs
+    expect(range[1]).toBeCloseTo(lastTimestamp, 5);
   });
 });
 
