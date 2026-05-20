@@ -12,7 +12,11 @@ export const NiiViewer = ({ volumes = [] }) => {
     if (nvRef.current) {
       // Only update opacity for volumes whose visibility changed
       next.forEach((isVisible, i) => {
-        if (isVisible !== visible[i]) nvRef.current.setOpacity(i, isVisible ? 1 : 0);
+        if (isVisible !== visible[i])
+          nvRef.current.setOpacity(
+            nvRef.current.volumes.findIndex((v) => v.url === volumes[i].url),
+            isVisible ? 1 : 0
+          );
       });
     }
   };
@@ -62,7 +66,7 @@ export const NiiViewer = ({ volumes = [] }) => {
       <div className="flex gap-2 justify-end py-2">
         {volumes.map((volume, i) => (
           <button
-            key={volume.label}
+            key={volume.type}
             type="button"
             onClick={() => toggleVolume(i)}
             className={'thin-button' + (visible[i] ? '' : ' thin-button-toggled')}

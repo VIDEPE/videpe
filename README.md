@@ -1,16 +1,46 @@
-# React + Vite
+# VIDÉPÉ
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A web-based viewer for EEG and neuroimaging data (MRI, PET, SPECT), developed at the [Vulliemoz Lab, UNIGE](https://www.unige.ch/medecine/neucli/groupes-de-recherche/serge-vulliemoz/open-science/videpe2).
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- **EEG viewer** — multichannel time-series plots with linked crosshair cursor (uPlot)
+- **Neuroimaging viewer** — multiplanar 3D viewer for NIfTI volumes (NiiVue), with toggle buttons for MRI, PET and SPECT overlays
+- **Dark / light theme** — OS preference detection with manual override, no flash on load
+- Runs entirely in the browser — no server required
 
-## React Compiler
+## Tech stack
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+| Area | Library |
+|---|---|
+| Framework | React 19 + Vite 8 |
+| Routing | React Router v7 (HashRouter for GitHub Pages) |
+| Styling | Tailwind CSS v4 |
+| EEG plots | uPlot + uplot-react |
+| Neuroimaging | @niivue/niivue |
+| Testing | Vitest + React Testing Library |
 
-## Expanding the ESLint configuration
+## Getting started
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+```bash
+npm install
+npm run dev
+```
+
+The app is served at `http://localhost:5173/videpe/`.
+
+## Running tests
+
+```bash
+npm test          # watch mode
+npm run test:run  # single run (used in CI)
+```
+
+## Deployment
+
+The app deploys automatically to GitHub Pages on every push to `main`. Tests run on every pull request.
+
+## Links
+
+- [GitHub repository](https://github.com/VIDEPE/videpe)
+- [UNIGE Open Science page](https://www.unige.ch/medecine/neucli/groupes-de-recherche/serge-vulliemoz/open-science/videpe2)

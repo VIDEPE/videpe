@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+﻿import { describe, it, expect, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { getInitialVisibility, applyToggle } from '@/components/NiiViewer.utils';
@@ -64,7 +64,10 @@ describe('NiiViewer', () => {
   });
 
   describe('button style toggle behaviour', () => {
-    const volumes = [{ type: 'MRI', url: '/mri.nii' }, { type: 'PET', url: '/pet.nii' }];
+    const volumes = [
+      { type: 'MRI', url: '/mri.nii' },
+      { type: 'PET', url: '/pet.nii' },
+    ];
 
     it('button gets thin-button-toggled class when clicked off', async () => {
       const user = userEvent.setup();

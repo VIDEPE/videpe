@@ -1,4 +1,4 @@
-export const getInitialVisibility = (volumes) => {
+﻿export const getInitialVisibility = (volumes) => {
   const visible = volumes.map(() => true);
   const mriIndex = volumes.findIndex((volume) => volume.type === 'MRI');
   const petIndex = volumes.findIndex((volume) => volume.type === 'PET');
