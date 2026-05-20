@@ -1,4 +1,5 @@
 ﻿import { useState, useEffect } from 'react';
+import toast from 'react-hot-toast';
 import { FullWidthLayout } from '../components/FullWidthLayout';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { EegViewer } from '../components/EegViewer';
@@ -19,6 +20,8 @@ const DEMO_VOLUMES = [
 ];
 
 export const PatientView = () => {
+
+  // Prevent default browser drag-and-drop behavior (e.g., opening files in a new tab)
   useEffect(() => {
     const prevent = (e) => e.preventDefault();
     document.addEventListener('dragover', prevent);
@@ -32,23 +35,22 @@ export const PatientView = () => {
   const [eeg, setEeg] = useState(null); // { data, channelNames }
   const [volumes, setVolumes] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
 
+  // Handler for when EEG files are dropped or selected. It tries to detect the format and load the data, updating state accordingly.
   const handleEegFiles = async (files) => {
     setLoading(true);
-    setError(null);
     try {
       setEeg(await detectAndLoadEEG(Array.from(files)));
     } catch (err) {
-      setError(err.message);
+      toast.error(err.message);
     } finally {
       setLoading(false);
     }
   };
 
+  // Handler for when imaging files are dropped or selected. It reads the files as ArrayBuffers and prepares them for the NiiViewer, updating state accordingly.
   const handleNiiFiles = async (files) => {
     setLoading(true);
-    setError(null);
     try {
       const vols = await Promise.all(
         Array.from(files).map(async (f) => ({
@@ -60,7 +62,7 @@ export const PatientView = () => {
       );
       setVolumes(vols);
     } catch (err) {
-      setError(err.message);
+      toast.error(err.message);
     } finally {
       setLoading(false);
     }
@@ -68,14 +70,13 @@ export const PatientView = () => {
 
   const handleLoadDemo = async () => {
     setLoading(true);
-    setError(null);
     try {
       const base = import.meta.env.BASE_URL;
       const result = await loadBrainVisionEEG(base + DEMO_EEG.header, base + DEMO_EEG.data);
       setEeg(result);
       setVolumes(DEMO_VOLUMES);
     } catch (err) {
-      setError(err.message);
+      toast.error(err.message);
     } finally {
       setLoading(false);
     }
@@ -94,7 +95,6 @@ export const PatientView = () => {
           >
             {loading ? 'Loading…' : 'Load Demo'}
           </button>
-          {error && <span className="text-sm text-red-500">{error}</span>}
         </div>
         <h1 className="absolute left-1/2 -translate-x-1/2 pb-8 text-lg font-semibold pointer-events-none">
           Patient Viewer

@@ -14,12 +14,16 @@ export const FileDropZone = ({ onFiles, accepted_formats, label, description }) 
   const handleDragLeave = () => setIsDraggingOver(false);
 
   const handleDrop = (e) => {
+    // Prevent default browser behavior (e.g., opening the file in a new tab) and reset drag state. If files are dropped, call onFiles with the FileList.
     e.preventDefault();
+    // Reset drag state. (Even if no files are dropped, we want to reset the visual state of the drop zone.)
     setIsDraggingOver(false);
+    // If files are dropped, call onFiles with the FileList. (e.dataTransfer.files is a FileList, which is array-like and can be used directly in onFiles.)
     if (e.dataTransfer.files.length > 0) onFiles(e.dataTransfer.files);
   };
 
   const handleInputChange = (e) => {
+    // if files are selected, call onFiles with the FileList. (e.target.files is a FileList, which is array-like and can be used directly in onFiles.)
     if (e.target.files.length > 0) onFiles(e.target.files);
   };
 
