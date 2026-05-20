@@ -1,6 +1,8 @@
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
+// Utility function to combine class names with Tailwind merging
+// Example: cn('p-4', isActive && 'bg-blue-500', 'text-white') will merge classes and handle conditional ones
 export const cn = (...inputs) => twMerge(clsx(inputs));
 
 /**
