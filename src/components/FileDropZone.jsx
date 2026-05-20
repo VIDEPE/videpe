@@ -28,17 +28,18 @@ export const FileDropZone = ({ onFiles, accepted_formats, label, description }) 
       className={cn(
         'flex-1 flex flex-col items-center justify-center gap-3 m-2 rounded-lg',
         'border-2 cursor-pointer transition-colors',
+        'group', // for linking hover styles to children (=<Upload> icon)
         isDraggingOver ? 'border-solid border-primary bg-primary/10' : 'border-dashed border-border hover:border-primary/70 bg-surface'
       )}
-      onClick={() => inputRef.current?.click()}
+      onClick={() => inputRef.current?.click()} // Trigger file dialog on click in the <input> element below. (?.) is to safely do nothing if inputRef.current is null (e.g., before the component mounts).
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      <Upload className="h-10 w-10 text-foreground/50" />
+      <Upload className="h-10 w-10 text-foreground/50 group-hover:text-primary/80 transition-colors" />
       <p className="text-sm font-medium text-foreground">{label}</p>
       <p className="text-xs text-foreground/50">{description}</p>
-      <p className="text-xs text-foreground/50">Drag & Drop or Click to Browse</p>
+      <p className="text-xs text-foreground/50">Drag & Drop /  Click to Browse</p>
       <input
         ref={inputRef}
         type="file"

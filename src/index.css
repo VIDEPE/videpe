@@ -5,7 +5,7 @@
   --c-heading: rgba(8, 6, 13, 1); /* headings, buttons */
   --c-foreground: rgb(56, 55, 56, 1); /* body text */
   --c-background: rgba(255, 255, 255, 1); /* page background */
-  --c-surface: rgb(230, 230, 230); /* cards, panels, code blocks */
+  --c-surface: rgb(235, 235, 235); /* cards, panels, code blocks */
   --c-border: rgb(196, 196, 196); /* borders, dividers */
   --c-primary: rgba(71, 118, 219, 1); /* brand / accent color */
   --c-secondary: rgba(1, 52, 219, 1); /* outlines */

@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { FullWidthLayout } from '../components/FullWidthLayout';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { EegViewer } from '../components/EegViewer';
@@ -19,6 +19,16 @@ const DEMO_VOLUMES = [
 ];
 
 export const PatientView = () => {
+  useEffect(() => {
+    const prevent = (e) => e.preventDefault();
+    document.addEventListener('dragover', prevent);
+    document.addEventListener('drop', prevent);
+    return () => {
+      document.removeEventListener('dragover', prevent);
+      document.removeEventListener('drop', prevent);
+    };
+  }, []);
+
   const [eeg, setEeg] = useState(null); // { data, channelNames }
   const [volumes, setVolumes] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -107,7 +117,7 @@ export const PatientView = () => {
           )}
         </div>
         <div className="flex flex-col min-h-0 text-center">
-          <h2 className="shrink-0">MRI + PET + SPECT</h2>
+          <h2 className="shrink-0">Neural Imaging</h2>
           {volumes.length > 0 ? (
             <NiiViewer volumes={volumes} />
           ) : (
