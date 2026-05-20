@@ -1,6 +1,7 @@
 {
   "css.lint.unknownAtRules": "ignore",
-  "editor.formatOnSave": true,
+  "editor.autoSave": "off",
+  "editor.formatOnSave": false,
   "editor.defaultFormatter": "esbenp.prettier-vscode",
   "[javascriptreact]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"

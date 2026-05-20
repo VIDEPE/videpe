@@ -11,7 +11,6 @@ vi.mock('@/components/Footer', () => ({
   Footer: () => <footer data-testid="footer" />,
 }));
 
-
 const renderPage = () =>
   render(
     <MemoryRouter>
