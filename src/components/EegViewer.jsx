@@ -58,7 +58,7 @@ export const EegViewer = ({ data, channelNames }) => {
   const [windowSize, setWindowSize] = useState(tMax < 20 ? Math.ceil(tMax) : 20); // seconds visible in the x-range, initialized to 20s or the full recording if shorter
   const [startTime, setStartTime] = useState(0); // start of the visible x-range
   const [shiftTimeStepSize, setShiftTimeStepSize] = useState(5);
-  const [yScale, setYScale] = useState(100); // y-axis half-range in µV; all channels share this
+  const [yScale, setYScale] = useState(10); // y-axis half-range in µV; all channels share this
 
   const clampChannelCount = (n) => Math.max(1, Math.min(channelNames.length, n));
   const X_AXIS_HEIGHT = 45; // px reserved for the fixed x-axis strip below the scroll area
@@ -110,7 +110,6 @@ export const EegViewer = ({ data, channelNames }) => {
       <div className="flex-1 min-h-0 flex flex-row">
         {/* Left sidebar: justify-center now centers against the channel area height only */}
         <div className="shrink-0 flex flex-col items-center justify-center gap-1 px-1">
-          <span className="text-xs">Ch.</span>
           <button
             type="button"
             className="thin-button"
@@ -208,60 +207,76 @@ export const EegViewer = ({ data, channelNames }) => {
 
       {/* shrink-0 pins the controls at the bottom, never squeezed by the channel area */}
       <div className="shrink-0 flex flex-wrap justify-center gap-4 py-2">
-        {/* Zoom: shrink/expand the shared y-range (all channels) */}
-        <div className="flex items-center gap-1">
-          <button type="button" className="thin-button" onClick={() => setYScale((s) => s * 1.5)}>
-            −
-          </button>
-          <span className="text-sm px-1">Zoom</span>
-          <button type="button" className="thin-button" onClick={() => setYScale((s) => s / 1.5)}>
-            +
-          </button>
+        {/* Gain: shrink/expand the shared y-range (all channels) */}
+        <div className="flex flex-col items-center gap-0.5">
+          <span className="text-xs text-foreground/60">Gain (µV)</span>
+          <div className="flex items-center gap-1">
+            <button type="button" className="thin-button" onClick={() => setYScale((s) => s * 2)}>
+              −
+            </button>
+            <input
+              type="number"
+              value={Math.round(yScale)}
+              min={1}
+              onChange={(e) => setYScale(Math.max(1, Number(e.target.value)))}
+              className="w-16 text-center border border-border rounded px-1 py-0.5 text-sm bg-background text-foreground"
+              aria-label="Gain (µV)"
+            />
+            <button type="button" className="thin-button" onClick={() => setYScale((s) => s / 2)}>
+              +
+            </button>
+          </div>
         </div>
 
-        {/* Shift: move the x-range forward/backward by a user-defined step */}
-        <div className="flex items-center gap-1">
-          <button type="button" className="thin-button" onClick={() => setStartTime(0)}>
-            {'|<'}
-          </button>
-          <button type="button" className="thin-button" onClick={backwardshiftStartTime}>
-            {'<'}
-          </button>
-          <input
-            type="number"
-            value={shiftTimeStepSize}
-            onChange={(e) => setShiftTimeStepSize(Math.max(1, Number(e.target.value)))}
-            className="w-16 text-center border border-border rounded px-1 py-0.5 text-sm bg-background text-foreground"
-            aria-label="Shift step (s)"
-          />
-          <button type="button" className="thin-button" onClick={forwardshiftStartTime}>
-            {'>'}
-          </button>
-          <button
-            type="button"
-            className="thin-button"
-            onClick={() => setStartTime(data[0][data[0].length - 1] - windowSize)}
-          >
-            {'>|'}
-          </button>
+        {/* Time Shift: move the x-range forward/backward by a user-defined step */}
+        <div className="flex flex-col items-center gap-0.5">
+          <span className="text-xs text-foreground/60">Time Shift (s)</span>
+          <div className="flex items-center gap-1">
+            <button type="button" className="thin-button" onClick={() => setStartTime(0)}>
+              {'|<'}
+            </button>
+            <button type="button" className="thin-button" onClick={backwardshiftStartTime}>
+              {'<'}
+            </button>
+            <input
+              type="number"
+              value={shiftTimeStepSize}
+              onChange={(e) => setShiftTimeStepSize(Math.max(1, Number(e.target.value)))}
+              className="w-16 text-center border border-border rounded px-1 py-0.5 text-sm bg-background text-foreground"
+              aria-label="Time shift step (s)"
+            />
+            <button type="button" className="thin-button" onClick={forwardshiftStartTime}>
+              {'>'}
+            </button>
+            <button
+              type="button"
+              className="thin-button"
+              onClick={() => setStartTime(data[0][data[0].length - 1] - windowSize)}
+            >
+              {'>|'}
+            </button>
+          </div>
         </div>
 
-        {/* Window: increase/decrease the total visible x-range */}
-        <div className="flex items-center gap-1">
-          <button type="button" className="thin-button " onClick={decreaseWindowSize}>
-            −
-          </button>
-          <input
-            type="number"
-            value={windowSize}
-            min={1}
-            onChange={(e) => setWindowSize(Math.max(1, Number(e.target.value)))}
-            className="w-16 text-center border border-border rounded px-1 py-0.5 text-sm bg-background text-foreground"
-            aria-label="Window size (s)"
-          />
-          <button type="button" className="thin-button" onClick={increaseWindowSize}>
-            +
-          </button>
+        {/* Window Size: increase/decrease the total visible x-range */}
+        <div className="flex flex-col items-center gap-0.5">
+          <span className="text-xs text-foreground/60">Window Size (s)</span>
+          <div className="flex items-center gap-1">
+            <button type="button" className="thin-button" onClick={decreaseWindowSize}>
+              −
+            </button>
+            <input
+              type="number"
+              value={windowSize}
+              min={1}
+              onChange={(e) => setWindowSize(Math.max(1, Number(e.target.value)))}
+              className="w-16 text-center border border-border rounded px-1 py-0.5 text-sm bg-background text-foreground"
+              aria-label="Window size (s)"
+            />
+            <button type="button" className="thin-button" onClick={increaseWindowSize}>
+              +
+            </button>
+          </div>
         </div>
       </div>
     </div>
