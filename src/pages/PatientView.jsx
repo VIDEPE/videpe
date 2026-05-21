@@ -91,9 +91,10 @@ export const PatientView = () => {
     try {
       const result = await toast.promise(
         Promise.all(
-          Array.from(files).map(async (f) => ({
-            url: f.name,
-            buffer: await f.arrayBuffer(),
+          Array.from(files).map((f) => ({
+            // NiiVue calls fetch(url) internally, so a blob: URL is needed — a plain filename would resolve as a relative HTTP request
+            url: URL.createObjectURL(f),
+            name: f.name,
             colormap: 'gray',
             type: f.name,
           }))
