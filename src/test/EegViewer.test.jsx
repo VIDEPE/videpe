@@ -333,7 +333,8 @@ describe('EegViewer — plot rendering', () => {
 
     renderViewer();
 
-    expect(UplotReactMock).toHaveBeenCalledTimes(channelNames.length);
+    // +1 for the fixed x-axis strip rendered below the scroll area
+    expect(UplotReactMock).toHaveBeenCalledTimes(channelNames.length + 1);
   });
 
   it('renders a label overlay for each channel name', () => {
@@ -407,7 +408,8 @@ describe('EegViewer — zoom controls', () => {
     UplotReactMock.mockClear();
     await user.click(zoomInBtn);
 
-    const yRanges = UplotReactMock.mock.calls.map((call) => call[0].options.scales.y.range);
+    const channelCalls = UplotReactMock.mock.calls.slice(0, channelNames.length);
+    const yRanges = channelCalls.map((call) => call[0].options.scales.y.range);
     yRanges.forEach((range) => expect(range).toEqual(yRanges[0]));
   });
 });
