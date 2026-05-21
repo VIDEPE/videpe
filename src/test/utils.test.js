@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { cn, handleScrollToSection, handleNavigation } from '@/lib/utils';
+import { cn, handleScrollToSection, handleNavigation } from '@/utils/utils';
 
 describe('cn', () => {
   it('combines class names', () => {

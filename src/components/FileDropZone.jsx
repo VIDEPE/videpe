@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { Upload, FileCheck } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn } from '@/utils/utils';
 
 export const FileDropZone = ({
   onFiles,
