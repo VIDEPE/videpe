@@ -20,7 +20,6 @@ const DEMO_VOLUMES = [
 ];
 
 export const PatientView = () => {
-
   // Prevent default browser drag-and-drop behavior (e.g., opening files in a new tab)
   useEffect(() => {
     const prevent = (e) => e.preventDefault();
@@ -44,7 +43,7 @@ export const PatientView = () => {
   const handleEegFiles = async (newFiles) => {
     // Merge pending with new files, then keep only the last file per extension so a new drop always replaces the previous file of the same type
     const merged = [...pendingEegFiles, ...Array.from(newFiles)];
-    // Create a map of extension to file, keeping only the last file for each extension. 
+    // Create a map of extension to file, keeping only the last file for each extension.
     // This way, if a user drops a new .vhdr file, it will replace the previous .vhdr in the pending state, while still keeping any .eeg file that was dropped before.
     const byExtension = new Map();
     for (const file of merged) {
@@ -115,7 +114,7 @@ export const PatientView = () => {
     setIsLoading(true);
     setIsDemoloading(true);
     try {
-      const base = import.meta.env.BASE_URL; 
+      const base = import.meta.env.BASE_URL;
       const result = await toast.promise(
         loadBrainVisionEEG(base + DEMO_EEG.header, base + DEMO_EEG.data),
         {
@@ -150,10 +149,16 @@ export const PatientView = () => {
           <button
             type="button"
             className="thin-button px-3 py-1"
-            onClick={eeg || volumes.length > 0 || pendingEegFiles.length > 0 ? handleReset : handleLoadDemo}
+            onClick={
+              eeg || volumes.length > 0 || pendingEegFiles.length > 0 ? handleReset : handleLoadDemo
+            }
             disabled={isLoading}
           >
-            {isDemoloading ? 'Loading…' : eeg || volumes.length > 0 || pendingEegFiles.length > 0 ? 'Reset' : 'Load Demo'}
+            {isDemoloading
+              ? 'Loading…'
+              : eeg || volumes.length > 0 || pendingEegFiles.length > 0
+                ? 'Reset'
+                : 'Load Demo'}
           </button>
         </div>
         <h1 className="absolute left-1/2 -translate-x-1/2 pb-8 text-lg font-semibold pointer-events-none">

@@ -73,7 +73,9 @@ export const FileDropZone = ({
         </div>
       )}
       {/* The hint is only shown when there are pending files that are not yet complete, providing specific feedback on what's missing. */}
-      {hint && <p className="text-xs text-alert font-bold text-center px-4 whitespace-pre-line">{hint}</p>}
+      {hint && (
+        <p className="text-xs text-alert font-bold text-center px-4 whitespace-pre-line">{hint}</p>
+      )}
       <p className="text-xs text-foreground/50">Drag & Drop / Click to Browse</p>
       <input
         ref={inputRef}

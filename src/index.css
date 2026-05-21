@@ -39,7 +39,7 @@
   --c-border: rgba(46, 48, 58, 1); /* borders, dividers */
   --c-primary: rgba(132, 204, 252, 1); /* brand / accent color */
   --c-secondary: rgba(22, 73, 252, 1); /* outlines */
-  --c-alert: rgb(235, 107, 20);; /* warning messages, nondestructive actions */
+  --c-alert: rgb(235, 107, 20); /* warning messages, nondestructive actions */
   --c-shadow:
     rgba(255, 255, 255, 0.4) 0 6px 15px -3px, rgba(255, 255, 255, 0.25) 0 4px 8px -2px; /* box shadows color x y blur spread*/
 }

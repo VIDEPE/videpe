@@ -5,7 +5,6 @@ export const ThemedToaster = () => (
   <Toaster
     position="top-left"
     reverseOrder={false}
-  
     toastOptions={{
       // Ensure toasts follow the app's theme
       style: {
@@ -13,15 +12,13 @@ export const ThemedToaster = () => (
         color: 'var(--c-foreground)',
         border: '1px solid var(--c-border)',
       },
-      // Accessibility props to ensure screen readers announce the toasts. 
+      // Accessibility props to ensure screen readers announce the toasts.
       // 'role: status' indicates that the content is a status message
       // 'aria-live: polite' means it should be announced at the next available opportunity without interrupting the user.
       ariaProps: {
         role: 'status',
         'aria-live': 'polite',
-    }
+      },
     }}
-
-    
   />
 );

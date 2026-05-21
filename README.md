@@ -5,22 +5,21 @@ A web-based viewer for EEG and neuroimaging data (MRI, PET, SPECT), developed at
 ## Features
 
 - **EEG viewer** — multichannel time-series plots with controls for navigating the recording. Build on [uPlot](https://github.com/leeoniya/uplot).
-- **Neuroimaging viewer** — multiplanar 3D viewer for NIfTI volumes (utilising [NiiVue](https://niivue.com/) — A WebGL2 medical image viewer), with controls for adjusting MRI, PET and SPECT overlays settings. 
+- **Neuroimaging viewer** — multiplanar 3D viewer for NIfTI volumes (utilising [NiiVue](https://niivue.com/) — A WebGL2 medical image viewer), with controls for adjusting MRI, PET and SPECT overlays settings.
 - **No Server Required** — Runs entirely in the browser.
 - **Dark / Light Mode** — OS preference detection with manual override.
 - **Cross-Platform** — Runs on modern browsers and even mobile devices.
 
-
 ## Tech stack
 
-| Area | Library |
-|---|---|
-| Framework | React 19 + Vite 8 |
-| Routing | React Router v7 (HashRouter for GitHub Pages) |
-| Styling | Tailwind CSS v4 |
-| EEG plots | uPlot + uplot-react |
-| Neuroimaging | NiiVue |
-| Testing | Vitest + React Testing Library |
+| Area         | Library                                       |
+| ------------ | --------------------------------------------- |
+| Framework    | React 19 + Vite 8                             |
+| Routing      | React Router v7 (HashRouter for GitHub Pages) |
+| Styling      | Tailwind CSS v4                               |
+| EEG plots    | uPlot + uplot-react                           |
+| Neuroimaging | NiiVue                                        |
+| Testing      | Vitest + React Testing Library                |
 
 ## Getting started
 
