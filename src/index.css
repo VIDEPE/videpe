@@ -9,6 +9,7 @@
   --c-border: rgb(196, 196, 196); /* borders, dividers */
   --c-primary: rgba(71, 118, 219, 1); /* brand / accent color */
   --c-secondary: rgba(1, 52, 219, 1); /* outlines */
+  --c-alert: rgb(240, 107, 20); /* warning messages, nondestructive actions */
   --c-shadow:
     rgba(0, 0, 0, 0.4) 0 6px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 8px -2px; /* box shadows */
 
@@ -38,6 +39,7 @@
   --c-border: rgba(46, 48, 58, 1); /* borders, dividers */
   --c-primary: rgba(132, 204, 252, 1); /* brand / accent color */
   --c-secondary: rgba(22, 73, 252, 1); /* outlines */
+  --c-alert: rgb(235, 107, 20);; /* warning messages, nondestructive actions */
   --c-shadow:
     rgba(255, 255, 255, 0.4) 0 6px 15px -3px, rgba(255, 255, 255, 0.25) 0 4px 8px -2px; /* box shadows color x y blur spread*/
 }
@@ -51,6 +53,7 @@
   --color-surface: var(--c-surface);
   --color-primary: var(--c-primary);
   --color-secondary: var(--c-secondary);
+  --color-alert: var(--c-alert);
   --font-sans: system-ui, 'Segoe UI', Roboto, sans-serif;
   --font-mono: ui-monospace, Consolas, monospace;
 }

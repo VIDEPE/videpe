@@ -5,12 +5,12 @@ import { ThemeToggle } from '../components/ThemeToggle';
 import { EegViewer } from '../components/EegViewer';
 import { NiiViewer } from '../components/NiiViewer';
 import { loadBrainVisionEEG } from '../loaders/loadBrainVisionEEG';
-import { detectAndLoadEEG } from '../loaders/eegFormats';
+import { detectAndLoadEEG, checkEegFiles } from '../loaders/eegFormats';
 import { FileDropZone } from '../components/FileDropZone';
 
 const DEMO_EEG = {
-  header: 'dataset1/EEG/sub-19_task-rest_desc-cleaned_eeg.vhdr',
-  data: 'dataset1/EEG/sub-19_task-rest_desc-cleaned_eeg.eeg',
+  header: 'sub-16_ses-preop_task-ied_AVG_desc-cleaned_eeg.vhdr',
+  data: 'sub-16_ses-preop_task-ied_AVG_desc-cleaned_eeg.eeg',
 };
 
 const DEMO_VOLUMES = [
@@ -34,52 +34,109 @@ export const PatientView = () => {
 
   const [eeg, setEeg] = useState(null); // { data, channelNames }
   const [volumes, setVolumes] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isDemoloading, setIsDemoloading] = useState(false);
+  const [pendingEegFiles, setPendingEegFiles] = useState([]);
+  const [eegHint, setEegHint] = useState(null);
 
-  // Handler for when EEG files are dropped or selected. It tries to detect the format and load the data, updating state accordingly.
-  const handleEegFiles = async (files) => {
-    setLoading(true);
-    try {
-      setEeg(await detectAndLoadEEG(Array.from(files)));
-    } catch (err) {
-      toast.error(err.message);
-    } finally {
-      setLoading(false);
+  // Handler for when EEG files are dropped or selected.
+  // Files accumulate across drops until all required files for a format are present.
+  const handleEegFiles = async (newFiles) => {
+    // Merge pending with new files, then keep only the last file per extension so a new drop always replaces the previous file of the same type
+    const merged = [...pendingEegFiles, ...Array.from(newFiles)];
+    // Create a map of extension to file, keeping only the last file for each extension. 
+    // This way, if a user drops a new .vhdr file, it will replace the previous .vhdr in the pending state, while still keeping any .eeg file that was dropped before.
+    const byExtension = new Map();
+    for (const file of merged) {
+      const ext = file.name.toLowerCase().match(/(\.[^.]+)$/)?.[1];
+      if (ext) byExtension.set(ext, file);
+    }
+    const deduped = [...byExtension.values()];
+    // Check the accumulated files against known EEG formats to determine if we can load or if we need to wait for more files.
+    const { formatName, complete, missing, warning } = checkEegFiles(deduped);
+
+    if (complete) {
+      // All required files present — clear pending state and load
+      setPendingEegFiles([]);
+      setEegHint(null);
+      setIsLoading(true);
+      try {
+        const result = await toast.promise(
+          Promise.resolve().then(() => detectAndLoadEEG(deduped)),
+          {
+            loading: 'Loading EEG data…',
+            success: 'EEG data loaded!',
+            error: (err) => `Error loading EEG:\n${err.message}`,
+          }
+        );
+        setEeg(result);
+      } finally {
+        setIsLoading(false);
+      }
+    } else if (formatName) {
+      // Partial match or name mismatch — hold files and show what's wrong
+      setPendingEegFiles(deduped);
+      setEegHint(warning ?? `${formatName} also requires: ${missing.join(', ')}`);
+    } else {
+      // No recognized format at all
+      setPendingEegFiles([]);
+      setEegHint(null);
+      toast.error(`Unrecognized EEG format.\nSupported: BrainVision (.vhdr + .eeg)`);
     }
   };
 
-  // Handler for when imaging files are dropped or selected. It reads the files as ArrayBuffers and prepares them for the NiiViewer, updating state accordingly.
+  // Handler for when imaging files are dropped or selected. It reads the files as ArrayBuffers and prepares them for visualization, updating state accordingly.
   const handleNiiFiles = async (files) => {
-    setLoading(true);
+    setIsLoading(true);
     try {
-      const vols = await Promise.all(
-        Array.from(files).map(async (f) => ({
-          url: f.name,
-          buffer: await f.arrayBuffer(),
-          colormap: 'gray',
-          type: f.name,
-        }))
+      const result = await toast.promise(
+        Promise.all(
+          Array.from(files).map(async (f) => ({
+            url: f.name,
+            buffer: await f.arrayBuffer(),
+            colormap: 'gray',
+            type: f.name,
+          }))
+        ),
+        {
+          loading: 'Loading imaging data…',
+          success: 'Imaging data loaded!',
+          error: (err) => `Error loading imaging data:\n${err.message}`,
+        }
       );
-      setVolumes(vols);
-    } catch (err) {
-      toast.error(err.message);
+      setVolumes(result);
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
   const handleLoadDemo = async () => {
-    setLoading(true);
+    setIsLoading(true);
+    setIsDemoloading(true);
     try {
-      const base = import.meta.env.BASE_URL;
-      const result = await loadBrainVisionEEG(base + DEMO_EEG.header, base + DEMO_EEG.data);
+      const base = import.meta.env.BASE_URL; 
+      const result = await toast.promise(
+        loadBrainVisionEEG(base + DEMO_EEG.header, base + DEMO_EEG.data),
+        {
+          loading: 'Loading demo EEG + Imaging data…',
+          success: 'Demo data loaded!',
+          error: (err) => `Error loading demo EEG + Imaging data:\n${err.message}`,
+        }
+      );
       setEeg(result);
       setVolumes(DEMO_VOLUMES);
-    } catch (err) {
-      toast.error(err.message);
     } finally {
-      setLoading(false);
+      setIsLoading(false);
+      setIsDemoloading(false);
     }
+  };
+
+  // Resets both viewers, returning to the empty drop zone state.
+  const handleReset = () => {
+    setEeg(null);
+    setVolumes([]);
+    setPendingEegFiles([]);
+    setEegHint(null);
   };
 
   return (
@@ -87,13 +144,15 @@ export const PatientView = () => {
       {/* Top bar: load actions on the left, theme toggle on the right */}
       <div className="shrink-0 relative flex items-center justify-between px-4 py-2 border-b border-border mt-8">
         <div className="flex items-center gap-2">
+          {/* The button shows "Load Demo" when no data is loaded, and "Reset" when either EEG, pending EEG files, or volumes are present.
+          It is disabled while loading to prevent multiple simultaneous loads.*/}
           <button
             type="button"
             className="thin-button px-3 py-1"
-            onClick={handleLoadDemo}
-            disabled={loading}
+            onClick={eeg || volumes.length > 0 || pendingEegFiles.length > 0 ? handleReset : handleLoadDemo}
+            disabled={isLoading}
           >
-            {loading ? 'Loading…' : 'Load Demo'}
+            {isDemoloading ? 'Loading…' : eeg || volumes.length > 0 || pendingEegFiles.length > 0 ? 'Reset' : 'Load Demo'}
           </button>
         </div>
         <h1 className="absolute left-1/2 -translate-x-1/2 pb-8 text-lg font-semibold pointer-events-none">
@@ -113,6 +172,8 @@ export const PatientView = () => {
               accepted_formats=".vhdr,.eeg"
               label="Drop EEG files"
               description="BrainVision: .vhdr + .eeg"
+              pendingFiles={pendingEegFiles}
+              hint={eegHint}
             />
           )}
         </div>

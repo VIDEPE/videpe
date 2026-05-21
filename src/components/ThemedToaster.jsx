@@ -3,7 +3,7 @@ import { Toaster } from 'react-hot-toast';
 // Uses CSS variables from index.css so toast colors always match the active theme automatically.
 export const ThemedToaster = () => (
   <Toaster
-    position="top-center"
+    position="top-left"
     reverseOrder={false}
   
     toastOptions={{
