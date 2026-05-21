@@ -35,7 +35,7 @@ function parseVhdr(text) {
 
     if (section === 'Common Infos') {
       if (key === 'NumberOfChannels') nChannels = parseInt(value, 10);
-      if (key === 'SamplingInterval') samplingInterval = parseInt(value, 10);
+      if (key === 'SamplingInterval') samplingInterval = parseFloat(value);
     }
 
     if (section === 'Channel Infos') {

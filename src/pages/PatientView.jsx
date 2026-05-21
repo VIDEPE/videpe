@@ -9,8 +9,8 @@ import { detectAndLoadEEG, checkEegFiles } from '../loaders/eegFormats';
 import { FileDropZone } from '../components/FileDropZone';
 
 const DEMO_EEG = {
-  header: 'demo_data/sub-16_ses-preop_task-ied_AVG_desc-cleaned_eeg.vhdr',
-  data: 'demo_data/sub-16_ses-preop_task-ied_AVG_desc-cleaned_eeg.eeg',
+  header: 'demo_data/sub-synth_task-rest_eeg.vhdr',
+  data: 'demo_data/sub-synth_task-rest_eeg.eeg',
 };
 
 const DEMO_VOLUMES = [

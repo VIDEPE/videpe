@@ -6,6 +6,8 @@ A web-based viewer for EEG and neuroimaging data (MRI, PET, SPECT), developed at
 
 - **EEG viewer** — multichannel time-series plots with controls for navigating the recording. Build on [uPlot](https://github.com/leeoniya/uplot).
 - **Neuroimaging viewer** — multiplanar 3D viewer for NIfTI volumes (utilising [NiiVue](https://niivue.com/) — A WebGL2 medical image viewer), with controls for adjusting MRI, PET and SPECT overlays settings.
+- **Drag & drop file loading** — drop EEG or imaging files directly onto the viewer. Multi-file formats (e.g. BrainVision `.vhdr` + `.eeg`) can be dropped together or in separate drops.
+- **Built-in demo** — load a sample EEG + MRI/PET/SPECT dataset with one click to explore the viewer without your own files.
 - **No Server Required** — Runs entirely in the browser.
 - **Dark / Light Mode** — OS preference detection with manual override.
 - **Cross-Platform** — Runs on modern browsers and even mobile devices.

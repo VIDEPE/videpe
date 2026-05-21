@@ -62,6 +62,21 @@ body {
   margin: 0;
 }
 
+.themed-scrollbar {
+  scrollbar-color: var(--c-border) var(--c-surface); /* Firefox */
+
+  &::-webkit-scrollbar {
+    width: 8px;
+  }
+  &::-webkit-scrollbar-track {
+    background: var(--c-surface);
+  }
+  &::-webkit-scrollbar-thumb {
+    background: var(--c-border);
+    border-radius: 4px;
+  }
+}
+
 h1,
 h2 {
   font-weight: 500;

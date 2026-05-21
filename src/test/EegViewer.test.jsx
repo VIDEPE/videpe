@@ -30,6 +30,8 @@ beforeEach(() => {
   };
 });
 
+const INITIAL_Y_SCALE = 10; // must match the yScale useState default in EegViewer
+
 const channelNames = ['EEG1', 'EEG2', 'EEG3'];
 const data = [
   [0, 10, 20, 30], // timestamps — 30 s recording so tMax(30) ≥ 20 → windowSize initialises to 20
@@ -93,11 +95,11 @@ describe('EegViewer — controls presence', () => {
     expect(buttons[3]).toHaveTextContent('>|');
   });
 
-  it('renders the Zoom label and its two buttons', () => {
+  it('renders the Gain label and its two buttons', () => {
     renderViewer();
-    expect(screen.getByText('Zoom')).toBeInTheDocument();
-    const zoomLabel = screen.getByText('Zoom');
-    const buttons = within(containerOf(zoomLabel)).getAllByRole('button');
+    expect(screen.getByText('Gain (µV)')).toBeInTheDocument();
+    const gainLabel = screen.getByText('Gain (µV)');
+    const buttons = within(containerOf(gainLabel)).getAllByRole('button');
     expect(buttons).toHaveLength(2);
   });
 });
@@ -333,79 +335,83 @@ describe('EegViewer — plot rendering', () => {
 
     renderViewer();
 
-    expect(UplotReactMock).toHaveBeenCalledTimes(channelNames.length);
+    // +1 for the fixed x-axis strip rendered below the scroll area
+    expect(UplotReactMock).toHaveBeenCalledTimes(channelNames.length + 1);
   });
 
-  it('passes the correct channel name to each plot', async () => {
+  it('renders a label overlay for each channel name', () => {
+    renderViewer();
+
+    for (const name of channelNames) {
+      expect(screen.getByText(name)).toBeTruthy();
+    }
+  });
+
+  it('all channel plots hide their x-axis (it is shown in the fixed strip instead)', async () => {
     const { default: UplotReactMock } = await import('uplot-react');
     UplotReactMock.mockClear();
 
     renderViewer();
 
-    const calledOptions = UplotReactMock.mock.calls.map((call) => call[0].options.axes[1].label);
-    expect(calledOptions).toEqual(channelNames);
+    // The first N calls are channel plots (axes[0].show === false).
+    // The last call is the fixed x-axis strip (axes[0].show is undefined/truthy).
+    const channelCalls = UplotReactMock.mock.calls.slice(0, channelNames.length);
+    const xAxisVisibility = channelCalls.map((call) => call[0].options.axes[0].show);
+    expect(xAxisVisibility).toEqual([false, false, false]);
   });
 
-  it('only the last channel shows the x-axis', async () => {
+  it('all channels receive the same initial y-range', async () => {
     const { default: UplotReactMock } = await import('uplot-react');
     UplotReactMock.mockClear();
 
     renderViewer();
 
-    const xAxisVisibility = UplotReactMock.mock.calls.map((call) => call[0].options.axes[0].show);
-    expect(xAxisVisibility).toEqual([false, false, true]);
-  });
-
-  it('all channels receive the same initial y-range of [-100, 100]', async () => {
-    const { default: UplotReactMock } = await import('uplot-react');
-    UplotReactMock.mockClear();
-
-    renderViewer();
-
-    const yRanges = UplotReactMock.mock.calls.map((call) => call[0].options.scales.y.range);
-    yRanges.forEach((range) => expect(range).toEqual([-100, 100]));
+    const channelCalls = UplotReactMock.mock.calls.slice(0, channelNames.length);
+    const yRanges = channelCalls.map((call) => call[0].options.scales.y.range);
+    yRanges.forEach((range) => expect(range).toEqual([-INITIAL_Y_SCALE, INITIAL_Y_SCALE]));
   });
 });
 
-describe('EegViewer — zoom controls', () => {
-  it('zoom + shrinks the y-range (zoom in)', async () => {
+describe('EegViewer — gain controls', () => {
+  it('gain + halves the y-range (increase gain)', async () => {
     const { default: UplotReactMock } = await import('uplot-react');
     const user = userEvent.setup();
     renderViewer();
 
-    const [, zoomInBtn] = within(containerOf(screen.getByText('Zoom'))).getAllByRole('button');
+    const [, gainUpBtn] = within(containerOf(screen.getByText('Gain (µV)'))).getAllByRole('button');
     UplotReactMock.mockClear();
-    await user.click(zoomInBtn);
+    await user.click(gainUpBtn);
 
     const [lo, hi] = UplotReactMock.mock.calls[0][0].options.scales.y.range;
-    expect(lo).toBeCloseTo(-100 / 1.5, 3);
-    expect(hi).toBeCloseTo(100 / 1.5, 3);
+    expect(lo).toBeCloseTo(-INITIAL_Y_SCALE / 2, 3);
+    expect(hi).toBeCloseTo(INITIAL_Y_SCALE / 2, 3);
   });
 
-  it('zoom − expands the y-range (zoom out)', async () => {
+  it('gain − doubles the y-range (decrease gain)', async () => {
     const { default: UplotReactMock } = await import('uplot-react');
     const user = userEvent.setup();
     renderViewer();
 
-    const [zoomOutBtn] = within(containerOf(screen.getByText('Zoom'))).getAllByRole('button');
+    const [gainDownBtn] = within(containerOf(screen.getByText('Gain (µV)'))).getAllByRole('button');
     UplotReactMock.mockClear();
-    await user.click(zoomOutBtn);
+    await user.click(gainDownBtn);
 
     const [lo, hi] = UplotReactMock.mock.calls[0][0].options.scales.y.range;
-    expect(lo).toBeCloseTo(-100 * 1.5, 3);
-    expect(hi).toBeCloseTo(100 * 1.5, 3);
+    expect(lo).toBeCloseTo(-INITIAL_Y_SCALE * 2, 3);
+    expect(hi).toBeCloseTo(INITIAL_Y_SCALE * 2, 3);
   });
 
-  it('all channels share the same y-range after zooming', async () => {
+  it('all channels share the same y-range after gain change', async () => {
     const { default: UplotReactMock } = await import('uplot-react');
     const user = userEvent.setup();
     renderViewer();
 
-    const [, zoomInBtn] = within(containerOf(screen.getByText('Zoom'))).getAllByRole('button');
+    const [, gainUpBtn] = within(containerOf(screen.getByText('Gain (µV)'))).getAllByRole('button');
     UplotReactMock.mockClear();
-    await user.click(zoomInBtn);
+    await user.click(gainUpBtn);
 
-    const yRanges = UplotReactMock.mock.calls.map((call) => call[0].options.scales.y.range);
+    const channelCalls = UplotReactMock.mock.calls.slice(0, channelNames.length);
+    const yRanges = channelCalls.map((call) => call[0].options.scales.y.range);
     yRanges.forEach((range) => expect(range).toEqual(yRanges[0]));
   });
 });

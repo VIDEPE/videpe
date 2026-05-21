@@ -4,23 +4,24 @@ import 'uplot/dist/uPlot.min.css';
 import { useTheme } from '@/components/ThemeContext';
 import { minMaxDownsample } from '@/utils/downsample';
 
+const Y_AXIS_WIDTH = 60; // px for the y-axis area (channel name + tick space) — must match x-axis strip left padding
+const PLOT_RIGHT_PAD = 20; // px right padding — must match in both channel plots and x-axis strip so ticks align
+
 // Builds uPlot options for a single channel. Called once per channel on each render.
 const buildChannelOptions = ({
-  channelName,
   channelIndex,
   totalChannels,
   isDarkMode,
   syncKey,
   width,
   height,
-  isLastChannel,
   windowSize,
   startTime,
   yScale,
 }) => {
   const axisColor = isDarkMode ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.8)';
   const gridColor = isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
-  const stroke = `hsl(${(channelIndex * 360) / totalChannels}, 70%, 55%)`;
+  const stroke =  isDarkMode ? 'rgb(255, 255, 255)' : 'rgba(0, 0, 0, 0.8)';
 
   return {
     width,
@@ -32,18 +33,17 @@ const buildChannelOptions = ({
       y: { range: [-yScale, yScale] },
     },
     axes: [
-      // x-axis label and ticks only shown on the bottom plot to save space
+      { show: false },
       {
-        show: isLastChannel,
         stroke: axisColor,
-        label: isLastChannel ? 'Time (s)' : undefined,
+        size: Y_AXIS_WIDTH,
         grid: { stroke: gridColor },
+        filter: () => [],
       },
-      { label: channelName, stroke: axisColor, size: 60, grid: { stroke: gridColor } },
     ],
     series: [{}, { stroke, width: 1 }],
     legend: { show: false },
-    padding: [4, 0, 4, 0],
+    padding: [4, PLOT_RIGHT_PAD, 4, 0],
   };
 };
 
@@ -53,20 +53,18 @@ export const EegViewer = ({ data, channelNames }) => {
   const containerRef = useRef(null); // channel plot panel — measures both plot width and available height
   const [plotWidth, setPlotWidth] = useState(0); // passed to uPlot options to fill the space
   const [channelAreaHeight, setChannelAreaHeight] = useState(0); // used to compute per-channel plot height
-  const [visibleChannelCount, setVisibleChannelCount] = useState(30); // how many channels fit in view at once
+  const [visibleChannelCount, setVisibleChannelCount] = useState(20); // how many channels fit in view at once
   const tMax = data[0][data[0].length - 1]; // total time span of the recording, from the time values in the first row
   const [windowSize, setWindowSize] = useState(tMax < 20 ? Math.ceil(tMax) : 20); // seconds visible in the x-range, initialized to 20s or the full recording if shorter
   const [startTime, setStartTime] = useState(0); // start of the visible x-range
   const [shiftTimeStepSize, setShiftTimeStepSize] = useState(5);
-  const [yScale, setYScale] = useState(100); // y-axis half-range in µV; all channels share this
+  const [yScale, setYScale] = useState(10); // y-axis half-range in µV; all channels share this
 
   const clampChannelCount = (n) => Math.max(1, Math.min(channelNames.length, n));
-  const X_AXIS_EXTRA = 40; // px reserved for x-axis ticks + label on the last channel
-  // plotHeight divides the remaining area evenly; last channel gets X_AXIS_EXTRA on top
+  const X_AXIS_HEIGHT = 45; // px reserved for the fixed x-axis strip below the scroll area
   const plotHeight =
-    channelAreaHeight > 0
-      ? Math.floor((channelAreaHeight - X_AXIS_EXTRA) / visibleChannelCount)
-      : 0;
+    channelAreaHeight > 0 ? Math.floor(channelAreaHeight / visibleChannelCount) : 0;
+  const axisColor = isDarkMode ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.8)';
 
   // Downsample each channel to 2×plotWidth points for the visible window.
   // Re-runs only when the window or plot dimensions change, not on every render.
@@ -112,7 +110,6 @@ export const EegViewer = ({ data, channelNames }) => {
       <div className="flex-1 min-h-0 flex flex-row">
         {/* Left sidebar: justify-center now centers against the channel area height only */}
         <div className="shrink-0 flex flex-col items-center justify-center gap-1 px-1">
-          <span className="text-xs">Ch.</span>
           <button
             type="button"
             className="thin-button"
@@ -138,34 +135,37 @@ export const EegViewer = ({ data, channelNames }) => {
           </button>
         </div>
 
-        {/* relative wrapper: sized by flex layout, never by content */}
-        <div className="flex-1 min-w-0 relative">
-          {/* containerRef is on the scroll div itself: absolute inset-0 fixes its size so
-              content can never inflate it. scrollbar-gutter:stable always reserves the scrollbar
-              lane so contentRect.width is stable and no horizontal scrollbar ever appears */}
-          <div
-            ref={containerRef}
-            className="absolute inset-0 overflow-y-auto"
-            style={{ scrollbarGutter: 'stable' }}
-          >
-            {/* Wait for first measurements before rendering — avoids zero-size flash */}
-            {plotWidth > 0 &&
-              plotHeight > 0 &&
-              channelNames.map((name, i) => {
-                const isLast = i === channelNames.length - 1;
-                const channelHeight = isLast ? plotHeight + X_AXIS_EXTRA : plotHeight;
-                return (
-                  <div key={name} style={{ height: channelHeight, overflow: 'hidden' }}>
+        {/* flex-col so the scroll area and fixed x-axis strip stack vertically */}
+        <div className="flex-1 min-w-0 flex flex-col">
+          {/* relative wrapper: sized by flex layout, never by content */}
+          <div className="flex-1 min-h-0 relative">
+            {/* containerRef is on the scroll div itself: absolute inset-0 fixes its size so
+                content can never inflate it. scrollbar-gutter:stable always reserves the scrollbar
+                lane so contentRect.width is stable and no horizontal scrollbar ever appears */}
+            <div
+              ref={containerRef}
+              className="absolute inset-0 overflow-y-auto themed-scrollbar"
+              style={{ scrollbarGutter: 'stable' }}
+            >
+              {/* Wait for first measurements before rendering — avoids zero-size flash */}
+              {plotWidth > 0 &&
+                plotHeight > 0 &&
+                channelNames.map((name, i) => (
+                  <div key={name} style={{ height: plotHeight, overflow: 'hidden' }} className="relative">
+                    <span
+                      className="absolute left-0 top-1/2 -translate-y-1/2 text-xs text-center pointer-events-none z-10 px-0.5 truncate"
+                      style={{ width: Y_AXIS_WIDTH }}
+                    >
+                      {name}
+                    </span>
                     <UplotReact
                       options={buildChannelOptions({
-                        channelName: name,
                         channelIndex: i,
                         totalChannels: channelNames.length,
                         isDarkMode,
                         syncKey,
                         width: plotWidth,
-                        height: channelHeight,
-                        isLastChannel: isLast,
+                        height: plotHeight,
                         windowSize,
                         startTime,
                         yScale,
@@ -175,68 +175,108 @@ export const EegViewer = ({ data, channelNames }) => {
                       onDelete={() => {}}
                     />
                   </div>
-                );
-              })}
+                ))}
+            </div>
           </div>
+
+          {/* Fixed x-axis strip — always visible, never scrolls with the channels */}
+          {plotWidth > 0 && (
+            <div className="shrink-0" style={{ height: X_AXIS_HEIGHT }}>
+              <UplotReact
+                options={{
+                  width: plotWidth,
+                  height: X_AXIS_HEIGHT,
+                  cursor: { sync: { key: syncKey } },
+                  scales: { x: { time: false, range: [startTime, startTime + windowSize] } },
+                  axes: [
+                    { stroke: axisColor, size: 40, grid: { show: false } },
+                    { show: false },
+                  ],
+                  series: [{}],
+                  legend: { show: false },
+                  padding: [0, PLOT_RIGHT_PAD, 0, Y_AXIS_WIDTH],
+                }}
+                data={[data[0]]}
+                onCreate={() => {}}
+                onDelete={() => {}}
+              />
+            </div>
+          )}
         </div>
       </div>
 
       {/* shrink-0 pins the controls at the bottom, never squeezed by the channel area */}
       <div className="shrink-0 flex flex-wrap justify-center gap-4 py-2">
-        {/* Zoom: shrink/expand the shared y-range (all channels) */}
-        <div className="flex items-center gap-1">
-          <button type="button" className="thin-button" onClick={() => setYScale((s) => s * 1.5)}>
-            −
-          </button>
-          <span className="text-sm px-1">Zoom</span>
-          <button type="button" className="thin-button" onClick={() => setYScale((s) => s / 1.5)}>
-            +
-          </button>
+        {/* Gain: shrink/expand the shared y-range (all channels) */}
+        <div className="flex flex-col items-center gap-0.5">
+          <span className="text-xs text-foreground/60">Gain (µV)</span>
+          <div className="flex items-center gap-1">
+            <button type="button" className="thin-button" onClick={() => setYScale((s) => s * 2)}>
+              −
+            </button>
+            <input
+              type="number"
+              value={Math.round(yScale)}
+              min={1}
+              onChange={(e) => setYScale(Math.max(1, Number(e.target.value)))}
+              className="w-16 text-center border border-border rounded px-1 py-0.5 text-sm bg-background text-foreground"
+              aria-label="Gain (µV)"
+            />
+            <button type="button" className="thin-button" onClick={() => setYScale((s) => s / 2)}>
+              +
+            </button>
+          </div>
         </div>
 
-        {/* Shift: move the x-range forward/backward by a user-defined step */}
-        <div className="flex items-center gap-1">
-          <button type="button" className="thin-button" onClick={() => setStartTime(0)}>
-            {'|<'}
-          </button>
-          <button type="button" className="thin-button" onClick={backwardshiftStartTime}>
-            {'<'}
-          </button>
-          <input
-            type="number"
-            value={shiftTimeStepSize}
-            onChange={(e) => setShiftTimeStepSize(Math.max(1, Number(e.target.value)))}
-            className="w-16 text-center border border-border rounded px-1 py-0.5 text-sm bg-background text-foreground"
-            aria-label="Shift step (s)"
-          />
-          <button type="button" className="thin-button" onClick={forwardshiftStartTime}>
-            {'>'}
-          </button>
-          <button
-            type="button"
-            className="thin-button"
-            onClick={() => setStartTime(data[0][data[0].length - 1] - windowSize)}
-          >
-            {'>|'}
-          </button>
+        {/* Time Shift: move the x-range forward/backward by a user-defined step */}
+        <div className="flex flex-col items-center gap-0.5">
+          <span className="text-xs text-foreground/60">Time Shift (s)</span>
+          <div className="flex items-center gap-1">
+            <button type="button" className="thin-button" onClick={() => setStartTime(0)}>
+              {'|<'}
+            </button>
+            <button type="button" className="thin-button" onClick={backwardshiftStartTime}>
+              {'<'}
+            </button>
+            <input
+              type="number"
+              value={shiftTimeStepSize}
+              onChange={(e) => setShiftTimeStepSize(Math.max(1, Number(e.target.value)))}
+              className="w-16 text-center border border-border rounded px-1 py-0.5 text-sm bg-background text-foreground"
+              aria-label="Time shift step (s)"
+            />
+            <button type="button" className="thin-button" onClick={forwardshiftStartTime}>
+              {'>'}
+            </button>
+            <button
+              type="button"
+              className="thin-button"
+              onClick={() => setStartTime(data[0][data[0].length - 1] - windowSize)}
+            >
+              {'>|'}
+            </button>
+          </div>
         </div>
 
-        {/* Window: increase/decrease the total visible x-range */}
-        <div className="flex items-center gap-1">
-          <button type="button" className="thin-button " onClick={decreaseWindowSize}>
-            −
-          </button>
-          <input
-            type="number"
-            value={windowSize}
-            min={1}
-            onChange={(e) => setWindowSize(Math.max(1, Number(e.target.value)))}
-            className="w-16 text-center border border-border rounded px-1 py-0.5 text-sm bg-background text-foreground"
-            aria-label="Window size (s)"
-          />
-          <button type="button" className="thin-button" onClick={increaseWindowSize}>
-            +
-          </button>
+        {/* Window Size: increase/decrease the total visible x-range */}
+        <div className="flex flex-col items-center gap-0.5">
+          <span className="text-xs text-foreground/60">Window Size (s)</span>
+          <div className="flex items-center gap-1">
+            <button type="button" className="thin-button" onClick={decreaseWindowSize}>
+              −
+            </button>
+            <input
+              type="number"
+              value={windowSize}
+              min={1}
+              onChange={(e) => setWindowSize(Math.max(1, Number(e.target.value)))}
+              className="w-16 text-center border border-border rounded px-1 py-0.5 text-sm bg-background text-foreground"
+              aria-label="Window size (s)"
+            />
+            <button type="button" className="thin-button" onClick={increaseWindowSize}>
+              +
+            </button>
+          </div>
         </div>
       </div>
     </div>
