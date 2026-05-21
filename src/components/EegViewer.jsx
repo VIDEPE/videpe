@@ -21,7 +21,7 @@ const buildChannelOptions = ({
 }) => {
   const axisColor = isDarkMode ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.8)';
   const gridColor = isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
-  const stroke = `hsl(${(channelIndex * 360) / totalChannels}, 70%, 55%)`;
+  const stroke =  isDarkMode ? 'rgb(255, 255, 255)' : 'rgba(0, 0, 0, 0.8)';
 
   return {
     width,
