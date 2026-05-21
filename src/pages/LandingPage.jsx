@@ -46,14 +46,14 @@ export const LandingPage = () => {
         </button>
       </section>
       <hr></hr>
-      <section id="documentation_section" className="grid grid-cols-1 md:grid-cols-2 mt-4">
+      <section id="documentation_section" className="grid grid-cols-1 md:grid-cols-2 mt-4 mb-8">
         <div id="docs" className="flex flex-col items-center">
           <h2>Documentation</h2>
           <ul className="list-none p-0 flex flex-col gap-2 mt-4 w-fit mx-auto">
             <li>
               <a href={DOCS_URL} className="flex items-center gap-2">
                 <BookMarked size={iconSize} style={{ stroke: 'var(--c-primary)' }} />
-                Documentation (coming soonish)
+                Wiki (coming soonish)
               </a>
             </li>
             <li>

@@ -25,9 +25,12 @@ function makeEegBuffer(values = [1, 4, 2, 5, 3, 6]) {
 }
 
 function mockFetch(vhdr = VHDR, buffer = makeEegBuffer()) {
-  vi.stubGlobal('fetch', vi.fn()
-    .mockResolvedValueOnce({ ok: true, text: () => Promise.resolve(vhdr) })
-    .mockResolvedValueOnce({ ok: true, arrayBuffer: () => Promise.resolve(buffer) }),
+  vi.stubGlobal(
+    'fetch',
+    vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, text: () => Promise.resolve(vhdr) })
+      .mockResolvedValueOnce({ ok: true, arrayBuffer: () => Promise.resolve(buffer) })
   );
 }
 
@@ -134,9 +137,12 @@ describe('loadBrainVisionEEG — fetch errors', () => {
   });
 
   it('throws when the data request fails', async () => {
-    vi.stubGlobal('fetch', vi.fn()
-      .mockResolvedValueOnce({ ok: true, text: () => Promise.resolve(VHDR) })
-      .mockResolvedValueOnce({ ok: false, statusText: 'Not Found' }),
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce({ ok: true, text: () => Promise.resolve(VHDR) })
+        .mockResolvedValueOnce({ ok: false, statusText: 'Not Found' })
     );
     await expect(loadBrainVisionEEG('h.vhdr', 'missing.eeg')).rejects.toThrow('Not Found');
   });

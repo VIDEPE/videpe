@@ -23,7 +23,10 @@ function parseVhdr(text) {
   for (const raw of text.split('\n')) {
     const line = raw.trim();
     if (!line || line.startsWith(';')) continue;
-    if (line.startsWith('[')) { section = line.slice(1, -1); continue; }
+    if (line.startsWith('[')) {
+      section = line.slice(1, -1);
+      continue;
+    }
 
     const eq = line.indexOf('=');
     if (eq === -1) continue;
@@ -53,10 +56,7 @@ function parseVhdr(text) {
  * data[i+1] is the float32 signal for channel i.
  */
 export async function loadBrainVisionEEG(header, data) {
-  const [headerText, buffer] = await Promise.all([
-    readText(header),
-    readArrayBuffer(data),
-  ]);
+  const [headerText, buffer] = await Promise.all([readText(header), readArrayBuffer(data)]);
 
   const { nChannels, samplingInterval, channelNames } = parseVhdr(headerText);
   if (nChannels === 0 || samplingInterval === 0) {

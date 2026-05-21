@@ -4,30 +4,38 @@ import userEvent from '@testing-library/user-event';
 import { EegViewer } from '@/components/EegViewer';
 
 vi.mock('uplot-react', () => {
-  const UplotReactMock = vi.fn(function () { return null; });
+  const UplotReactMock = vi.fn(function () {
+    return null;
+  });
   return { default: UplotReactMock };
 });
 
 vi.mock('@/components/ThemeContext', () => ({
-  useTheme: function () { return { isDarkMode: false }; },
+  useTheme: function () {
+    return { isDarkMode: false };
+  },
 }));
 
 // jsdom does not implement ResizeObserver; use a class so `new` works,
 // and fire the callback immediately so plotWidth/plotHeight become non-zero
 beforeEach(() => {
   global.ResizeObserver = class {
-    constructor(callback) { this._cb = callback; }
-    observe() { this._cb([{ contentRect: { width: 800, height: 600 } }]); }
+    constructor(callback) {
+      this._cb = callback;
+    }
+    observe() {
+      this._cb([{ contentRect: { width: 800, height: 600 } }]);
+    }
     disconnect() {}
   };
 });
 
 const channelNames = ['EEG1', 'EEG2', 'EEG3'];
 const data = [
-  [0, 0.01, 0.02],   // timestamps
-  [1, 2, 3],         // EEG1
-  [4, 5, 6],         // EEG2
-  [7, 8, 9],         // EEG3
+  [0, 10, 20, 30], // timestamps — 30 s recording so tMax(30) ≥ 20 → windowSize initialises to 20
+  [1, 2, 3, 4], // EEG1
+  [4, 5, 6, 7], // EEG2
+  [7, 8, 9, 10], // EEG3
 ];
 
 const renderViewer = () => render(<EegViewer data={data} channelNames={channelNames} />);
@@ -232,6 +240,69 @@ describe('EegViewer — start/end navigation', () => {
     const lastTimestamp = data[0][data[0].length - 1];
     // range[1] = startTime + windowSize = (lastTs - windowSize) + windowSize = lastTs
     expect(range[1]).toBeCloseTo(lastTimestamp, 5);
+  });
+
+  it('> shifts start time forward by the default shift step (5)', async () => {
+    const { default: UplotReactMock } = await import('uplot-react');
+    const user = userEvent.setup();
+    renderViewer();
+
+    UplotReactMock.mockClear();
+    await user.click(shiftButtons()[2]); // >
+
+    const range = UplotReactMock.mock.calls[0][0].options.scales.x.range;
+    expect(range[0]).toBe(5);
+  });
+
+  it('< shifts start time backward by the default shift step', async () => {
+    const { default: UplotReactMock } = await import('uplot-react');
+    const user = userEvent.setup();
+    renderViewer();
+
+    await user.click(shiftButtons()[2]); // > to move away from 0
+    UplotReactMock.mockClear();
+    await user.click(shiftButtons()[1]); // <
+
+    const range = UplotReactMock.mock.calls[0][0].options.scales.x.range;
+    expect(range[0]).toBe(0);
+  });
+
+  it('< clamps start time at 0', async () => {
+    const { default: UplotReactMock } = await import('uplot-react');
+    const user = userEvent.setup();
+    renderViewer();
+
+    await user.click(shiftButtons()[2]); // > advance to 5
+    await user.click(shiftButtons()[1]); // < back to 0
+    await user.click(shiftButtons()[1]); // < try to go below 0 — state unchanged, no re-render
+
+    // Last render (from the first < click) had startTime=0
+    const lastRange = UplotReactMock.mock.calls.at(-1)[0].options.scales.x.range;
+    expect(lastRange[0]).toBe(0);
+  });
+});
+
+describe('EegViewer — shift step size effect', () => {
+  const shiftButtons = () => {
+    const input = screen.getByRole('spinbutton', { name: /shift step/i });
+    return within(containerOf(input)).getAllByRole('button');
+    // order: [|<, <, >, >|]
+  };
+
+  it('changing the shift step changes the jump distance of the > button', async () => {
+    const { default: UplotReactMock } = await import('uplot-react');
+    const user = userEvent.setup();
+    renderViewer();
+
+    fireEvent.change(screen.getByRole('spinbutton', { name: /shift step/i }), {
+      target: { value: '10' },
+    });
+
+    UplotReactMock.mockClear();
+    await user.click(shiftButtons()[2]); // >
+
+    const range = UplotReactMock.mock.calls[0][0].options.scales.x.range;
+    expect(range[0]).toBe(10);
   });
 });
 

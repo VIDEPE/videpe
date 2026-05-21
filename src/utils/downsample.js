@@ -22,39 +22,52 @@ export function minMaxDownsample(timestamps, values, startTime, endTime, targetP
   // Compute start/end indices from the linearly-spaced timestamp array in O(1)
   const tStep = n > 1 ? (timestamps[n - 1] - timestamps[0]) / (n - 1) : 1;
   const startIdx = Math.max(0, Math.floor((startTime - timestamps[0]) / tStep));
-  const endIdx   = Math.min(n - 1, Math.ceil((endTime - timestamps[0]) / tStep));
+  const endIdx = Math.min(n - 1, Math.ceil((endTime - timestamps[0]) / tStep));
   const nVisible = endIdx - startIdx + 1;
 
   // Already within budget — return a view/slice of the original arrays (no copy for TypedArrays)
-  const cut = (arr, lo, hi) => arr.subarray ? arr.subarray(lo, hi) : arr.slice(lo, hi);
+  const cut = (arr, lo, hi) => (arr.subarray ? arr.subarray(lo, hi) : arr.slice(lo, hi));
   if (nVisible <= targetPoints) {
     return [cut(timestamps, startIdx, endIdx + 1), cut(values, startIdx, endIdx + 1)];
   }
 
   const buckets = Math.floor(targetPoints / 2);
-  const outTs   = new Float32Array(buckets * 2);
+  const outTs = new Float32Array(buckets * 2);
   const outVals = new Float32Array(buckets * 2);
   let out = 0;
 
   for (let b = 0; b < buckets; b++) {
     // Integer bucket boundaries avoid floating-point drift across many buckets
-    const lo = startIdx + Math.floor((b       * nVisible) / buckets);
+    const lo = startIdx + Math.floor((b * nVisible) / buckets);
     const hi = startIdx + Math.floor(((b + 1) * nVisible) / buckets);
 
-    let minVal = Infinity, maxVal = -Infinity, minI = lo, maxI = lo;
+    let minVal = Infinity,
+      maxVal = -Infinity,
+      minI = lo,
+      maxI = lo;
     for (let i = lo; i < hi; i++) {
       const v = values[i];
-      if (v < minVal) { minVal = v; minI = i; }
-      if (v > maxVal) { maxVal = v; maxI = i; }
+      if (v < minVal) {
+        minVal = v;
+        minI = i;
+      }
+      if (v > maxVal) {
+        maxVal = v;
+        maxI = i;
+      }
     }
 
     // Emit in time order so the series stays monotonically increasing
     if (minI <= maxI) {
-      outTs[out] = timestamps[minI]; outVals[out++] = minVal;
-      outTs[out] = timestamps[maxI]; outVals[out++] = maxVal;
+      outTs[out] = timestamps[minI];
+      outVals[out++] = minVal;
+      outTs[out] = timestamps[maxI];
+      outVals[out++] = maxVal;
     } else {
-      outTs[out] = timestamps[maxI]; outVals[out++] = maxVal;
-      outTs[out] = timestamps[minI]; outVals[out++] = minVal;
+      outTs[out] = timestamps[maxI];
+      outVals[out++] = maxVal;
+      outTs[out] = timestamps[minI];
+      outVals[out++] = minVal;
     }
   }
 

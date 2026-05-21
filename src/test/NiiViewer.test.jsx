@@ -5,14 +5,20 @@ import { getInitialVisibility, applyToggle } from '@/components/NiiViewer.utils'
 import { NiiViewer } from '@/components/NiiViewer';
 
 vi.mock('@niivue/niivue', () => ({
-  Niivue: vi.fn().mockImplementation(() => ({
-    attachToCanvas: vi.fn(),
-    loadVolumes: vi.fn().mockResolvedValue(undefined),
-    setOpacity: vi.fn(),
-    setSliceType: vi.fn(),
-    opts: {},
-    sliceTypeMultiplanar: 1,
-  })),
+  Niivue: vi.fn().mockImplementation(function () {
+    const instance = {
+      attachToCanvas: vi.fn(),
+      loadVolumes: vi.fn().mockImplementation(async function (vols) {
+        instance.volumes = vols; // mirrors what real NiiVue does so toggleVolume can look up by url
+      }),
+      setOpacity: vi.fn(),
+      setSliceType: vi.fn(),
+      opts: {},
+      sliceTypeMultiplanar: 1,
+      volumes: [],
+    };
+    return instance;
+  }),
   SHOW_RENDER: { ALWAYS: 2 },
 }));
 
@@ -79,6 +85,64 @@ describe('NiiViewer', () => {
       await user.click(mriButton);
 
       expect(mriButton.className).toContain('thin-button-toggled');
+    });
+  });
+
+  describe('component rendering', () => {
+    it('renders one toggle button per volume', async () => {
+      const volumes = [
+        { type: 'MRI', url: '/mri.nii' },
+        { type: 'PET', url: '/pet.nii' },
+        { type: 'SPECT', url: '/spect.nii' },
+      ];
+      render(<NiiViewer volumes={volumes} />);
+      await waitFor(() => expect(screen.queryByText('Loading image...')).not.toBeInTheDocument());
+      expect(screen.getByRole('button', { name: /toggle MRI/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /toggle PET/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /toggle SPECT/i })).toBeInTheDocument();
+    });
+
+    it('shows "Loading image..." while volumes are loading', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      // Block loadVolumes so the loading state never resolves during this test
+      Niivue.mockImplementationOnce(function () {
+        return {
+          attachToCanvas: vi.fn(),
+          loadVolumes: vi.fn().mockReturnValue(new Promise(() => {})),
+          setOpacity: vi.fn(),
+          setSliceType: vi.fn(),
+          opts: {},
+          sliceTypeMultiplanar: 1,
+          volumes: [],
+        };
+      });
+
+      render(<NiiViewer volumes={[{ type: 'MRI', url: '/mri.nii' }]} />);
+      expect(screen.getByText('Loading image...')).toBeInTheDocument();
+    });
+
+    it('hides "Loading image..." once volumes have loaded', async () => {
+      render(<NiiViewer volumes={[{ type: 'MRI', url: '/mri.nii' }]} />);
+      await waitFor(() => expect(screen.queryByText('Loading image...')).not.toBeInTheDocument());
+    });
+
+    it('shows an error message when loadVolumes rejects', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      Niivue.mockImplementationOnce(function () {
+        return {
+          attachToCanvas: vi.fn(),
+          loadVolumes: vi.fn().mockRejectedValue(new Error('Network error')),
+          setOpacity: vi.fn(),
+          setSliceType: vi.fn(),
+          opts: {},
+          sliceTypeMultiplanar: 1,
+          volumes: [],
+        };
+      });
+
+      render(<NiiViewer volumes={[{ type: 'MRI', url: '/mri.nii' }]} />);
+
+      await waitFor(() => expect(screen.getByText(/failed to load image/i)).toBeInTheDocument());
     });
   });
 });

@@ -54,7 +54,8 @@ export const EegViewer = ({ data, channelNames }) => {
   const [plotWidth, setPlotWidth] = useState(0); // passed to uPlot options to fill the space
   const [channelAreaHeight, setChannelAreaHeight] = useState(0); // used to compute per-channel plot height
   const [visibleChannelCount, setVisibleChannelCount] = useState(30); // how many channels fit in view at once
-  const [windowSize, setWindowSize] = useState(20); // seconds visible in the x-range
+  const tMax = data[0][data[0].length - 1]; // total time span of the recording, from the time values in the first row
+  const [windowSize, setWindowSize] = useState(tMax < 20 ? Math.ceil(tMax) : 20); // seconds visible in the x-range, initialized to 20s or the full recording if shorter
   const [startTime, setStartTime] = useState(0); // start of the visible x-range
   const [shiftTimeStepSize, setShiftTimeStepSize] = useState(5);
   const [yScale, setYScale] = useState(100); // y-axis half-range in µV; all channels share this
@@ -63,7 +64,9 @@ export const EegViewer = ({ data, channelNames }) => {
   const X_AXIS_EXTRA = 40; // px reserved for x-axis ticks + label on the last channel
   // plotHeight divides the remaining area evenly; last channel gets X_AXIS_EXTRA on top
   const plotHeight =
-    channelAreaHeight > 0 ? Math.floor((channelAreaHeight - X_AXIS_EXTRA) / visibleChannelCount) : 0;
+    channelAreaHeight > 0
+      ? Math.floor((channelAreaHeight - X_AXIS_EXTRA) / visibleChannelCount)
+      : 0;
 
   // Downsample each channel to 2×plotWidth points for the visible window.
   // Re-runs only when the window or plot dimensions change, not on every render.
@@ -209,7 +212,11 @@ export const EegViewer = ({ data, channelNames }) => {
           <button type="button" className="thin-button" onClick={forwardshiftStartTime}>
             {'>'}
           </button>
-          <button type="button" className="thin-button" onClick={() => setStartTime(data[0][data[0].length - 1] - windowSize)}>
+          <button
+            type="button"
+            className="thin-button"
+            onClick={() => setStartTime(data[0][data[0].length - 1] - windowSize)}
+          >
             {'>|'}
           </button>
         </div>
