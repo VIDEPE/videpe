@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { FullWidthLayout } from '../components/FullWidthLayout';
 import { ThemeToggle } from '../components/ThemeToggle';
@@ -9,14 +9,14 @@ import { detectAndLoadEEG, checkEegFiles } from '../loaders/eegFormats';
 import { FileDropZone } from '../components/FileDropZone';
 
 const DEMO_EEG = {
-  header: 'sub-16_ses-preop_task-ied_AVG_desc-cleaned_eeg.vhdr',
-  data: 'sub-16_ses-preop_task-ied_AVG_desc-cleaned_eeg.eeg',
+  header: 'demo_data/sub-16_ses-preop_task-ied_AVG_desc-cleaned_eeg.vhdr',
+  data: 'demo_data/sub-16_ses-preop_task-ied_AVG_desc-cleaned_eeg.eeg',
 };
 
 const DEMO_VOLUMES = [
-  { url: 'dataset1/IRM/patT1.nii', colormap: 'gray', type: 'MRI' },
-  { url: 'dataset1/MN/pat_PET_aligned.nii', colormap: 'viridis', type: 'PET' },
-  { url: 'dataset1/MN/pat_siscom_17-13.nii', colormap: 'hot', type: 'SPECT', urlImgType: 'nii' },
+  { url: 'demo_data/patT1.nii', colormap: 'gray', type: 'MRI' },
+  { url: 'demo_data/pat_PET_aligned.nii', colormap: 'viridis', type: 'PET' },
+  { url: 'demo_data/pat_siscom_17-13.nii', colormap: 'hot', type: 'SPECT', urlImgType: 'nii' },
 ];
 
 export const PatientView = () => {
