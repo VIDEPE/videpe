@@ -145,7 +145,7 @@ export const EegViewer = ({ data, channelNames }) => {
                 lane so contentRect.width is stable and no horizontal scrollbar ever appears */}
             <div
               ref={containerRef}
-              className="absolute inset-0 overflow-y-auto"
+              className="absolute inset-0 overflow-y-auto themed-scrollbar"
               style={{ scrollbarGutter: 'stable' }}
             >
               {/* Wait for first measurements before rendering — avoids zero-size flash */}
