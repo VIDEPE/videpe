@@ -4,6 +4,9 @@ import 'uplot/dist/uPlot.min.css';
 import { useTheme } from '@/components/ThemeContext';
 import { minMaxDownsample } from '@/utils/downsample';
 
+const Y_AXIS_WIDTH = 60; // px for the y-axis area (channel name + tick space) — must match x-axis strip left padding
+const PLOT_RIGHT_PAD = 20; // px right padding — must match in both channel plots and x-axis strip so ticks align
+
 // Builds uPlot options for a single channel. Called once per channel on each render.
 const buildChannelOptions = ({
   channelIndex,
@@ -33,14 +36,14 @@ const buildChannelOptions = ({
       { show: false },
       {
         stroke: axisColor,
-        size: 60,
+        size: Y_AXIS_WIDTH,
         grid: { stroke: gridColor },
         filter: () => [],
       },
     ],
     series: [{}, { stroke, width: 1 }],
     legend: { show: false },
-    padding: [4, 0, 4, 0],
+    padding: [4, PLOT_RIGHT_PAD, 4, 0],
   };
 };
 
@@ -58,7 +61,7 @@ export const EegViewer = ({ data, channelNames }) => {
   const [yScale, setYScale] = useState(100); // y-axis half-range in µV; all channels share this
 
   const clampChannelCount = (n) => Math.max(1, Math.min(channelNames.length, n));
-  const X_AXIS_HEIGHT = 55; // px reserved for the fixed x-axis strip below the scroll area
+  const X_AXIS_HEIGHT = 45; // px reserved for the fixed x-axis strip below the scroll area
   const plotHeight =
     channelAreaHeight > 0 ? Math.floor(channelAreaHeight / visibleChannelCount) : 0;
   const axisColor = isDarkMode ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.8)';
@@ -152,7 +155,7 @@ export const EegViewer = ({ data, channelNames }) => {
                   <div key={name} style={{ height: plotHeight, overflow: 'hidden' }} className="relative">
                     <span
                       className="absolute left-0 top-1/2 -translate-y-1/2 text-xs text-center pointer-events-none z-10 px-0.5 truncate"
-                      style={{ width: 60 }}
+                      style={{ width: Y_AXIS_WIDTH }}
                     >
                       {name}
                     </span>
@@ -187,12 +190,12 @@ export const EegViewer = ({ data, channelNames }) => {
                   cursor: { sync: { key: syncKey } },
                   scales: { x: { time: false, range: [startTime, startTime + windowSize] } },
                   axes: [
-                    { stroke: axisColor, label: 'Time (s)', size: 50, grid: { show: false } },
+                    { stroke: axisColor, size: 40, grid: { show: false } },
                     { show: false },
                   ],
                   series: [{}],
                   legend: { show: false },
-                  padding: [0, 0, 0, 60],
+                  padding: [0, PLOT_RIGHT_PAD, 0, Y_AXIS_WIDTH],
                 }}
                 data={[data[0]]}
                 onCreate={() => {}}
