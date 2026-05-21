@@ -1,4 +1,4 @@
-﻿import { cn } from '@/lib/utils';
+﻿import { cn } from '@/utils/utils';
 import { ArrowUp } from 'lucide-react';
 
 export const Footer = () => {
@@ -18,7 +18,7 @@ export const Footer = () => {
       )}
     >
       <p className="text-sm text-foreground">
-        &copy; {new Date().getFullYear()} Jeroen Buil. All rights reserved.
+        &copy; {new Date().getFullYear()} Clinical NeuroScience Department HUG. All rights reserved.
       </p>
 
       <a
