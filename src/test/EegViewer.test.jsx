@@ -336,24 +336,25 @@ describe('EegViewer — plot rendering', () => {
     expect(UplotReactMock).toHaveBeenCalledTimes(channelNames.length);
   });
 
-  it('passes the correct channel name to each plot', async () => {
-    const { default: UplotReactMock } = await import('uplot-react');
-    UplotReactMock.mockClear();
-
+  it('renders a label overlay for each channel name', () => {
     renderViewer();
 
-    const calledOptions = UplotReactMock.mock.calls.map((call) => call[0].options.axes[1].label);
-    expect(calledOptions).toEqual(channelNames);
+    for (const name of channelNames) {
+      expect(screen.getByText(name)).toBeTruthy();
+    }
   });
 
-  it('only the last channel shows the x-axis', async () => {
+  it('all channel plots hide their x-axis (it is shown in the fixed strip instead)', async () => {
     const { default: UplotReactMock } = await import('uplot-react');
     UplotReactMock.mockClear();
 
     renderViewer();
 
-    const xAxisVisibility = UplotReactMock.mock.calls.map((call) => call[0].options.axes[0].show);
-    expect(xAxisVisibility).toEqual([false, false, true]);
+    // The first N calls are channel plots (axes[0].show === false).
+    // The last call is the fixed x-axis strip (axes[0].show is undefined/truthy).
+    const channelCalls = UplotReactMock.mock.calls.slice(0, channelNames.length);
+    const xAxisVisibility = channelCalls.map((call) => call[0].options.axes[0].show);
+    expect(xAxisVisibility).toEqual([false, false, false]);
   });
 
   it('all channels receive the same initial y-range of [-100, 100]', async () => {
@@ -362,7 +363,8 @@ describe('EegViewer — plot rendering', () => {
 
     renderViewer();
 
-    const yRanges = UplotReactMock.mock.calls.map((call) => call[0].options.scales.y.range);
+    const channelCalls = UplotReactMock.mock.calls.slice(0, channelNames.length);
+    const yRanges = channelCalls.map((call) => call[0].options.scales.y.range);
     yRanges.forEach((range) => expect(range).toEqual([-100, 100]));
   });
 });

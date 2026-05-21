@@ -6,14 +6,12 @@ import { minMaxDownsample } from '@/utils/downsample';
 
 // Builds uPlot options for a single channel. Called once per channel on each render.
 const buildChannelOptions = ({
-  channelName,
   channelIndex,
   totalChannels,
   isDarkMode,
   syncKey,
   width,
   height,
-  isLastChannel,
   windowSize,
   startTime,
   yScale,
@@ -32,14 +30,13 @@ const buildChannelOptions = ({
       y: { range: [-yScale, yScale] },
     },
     axes: [
-      // x-axis label and ticks only shown on the bottom plot to save space
+      { show: false },
       {
-        show: isLastChannel,
         stroke: axisColor,
-        label: isLastChannel ? 'Time (s)' : undefined,
+        size: 60,
         grid: { stroke: gridColor },
+        filter: () => [],
       },
-      { label: channelName, stroke: axisColor, size: 60, grid: { stroke: gridColor } },
     ],
     series: [{}, { stroke, width: 1 }],
     legend: { show: false },
@@ -53,7 +50,7 @@ export const EegViewer = ({ data, channelNames }) => {
   const containerRef = useRef(null); // channel plot panel — measures both plot width and available height
   const [plotWidth, setPlotWidth] = useState(0); // passed to uPlot options to fill the space
   const [channelAreaHeight, setChannelAreaHeight] = useState(0); // used to compute per-channel plot height
-  const [visibleChannelCount, setVisibleChannelCount] = useState(30); // how many channels fit in view at once
+  const [visibleChannelCount, setVisibleChannelCount] = useState(20); // how many channels fit in view at once
   const tMax = data[0][data[0].length - 1]; // total time span of the recording, from the time values in the first row
   const [windowSize, setWindowSize] = useState(tMax < 20 ? Math.ceil(tMax) : 20); // seconds visible in the x-range, initialized to 20s or the full recording if shorter
   const [startTime, setStartTime] = useState(0); // start of the visible x-range
@@ -61,12 +58,10 @@ export const EegViewer = ({ data, channelNames }) => {
   const [yScale, setYScale] = useState(100); // y-axis half-range in µV; all channels share this
 
   const clampChannelCount = (n) => Math.max(1, Math.min(channelNames.length, n));
-  const X_AXIS_EXTRA = 40; // px reserved for x-axis ticks + label on the last channel
-  // plotHeight divides the remaining area evenly; last channel gets X_AXIS_EXTRA on top
+  const X_AXIS_HEIGHT = 55; // px reserved for the fixed x-axis strip below the scroll area
   const plotHeight =
-    channelAreaHeight > 0
-      ? Math.floor((channelAreaHeight - X_AXIS_EXTRA) / visibleChannelCount)
-      : 0;
+    channelAreaHeight > 0 ? Math.floor(channelAreaHeight / visibleChannelCount) : 0;
+  const axisColor = isDarkMode ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.8)';
 
   // Downsample each channel to 2×plotWidth points for the visible window.
   // Re-runs only when the window or plot dimensions change, not on every render.
@@ -138,34 +133,37 @@ export const EegViewer = ({ data, channelNames }) => {
           </button>
         </div>
 
-        {/* relative wrapper: sized by flex layout, never by content */}
-        <div className="flex-1 min-w-0 relative">
-          {/* containerRef is on the scroll div itself: absolute inset-0 fixes its size so
-              content can never inflate it. scrollbar-gutter:stable always reserves the scrollbar
-              lane so contentRect.width is stable and no horizontal scrollbar ever appears */}
-          <div
-            ref={containerRef}
-            className="absolute inset-0 overflow-y-auto"
-            style={{ scrollbarGutter: 'stable' }}
-          >
-            {/* Wait for first measurements before rendering — avoids zero-size flash */}
-            {plotWidth > 0 &&
-              plotHeight > 0 &&
-              channelNames.map((name, i) => {
-                const isLast = i === channelNames.length - 1;
-                const channelHeight = isLast ? plotHeight + X_AXIS_EXTRA : plotHeight;
-                return (
-                  <div key={name} style={{ height: channelHeight, overflow: 'hidden' }}>
+        {/* flex-col so the scroll area and fixed x-axis strip stack vertically */}
+        <div className="flex-1 min-w-0 flex flex-col">
+          {/* relative wrapper: sized by flex layout, never by content */}
+          <div className="flex-1 min-h-0 relative">
+            {/* containerRef is on the scroll div itself: absolute inset-0 fixes its size so
+                content can never inflate it. scrollbar-gutter:stable always reserves the scrollbar
+                lane so contentRect.width is stable and no horizontal scrollbar ever appears */}
+            <div
+              ref={containerRef}
+              className="absolute inset-0 overflow-y-auto"
+              style={{ scrollbarGutter: 'stable' }}
+            >
+              {/* Wait for first measurements before rendering — avoids zero-size flash */}
+              {plotWidth > 0 &&
+                plotHeight > 0 &&
+                channelNames.map((name, i) => (
+                  <div key={name} style={{ height: plotHeight, overflow: 'hidden' }} className="relative">
+                    <span
+                      className="absolute left-0 top-1/2 -translate-y-1/2 text-xs text-center pointer-events-none z-10 px-0.5 truncate"
+                      style={{ width: 60 }}
+                    >
+                      {name}
+                    </span>
                     <UplotReact
                       options={buildChannelOptions({
-                        channelName: name,
                         channelIndex: i,
                         totalChannels: channelNames.length,
                         isDarkMode,
                         syncKey,
                         width: plotWidth,
-                        height: channelHeight,
-                        isLastChannel: isLast,
+                        height: plotHeight,
                         windowSize,
                         startTime,
                         yScale,
@@ -175,9 +173,33 @@ export const EegViewer = ({ data, channelNames }) => {
                       onDelete={() => {}}
                     />
                   </div>
-                );
-              })}
+                ))}
+            </div>
           </div>
+
+          {/* Fixed x-axis strip — always visible, never scrolls with the channels */}
+          {plotWidth > 0 && (
+            <div className="shrink-0" style={{ height: X_AXIS_HEIGHT }}>
+              <UplotReact
+                options={{
+                  width: plotWidth,
+                  height: X_AXIS_HEIGHT,
+                  cursor: { sync: { key: syncKey } },
+                  scales: { x: { time: false, range: [startTime, startTime + windowSize] } },
+                  axes: [
+                    { stroke: axisColor, label: 'Time (s)', size: 50, grid: { show: false } },
+                    { show: false },
+                  ],
+                  series: [{}],
+                  legend: { show: false },
+                  padding: [0, 0, 0, 60],
+                }}
+                data={[data[0]]}
+                onCreate={() => {}}
+                onDelete={() => {}}
+              />
+            </div>
+          )}
         </div>
       </div>
 
