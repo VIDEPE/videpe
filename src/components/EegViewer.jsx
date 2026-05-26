@@ -128,7 +128,7 @@ export const EegViewer = ({ data, channelNames }) => {
         } else if (type === 'resize-left') {
           const newStart = r10(Math.max(0, Math.min(st + sw - 1, st + dt)));
           setStartTime(newStart);
-          setWindowSize(st + sw - newStart);
+          setWindowSize(r10(st + sw - newStart));
         }
       });
     };
@@ -381,7 +381,7 @@ export const EegViewer = ({ data, channelNames }) => {
             <input
               id="eeg-window-size"
               type="number"
-              value={windowSize}
+              value={Math.round(windowSize * 10) / 10}
               min={1}
               onChange={(e) => setWindowSize(Math.max(1, Number(e.target.value)))}
               className="w-16 text-center border border-border rounded px-1 py-0.5 text-sm bg-background text-foreground"
