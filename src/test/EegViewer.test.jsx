@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, within, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, within, fireEvent, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { EegViewer } from '@/components/EegViewer';
 
@@ -323,6 +323,7 @@ describe('EegViewer — shift step controls', () => {
     const input = screen.getByRole('spinbutton', { name: /shift step/i });
 
     fireEvent.change(input, { target: { value: '0' } });
+    fireEvent.blur(input);
 
     expect(input).toHaveValue(1);
   });
@@ -413,5 +414,162 @@ describe('EegViewer — gain controls', () => {
     const channelCalls = UplotReactMock.mock.calls.slice(0, channelNames.length);
     const yRanges = channelCalls.map((call) => call[0].options.scales.y.range);
     yRanges.forEach((range) => expect(range).toEqual(yRanges[0]));
+  });
+});
+
+describe('EegViewer — timeline scrubber', () => {
+  // Make requestAnimationFrame synchronous so drag callbacks fire immediately in tests
+  beforeEach(() => {
+    vi.stubGlobal('requestAnimationFrame', (cb) => { cb(); return 0; });
+    vi.stubGlobal('cancelAnimationFrame', () => {});
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  // tMax=30, windowSize=20 (initial), startTime=0 (initial)
+  const scrubber = () => screen.getByTestId('timeline-scrubber');
+  const thumb = () => screen.getByTestId('timeline-thumb');
+
+  const mockScrubberWidth = (el, width = 300) =>
+    Object.defineProperty(el, 'offsetWidth', { configurable: true, value: width });
+
+  it('renders the thumb at position 0 with width proportional to windowSize', () => {
+    renderViewer();
+    expect(thumb().style.left).toBe('0%');
+    // windowSize=20, tMax=30 → 66.67%
+    expect(parseFloat(thumb().style.width)).toBeCloseTo(66.67, 1);
+  });
+
+  it('clicking the bar jumps start time to the clicked position', () => {
+    renderViewer();
+    vi.spyOn(scrubber(), 'getBoundingClientRect').mockReturnValue(
+      { left: 0, width: 300, top: 0, bottom: 12, right: 300, height: 12 }
+    );
+    // clientX=150 on 300px bar: ratio=0.5 → startTime = max(0, min(10, 0.5×30 − 10)) = 5
+    fireEvent.mouseDown(scrubber(), { clientX: 150 });
+    // left = 5/30 ≈ 16.67%
+    expect(parseFloat(thumb().style.left)).toBeCloseTo(16.67, 1);
+  });
+
+  it('dragging the thumb moves the window forward', () => {
+    renderViewer();
+    mockScrubberWidth(scrubber());
+    // startX=0, startTime=0, windowSize=20
+    fireEvent.mouseDown(thumb(), { clientX: 0 });
+    // move 100px → dt=(100/300)×30=10 → startTime=min(10,10)=10
+    act(() => { fireEvent.mouseMove(window, { clientX: 100 }); });
+    // left = 10/30 ≈ 33.33%
+    expect(parseFloat(thumb().style.left)).toBeCloseTo(33.33, 1);
+    act(() => { fireEvent.mouseUp(window); });
+  });
+
+  it('dragging the thumb clamps start time at 0', () => {
+    renderViewer();
+    mockScrubberWidth(scrubber());
+    fireEvent.mouseDown(thumb(), { clientX: 100 });
+    // move left past 0 → dt negative → clamped to 0
+    act(() => { fireEvent.mouseMove(window, { clientX: -200 }); });
+    expect(parseFloat(thumb().style.left)).toBe(0);
+    act(() => { fireEvent.mouseUp(window); });
+  });
+
+  it('dragging the right handle increases window size', () => {
+    renderViewer();
+    mockScrubberWidth(scrubber());
+    // startX=0, startTime=0, windowSize=20
+    fireEvent.mouseDown(screen.getByTestId('timeline-resize-right'), { clientX: 0 });
+    // move 60px → dt=(60/300)×30=6 → windowSize=min(30,26)=26
+    act(() => { fireEvent.mouseMove(window, { clientX: 60 }); });
+    // width = 26/30 ≈ 86.67%
+    expect(parseFloat(thumb().style.width)).toBeCloseTo(86.67, 1);
+    act(() => { fireEvent.mouseUp(window); });
+  });
+
+  it('dragging the left handle shrinks the window from the left', () => {
+    renderViewer();
+    mockScrubberWidth(scrubber());
+    // startX=0, startTime=0, windowSize=20
+    fireEvent.mouseDown(screen.getByTestId('timeline-resize-left'), { clientX: 0 });
+    // move 30px → dt=(30/300)×30=3 → newStart=min(19,3)=3, newWindowSize=20-3=17
+    act(() => { fireEvent.mouseMove(window, { clientX: 30 }); });
+    expect(parseFloat(thumb().style.left)).toBeCloseTo(10, 1);   // 3/30=10%
+    expect(parseFloat(thumb().style.width)).toBeCloseTo(56.67, 1); // 17/30≈56.67%
+    act(() => { fireEvent.mouseUp(window); });
+  });
+
+  it('mouseup stops the drag — further moves have no effect', () => {
+    renderViewer();
+    mockScrubberWidth(scrubber());
+    fireEvent.mouseDown(thumb(), { clientX: 0 });
+    act(() => { fireEvent.mouseMove(window, { clientX: 100 }); }); // startTime → 10
+    act(() => { fireEvent.mouseUp(window); });
+    const leftAfterRelease = thumb().style.left;
+    act(() => { fireEvent.mouseMove(window, { clientX: 200 }); }); // should have no effect
+    expect(thumb().style.left).toBe(leftAfterRelease);
+  });
+});
+
+describe('EegViewer — time shift clamping', () => {
+  // tMax=30, windowSize=20 → valid startTime range is [0, 10]
+  const shiftButtons = () => {
+    const input = screen.getByRole('spinbutton', { name: /shift step/i });
+    return within(input.closest('div')).getAllByRole('button');
+    // order: [|<, <, >, >|]
+  };
+
+  it('forward shift clamps at tMax − windowSize', async () => {
+    const { default: UplotReactMock } = await import('uplot-react');
+    const user = userEvent.setup();
+    renderViewer();
+
+    // Set a step large enough to overshoot in one click (25 > tMax−windowSize=10)
+    fireEvent.change(screen.getByRole('spinbutton', { name: /shift step/i }), {
+      target: { value: '25' },
+    });
+
+    UplotReactMock.mockClear();
+    await user.click(shiftButtons()[2]); // >
+
+    // startTime should be clamped at tMax − windowSize = 10, not 25
+    const range = UplotReactMock.mock.calls[0][0].options.scales.x.range;
+    expect(range[0]).toBe(10);
+    expect(range[1]).toBe(30); // startTime + windowSize = 10 + 20
+  });
+
+  it('clicking forward when already at tMax − windowSize causes no re-render', async () => {
+    const { default: UplotReactMock } = await import('uplot-react');
+    const user = userEvent.setup();
+    renderViewer();
+
+    // step=5: two clicks reach the ceiling (0 → 5 → 10 = tMax − windowSize)
+    await user.click(shiftButtons()[2]);
+    await user.click(shiftButtons()[2]);
+
+    // Third click: clamped value equals current state → React skips re-render
+    UplotReactMock.mockClear();
+    await user.click(shiftButtons()[2]);
+    expect(UplotReactMock).not.toHaveBeenCalled();
+  });
+
+  it('backward shift clamps at 0', async () => {
+    const { default: UplotReactMock } = await import('uplot-react');
+    const user = userEvent.setup();
+    renderViewer();
+
+    // Set a step large enough to undershoot in one click from any position
+    fireEvent.change(screen.getByRole('spinbutton', { name: /shift step/i }), {
+      target: { value: '25' },
+    });
+    await user.click(shiftButtons()[2]); // first move forward so < has somewhere to go
+
+    UplotReactMock.mockClear();
+    await user.click(shiftButtons()[1]); // <
+
+    // startTime should be clamped at 0, not negative
+    const range = UplotReactMock.mock.calls[0][0].options.scales.x.range;
+    expect(range[0]).toBe(0);
+    expect(range[1]).toBe(20); // 0 + windowSize
   });
 });

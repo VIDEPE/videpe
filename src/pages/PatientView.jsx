@@ -140,6 +140,16 @@ export const PatientView = () => {
     setEegHint(null);
   };
 
+  const handleEegReset = () => {
+    setEeg(null);
+    setPendingEegFiles([]);
+    setEegHint(null);
+  };
+
+  const handleNiiReset = () => {
+    setVolumes([]);
+  };
+
   return (
     <FullWidthLayout>
       {/* Top bar: title centered in flow; button and toggle are fixed like ThemeToggle */}
@@ -172,6 +182,8 @@ export const PatientView = () => {
       <SplitPane
         leftLabel="EEG"
         rightLabel="Neuroimaging"
+        onLeftReset={eeg || pendingEegFiles.length > 0 ? handleEegReset : undefined}
+        onRightReset={volumes.length > 0 ? handleNiiReset : undefined}
         left={
           eeg ? (
             <EegViewer data={eeg.data} channelNames={eeg.channelNames} />

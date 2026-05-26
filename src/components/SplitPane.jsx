@@ -1,15 +1,15 @@
 import { useRef, useState, useEffect } from 'react';
-import { Maximize2, Minimize2, ArrowLeftRight } from 'lucide-react';
+import { Maximize2, Minimize2, ArrowLeftRight, X} from 'lucide-react';
 
-export const SplitPane = ({ leftLabel, rightLabel, left, right }) => {
-  const [splitPercent, setSplitPercent] = useState(50);
+export const SplitPane = ({ leftLabel, rightLabel, left, right, onLeftReset, onRightReset }) => {
+  const [splitPercent, setSplitPercent] = useState(50);// the percentage width of the left panel (when not maximized)
   const [maximized, setMaximized] = useState(null); // null | 'left' | 'right'
-  const [swapped, setSwapped] = useState(false);
-  const containerRef = useRef(null);
-  const leftPanelRef = useRef(null);
-  const rightPanelRef = useRef(null);
-  const isDraggingRef = useRef(false);
-  const rafRef = useRef(null);
+  const [swapped, setSwapped] = useState(false); // whether the left/right content is swapped (affects which side splitPercent applies to)
+  const containerRef = useRef(null); // for measuring dimensions and mouse position during drag
+  const leftPanelRef = useRef(null); // for directly setting width during drag without causing React re-renders
+  const rightPanelRef = useRef(null); // for directly setting width during drag without causing React re-renders
+  const isDraggingRef = useRef(false); // tracks whether the divider is currently being dragged, without causing re-renders
+  const rafRef = useRef(null); // stores the pending requestAnimationFrame id so we can cancel it if needed
   const splitPercentRef = useRef(50); // mirrors splitPercent without triggering re-renders during drag
   const swappedRef = useRef(false);   // mirrors swapped for use inside rAF callbacks
 
@@ -25,17 +25,18 @@ export const SplitPane = ({ leftLabel, rightLabel, left, right }) => {
 
       // Capture clientX now; the event object may be recycled by the time the rAF fires
       const clientX = e.clientX;
+      // requestAnimationFrame tells the browser "run this just before the next screen repaint" — at most 60 times per second.
       rafRef.current = requestAnimationFrame(() => {
         if (!isDraggingRef.current || !containerRef.current) return;
         const rect = containerRef.current.getBoundingClientRect();
         const pct = Math.min(85, Math.max(15, ((clientX - rect.left) / rect.width) * 100));
         splitPercentRef.current = pct;
-        // Mutate DOM directly — skips React render cycle entirely during drag
-        const sw = swappedRef.current;
+        // Directly write the new widths into the DOM directly — skips React render cycle entirely during drag
+        const isSwapped = swappedRef.current;
         if (leftPanelRef.current)
-          leftPanelRef.current.style.width = sw ? `${100 - pct}%` : `${pct}%`;
+          leftPanelRef.current.style.width = isSwapped ? `${100 - pct}%` : `${pct}%`;
         if (rightPanelRef.current)
-          rightPanelRef.current.style.width = sw ? `${pct}%` : `${100 - pct}%`;
+          rightPanelRef.current.style.width = isSwapped ? `${pct}%` : `${100 - pct}%`;
       });
     };
     const onMouseUp = () => {
@@ -67,7 +68,7 @@ export const SplitPane = ({ leftLabel, rightLabel, left, right }) => {
     maximized === 'left' ? '0%' :
     swapped ? `${splitPercent}%` : `${100 - splitPercent}%`;
 
-  const panelHeader = (label, which) => (
+  const panelHeader = (label, which, onReset) => (
     <div className="shrink-0 flex items-center justify-between px-3 py-1 border-b border-border bg-surface">
       <h2 style={{ margin: 0 }}>{label}</h2>
       <div className="flex items-center gap-1">
@@ -89,10 +90,23 @@ export const SplitPane = ({ leftLabel, rightLabel, left, right }) => {
         >
           {maximized === which ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
         </button>
+        {onReset && (
+          <button
+            type="button"
+            className="thin-button"
+            onClick={onReset}
+            title="Reset viewer"
+          >
+            <X size={14} />
+          </button>
+        )}
       </div>
     </div>
   );
 
+  // Swap logic: The two panels never move in the DOM — the EEG panel is always DOM-first, NII always DOM-second.
+  // Instead, their CSS order property is toggled between 1 and 3, with the divider fixed at order 2.
+  // This means the viewers never unmount when swapped, so EEG state (zoom, scroll position) is preserved
   return (
     <div ref={containerRef} className="flex-1 min-h-0 flex flex-row">
       {/* Left content — DOM-first; visually right when swapped (order:3) */}
@@ -101,7 +115,7 @@ export const SplitPane = ({ leftLabel, rightLabel, left, right }) => {
         className="flex flex-col min-h-0 overflow-hidden"
         style={{ order: swapped ? 3 : 1, width: leftWidth }}
       >
-        {panelHeader(leftLabel, 'left')}
+        {panelHeader(leftLabel, 'left', onLeftReset)}
         <div className="flex-1 min-h-0">{left}</div>
       </div>
 
@@ -120,7 +134,7 @@ export const SplitPane = ({ leftLabel, rightLabel, left, right }) => {
         className="flex flex-col min-h-0 overflow-hidden"
         style={{ order: swapped ? 1 : 3, width: rightWidth }}
       >
-        {panelHeader(rightLabel, 'right')}
+        {panelHeader(rightLabel, 'right', onRightReset)}
         <div className="flex-1 min-h-0">{right}</div>
       </div>
     </div>
