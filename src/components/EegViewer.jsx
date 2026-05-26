@@ -55,6 +55,7 @@ export const EegViewer = ({ data, channelNames }) => {
   const containerRef = useRef(null); // channel plot panel — measures both plot width and available height
   const scrubberRef = useRef(null);  // attached to the bar div — used to measure its pixel width
   const dragRef = useRef(null);      // stores active drag state — null when not dragging
+  const rafRef = useRef(null);       // stores the pending requestAnimationFrame id so we can cancel it
   // the following states on the other hand do cause re-renders when updated
   const [plotWidth, setPlotWidth] = useState(0); // passed to uPlot options to fill the space
   const [channelAreaHeight, setChannelAreaHeight] = useState(0); // used to compute per-channel plot height
@@ -103,26 +104,39 @@ export const EegViewer = ({ data, channelNames }) => {
   useEffect(() => {
     const onMouseMove = (e) => {
       if (!dragRef.current || !scrubberRef.current) return;
-      const barWidth = scrubberRef.current.offsetWidth;
-      const dt = ((e.clientX - dragRef.current.startX) / barWidth) * tMax; // convert pixel movement to time movement based on the total time span and scrubber width
-      // destructure dragRef.current and rename startTime and startWindowSize to st and sw for easier math below
-      const { type, startTime: st, startWindowSize: sw } = dragRef.current; 
 
-      // r10 rounds to 1 decimal place to avoid jittery updates from tiny mouse movements; adjust as needed
-      const r10 = (v) => Math.round(v * 10) / 10;
-      // Update startTime and/or windowSize based on the drag type, constraining to valid ranges
-      if (type === 'move') {
-        setStartTime(r10(Math.max(0, Math.min(tMax - sw, st + dt))));
-      } else if (type === 'resize-right') {
-        setWindowSize(r10(Math.max(1, Math.min(tMax - st, sw + dt))));
-      } else if (type === 'resize-left') {
-        const newStart = r10(Math.max(0, Math.min(st + sw - 1, st + dt)));
-        setStartTime(newStart);
-        setWindowSize(st + sw - newStart);
-      }
+      // Cancel any frame that was already queued but hasn't run yet.
+      // Without this, fast mouse moves would stack up multiple pending updates
+      // and they'd all fire in the same frame, doing redundant work.
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+
+      // Capture clientX immediately — by the time the rAF callback runs,
+      // the original event object may be recycled by the browser and clientX would be 0.
+      const clientX = e.clientX;
+
+      rafRef.current = requestAnimationFrame(() => {
+        if (!dragRef.current || !scrubberRef.current) return;
+        const barWidth = scrubberRef.current.offsetWidth;
+        const dt = ((clientX - dragRef.current.startX) / barWidth) * tMax;
+        const { type, startTime: st, startWindowSize: sw } = dragRef.current;
+
+        const r10 = (v) => Math.round(v * 10) / 10;
+        if (type === 'move') {
+          setStartTime(r10(Math.max(0, Math.min(tMax - sw, st + dt))));
+        } else if (type === 'resize-right') {
+          setWindowSize(r10(Math.max(1, Math.min(tMax - st, sw + dt))));
+        } else if (type === 'resize-left') {
+          const newStart = r10(Math.max(0, Math.min(st + sw - 1, st + dt)));
+          setStartTime(newStart);
+          setWindowSize(st + sw - newStart);
+        }
+      });
     };
     // On mouse up, clear the drag state to stop dragging
-    const onMouseUp = () => { dragRef.current = null; };
+    const onMouseUp = () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      dragRef.current = null;
+    };
 
     // Attach listeners to the window to track mouse movements instead of the scrubber,
     // this allows dragging to continue even if the cursor leaves the scrubber area
