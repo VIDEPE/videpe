@@ -2,7 +2,7 @@
 import UplotReact from 'uplot-react';
 import 'uplot/dist/uPlot.min.css';
 import { useTheme } from '@/components/ThemeContext';
-import { ZoomIn, ZoomOut, ChevronRight, ChevronLeft, ChevronLast, ChevronFirst, Plus, Minus } from 'lucide-react';
+import { ZoomIn, ZoomOut, ChevronRight, ChevronLeft, ChevronLast, ChevronFirst, Plus, Minus, ListChevronsUpDown , ListChevronsDownUp  } from 'lucide-react';
 import { minMaxDownsample } from '@/utils/downsample';
 
 const Y_AXIS_WIDTH = 60; // px for the y-axis area (channel name + tick space) — must match x-axis strip left padding
@@ -209,7 +209,7 @@ export const EegViewer = ({ data, channelNames }) => {
             className="thin-button"
             onClick={() => updateVisibleChannelCount(visibleChannelCount - 1)}
           >
-            −
+            <ListChevronsDownUp size={22} />
           </button>
           <input
             type="number"
@@ -231,7 +231,7 @@ export const EegViewer = ({ data, channelNames }) => {
             className="thin-button"
             onClick={() => updateVisibleChannelCount(visibleChannelCount + 1)}
           >
-            +
+            <ListChevronsUpDown  size={22} />
           </button>
         </div>
 
@@ -382,10 +382,10 @@ export const EegViewer = ({ data, channelNames }) => {
           <label htmlFor="eeg-time-shift-step" className="text-xs text-foreground/60">Time Shift (s)</label>
           <div className="flex items-center gap-1">
             <button type="button" className="thin-button" onClick={() => setStartTime(0)}>
-              <ChevronFirst size={14} />
+              <ChevronFirst size={16} />
             </button>
             <button type="button" className="thin-button" onClick={backwardshiftStartTime}>
-              <ChevronLeft size={14} />
+              <ChevronLeft size={22} />
             </button>
             <input
               id="eeg-time-shift-step"
@@ -402,14 +402,14 @@ export const EegViewer = ({ data, channelNames }) => {
               aria-label="Time shift step (s)"
             />
             <button type="button" className="thin-button" onClick={forwardshiftStartTime}>
-              <ChevronRight size={14} />
+              <ChevronRight size={22} />
             </button>
             <button
               type="button"
               className="thin-button"
               onClick={() => setStartTime(data[0][data[0].length - 1] - windowSize)}
             >
-              <ChevronLast size={14} />
+              <ChevronLast size={16} />
             </button>
           </div>
         </div>
@@ -419,7 +419,7 @@ export const EegViewer = ({ data, channelNames }) => {
           <label htmlFor="eeg-window-size" className="text-xs text-foreground/60">Window Size (s)</label>
           <div className="flex items-center gap-1">
             <button type="button" className="thin-button" onClick={decreaseWindowSize}>
-              <Minus size={14} />
+              <Minus size={22} />
             </button>
             <input
               id="eeg-window-size"
@@ -437,7 +437,7 @@ export const EegViewer = ({ data, channelNames }) => {
               aria-label="Window size (s)"
             />
             <button type="button" className="thin-button" onClick={increaseWindowSize}>
-              <Plus size={14} />
+              <Plus size={22} />
             </button>
           </div>
         </div>
