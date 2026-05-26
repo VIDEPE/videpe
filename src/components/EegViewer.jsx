@@ -51,9 +51,11 @@ const buildChannelOptions = ({
 export const EegViewer = ({ data, channelNames }) => {
   const { isDarkMode } = useTheme();
   const syncKey = 'eeg-sync'; // shared across all channels to link their interactions
+  // the following refs do not cause re-renders when updated
   const containerRef = useRef(null); // channel plot panel — measures both plot width and available height
-  const scrubberRef = useRef(null);
-  const dragRef = useRef(null);
+  const scrubberRef = useRef(null);  // attached to the bar div — used to measure its pixel width
+  const dragRef = useRef(null);      // stores active drag state — null when not dragging
+  // the following states on the other hand do cause re-renders when updated
   const [plotWidth, setPlotWidth] = useState(0); // passed to uPlot options to fill the space
   const [channelAreaHeight, setChannelAreaHeight] = useState(0); // used to compute per-channel plot height
   const [visibleChannelCount, setVisibleChannelCount] = useState(20); // how many channels fit in view at once
@@ -62,7 +64,7 @@ export const EegViewer = ({ data, channelNames }) => {
   const [startTime, setStartTime] = useState(0); // start of the visible x-range
   const [shiftTimeStepSize, setShiftTimeStepSize] = useState(5);
   const [yScale, setYScale] = useState(10); // y-axis half-range in µV; all channels share this
-  const [yScaleStr, setYScaleStr] = useState('10');
+  const [yScaleStr, setYScaleStr] = useState('10'); // separate state for the input string to allow temporary invalid states (e.g. empty string while editing) without breaking the numeric yScale used for plotting
   const updateYScale = (newVal) => {
     const clamped = Math.max(1, Math.round(newVal));
     setYScale(clamped);
@@ -102,21 +104,28 @@ export const EegViewer = ({ data, channelNames }) => {
     const onMouseMove = (e) => {
       if (!dragRef.current || !scrubberRef.current) return;
       const barWidth = scrubberRef.current.offsetWidth;
-      const dt = ((e.clientX - dragRef.current.startX) / barWidth) * tMax;
-      const { type, startTime: st, startWindowSize: sw } = dragRef.current;
+      const dt = ((e.clientX - dragRef.current.startX) / barWidth) * tMax; // convert pixel movement to time movement based on the total time span and scrubber width
+      // destructure dragRef.current and rename startTime and startWindowSize to st and sw for easier math below
+      const { type, startTime: st, startWindowSize: sw } = dragRef.current; 
 
+      // r10 rounds to 1 decimal place to avoid jittery updates from tiny mouse movements; adjust as needed
+      const r10 = (v) => Math.round(v * 10) / 10;
+      // Update startTime and/or windowSize based on the drag type, constraining to valid ranges
       if (type === 'move') {
-        setStartTime(Math.max(0, Math.min(tMax - sw, st + dt)));
+        setStartTime(r10(Math.max(0, Math.min(tMax - sw, st + dt))));
       } else if (type === 'resize-right') {
-        setWindowSize(Math.max(1, Math.min(tMax - st, sw + dt)));
+        setWindowSize(r10(Math.max(1, Math.min(tMax - st, sw + dt))));
       } else if (type === 'resize-left') {
-        const newStart = Math.max(0, Math.min(st + sw - 1, st + dt));
+        const newStart = r10(Math.max(0, Math.min(st + sw - 1, st + dt)));
         setStartTime(newStart);
         setWindowSize(st + sw - newStart);
       }
     };
+    // On mouse up, clear the drag state to stop dragging
     const onMouseUp = () => { dragRef.current = null; };
 
+    // Attach listeners to the window to track mouse movements instead of the scrubber,
+    // this allows dragging to continue even if the cursor leaves the scrubber area
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
     return () => {
@@ -126,16 +135,16 @@ export const EegViewer = ({ data, channelNames }) => {
   }, [tMax]);
 
   const startDrag = (e, type) => {
-    e.preventDefault();
-    e.stopPropagation();
+    e.preventDefault();   // stops text selection during drag
+    e.stopPropagation();  // stops the event bubbling up to the bar's own onMouseDown
     dragRef.current = { type, startX: e.clientX, startTime, startWindowSize: windowSize };
   };
 
   const increaseWindowSize = () => {
-    setWindowSize((size) => size + 1);
+    setWindowSize((size) => Math.floor(size) + 1);
   };
   const decreaseWindowSize = () => {
-    setWindowSize((size) => Math.max(1, size - 1));
+    setWindowSize((size) => Math.max(1, Math.floor(size) - 1));
   };
 
   const forwardshiftStartTime = () => {
@@ -247,30 +256,37 @@ export const EegViewer = ({ data, channelNames }) => {
 
           {/* Timeline scrubber: thumb position = startTime, thumb width = windowSize */}
           {plotWidth > 0 && (
-            <div className="shrink-0 py-1" style={{ paddingLeft: Y_AXIS_WIDTH, paddingRight: PLOT_RIGHT_PAD }}>
+            <div className="shrink-0 py-2" style={{ width: plotWidth, paddingLeft: Y_AXIS_WIDTH, paddingRight: PLOT_RIGHT_PAD }}>
               <div
+                // The x scrollbar bar itself
                 ref={scrubberRef}
-                className="relative h-3 rounded-full bg-border cursor-pointer"
+                className="relative h-3 bg-surface cursor-pointer"
                 onMouseDown={(e) => {
-                  const bar = scrubberRef.current.getBoundingClientRect();
-                  const ratio = (e.clientX - bar.left) / bar.width;
+                  // Calculate the time corresponding to the mouse position on the bar at the start of the drag
+                  const bar = scrubberRef.current.getBoundingClientRect(); // getBoundingClientRect gives the position of the bar in pixels relative to the viewport
+                  const ratio = (e.clientX - bar.left) / bar.width; // convert mouse x position to a ratio of the bar width
                   setStartTime(Math.max(0, Math.min(tMax - windowSize, ratio * tMax - windowSize / 2)));
                 }}
               >
                 <div
+                  // The draggable thumb inside the bar
                   style={{
                     left: `${(startTime / tMax) * 100}%`,
                     width: `${(windowSize / tMax) * 100}%`,
                   }}
-                  className="absolute inset-y-0 rounded-full bg-primary/50 hover:bg-primary/60 cursor-grab active:cursor-grabbing"
+                  className="absolute inset-y-0 cursor-grab active:cursor-grabbing bg-border hover:bg-foreground"
                   onMouseDown={(e) => startDrag(e, 'move')}
                 >
+                  {/* Left resize handle — secondary-coloured line extending above and below the thumb */}
                   <div
-                    className="absolute left-0 inset-y-0 w-2 cursor-ew-resize rounded-l-full"
+                    className="absolute left-0 w-0.5 cursor-ew-resize"
+                    style={{ top: '-4px', bottom: '-4px', backgroundColor: 'var(--c-secondary)' }}
                     onMouseDown={(e) => startDrag(e, 'resize-left')}
                   />
+                  {/* Right resize handle */}
                   <div
-                    className="absolute right-0 inset-y-0 w-2 cursor-ew-resize rounded-r-full"
+                    className="absolute right-0 w-0.5 cursor-ew-resize"
+                    style={{ top: '-4px', bottom: '-4px', backgroundColor: 'var(--c-secondary)' }}
                     onMouseDown={(e) => startDrag(e, 'resize-right')}
                   />
                 </div>
@@ -280,9 +296,9 @@ export const EegViewer = ({ data, channelNames }) => {
         </div>
       </div>
 
+      {/* Gain: shrink/expand the shared y-range (all channels) */}    
       {/* shrink-0 pins the controls at the bottom, never squeezed by the channel area */}
       <div className="shrink-0 flex flex-wrap justify-center gap-4 py-2">
-        {/* Gain: shrink/expand the shared y-range (all channels) */}
         <div className="flex flex-col items-center gap-0.5">
           <label htmlFor="eeg-gain"
           className="text-xs text-foreground/60">Gain (µV)</label>
