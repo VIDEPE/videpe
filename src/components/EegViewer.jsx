@@ -52,6 +52,8 @@ export const EegViewer = ({ data, channelNames }) => {
   const { isDarkMode } = useTheme();
   const syncKey = 'eeg-sync'; // shared across all channels to link their interactions
   const containerRef = useRef(null); // channel plot panel — measures both plot width and available height
+  const scrubberRef = useRef(null);
+  const dragRef = useRef(null);
   const [plotWidth, setPlotWidth] = useState(0); // passed to uPlot options to fill the space
   const [channelAreaHeight, setChannelAreaHeight] = useState(0); // used to compute per-channel plot height
   const [visibleChannelCount, setVisibleChannelCount] = useState(20); // how many channels fit in view at once
@@ -95,6 +97,39 @@ export const EegViewer = ({ data, channelNames }) => {
     if (containerRef.current) observer.observe(containerRef.current);
     return () => observer.disconnect();
   }, []);
+
+  useEffect(() => {
+    const onMouseMove = (e) => {
+      if (!dragRef.current || !scrubberRef.current) return;
+      const barWidth = scrubberRef.current.offsetWidth;
+      const dt = ((e.clientX - dragRef.current.startX) / barWidth) * tMax;
+      const { type, startTime: st, startWindowSize: sw } = dragRef.current;
+
+      if (type === 'move') {
+        setStartTime(Math.max(0, Math.min(tMax - sw, st + dt)));
+      } else if (type === 'resize-right') {
+        setWindowSize(Math.max(1, Math.min(tMax - st, sw + dt)));
+      } else if (type === 'resize-left') {
+        const newStart = Math.max(0, Math.min(st + sw - 1, st + dt));
+        setStartTime(newStart);
+        setWindowSize(st + sw - newStart);
+      }
+    };
+    const onMouseUp = () => { dragRef.current = null; };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+  }, [tMax]);
+
+  const startDrag = (e, type) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragRef.current = { type, startX: e.clientX, startTime, startWindowSize: windowSize };
+  };
 
   const increaseWindowSize = () => {
     setWindowSize((size) => size + 1);
@@ -209,6 +244,39 @@ export const EegViewer = ({ data, channelNames }) => {
               />
             </div>
           )}
+
+          {/* Timeline scrubber: thumb position = startTime, thumb width = windowSize */}
+          {plotWidth > 0 && (
+            <div className="shrink-0 py-1" style={{ paddingLeft: Y_AXIS_WIDTH, paddingRight: PLOT_RIGHT_PAD }}>
+              <div
+                ref={scrubberRef}
+                className="relative h-3 rounded-full bg-border cursor-pointer"
+                onMouseDown={(e) => {
+                  const bar = scrubberRef.current.getBoundingClientRect();
+                  const ratio = (e.clientX - bar.left) / bar.width;
+                  setStartTime(Math.max(0, Math.min(tMax - windowSize, ratio * tMax - windowSize / 2)));
+                }}
+              >
+                <div
+                  style={{
+                    left: `${(startTime / tMax) * 100}%`,
+                    width: `${(windowSize / tMax) * 100}%`,
+                  }}
+                  className="absolute inset-y-0 rounded-full bg-primary/50 hover:bg-primary/60 cursor-grab active:cursor-grabbing"
+                  onMouseDown={(e) => startDrag(e, 'move')}
+                >
+                  <div
+                    className="absolute left-0 inset-y-0 w-2 cursor-ew-resize rounded-l-full"
+                    onMouseDown={(e) => startDrag(e, 'resize-left')}
+                  />
+                  <div
+                    className="absolute right-0 inset-y-0 w-2 cursor-ew-resize rounded-r-full"
+                    onMouseDown={(e) => startDrag(e, 'resize-right')}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -220,7 +288,7 @@ export const EegViewer = ({ data, channelNames }) => {
           className="text-xs text-foreground/60">Gain (µV)</label>
           <div className="flex items-center gap-1">
             <button type="button" className="thin-button" onClick={() => updateYScale(yScale * 2)}>
-              <ZoomOut size={20} />
+              <ZoomOut size={22} />
             </button>
             <input
               id="eeg-gain"
@@ -237,7 +305,7 @@ export const EegViewer = ({ data, channelNames }) => {
               aria-label="Gain (µV)"
             />
             <button type="button" className="thin-button" onClick={() => updateYScale(yScale / 2)}>
-              <ZoomIn size={20} />
+              <ZoomIn size={22} />
             </button>
           </div>
         </div>
