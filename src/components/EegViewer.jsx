@@ -71,6 +71,7 @@ export const EegViewer = ({ data, channelNames }) => {
   const [shiftTimeStepSizeStr, setShiftTimeStepSizeStr] = useState('5');
   const [yScale, setYScale] = useState(10); // y-axis half-range in µV; all channels share this
   const [yScaleStr, setYScaleStr] = useState('10'); // separate state for the input string to allow temporary invalid states (e.g. empty string while editing) without breaking the numeric yScale used for plotting
+  const [isDragging, setIsDragging] = useState(false); // true while the scrubber thumb is being dragged, so it stays highlighted
   // Clamp the visible channel count to a valid range whenever channelNames or the count changes
   const clampChannelCount = (n) => Math.max(1, Math.min(channelNames.length, n));
   // Whenever on of the control variables changes, ensure it is still valid and update the input string to match
@@ -169,6 +170,7 @@ export const EegViewer = ({ data, channelNames }) => {
     const onMouseUp = () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       dragRef.current = null;
+      setIsDragging(false);
     };
 
     // Attach listeners to the window to track mouse movements instead of the scrubber,
@@ -185,6 +187,7 @@ export const EegViewer = ({ data, channelNames }) => {
     e.preventDefault();   // stops text selection during drag
     e.stopPropagation();  // stops the event bubbling up to the bar's own onMouseDown
     dragRef.current = { type, startX: e.clientX, startTime, startWindowSize: windowSize };
+    setIsDragging(true);
   };
 
   const increaseWindowSize = () => updateWindowSize(Math.floor(windowSize) + 1);
@@ -322,7 +325,7 @@ export const EegViewer = ({ data, channelNames }) => {
                     left: `${(startTime / tMax) * 100}%`,
                     width: `${(windowSize / tMax) * 100}%`,
                   }}
-                  className="absolute inset-y-0 cursor-grab active:cursor-grabbing bg-border hover:bg-foreground"
+                  className={`absolute inset-y-0 cursor-grab active:cursor-grabbing ${isDragging ? 'bg-primary' : 'bg-border hover:bg-foreground'}`}
                   onMouseDown={(e) => startDrag(e, 'move')}
                 >
                   {/* Left resize handle — secondary-coloured line extending above and below the thumb */}

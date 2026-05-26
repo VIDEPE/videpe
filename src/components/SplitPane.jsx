@@ -123,7 +123,7 @@ export const SplitPane = ({ leftLabel, rightLabel, left, right, onLeftReset, onR
       {!maximized && (
         <div
           style={{ order: 2 }}
-          className="w-1.5 shrink-0 cursor-col-resize bg-border hover:bg-primary/50 active:bg-primary transition-colors select-none"
+          className="w-1.5 shrink-0 cursor-col-resize mx-1 bg-border hover:bg-secondary active:bg-primary transition-colors select-none"
           onMouseDown={(e) => { e.preventDefault(); isDraggingRef.current = true; }}
         />
       )}
