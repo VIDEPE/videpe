@@ -141,29 +141,30 @@ export const PatientView = () => {
 
   return (
     <FullWidthLayout>
-      {/* Top bar: load actions on the left, theme toggle on the right */}
-      <div className="shrink-0 relative flex items-center justify-between px-4 py-2 border-b border-border mt-8">
-        <div className="flex items-center gap-2">
-          {/* The button shows "Load Demo" when no data is loaded, and "Reset" when either EEG, pending EEG files, or volumes are present.
-          It is disabled while loading to prevent multiple simultaneous loads.*/}
-          <button
-            type="button"
-            className="thin-button px-3 py-1"
-            onClick={
-              eeg || volumes.length > 0 || pendingEegFiles.length > 0 ? handleReset : handleLoadDemo
-            }
-            disabled={isLoading}
-          >
-            {isDemoloading
-              ? 'Loading…'
-              : eeg || volumes.length > 0 || pendingEegFiles.length > 0
-                ? 'Reset'
-                : 'Load Demo'}
-          </button>
+      {/* Top bar: title centered in flow; button and toggle are fixed like ThemeToggle */}
+      <div className="shrink-0 flex flex-col items-center py-2 border-b border-border">
+        <button
+          type="button"
+          className="thin-button px-3 py-1 fixed top-5 left-5 z-50"
+          onClick={
+            eeg || volumes.length > 0 || pendingEegFiles.length > 0 ? handleReset : handleLoadDemo
+          }
+          disabled={isLoading}
+        >
+          {isDemoloading
+            ? 'Loading…'
+            : eeg || volumes.length > 0 || pendingEegFiles.length > 0
+              ? 'Reset'
+              : 'Load Demo'}
+        </button>
+        <div className="pointer-events-none text-center">
+          <h1 className="!mb-3">VIDEPE</h1>
+          <p className="text-sm text-foreground/70 py-2">
+            <span className="font-bold">V</span>isualization & <span className="font-bold">I</span>ntegration
+            of <span className="font-bold">D</span>ata for <span className="font-bold">E</span>pilepsy{' '}
+            <span className="font-bold">P</span>re-surgical <span className="font-bold">E</span>valuation
+          </p>
         </div>
-        <h1 className="absolute left-1/2 -translate-x-1/2 pb-8 text-lg font-semibold pointer-events-none">
-          Patient Viewer
-        </h1>
         <ThemeToggle />
       </div>
 
@@ -184,7 +185,7 @@ export const PatientView = () => {
           )}
         </div>
         <div className="flex flex-col min-h-0 text-center">
-          <h2 className="shrink-0">Neural Imaging</h2>
+          <h2 className="shrink-0">Neuroimaging</h2>
           {volumes.length > 0 ? (
             <NiiViewer volumes={volumes} />
           ) : (

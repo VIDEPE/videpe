@@ -2,6 +2,7 @@
 import UplotReact from 'uplot-react';
 import 'uplot/dist/uPlot.min.css';
 import { useTheme } from '@/components/ThemeContext';
+import { ZoomIn, ZoomOut } from 'lucide-react';
 import { minMaxDownsample } from '@/utils/downsample';
 
 const Y_AXIS_WIDTH = 60; // px for the y-axis area (channel name + tick space) — must match x-axis strip left padding
@@ -50,7 +51,12 @@ const buildChannelOptions = ({
 export const EegViewer = ({ data, channelNames }) => {
   const { isDarkMode } = useTheme();
   const syncKey = 'eeg-sync'; // shared across all channels to link their interactions
+  // the following refs do not cause re-renders when updated
   const containerRef = useRef(null); // channel plot panel — measures both plot width and available height
+  const scrubberRef = useRef(null);  // attached to the bar div — used to measure its pixel width
+  const dragRef = useRef(null);      // stores active drag state — null when not dragging
+  const rafRef = useRef(null);       // stores the pending requestAnimationFrame id so we can cancel it
+  // the following states on the other hand do cause re-renders when updated
   const [plotWidth, setPlotWidth] = useState(0); // passed to uPlot options to fill the space
   const [channelAreaHeight, setChannelAreaHeight] = useState(0); // used to compute per-channel plot height
   const [visibleChannelCount, setVisibleChannelCount] = useState(20); // how many channels fit in view at once
@@ -59,6 +65,12 @@ export const EegViewer = ({ data, channelNames }) => {
   const [startTime, setStartTime] = useState(0); // start of the visible x-range
   const [shiftTimeStepSize, setShiftTimeStepSize] = useState(5);
   const [yScale, setYScale] = useState(10); // y-axis half-range in µV; all channels share this
+  const [yScaleStr, setYScaleStr] = useState('10'); // separate state for the input string to allow temporary invalid states (e.g. empty string while editing) without breaking the numeric yScale used for plotting
+  const updateYScale = (newVal) => {
+    const clamped = Math.max(1, Math.round(newVal));
+    setYScale(clamped);
+    setYScaleStr(String(clamped));
+  };
 
   const clampChannelCount = (n) => Math.max(1, Math.min(channelNames.length, n));
   const X_AXIS_HEIGHT = 45; // px reserved for the fixed x-axis strip below the scroll area
@@ -89,11 +101,64 @@ export const EegViewer = ({ data, channelNames }) => {
     return () => observer.disconnect();
   }, []);
 
+  useEffect(() => {
+    const onMouseMove = (e) => {
+      if (!dragRef.current || !scrubberRef.current) return;
+
+      // Cancel any frame that was already queued but hasn't run yet.
+      // Without this, fast mouse moves would stack up multiple pending updates
+      // and they'd all fire in the same frame, doing redundant work.
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+
+      // Capture clientX immediately — by the time the rAF callback runs,
+      // the original event object may be recycled by the browser and clientX would be 0.
+      const clientX = e.clientX;
+
+      rafRef.current = requestAnimationFrame(() => {
+        if (!dragRef.current || !scrubberRef.current) return;
+        const barWidth = scrubberRef.current.offsetWidth;
+        const dt = ((clientX - dragRef.current.startX) / barWidth) * tMax;
+        const { type, startTime: st, startWindowSize: sw } = dragRef.current;
+
+        const r10 = (v) => Math.round(v * 10) / 10;
+        if (type === 'move') {
+          setStartTime(r10(Math.max(0, Math.min(tMax - sw, st + dt))));
+        } else if (type === 'resize-right') {
+          setWindowSize(r10(Math.max(1, Math.min(tMax - st, sw + dt))));
+        } else if (type === 'resize-left') {
+          const newStart = r10(Math.max(0, Math.min(st + sw - 1, st + dt)));
+          setStartTime(newStart);
+          setWindowSize(r10(st + sw - newStart));
+        }
+      });
+    };
+    // On mouse up, clear the drag state to stop dragging
+    const onMouseUp = () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      dragRef.current = null;
+    };
+
+    // Attach listeners to the window to track mouse movements instead of the scrubber,
+    // this allows dragging to continue even if the cursor leaves the scrubber area
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+  }, [tMax]);
+
+  const startDrag = (e, type) => {
+    e.preventDefault();   // stops text selection during drag
+    e.stopPropagation();  // stops the event bubbling up to the bar's own onMouseDown
+    dragRef.current = { type, startX: e.clientX, startTime, startWindowSize: windowSize };
+  };
+
   const increaseWindowSize = () => {
-    setWindowSize((size) => size + 1);
+    setWindowSize((size) => Math.floor(size) + 1);
   };
   const decreaseWindowSize = () => {
-    setWindowSize((size) => Math.max(1, size - 1));
+    setWindowSize((size) => Math.max(1, Math.floor(size) - 1));
   };
 
   const forwardshiftStartTime = () => {
@@ -202,35 +267,82 @@ export const EegViewer = ({ data, channelNames }) => {
               />
             </div>
           )}
+
+          {/* Timeline scrubber: thumb position = startTime, thumb width = windowSize */}
+          {plotWidth > 0 && (
+            <div className="shrink-0 py-2" style={{ width: plotWidth, paddingLeft: Y_AXIS_WIDTH, paddingRight: PLOT_RIGHT_PAD }}>
+              <div
+                // The x scrollbar bar itself
+                ref={scrubberRef}
+                className="relative h-3 bg-surface cursor-pointer"
+                onMouseDown={(e) => {
+                  // Calculate the time corresponding to the mouse position on the bar at the start of the drag
+                  const bar = scrubberRef.current.getBoundingClientRect(); // getBoundingClientRect gives the position of the bar in pixels relative to the viewport
+                  const ratio = (e.clientX - bar.left) / bar.width; // convert mouse x position to a ratio of the bar width
+                  setStartTime(Math.max(0, Math.min(tMax - windowSize, ratio * tMax - windowSize / 2)));
+                }}
+              >
+                <div
+                  // The draggable thumb inside the bar
+                  style={{
+                    left: `${(startTime / tMax) * 100}%`,
+                    width: `${(windowSize / tMax) * 100}%`,
+                  }}
+                  className="absolute inset-y-0 cursor-grab active:cursor-grabbing bg-border hover:bg-foreground"
+                  onMouseDown={(e) => startDrag(e, 'move')}
+                >
+                  {/* Left resize handle — secondary-coloured line extending above and below the thumb */}
+                  <div
+                    className="absolute left-0 w-0.5 cursor-ew-resize"
+                    style={{ top: '-4px', bottom: '-4px', backgroundColor: 'var(--c-secondary)' }}
+                    onMouseDown={(e) => startDrag(e, 'resize-left')}
+                  />
+                  {/* Right resize handle */}
+                  <div
+                    className="absolute right-0 w-0.5 cursor-ew-resize"
+                    style={{ top: '-4px', bottom: '-4px', backgroundColor: 'var(--c-secondary)' }}
+                    onMouseDown={(e) => startDrag(e, 'resize-right')}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
+      {/* Gain: shrink/expand the shared y-range (all channels) */}    
       {/* shrink-0 pins the controls at the bottom, never squeezed by the channel area */}
       <div className="shrink-0 flex flex-wrap justify-center gap-4 py-2">
-        {/* Gain: shrink/expand the shared y-range (all channels) */}
         <div className="flex flex-col items-center gap-0.5">
-          <span className="text-xs text-foreground/60">Gain (µV)</span>
+          <label htmlFor="eeg-gain"
+          className="text-xs text-foreground/60">Gain (µV)</label>
           <div className="flex items-center gap-1">
-            <button type="button" className="thin-button" onClick={() => setYScale((s) => s * 2)}>
-              −
+            <button type="button" className="thin-button" onClick={() => updateYScale(yScale * 2)}>
+              <ZoomOut size={22} />
             </button>
             <input
+              id="eeg-gain"
               type="number"
-              value={Math.round(yScale)}
+              value={yScaleStr}
               min={1}
-              onChange={(e) => setYScale(Math.max(1, Number(e.target.value)))}
+              onChange={(e) => {
+                setYScaleStr(e.target.value);
+                const val = Number(e.target.value);
+                if (e.target.value !== '' && !isNaN(val)) setYScale(Math.max(1, val));
+              }}
+              onBlur={() => updateYScale(Number(yScaleStr) || yScale)}
               className="w-16 text-center border border-border rounded px-1 py-0.5 text-sm bg-background text-foreground"
               aria-label="Gain (µV)"
             />
-            <button type="button" className="thin-button" onClick={() => setYScale((s) => s / 2)}>
-              +
+            <button type="button" className="thin-button" onClick={() => updateYScale(yScale / 2)}>
+              <ZoomIn size={22} />
             </button>
           </div>
         </div>
 
         {/* Time Shift: move the x-range forward/backward by a user-defined step */}
         <div className="flex flex-col items-center gap-0.5">
-          <span className="text-xs text-foreground/60">Time Shift (s)</span>
+          <label htmlFor="eeg-time-shift-step" className="text-xs text-foreground/60">Time Shift (s)</label>
           <div className="flex items-center gap-1">
             <button type="button" className="thin-button" onClick={() => setStartTime(0)}>
               {'|<'}
@@ -239,6 +351,7 @@ export const EegViewer = ({ data, channelNames }) => {
               {'<'}
             </button>
             <input
+              id="eeg-time-shift-step"
               type="number"
               value={shiftTimeStepSize}
               onChange={(e) => setShiftTimeStepSize(Math.max(1, Number(e.target.value)))}
@@ -260,14 +373,15 @@ export const EegViewer = ({ data, channelNames }) => {
 
         {/* Window Size: increase/decrease the total visible x-range */}
         <div className="flex flex-col items-center gap-0.5">
-          <span className="text-xs text-foreground/60">Window Size (s)</span>
+          <label htmlFor="eeg-window-size" className="text-xs text-foreground/60">Window Size (s)</label>
           <div className="flex items-center gap-1">
             <button type="button" className="thin-button" onClick={decreaseWindowSize}>
               −
             </button>
             <input
+              id="eeg-window-size"
               type="number"
-              value={windowSize}
+              value={Math.round(windowSize * 10) / 10}
               min={1}
               onChange={(e) => setWindowSize(Math.max(1, Number(e.target.value)))}
               className="w-16 text-center border border-border rounded px-1 py-0.5 text-sm bg-background text-foreground"
