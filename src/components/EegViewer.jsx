@@ -56,6 +56,8 @@ export const EegViewer = ({ data, channelNames }) => {
   const scrubberRef = useRef(null);  // attached to the bar div — used to measure its pixel width
   const dragRef = useRef(null);      // stores active drag state — null when not dragging
   const rafRef = useRef(null);       // stores the pending requestAnimationFrame id so we can cancel it
+  const resizeDebounceRef = useRef(null); // debounces ResizeObserver to avoid rebuilding charts on every resize pixel
+  const hasMeasuredRef = useRef(false);   // true after the first ResizeObserver measurement
   // the following states on the other hand do cause re-renders when updated
   const [plotWidth, setPlotWidth] = useState(0); // passed to uPlot options to fill the space
   const [channelAreaHeight, setChannelAreaHeight] = useState(0); // used to compute per-channel plot height
@@ -71,21 +73,21 @@ export const EegViewer = ({ data, channelNames }) => {
     setYScale(clamped);
     setYScaleStr(String(clamped));
   };
-
+  
+  // Clamp the visible channel count to a valid range whenever channelNames or the count changes
   const clampChannelCount = (n) => Math.max(1, Math.min(channelNames.length, n));
   const X_AXIS_HEIGHT = 45; // px reserved for the fixed x-axis strip below the scroll area
   const plotHeight =
     channelAreaHeight > 0 ? Math.floor(channelAreaHeight / visibleChannelCount) : 0;
   const axisColor = isDarkMode ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.8)';
 
-  // Downsample each channel to 2×plotWidth points for the visible window.
+  // Downsample each channel for the visible window.
   // Re-runs only when the window or plot dimensions change, not on every render.
   const sampledData = useMemo(() => {
     if (plotWidth === 0) return null;
     const endTime = startTime + windowSize;
-    const target = plotWidth * 2;
     return channelNames.map((_, i) =>
-      minMaxDownsample(data[0], data[i + 1], startTime, endTime, target)
+      minMaxDownsample(data[0], data[i + 1], startTime, endTime, plotWidth)
     );
   }, [data, startTime, windowSize, plotWidth, channelNames]);
 
@@ -94,8 +96,21 @@ export const EegViewer = ({ data, channelNames }) => {
     // which causes uPlot to redraw at the correct pixel dimensions
     // Single observer on containerRef gives both width (for plot sizing) and height (for plotHeight)
     const observer = new ResizeObserver(([entry]) => {
-      setPlotWidth(Math.floor(entry.contentRect.width)); // floor avoids sub-pixel artefacts
-      setChannelAreaHeight(Math.floor(entry.contentRect.height));
+      const w = Math.floor(entry.contentRect.width);
+      const h = Math.floor(entry.contentRect.height);
+      if (!hasMeasuredRef.current) {
+        // First measurement on mount: update immediately so charts render without delay
+        hasMeasuredRef.current = true;
+        setPlotWidth(w);
+        setChannelAreaHeight(h);
+        return;
+      }
+      // Subsequent changes (e.g. panel drag): debounce so charts only rebuild after resizing stops
+      if (resizeDebounceRef.current) clearTimeout(resizeDebounceRef.current);
+      resizeDebounceRef.current = setTimeout(() => {
+        setPlotWidth(w);
+        setChannelAreaHeight(h);
+      }, 150);
     });
     if (containerRef.current) observer.observe(containerRef.current);
     return () => observer.disconnect();

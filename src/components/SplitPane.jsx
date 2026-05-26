@@ -6,8 +6,15 @@ export const SplitPane = ({ leftLabel, rightLabel, left, right }) => {
   const [maximized, setMaximized] = useState(null); // null | 'left' | 'right'
   const [swapped, setSwapped] = useState(false);
   const containerRef = useRef(null);
+  const leftPanelRef = useRef(null);
+  const rightPanelRef = useRef(null);
   const isDraggingRef = useRef(false);
   const rafRef = useRef(null);
+  const splitPercentRef = useRef(50); // mirrors splitPercent without triggering re-renders during drag
+  const swappedRef = useRef(false);   // mirrors swapped for use inside rAF callbacks
+
+  // Keep swappedRef in sync so rAF callbacks always read the current value
+  useEffect(() => { swappedRef.current = swapped; }, [swapped]);
 
   useEffect(() => {
     const onMouseMove = (e) => {
@@ -21,13 +28,21 @@ export const SplitPane = ({ leftLabel, rightLabel, left, right }) => {
       rafRef.current = requestAnimationFrame(() => {
         if (!isDraggingRef.current || !containerRef.current) return;
         const rect = containerRef.current.getBoundingClientRect();
-        const pct = ((clientX - rect.left) / rect.width) * 100;
-        setSplitPercent(Math.min(85, Math.max(15, pct)));
+        const pct = Math.min(85, Math.max(15, ((clientX - rect.left) / rect.width) * 100));
+        splitPercentRef.current = pct;
+        // Mutate DOM directly — skips React render cycle entirely during drag
+        const sw = swappedRef.current;
+        if (leftPanelRef.current)
+          leftPanelRef.current.style.width = sw ? `${100 - pct}%` : `${pct}%`;
+        if (rightPanelRef.current)
+          rightPanelRef.current.style.width = sw ? `${pct}%` : `${100 - pct}%`;
       });
     };
     const onMouseUp = () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       isDraggingRef.current = false;
+      // Sync React state once at end of drag so subsequent renders use the correct value
+      setSplitPercent(splitPercentRef.current);
     };
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
@@ -82,6 +97,7 @@ export const SplitPane = ({ leftLabel, rightLabel, left, right }) => {
     <div ref={containerRef} className="flex-1 min-h-0 flex flex-row">
       {/* Left content — DOM-first; visually right when swapped (order:3) */}
       <div
+        ref={leftPanelRef}
         className="flex flex-col min-h-0 overflow-hidden"
         style={{ order: swapped ? 3 : 1, width: leftWidth }}
       >
@@ -100,6 +116,7 @@ export const SplitPane = ({ leftLabel, rightLabel, left, right }) => {
 
       {/* Right content — DOM-second; visually left when swapped (order:1) */}
       <div
+        ref={rightPanelRef}
         className="flex flex-col min-h-0 overflow-hidden"
         style={{ order: swapped ? 1 : 3, width: rightWidth }}
       >
