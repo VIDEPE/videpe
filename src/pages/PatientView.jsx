@@ -4,6 +4,7 @@ import { FullWidthLayout } from '../components/FullWidthLayout';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { EegViewer } from '../components/EegViewer';
 import { NiiViewer } from '../components/NiiViewer';
+import { SplitPane } from '../components/SplitPane';
 import { loadBrainVisionEEG } from '../loaders/loadBrainVisionEEG';
 import { detectAndLoadEEG, checkEegFiles } from '../loaders/eegFormats';
 import { FileDropZone } from '../components/FileDropZone';
@@ -168,10 +169,11 @@ export const PatientView = () => {
         <ThemeToggle />
       </div>
 
-      <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
-        <div className="flex flex-col min-h-0">
-          <h2 className="text-center shrink-0">EEG</h2>
-          {eeg ? (
+      <SplitPane
+        leftLabel="EEG"
+        rightLabel="Neuroimaging"
+        left={
+          eeg ? (
             <EegViewer data={eeg.data} channelNames={eeg.channelNames} />
           ) : (
             <FileDropZone
@@ -182,11 +184,10 @@ export const PatientView = () => {
               pendingFiles={pendingEegFiles}
               hint={eegHint}
             />
-          )}
-        </div>
-        <div className="flex flex-col min-h-0 text-center">
-          <h2 className="shrink-0">Neuroimaging</h2>
-          {volumes.length > 0 ? (
+          )
+        }
+        right={
+          volumes.length > 0 ? (
             <NiiViewer volumes={volumes} />
           ) : (
             <FileDropZone
@@ -195,9 +196,9 @@ export const PatientView = () => {
               label="Drop imaging files"
               description="Volumes: NIfTI, MGH, GIFTI, PLY, OBJ, …"
             />
-          )}
-        </div>
-      </div>
+          )
+        }
+      />
     </FullWidthLayout>
   );
 };
