@@ -2,6 +2,7 @@
 import UplotReact from 'uplot-react';
 import 'uplot/dist/uPlot.min.css';
 import { useTheme } from '@/components/ThemeContext';
+import { ZoomIn, ZoomOut } from 'lucide-react';
 import { minMaxDownsample } from '@/utils/downsample';
 
 const Y_AXIS_WIDTH = 60; // px for the y-axis area (channel name + tick space) — must match x-axis strip left padding
@@ -59,6 +60,12 @@ export const EegViewer = ({ data, channelNames }) => {
   const [startTime, setStartTime] = useState(0); // start of the visible x-range
   const [shiftTimeStepSize, setShiftTimeStepSize] = useState(5);
   const [yScale, setYScale] = useState(10); // y-axis half-range in µV; all channels share this
+  const [yScaleStr, setYScaleStr] = useState('10');
+  const updateYScale = (newVal) => {
+    const clamped = Math.max(1, Math.round(newVal));
+    setYScale(clamped);
+    setYScaleStr(String(clamped));
+  };
 
   const clampChannelCount = (n) => Math.max(1, Math.min(channelNames.length, n));
   const X_AXIS_HEIGHT = 45; // px reserved for the fixed x-axis strip below the scroll area
@@ -209,28 +216,35 @@ export const EegViewer = ({ data, channelNames }) => {
       <div className="shrink-0 flex flex-wrap justify-center gap-4 py-2">
         {/* Gain: shrink/expand the shared y-range (all channels) */}
         <div className="flex flex-col items-center gap-0.5">
-          <span className="text-xs text-foreground/60">Gain (µV)</span>
+          <label htmlFor="eeg-gain"
+          className="text-xs text-foreground/60">Gain (µV)</label>
           <div className="flex items-center gap-1">
-            <button type="button" className="thin-button" onClick={() => setYScale((s) => s * 2)}>
-              −
+            <button type="button" className="thin-button" onClick={() => updateYScale(yScale * 2)}>
+              <ZoomOut size={20} />
             </button>
             <input
+              id="eeg-gain"
               type="number"
-              value={Math.round(yScale)}
+              value={yScaleStr}
               min={1}
-              onChange={(e) => setYScale(Math.max(1, Number(e.target.value)))}
+              onChange={(e) => {
+                setYScaleStr(e.target.value);
+                const val = Number(e.target.value);
+                if (e.target.value !== '' && !isNaN(val)) setYScale(Math.max(1, val));
+              }}
+              onBlur={() => updateYScale(Number(yScaleStr) || yScale)}
               className="w-16 text-center border border-border rounded px-1 py-0.5 text-sm bg-background text-foreground"
               aria-label="Gain (µV)"
             />
-            <button type="button" className="thin-button" onClick={() => setYScale((s) => s / 2)}>
-              +
+            <button type="button" className="thin-button" onClick={() => updateYScale(yScale / 2)}>
+              <ZoomIn size={20} />
             </button>
           </div>
         </div>
 
         {/* Time Shift: move the x-range forward/backward by a user-defined step */}
         <div className="flex flex-col items-center gap-0.5">
-          <span className="text-xs text-foreground/60">Time Shift (s)</span>
+          <label htmlFor="eeg-time-shift-step" className="text-xs text-foreground/60">Time Shift (s)</label>
           <div className="flex items-center gap-1">
             <button type="button" className="thin-button" onClick={() => setStartTime(0)}>
               {'|<'}
@@ -239,6 +253,7 @@ export const EegViewer = ({ data, channelNames }) => {
               {'<'}
             </button>
             <input
+              id="eeg-time-shift-step"
               type="number"
               value={shiftTimeStepSize}
               onChange={(e) => setShiftTimeStepSize(Math.max(1, Number(e.target.value)))}
@@ -260,12 +275,13 @@ export const EegViewer = ({ data, channelNames }) => {
 
         {/* Window Size: increase/decrease the total visible x-range */}
         <div className="flex flex-col items-center gap-0.5">
-          <span className="text-xs text-foreground/60">Window Size (s)</span>
+          <label htmlFor="eeg-window-size" className="text-xs text-foreground/60">Window Size (s)</label>
           <div className="flex items-center gap-1">
             <button type="button" className="thin-button" onClick={decreaseWindowSize}>
               −
             </button>
             <input
+              id="eeg-window-size"
               type="number"
               value={windowSize}
               min={1}
