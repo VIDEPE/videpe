@@ -176,6 +176,29 @@ describe('EegViewer — window size controls', () => {
     expect(input).toHaveValue(30);
   });
 
+  it('clamps startTime down when + button would push the window end beyond tMax', async () => {
+    const { default: UplotReactMock } = await import('uplot-react');
+    const user = userEvent.setup();
+    renderViewer();
+
+    // Shift forward to startTime=10 using two > clicks (default step=5).
+    // Window is then [10, 30] — right edge exactly touches tMax=30.
+    const shiftInput = screen.getByRole('spinbutton', { name: /shift step/i });
+    const shiftBtns = within(shiftInput.closest('div')).getAllByRole('button');
+    await user.click(shiftBtns[2]); // > : startTime 0 → 5
+    await user.click(shiftBtns[2]); // > : startTime 5 → 10
+
+    const windowInput = screen.getByRole('spinbutton', { name: /window size/i });
+    const [, increaseBtn] = within(containerOf(windowInput)).getAllByRole('button');
+
+    UplotReactMock.mockClear();
+    await user.click(increaseBtn); // tries windowSize 20→30; without fix startTime stays 10, end=40
+
+    // The x-range end must not exceed tMax=30
+    const range = UplotReactMock.mock.calls[0][0].options.scales.x.range;
+    expect(range[1]).toBeLessThanOrEqual(30);
+  });
+
   it('clamps to tMax and rounds to 1 decimal on blur when value exceeds recording length', () => {
     // tMax has more than one decimal place — the bug was that tMax was used verbatim
     // (e.g. "30.123456") instead of being rounded to 1 decimal ("30.1")

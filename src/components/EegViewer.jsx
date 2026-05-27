@@ -125,6 +125,8 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
     const clamped = Math.round(Math.min(tMax, Math.max(1, newVal)) * 10) / 10;
     setWindowSize(clamped);
     setWindowSizeStr(String(clamped));
+    // If the new window size would push the right edge past tMax, pull startTime back
+    setStartTime((prev) => Math.max(0, Math.min(prev, tMax - clamped)));
   };
   const updateShiftTimeStepSize = (newVal) => {
     const clamped = Math.max(1, Math.round(newVal * 10) / 10);
