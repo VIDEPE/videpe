@@ -52,13 +52,19 @@ describe('EegViewer — controls presence', () => {
     expect(input).toBeInTheDocument();
   });
 
-  it('renders channel decrease (−) and increase (+) buttons', () => {
+  it('renders visible channels decrease (−) and increase (+) buttons', () => {
     renderViewer();
-    const input = screen.getByRole('spinbutton', { name: /number of channels/i });
-    const buttons = within(containerOf(input)).getAllByRole('button');
+    const label2test = screen.getByText('Channels');
+    expect(label2test).toBeInTheDocument();
+    const buttons = within(containerOf(label2test)).getAllByRole('button');
     expect(buttons).toHaveLength(2);
-    expect(buttons[0]).toHaveTextContent('−');
-    expect(buttons[1]).toHaveTextContent('+');
+  });
+
+    it('renders visible channel count size input with default value of 20', () => {
+    renderViewer();
+    const input = screen.getByRole('spinbutton', { name: /window size/i });
+    expect(input).toBeInTheDocument();
+    expect(input).toHaveValue(20);
   });
 
   it('renders the window size input with default value of 20', () => {
@@ -68,13 +74,12 @@ describe('EegViewer — controls presence', () => {
     expect(input).toHaveValue(20);
   });
 
-  it('renders window size decrease (−) and increase (+) buttons', () => {
+  it('renders the Window Size label and its two buttons', () => {
     renderViewer();
-    const input = screen.getByRole('spinbutton', { name: /window size/i });
-    const buttons = within(containerOf(input)).getAllByRole('button');
+    const label = screen.getByText('Window Size (s)');
+    expect(label).toBeInTheDocument();
+    const buttons = within(containerOf(label)).getAllByRole('button');
     expect(buttons).toHaveLength(2);
-    expect(buttons[0]).toHaveTextContent('−');
-    expect(buttons[1]).toHaveTextContent('+');
   });
 
   it('renders the shift step input with default value of 5', () => {
@@ -84,15 +89,12 @@ describe('EegViewer — controls presence', () => {
     expect(input).toHaveValue(5);
   });
 
-  it('renders all four shift buttons in order: |< < > >|', () => {
+  it('renders the Time Shift label and its four buttons', () => {
     renderViewer();
-    const input = screen.getByRole('spinbutton', { name: /shift step/i });
-    const buttons = within(containerOf(input)).getAllByRole('button');
+    const label = screen.getByText('Time Shift (s)');
+    expect(label).toBeInTheDocument();
+    const buttons = within(containerOf(label)).getAllByRole('button');
     expect(buttons).toHaveLength(4);
-    expect(buttons[0]).toHaveTextContent('|<');
-    expect(buttons[1]).toHaveTextContent('<');
-    expect(buttons[2]).toHaveTextContent('>');
-    expect(buttons[3]).toHaveTextContent('>|');
   });
 
   it('renders the Gain label and its two buttons', () => {
@@ -496,6 +498,69 @@ describe('EegViewer — timeline scrubber', () => {
     act(() => { fireEvent.mouseMove(window, { clientX: 30 }); });
     expect(parseFloat(thumb().style.left)).toBeCloseTo(10, 1);   // 3/30=10%
     expect(parseFloat(thumb().style.width)).toBeCloseTo(56.67, 1); // 17/30≈56.67%
+    act(() => { fireEvent.mouseUp(window); });
+  });
+
+  it('dragging the right handle updates the window size input', () => {
+    renderViewer();
+    mockScrubberWidth(scrubber());
+    const windowInput = screen.getByRole('spinbutton', { name: /window size/i });
+
+    fireEvent.mouseDown(screen.getByTestId('timeline-resize-right'), { clientX: 0 });
+    // move 60px → dt=(60/300)×30=6 → windowSize=min(30,26)=26
+    act(() => { fireEvent.mouseMove(window, { clientX: 60 }); });
+
+    expect(windowInput).toHaveValue(26);
+    act(() => { fireEvent.mouseUp(window); });
+  });
+
+  it('dragging the left handle updates the window size input', () => {
+    renderViewer();
+    mockScrubberWidth(scrubber());
+    const windowInput = screen.getByRole('spinbutton', { name: /window size/i });
+
+    fireEvent.mouseDown(screen.getByTestId('timeline-resize-left'), { clientX: 0 });
+    // move 30px → dt=(30/300)×30=3 → newStart=3, newWindowSize=20-3=17
+    act(() => { fireEvent.mouseMove(window, { clientX: 30 }); });
+
+    expect(windowInput).toHaveValue(17);
+    act(() => { fireEvent.mouseUp(window); });
+  });
+
+  it('dragging the thumb clamps start time at tMax − windowSize', () => {
+    renderViewer();
+    mockScrubberWidth(scrubber());
+
+    fireEvent.mouseDown(thumb(), { clientX: 0 });
+    // move far right → dt >> tMax-windowSize → clamped to 10
+    act(() => { fireEvent.mouseMove(window, { clientX: 600 }); });
+
+    // left = 10/30 ≈ 33.33%
+    expect(parseFloat(thumb().style.left)).toBeCloseTo(33.33, 1);
+    act(() => { fireEvent.mouseUp(window); });
+  });
+
+  it('dragging the right handle clamps windowSize at tMax', () => {
+    renderViewer();
+    mockScrubberWidth(scrubber());
+
+    fireEvent.mouseDown(screen.getByTestId('timeline-resize-right'), { clientX: 0 });
+    // move far right → windowSize clamped to tMax=30
+    act(() => { fireEvent.mouseMove(window, { clientX: 600 }); });
+
+    expect(parseFloat(thumb().style.width)).toBeCloseTo(100, 1);
+    act(() => { fireEvent.mouseUp(window); });
+  });
+
+  it('dragging the left handle clamps windowSize to a minimum of 1', () => {
+    renderViewer();
+    mockScrubberWidth(scrubber());
+
+    fireEvent.mouseDown(screen.getByTestId('timeline-resize-left'), { clientX: 0 });
+    // move far right → newStart clamped to st+sw-1=19, newWindowSize=20-19=1
+    act(() => { fireEvent.mouseMove(window, { clientX: 600 }); });
+
+    expect(parseFloat(thumb().style.width)).toBeCloseTo(1 / 30 * 100, 1);
     act(() => { fireEvent.mouseUp(window); });
   });
 
