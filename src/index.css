@@ -190,8 +190,12 @@ code {
 .button-icon {
   padding: 2px 4px;
 
-  &:hover { box-shadow: none; }
-  &:active { box-shadow: none; }
+  &:hover {
+    box-shadow: none;
+  }
+  &:active {
+    box-shadow: none;
+  }
 }
 
 .button-toggled {

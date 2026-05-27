@@ -2,7 +2,18 @@
 import UplotReact from 'uplot-react';
 import 'uplot/dist/uPlot.min.css';
 import { useTheme } from '@/components/ThemeContext';
-import { ZoomIn, ZoomOut, ChevronRight, ChevronLeft, ChevronLast, ChevronFirst, Plus, Minus, ListChevronsUpDown , ListChevronsDownUp  } from 'lucide-react';
+import {
+  ZoomIn,
+  ZoomOut,
+  ChevronRight,
+  ChevronLeft,
+  ChevronLast,
+  ChevronFirst,
+  Plus,
+  Minus,
+  ListChevronsUpDown,
+  ListChevronsDownUp,
+} from 'lucide-react';
 import { minMaxDownsample } from '@/utils/downsample';
 
 const Y_AXIS_WIDTH = 60; // px for the y-axis area (channel name + tick space) — must match x-axis strip left padding
@@ -10,11 +21,12 @@ const PLOT_RIGHT_PAD = 20; // px right padding — must match in both channel pl
 const OVERDRAW = 2; // canvas height multiplier — peaks bleed ±50% into adjacent lanes instead of clipping
 const MIN_PLOT_HEIGHT = 12; // minimum px per channel lane — prevents uPlot from collapsing at high channel counts
 const ICON_SIZE = 22; // default size for lucide icons in the controls, used to compute input widths
-const INPUT_MIN_CH = 3;    // minimum input width in ch units
-const INPUT_EXTRA_CH = 3;  // extra ch of breathing room beyond the value's character length
+const INPUT_MIN_CH = 3; // minimum input width in ch units
+const INPUT_EXTRA_CH = 3; // extra ch of breathing room beyond the value's character length
 const INPUT_PAD = '0.5rem'; // offsets px-1 padding (box-sizing: border-box shrinks the content area by this amount)
 // Computes the width for the numeric inputs based on their current value, so they expand to fit large and small numbers
-const inputWidth = (str) => `calc(${Math.max(INPUT_MIN_CH, str.length + INPUT_EXTRA_CH)}ch + ${INPUT_PAD})`;
+const inputWidth = (str) =>
+  `calc(${Math.max(INPUT_MIN_CH, str.length + INPUT_EXTRA_CH)}ch + ${INPUT_PAD})`;
 
 // Builds uPlot options for a single channel. Called once per channel on each render.
 const buildChannelOptions = ({
@@ -55,14 +67,14 @@ const buildChannelOptions = ({
 export const EegViewer = ({ data, channelNames, onReady }) => {
   const { isDarkMode } = useTheme();
   const syncKey = 'eeg-sync'; // shared across all channels to link their interactions
-  
+
   // the following refs do not cause re-renders when updated
   const containerRef = useRef(null); // channel plot panel — measures both plot width and available height
-  const scrubberRef = useRef(null);  // attached to the bar div — used to measure its pixel width
-  const dragRef = useRef(null);      // stores active drag state — null when not dragging
-  const rafRef = useRef(null);       // stores the pending requestAnimationFrame id so we can cancel it
+  const scrubberRef = useRef(null); // attached to the bar div — used to measure its pixel width
+  const dragRef = useRef(null); // stores active drag state — null when not dragging
+  const rafRef = useRef(null); // stores the pending requestAnimationFrame id so we can cancel it
   const resizeDebounceRef = useRef(null); // debounces ResizeObserver to avoid rebuilding charts on every resize pixel
-  const hasMeasuredRef = useRef(false);   // true after the first ResizeObserver measurement
+  const hasMeasuredRef = useRef(false); // true after the first ResizeObserver measurement
 
   // the following states on the other hand do cause re-renders when updated
   const [plotWidth, setPlotWidth] = useState(0); // passed to uPlot options to fill the space
@@ -70,7 +82,9 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
 
   const defaultVisibleChannelCount = 20;
   const [visibleChannelCount, setVisibleChannelCount] = useState(defaultVisibleChannelCount); // how many channels fit in view at once
-  const [visibleChannelCountStr, setVisibleChannelCountStr] = useState(String(defaultVisibleChannelCount));
+  const [visibleChannelCountStr, setVisibleChannelCountStr] = useState(
+    String(defaultVisibleChannelCount)
+  );
 
   const tMax = data[0][data[0].length - 1]; // total time span of the recording, from the time values in the first row
   const defaultWindowSize = tMax < 20 ? Math.ceil(tMax) : 20; // default to showing the full recording if it's shorter than 20s, otherwise start with a 20s window
@@ -80,15 +94,19 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
   const [startTime, setStartTime] = useState(0); // start of the visible x-range
   const defaultShiftTimeStepSize = 5;
   const [shiftTimeStepSize, setShiftTimeStepSize] = useState(defaultShiftTimeStepSize);
-  const [shiftTimeStepSizeStr, setShiftTimeStepSizeStr] = useState(String(defaultShiftTimeStepSize));
+  const [shiftTimeStepSizeStr, setShiftTimeStepSizeStr] = useState(
+    String(defaultShiftTimeStepSize)
+  );
 
   const defaultYScale = 10;
   const [yScale, setYScale] = useState(defaultYScale); // y-axis half-range in µV; all channels share this
   const [yScaleStr, setYScaleStr] = useState(String(defaultYScale)); // separate state for the input string to allow temporary invalid states (e.g. empty string while editing) without breaking the numeric yScale used for plotting
   const [isDragging, setIsDragging] = useState(false); // true while the scrubber thumb is being dragged, so it stays highlighted
   // Clamp the visible channel count to a valid range whenever channelNames or the count changes
-  const maxChannelsByHeight = channelAreaHeight > 0 ? Math.floor(channelAreaHeight / MIN_PLOT_HEIGHT) : channelNames.length;
-  const clampChannelCount = (n) => Math.max(1, Math.min(channelNames.length, maxChannelsByHeight, n));
+  const maxChannelsByHeight =
+    channelAreaHeight > 0 ? Math.floor(channelAreaHeight / MIN_PLOT_HEIGHT) : channelNames.length;
+  const clampChannelCount = (n) =>
+    Math.max(1, Math.min(channelNames.length, maxChannelsByHeight, n));
   // Whenever on of the control variables changes, ensure it is still valid and update the input string to match
   const updateYScale = (newVal) => {
     const clamped = Math.max(1, Math.round(newVal));
@@ -101,7 +119,7 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
     setWindowSizeStr(String(clamped));
   };
   const updateShiftTimeStepSize = (newVal) => {
-    const clamped = Math.max(1, Math.round(newVal));
+    const clamped = Math.max(1, Math.round(newVal * 10) / 10);
     setShiftTimeStepSize(clamped);
     setShiftTimeStepSizeStr(String(clamped));
   };
@@ -217,14 +235,14 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
   }, [tMax]);
 
   const startDrag = (e, type) => {
-    e.preventDefault();   // stops text selection during drag
-    e.stopPropagation();  // stops the event bubbling up to the bar's own onMouseDown
+    e.preventDefault(); // stops text selection during drag
+    e.stopPropagation(); // stops the event bubbling up to the bar's own onMouseDown
     dragRef.current = { type, startX: e.clientX, startTime, startWindowSize: windowSize };
     setIsDragging(true);
   };
 
-  const increaseWindowSize = () => updateWindowSize(Math.floor(windowSize) + 1);
-  const decreaseWindowSize = () => updateWindowSize(Math.max(1, Math.floor(windowSize) - 1));
+  const increaseWindowSize = () => updateWindowSize(Math.floor(windowSize) + 10);
+  const decreaseWindowSize = () => updateWindowSize(Math.max(1, Math.floor(windowSize) - 10));
 
   const forwardshiftStartTime = () => {
     setStartTime((start) => Math.min(tMax - windowSize, start + shiftTimeStepSize));
@@ -252,6 +270,7 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
               <ListChevronsDownUp size={ICON_SIZE} />
             </button>
             <input
+              id="eeg-visible-channels"
               type="number"
               value={visibleChannelCountStr}
               min={1}
@@ -260,9 +279,12 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
               onChange={(e) => {
                 setVisibleChannelCountStr(e.target.value);
                 const val = Number(e.target.value);
-                if (e.target.value !== '' && !isNaN(val)) setVisibleChannelCount(clampChannelCount(Math.round(val)));
+                if (e.target.value !== '' && !isNaN(val))
+                  setVisibleChannelCount(clampChannelCount(Math.round(val)));
               }}
-              onBlur={() => updateVisibleChannelCount(Number(visibleChannelCountStr) || visibleChannelCount)}
+              onBlur={() =>
+                updateVisibleChannelCount(Number(visibleChannelCountStr) || visibleChannelCount)
+              }
               className="text-center border border-border rounded px-1 py-0.5 text-sm bg-background text-foreground [appearance:textfield]"
               aria-label="Number of channels displayed"
             />
@@ -319,7 +341,13 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
                       }}
                     />
                     {/* Canvas wrapper — absolutely positioned to center the taller canvas in the lane */}
-                    <div style={{ position: 'absolute', top: -(plotHeight * (OVERDRAW - 1) / 2), left: 0 }}>
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: -((plotHeight * (OVERDRAW - 1)) / 2),
+                        left: 0,
+                      }}
+                    >
                       <UplotReact
                         options={buildChannelOptions({
                           channelIndex: i,
@@ -351,10 +379,7 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
                   height: X_AXIS_HEIGHT,
                   cursor: { sync: { key: syncKey } },
                   scales: { x: { time: false, range: [startTime, startTime + windowSize] } },
-                  axes: [
-                    { stroke: axisColor, size: 40, grid: { show: false } },
-                    { show: false },
-                  ],
+                  axes: [{ stroke: axisColor, size: 40, grid: { show: false } }, { show: false }],
                   series: [{}],
                   legend: { show: false },
                   padding: [0, PLOT_RIGHT_PAD, 0, Y_AXIS_WIDTH],
@@ -368,7 +393,10 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
 
           {/* Timeline scrubber: thumb position = startTime, thumb width = windowSize */}
           {plotWidth > 0 && (
-            <div className="shrink-0 py-2" style={{ width: plotWidth, paddingLeft: Y_AXIS_WIDTH, paddingRight: PLOT_RIGHT_PAD }}>
+            <div
+              className="shrink-0 py-2"
+              style={{ width: plotWidth, paddingLeft: Y_AXIS_WIDTH, paddingRight: PLOT_RIGHT_PAD }}
+            >
               <div
                 ref={scrubberRef}
                 data-testid="timeline-scrubber"
@@ -376,7 +404,9 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
                 onMouseDown={(e) => {
                   const bar = scrubberRef.current.getBoundingClientRect();
                   const ratio = (e.clientX - bar.left) / bar.width;
-                  setStartTime(Math.max(0, Math.min(tMax - windowSize, ratio * tMax - windowSize / 2)));
+                  setStartTime(
+                    Math.max(0, Math.min(tMax - windowSize, ratio * tMax - windowSize / 2))
+                  );
                 }}
               >
                 <div
@@ -409,14 +439,19 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
         </div>
       </div>
 
-      {/* Gain: shrink/expand the shared y-range (all channels) */}    
+      {/* Gain: shrink/expand the shared y-range (all channels) */}
       {/* shrink-0 pins the controls at the bottom, never squeezed by the channel area */}
       <div className="shrink-0 flex flex-wrap justify-center gap-4 py-2">
         <div className="flex flex-col items-center gap-0.5">
-          <label htmlFor="eeg-gain"
-          className="text-xs text-foreground/60">Gain (µV)</label>
+          <label htmlFor="eeg-gain" className="text-xs text-foreground/60">
+            Gain (µV)
+          </label>
           <div className="flex items-center gap-1">
-            <button type="button" className="button button-icon" onClick={() => updateYScale(yScale * 2)}>
+            <button
+              type="button"
+              className="button button-icon"
+              onClick={() => updateYScale(yScale * 2)}
+            >
               <ZoomOut size={ICON_SIZE} />
             </button>
             <input
@@ -434,7 +469,11 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
               className="text-center border border-border rounded px-1 py-0.5 text-sm bg-background text-foreground [appearance:textfield]"
               aria-label="Gain (µV)"
             />
-            <button type="button" className="button button-icon" onClick={() => updateYScale(yScale / 2)}>
+            <button
+              type="button"
+              className="button button-icon"
+              onClick={() => updateYScale(yScale / 2)}
+            >
               <ZoomIn size={ICON_SIZE} />
             </button>
           </div>
@@ -442,7 +481,9 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
 
         {/* Time Shift: move the x-range forward/backward by a user-defined step */}
         <div className="flex flex-col items-center gap-0.5">
-          <label htmlFor="eeg-time-shift-step" className="text-xs text-foreground/60">Time Shift (s)</label>
+          <label htmlFor="eeg-time-shift-step" className="text-xs text-foreground/60">
+            Time Shift (s)
+          </label>
           <div className="flex items-center gap-1">
             <button type="button" className="button button-icon" onClick={() => setStartTime(0)}>
               <ChevronFirst size={15} />
@@ -458,9 +499,12 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
               onChange={(e) => {
                 setShiftTimeStepSizeStr(e.target.value);
                 const val = Number(e.target.value);
-                if (e.target.value !== '' && !isNaN(val)) setShiftTimeStepSize(Math.max(1, Math.round(val)));
+                if (e.target.value !== '' && !isNaN(val))
+                  setShiftTimeStepSize(Math.max(1, Math.round(val * 10) / 10));
               }}
-              onBlur={() => updateShiftTimeStepSize(Number(shiftTimeStepSizeStr) || shiftTimeStepSize)}
+              onBlur={() =>
+                updateShiftTimeStepSize(Number(shiftTimeStepSizeStr) || shiftTimeStepSize)
+              }
               className="text-center border border-border rounded px-1 py-0.5 text-sm bg-background text-foreground [appearance:textfield]"
               aria-label="Time shift step (s)"
             />
@@ -479,7 +523,9 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
 
         {/* Window Size: increase/decrease the total visible x-range */}
         <div className="flex flex-col items-center gap-0.5">
-          <label htmlFor="eeg-window-size" className="text-xs text-foreground/60">Window Size (s)</label>
+          <label htmlFor="eeg-window-size" className="text-xs text-foreground/60">
+            Window Size (s)
+          </label>
           <div className="flex items-center gap-1">
             <button type="button" className="button button-icon" onClick={decreaseWindowSize}>
               <Minus size={ICON_SIZE} />
@@ -493,7 +539,8 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
               onChange={(e) => {
                 setWindowSizeStr(e.target.value);
                 const val = Number(e.target.value);
-                if (e.target.value !== '' && !isNaN(val) && val > 0) setWindowSize(Math.max(1, val));
+                if (e.target.value !== '' && !isNaN(val) && val > 0)
+                  setWindowSize(Math.max(1, val));
               }}
               onBlur={() => updateWindowSize(Number(windowSizeStr) || windowSize)}
               className="text-center border border-border rounded px-1 py-0.5 text-sm bg-background text-foreground [appearance:textfield]"

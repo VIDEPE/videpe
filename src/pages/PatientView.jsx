@@ -117,14 +117,20 @@ export const PatientView = () => {
     setIsLoading(true);
     setIsDemoloading(true);
     // Create ready promises before setting state — the viewers resolve them once fully rendered
-    const eegReady = new Promise(resolve => { eegReadyResolveRef.current = resolve; });
-    const niiReady = new Promise(resolve => { niiReadyResolveRef.current = resolve; });
+    const eegReady = new Promise((resolve) => {
+      eegReadyResolveRef.current = resolve;
+    });
+    const niiReady = new Promise((resolve) => {
+      niiReadyResolveRef.current = resolve;
+    });
     try {
-      const base = import.meta.env.BASE_URL;
+      const base = import.meta.env.BASE_URL; // base is the public folder in Vite, so demo_data is at `${base}demo_data/...`
       await toast.promise(
         (async () => {
+          // Load and set EEG
           const result = await loadBrainVisionEEG(base + DEMO_EEG.header, base + DEMO_EEG.data);
           setEeg(result);
+          // Load and set volumes
           setVolumes(DEMO_VOLUMES);
           await Promise.all([eegReady, niiReady]);
         })(),
@@ -169,11 +175,13 @@ export const PatientView = () => {
             eeg || volumes.length > 0 || pendingEegFiles.length > 0 ? handleReset : handleLoadDemo
           }
           disabled={isLoading}
-          title={isDemoloading
-            ? 'Loading demo data…'
-            : eeg || volumes.length > 0 || pendingEegFiles.length > 0
-              ? 'Reset both viewers'
-              : 'Load demo data to test VIDEPE without needing your own files'}
+          title={
+            isDemoloading
+              ? 'Loading demo data…'
+              : eeg || volumes.length > 0 || pendingEegFiles.length > 0
+                ? 'Reset both viewers'
+                : 'Load demo data to test VIDEPE without needing your own files'
+          }
         >
           {isDemoloading
             ? 'Loading…'
@@ -184,9 +192,10 @@ export const PatientView = () => {
         <div className="pointer-events-none text-center">
           <h1 className="!mb-3">VIDEPE</h1>
           <p className="text-sm text-foreground/70 py-2">
-            <span className="font-bold">V</span>isualization & <span className="font-bold">I</span>ntegration
-            of <span className="font-bold">D</span>ata for <span className="font-bold">E</span>pilepsy{' '}
-            <span className="font-bold">P</span>re-surgical <span className="font-bold">E</span>valuation
+            <span className="font-bold">V</span>isualization & <span className="font-bold">I</span>
+            ntegration of <span className="font-bold">D</span>ata for{' '}
+            <span className="font-bold">E</span>pilepsy <span className="font-bold">P</span>
+            re-surgical <span className="font-bold">E</span>valuation
           </p>
         </div>
         <ThemeToggle />
@@ -199,7 +208,11 @@ export const PatientView = () => {
         onRightReset={volumes.length > 0 ? handleNiiReset : undefined}
         left={
           eeg ? (
-            <EegViewer data={eeg.data} channelNames={eeg.channelNames} onReady={() => eegReadyResolveRef.current?.()} />
+            <EegViewer
+              data={eeg.data}
+              channelNames={eeg.channelNames}
+              onReady={() => eegReadyResolveRef.current?.()}
+            />
           ) : (
             <FileDropZone
               onFiles={handleEegFiles}
