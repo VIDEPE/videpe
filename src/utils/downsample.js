@@ -12,10 +12,11 @@
  * @param {Float32Array} values      Y values aligned with timestamps.
  * @param {number}       startTime   Start of the visible window.
  * @param {number}       endTime     End of the visible window.
- * @param {number}       targetPoints  Max output points (use 2 × plotWidth).
+ * @param {number}       pixelWidth  Width of the plot in pixels.
  * @returns {[Float32Array, Float32Array]} [downsampled timestamps, downsampled values]
  */
-export function minMaxDownsample(timestamps, values, startTime, endTime, targetPoints) {
+export function minMaxDownsample(timestamps, values, startTime, endTime, pixelWidth) {
+  const targetPoints = pixelWidth * 2;
   const n = timestamps.length;
   if (n === 0) return [timestamps, values];
 

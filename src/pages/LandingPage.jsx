@@ -39,7 +39,7 @@ export const LandingPage = () => {
         <img src={logo} alt="VIDÉPÉ logo" className="w-120 app-logo" />
         <button
           type="button"
-          className="button w-40 flex justify-center text"
+          className="button-lg w-40 flex justify-center text"
           onClick={() => navigate('/patient-view')}
         >
           Get Started

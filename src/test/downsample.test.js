@@ -26,8 +26,8 @@ describe('minMaxDownsample — no downsampling needed', () => {
 });
 
 describe('minMaxDownsample — downsampling', () => {
-  it('output has at most targetPoints points', () => {
-    const [outTs, outVals] = minMaxDownsample(TS, VALS, 0, 0.9, 4);
+  it('output has at most pixelWidth × 2 points', () => {
+    const [outTs, outVals] = minMaxDownsample(TS, VALS, 0, 0.9, 2);
     expect(outTs.length).toBeLessThanOrEqual(4);
     expect(outVals.length).toBeLessThanOrEqual(4);
   });
