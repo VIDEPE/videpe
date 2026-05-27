@@ -54,7 +54,7 @@ const buildChannelOptions = ({
   };
 };
 
-export const EegViewer = ({ data, channelNames }) => {
+export const EegViewer = ({ data, channelNames, onReady }) => {
   const { isDarkMode } = useTheme();
   const syncKey = 'eeg-sync'; // shared across all channels to link their interactions
   
@@ -150,6 +150,15 @@ export const EegViewer = ({ data, channelNames }) => {
     if (containerRef.current) observer.observe(containerRef.current);
     return () => observer.disconnect();
   }, []);
+
+  // Signal onReady once the first measurement lands and charts have rendered
+  const onReadyCalledRef = useRef(false);
+  useEffect(() => {
+    if (plotWidth > 0 && !onReadyCalledRef.current) {
+      onReadyCalledRef.current = true;
+      onReady?.();
+    }
+  }, [plotWidth, onReady]);
 
   useEffect(() => {
     const onMouseMove = (e) => {

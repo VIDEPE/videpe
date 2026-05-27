@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { FullWidthLayout } from '../components/FullWidthLayout';
 import { ThemeToggle } from '../components/ThemeToggle';
@@ -36,6 +36,8 @@ export const PatientView = () => {
   const [volumes, setVolumes] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isDemoloading, setIsDemoloading] = useState(false);
+  const eegReadyResolveRef = useRef(null); // set before demo load; EegViewer calls it when charts are ready
+  const niiReadyResolveRef = useRef(null); // set before demo load; NiiViewer calls it when volumes are ready
   const [pendingEegFiles, setPendingEegFiles] = useState([]);
   const [eegHint, setEegHint] = useState(null);
 
@@ -114,18 +116,24 @@ export const PatientView = () => {
   const handleLoadDemo = async () => {
     setIsLoading(true);
     setIsDemoloading(true);
+    // Create ready promises before setting state — the viewers resolve them once fully rendered
+    const eegReady = new Promise(resolve => { eegReadyResolveRef.current = resolve; });
+    const niiReady = new Promise(resolve => { niiReadyResolveRef.current = resolve; });
     try {
       const base = import.meta.env.BASE_URL;
-      const result = await toast.promise(
-        loadBrainVisionEEG(base + DEMO_EEG.header, base + DEMO_EEG.data),
+      await toast.promise(
+        (async () => {
+          const result = await loadBrainVisionEEG(base + DEMO_EEG.header, base + DEMO_EEG.data);
+          setEeg(result);
+          setVolumes(DEMO_VOLUMES);
+          await Promise.all([eegReady, niiReady]);
+        })(),
         {
           loading: 'Loading demo EEG + Imaging data…',
           success: 'Demo data loaded!',
           error: (err) => `Error loading demo EEG + Imaging data:\n${err.message}`,
         }
       );
-      setEeg(result);
-      setVolumes(DEMO_VOLUMES);
     } finally {
       setIsLoading(false);
       setIsDemoloading(false);
@@ -191,7 +199,7 @@ export const PatientView = () => {
         onRightReset={volumes.length > 0 ? handleNiiReset : undefined}
         left={
           eeg ? (
-            <EegViewer data={eeg.data} channelNames={eeg.channelNames} />
+            <EegViewer data={eeg.data} channelNames={eeg.channelNames} onReady={() => eegReadyResolveRef.current?.()} />
           ) : (
             <FileDropZone
               onFiles={handleEegFiles}
@@ -205,7 +213,7 @@ export const PatientView = () => {
         }
         right={
           volumes.length > 0 ? (
-            <NiiViewer volumes={volumes} />
+            <NiiViewer volumes={volumes} onReady={() => niiReadyResolveRef.current?.()} />
           ) : (
             <FileDropZone
               onFiles={handleNiiFiles}

@@ -2,7 +2,7 @@
 import { Niivue, SHOW_RENDER } from '@niivue/niivue';
 import { getInitialVisibility, applyToggle } from './NiiViewer.utils';
 
-export const NiiViewer = ({ volumes = [] }) => {
+export const NiiViewer = ({ volumes = [], onReady }) => {
   // visible is an array of booleans indicating whether each volume is currently visible
   const [visible, setVisible] = useState(() => getInitialVisibility(volumes));
 
@@ -48,6 +48,7 @@ export const NiiViewer = ({ volumes = [] }) => {
         });
         nvRef.current = nv;
         setLoading(false);
+        onReady?.();
       } catch (error) {
         setError(`Failed to load image: ${error.message}`);
         setLoading(false);
