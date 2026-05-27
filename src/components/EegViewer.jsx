@@ -87,6 +87,13 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
   );
 
   const tMax = data[0][data[0].length - 1]; // total time span of the recording, from the time values in the first row
+  // Max input lengths — prevents the boxes from accepting absurdly long strings that warp the layout.
+  // Window/shift allow one decimal place so get +2 (dot + digit); gain and channels are integers.
+  const CHANNEL_MAX_LENGTH = String(channelNames.length).length; // enough to display the max channel count, e.g. "128"
+  const WINDOW_MAX_LENGTH = String(Math.ceil(tMax)).length + 2; // enough to display the max window size (tMax) with a comma + 1 decimal
+  const SHIFT_MAX_LENGTH = 6; // covers up to 9999.9 s
+  const GAIN_MAX_LENGTH = 5; // covers up to 99999 µV
+  
   const defaultWindowSize = tMax < 20 ? Math.ceil(tMax) : 20; // default to showing the full recording if it's shorter than 20s, otherwise start with a 20s window
   const [windowSize, setWindowSize] = useState(defaultWindowSize); // seconds visible in the x-range, initialized to 20s or the full recording if shorter
   const [windowSizeStr, setWindowSizeStr] = useState(String(defaultWindowSize));
@@ -114,7 +121,7 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
     setYScaleStr(String(clamped));
   };
   const updateWindowSize = (newVal) => {
-    const clamped = Math.max(1, Math.round(newVal * 10) / 10);
+    const clamped = Math.round(Math.min(tMax, Math.max(1, newVal)) * 10) / 10;
     setWindowSize(clamped);
     setWindowSizeStr(String(clamped));
   };
@@ -277,6 +284,7 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
               max={channelNames.length}
               style={{ width: inputWidth(visibleChannelCountStr) }}
               onChange={(e) => {
+                if (e.target.value.length > CHANNEL_MAX_LENGTH) return;
                 setVisibleChannelCountStr(e.target.value);
                 const val = Number(e.target.value);
                 if (e.target.value !== '' && !isNaN(val))
@@ -461,6 +469,7 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
               min={1}
               style={{ width: inputWidth(yScaleStr) }}
               onChange={(e) => {
+                if (e.target.value.length > GAIN_MAX_LENGTH) return;
                 setYScaleStr(e.target.value);
                 const val = Number(e.target.value);
                 if (e.target.value !== '' && !isNaN(val)) setYScale(Math.max(1, val));
@@ -497,6 +506,7 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
               value={shiftTimeStepSizeStr}
               style={{ width: inputWidth(shiftTimeStepSizeStr) }}
               onChange={(e) => {
+                if (e.target.value.length > SHIFT_MAX_LENGTH) return;
                 setShiftTimeStepSizeStr(e.target.value);
                 const val = Number(e.target.value);
                 if (e.target.value !== '' && !isNaN(val))
@@ -536,11 +546,13 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
               value={windowSizeStr}
               min={1}
               style={{ width: inputWidth(windowSizeStr) }}
+              max={tMax}
               onChange={(e) => {
+                if (e.target.value.length > WINDOW_MAX_LENGTH) return;
                 setWindowSizeStr(e.target.value);
                 const val = Number(e.target.value);
                 if (e.target.value !== '' && !isNaN(val) && val > 0)
-                  setWindowSize(Math.max(1, val));
+                  setWindowSize(Math.max(1, Math.min(tMax, val)));
               }}
               onBlur={() => updateWindowSize(Number(windowSizeStr) || windowSize)}
               className="text-center border border-border rounded px-1 py-0.5 text-sm bg-background text-foreground [appearance:textfield]"

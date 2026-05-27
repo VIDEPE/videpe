@@ -156,11 +156,31 @@ describe('EegViewer — window size controls', () => {
     renderViewer();
     const input = screen.getByRole('spinbutton', { name: /window size/i });
 
-    // 20.25 × 10 = 202.5 → Math.round = 203 → / 10 = 20.3
-    fireEvent.change(input, { target: { value: '20.25' } });
+    // "5.75" is 4 chars (fits the tMax=30 window limit); 5.75 × 10 = 57.5 → Math.round = 58 → / 10 = 5.8
+    fireEvent.change(input, { target: { value: '5.75' } });
     fireEvent.blur(input);
 
-    expect(input).toHaveValue(20.3);
+    expect(input).toHaveValue(5.8);
+  });
+
+  it('clamps to tMax and rounds to 1 decimal on blur when value exceeds recording length', () => {
+    // tMax has more than one decimal place — the bug was that tMax was used verbatim
+    // (e.g. "30.123456") instead of being rounded to 1 decimal ("30.1")
+    const dataWithDecimalTMax = [
+      [0, 10, 20, 30.123456],
+      [1, 2, 3, 4],
+      [4, 5, 6, 7],
+      [7, 8, 9, 10],
+    ];
+    render(<EegViewer data={dataWithDecimalTMax} channelNames={channelNames} />);
+    const input = screen.getByRole('spinbutton', { name: /window size/i });
+
+    // "31" is above tMax but fits in the 4-char limit (ceil(30.123456)="31" → length 2+2=4)
+    fireEvent.change(input, { target: { value: '31' } });
+    fireEvent.blur(input);
+
+    // clamp to tMax=30.123456, then round: Math.round(30.123456 × 10) / 10 = 30.1
+    expect(input).toHaveValue(30.1);
   });
 });
 
