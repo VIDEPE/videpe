@@ -4,10 +4,15 @@
 :root {
   --c-heading: rgba(8, 6, 13, 1); /* headings, buttons */
   --c-foreground: rgb(56, 55, 56, 1); /* body text */
+  --c-foreground: rgb(56, 55, 56, 1); /* body text */
   --c-background: rgba(255, 255, 255, 1); /* page background */
   --c-surface: rgb(235, 235, 235); /* cards, panels, code blocks */
   --c-border: rgb(196, 196, 196); /* borders, dividers */
+  --c-surface: rgb(235, 235, 235); /* cards, panels, code blocks */
+  --c-border: rgb(196, 196, 196); /* borders, dividers */
   --c-primary: rgba(71, 118, 219, 1); /* brand / accent color */
+  --c-secondary: rgba(1, 52, 219, 1); /* outlines */
+  --c-alert: rgb(240, 107, 20); /* warning messages, nondestructive actions */
   --c-secondary: rgba(1, 52, 219, 1); /* outlines */
   --c-alert: rgb(240, 107, 20); /* warning messages, nondestructive actions */
   --c-shadow:
@@ -34,10 +39,14 @@
 .dark {
   --c-heading: rgba(243, 244, 246, 1); /* headings, buttons */
   --c-foreground: rgba(156, 163, 175, 1); /* body text */
+  --c-foreground: rgba(156, 163, 175, 1); /* body text */
   --c-background: rgba(22, 23, 29, 1); /* page background */
   --c-surface: rgba(31, 32, 40, 1); /* cards, panels, code blocks */
   --c-border: rgba(46, 48, 58, 1); /* borders, dividers */
+  --c-border: rgba(46, 48, 58, 1); /* borders, dividers */
   --c-primary: rgba(132, 204, 252, 1); /* brand / accent color */
+  --c-secondary: rgba(22, 73, 252, 1); /* outlines */
+  --c-alert: rgb(235, 107, 20); /* warning messages, nondestructive actions */
   --c-secondary: rgba(22, 73, 252, 1); /* outlines */
   --c-alert: rgb(235, 107, 20); /* warning messages, nondestructive actions */
   --c-shadow:
@@ -54,12 +63,28 @@
   --color-primary: var(--c-primary);
   --color-secondary: var(--c-secondary);
   --color-alert: var(--c-alert);
+  --color-alert: var(--c-alert);
   --font-sans: system-ui, 'Segoe UI', Roboto, sans-serif;
   --font-mono: ui-monospace, Consolas, monospace;
 }
 
 body {
   margin: 0;
+}
+
+.themed-scrollbar {
+  scrollbar-color: var(--c-border) var(--c-surface); /* Firefox */
+
+  &::-webkit-scrollbar {
+    width: 8px;
+  }
+  &::-webkit-scrollbar-track {
+    background: var(--c-surface);
+  }
+  &::-webkit-scrollbar-thumb {
+    background: var(--c-border);
+    border-radius: 4px;
+  }
 }
 
 .themed-scrollbar {
