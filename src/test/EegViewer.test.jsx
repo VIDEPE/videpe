@@ -156,11 +156,67 @@ describe('EegViewer — window size controls', () => {
     renderViewer();
     const input = screen.getByRole('spinbutton', { name: /window size/i });
 
-    // 20.25 × 10 = 202.5 → Math.round = 203 → / 10 = 20.3
-    fireEvent.change(input, { target: { value: '20.25' } });
+    // "5.75" is 4 chars (fits the tMax=30 window limit); 5.75 × 10 = 57.5 → Math.round = 58 → / 10 = 5.8
+    fireEvent.change(input, { target: { value: '5.75' } });
     fireEvent.blur(input);
 
-    expect(input).toHaveValue(20.3);
+    expect(input).toHaveValue(5.8);
+  });
+
+  it('does not increase window size beyond tMax via the + button', async () => {
+    const user = userEvent.setup();
+    renderViewer();
+    const input = screen.getByRole('spinbutton', { name: /window size/i });
+    const [, increaseBtn] = within(containerOf(input)).getAllByRole('button');
+
+    // Default windowSize=20, tMax=30. First click reaches 30 (the limit), second should stay there.
+    await user.click(increaseBtn);
+    await user.click(increaseBtn);
+
+    expect(input).toHaveValue(30);
+  });
+
+  it('clamps startTime down when + button would push the window end beyond tMax', async () => {
+    const { default: UplotReactMock } = await import('uplot-react');
+    const user = userEvent.setup();
+    renderViewer();
+
+    // Shift forward to startTime=10 using two > clicks (default step=5).
+    // Window is then [10, 30] — right edge exactly touches tMax=30.
+    const shiftInput = screen.getByRole('spinbutton', { name: /shift step/i });
+    const shiftBtns = within(shiftInput.closest('div')).getAllByRole('button');
+    await user.click(shiftBtns[2]); // > : startTime 0 → 5
+    await user.click(shiftBtns[2]); // > : startTime 5 → 10
+
+    const windowInput = screen.getByRole('spinbutton', { name: /window size/i });
+    const [, increaseBtn] = within(containerOf(windowInput)).getAllByRole('button');
+
+    UplotReactMock.mockClear();
+    await user.click(increaseBtn); // tries windowSize 20→30; without fix startTime stays 10, end=40
+
+    // The x-range end must not exceed tMax=30
+    const range = UplotReactMock.mock.calls[0][0].options.scales.x.range;
+    expect(range[1]).toBeLessThanOrEqual(30);
+  });
+
+  it('clamps to tMax and rounds to 1 decimal on blur when value exceeds recording length', () => {
+    // tMax has more than one decimal place — the bug was that tMax was used verbatim
+    // (e.g. "30.123456") instead of being rounded to 1 decimal ("30.1")
+    const dataWithDecimalTMax = [
+      [0, 10, 20, 30.123456],
+      [1, 2, 3, 4],
+      [4, 5, 6, 7],
+      [7, 8, 9, 10],
+    ];
+    render(<EegViewer data={dataWithDecimalTMax} channelNames={channelNames} />);
+    const input = screen.getByRole('spinbutton', { name: /window size/i });
+
+    // "31" is above tMax but fits in the 4-char limit (ceil(30.123456)="31" → length 2+2=4)
+    fireEvent.change(input, { target: { value: '31' } });
+    fireEvent.blur(input);
+
+    // clamp to tMax=30.123456, then round: Math.round(30.123456 × 10) / 10 = 30.1
+    expect(input).toHaveValue(30.1);
   });
 });
 
@@ -483,6 +539,19 @@ describe('EegViewer — gain controls', () => {
     const channelCalls = UplotReactMock.mock.calls.slice(0, channelNames.length);
     const yRanges = channelCalls.map((call) => call[0].options.scales.y.range);
     yRanges.forEach((range) => expect(range).toEqual(yRanges[0]));
+  });
+
+  it('does not increase gain beyond 99999 via the ZoomOut button', async () => {
+    const user = userEvent.setup();
+    renderViewer();
+    const gainInput = screen.getByRole('spinbutton', { name: /gain/i });
+    const [gainDownBtn] = within(containerOf(screen.getByText('Gain (µV)'))).getAllByRole('button');
+
+    // Set gain to 99999 (the 5-digit max), then click ZoomOut — which doubles to 199998 without a cap
+    fireEvent.change(gainInput, { target: { value: '99999' } });
+    await user.click(gainDownBtn);
+
+    expect(gainInput).toHaveValue(99999);
   });
 });
 
