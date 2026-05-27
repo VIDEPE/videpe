@@ -35,7 +35,7 @@ const getEegOnFiles = () => {
   return calls.at(-1)[0].onFiles;
 };
 
-const getMainButton = () => screen.getByRole('button', { name: /load demo|reset/i });
+const getMainButton = () => screen.getByRole('button', { name: /^(load demo|reset|loading…)$/i });
 
 describe('PatientView — button label', () => {
   beforeEach(() => {

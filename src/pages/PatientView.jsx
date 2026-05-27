@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { FullWidthLayout } from '../components/FullWidthLayout';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { EegViewer } from '../components/EegViewer';
 import { NiiViewer } from '../components/NiiViewer';
+import { SplitPane } from '../components/SplitPane';
 import { loadBrainVisionEEG } from '../loaders/loadBrainVisionEEG';
 import { detectAndLoadEEG, checkEegFiles } from '../loaders/eegFormats';
 import { FileDropZone } from '../components/FileDropZone';
@@ -35,6 +36,8 @@ export const PatientView = () => {
   const [volumes, setVolumes] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isDemoloading, setIsDemoloading] = useState(false);
+  const eegReadyResolveRef = useRef(null); // set before demo load; EegViewer calls it when charts are ready
+  const niiReadyResolveRef = useRef(null); // set before demo load; NiiViewer calls it when volumes are ready
   const [pendingEegFiles, setPendingEegFiles] = useState([]);
   const [eegHint, setEegHint] = useState(null);
 
@@ -113,18 +116,24 @@ export const PatientView = () => {
   const handleLoadDemo = async () => {
     setIsLoading(true);
     setIsDemoloading(true);
+    // Create ready promises before setting state — the viewers resolve them once fully rendered
+    const eegReady = new Promise(resolve => { eegReadyResolveRef.current = resolve; });
+    const niiReady = new Promise(resolve => { niiReadyResolveRef.current = resolve; });
     try {
       const base = import.meta.env.BASE_URL;
-      const result = await toast.promise(
-        loadBrainVisionEEG(base + DEMO_EEG.header, base + DEMO_EEG.data),
+      await toast.promise(
+        (async () => {
+          const result = await loadBrainVisionEEG(base + DEMO_EEG.header, base + DEMO_EEG.data);
+          setEeg(result);
+          setVolumes(DEMO_VOLUMES);
+          await Promise.all([eegReady, niiReady]);
+        })(),
         {
           loading: 'Loading demo EEG + Imaging data…',
           success: 'Demo data loaded!',
           error: (err) => `Error loading demo EEG + Imaging data:\n${err.message}`,
         }
       );
-      setEeg(result);
-      setVolumes(DEMO_VOLUMES);
     } finally {
       setIsLoading(false);
       setIsDemoloading(false);
@@ -139,17 +148,32 @@ export const PatientView = () => {
     setEegHint(null);
   };
 
+  const handleEegReset = () => {
+    setEeg(null);
+    setPendingEegFiles([]);
+    setEegHint(null);
+  };
+
+  const handleNiiReset = () => {
+    setVolumes([]);
+  };
+
   return (
     <FullWidthLayout>
       {/* Top bar: title centered in flow; button and toggle are fixed like ThemeToggle */}
       <div className="shrink-0 flex flex-col items-center py-2 border-b border-border">
         <button
           type="button"
-          className="thin-button px-3 py-1 fixed top-5 left-5 z-50"
+          className="button px-3 py-1 fixed top-5 left-5 z-50"
           onClick={
             eeg || volumes.length > 0 || pendingEegFiles.length > 0 ? handleReset : handleLoadDemo
           }
           disabled={isLoading}
+          title={isDemoloading
+            ? 'Loading demo data…'
+            : eeg || volumes.length > 0 || pendingEegFiles.length > 0
+              ? 'Reset both viewers'
+              : 'Load demo data to test VIDEPE without needing your own files'}
         >
           {isDemoloading
             ? 'Loading…'
@@ -168,11 +192,14 @@ export const PatientView = () => {
         <ThemeToggle />
       </div>
 
-      <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
-        <div className="flex flex-col min-h-0">
-          <h2 className="text-center shrink-0">EEG</h2>
-          {eeg ? (
-            <EegViewer data={eeg.data} channelNames={eeg.channelNames} />
+      <SplitPane
+        leftLabel="EEG"
+        rightLabel="Neuroimaging"
+        onLeftReset={eeg || pendingEegFiles.length > 0 ? handleEegReset : undefined}
+        onRightReset={volumes.length > 0 ? handleNiiReset : undefined}
+        left={
+          eeg ? (
+            <EegViewer data={eeg.data} channelNames={eeg.channelNames} onReady={() => eegReadyResolveRef.current?.()} />
           ) : (
             <FileDropZone
               onFiles={handleEegFiles}
@@ -182,12 +209,11 @@ export const PatientView = () => {
               pendingFiles={pendingEegFiles}
               hint={eegHint}
             />
-          )}
-        </div>
-        <div className="flex flex-col min-h-0 text-center">
-          <h2 className="shrink-0">Neuroimaging</h2>
-          {volumes.length > 0 ? (
-            <NiiViewer volumes={volumes} />
+          )
+        }
+        right={
+          volumes.length > 0 ? (
+            <NiiViewer volumes={volumes} onReady={() => niiReadyResolveRef.current?.()} />
           ) : (
             <FileDropZone
               onFiles={handleNiiFiles}
@@ -195,9 +221,9 @@ export const PatientView = () => {
               label="Drop imaging files"
               description="Volumes: NIfTI, MGH, GIFTI, PLY, OBJ, …"
             />
-          )}
-        </div>
-      </div>
+          )
+        }
+      />
     </FullWidthLayout>
   );
 };
