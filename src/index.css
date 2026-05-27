@@ -131,7 +131,7 @@ code {
    Animation Styles
    ============================================ */
 
-.button {
+.button-lg {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -143,31 +143,22 @@ code {
   border: none;
   cursor: pointer;
   transition:
-    background-color 0.2s ease,
-    box-shadow 0.2s ease;
+    background-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.1s ease;
 
   &:hover {
     box-shadow: var(--c-shadow);
-    outline: var(--c-secondary);
+    transform: scale(1.06);
+  }
+
+  &:active {
+    transform: scale(0.93);
+    box-shadow: none;
   }
 }
 
-.button-colored {
-  .button {
-    color: var(--color-primary);
-    background-color: var(--color-background);
-    transition:
-      background-color 0.2s ease,
-      box-shadow 0.2s ease;
-
-    &:hover {
-      background-color: var(--color-background);
-      box-shadow: var(--c-shadow);
-    }
-  }
-}
-
-.thin-button {
+.button {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -180,16 +171,30 @@ code {
   border: none;
   cursor: pointer;
   transition:
-    background-color 0.2s ease,
-    box-shadow 0.2s ease;
+    background-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.1s ease;
 
   &:hover {
     box-shadow: var(--c-shadow);
-    outline: var(--c-secondary);
+    transform: scale(1.06);
+  }
+
+  &:active {
+    transform: scale(0.93);
+    box-shadow: none;
   }
 }
 
-.thin-button-toggled {
+/* Icon-only variant: tighter padding, no shadow — for dense control toolbars */
+.button-icon {
+  padding: 2px 4px;
+
+  &:hover { box-shadow: none; }
+  &:active { box-shadow: none; }
+}
+
+.button-toggled {
   background: var(--color-background);
   color: var(--color-primary);
   border: 2px solid var(--color-primary);

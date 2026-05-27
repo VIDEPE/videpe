@@ -69,7 +69,7 @@ export const NiiViewer = ({ volumes = [] }) => {
             key={volume.type}
             type="button"
             onClick={() => toggleVolume(i)}
-            className={'thin-button' + (visible[i] ? '' : ' thin-button-toggled')}
+            className={'button' + (visible[i] ? '' : ' button-toggled')}
             aria-label={`Toggle ${volume.type} visibility`}
           >
             {volume.type ?? `Volume ${i + 1}`}

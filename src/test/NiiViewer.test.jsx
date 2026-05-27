@@ -75,16 +75,16 @@ describe('NiiViewer', () => {
       { type: 'PET', url: '/pet.nii' },
     ];
 
-    it('button gets thin-button-toggled class when clicked off', async () => {
+    it('button gets button-toggled class when clicked off', async () => {
       const user = userEvent.setup();
       render(<NiiViewer volumes={volumes} />);
 
       const mriButton = screen.getByRole('button', { name: /toggle MRI/i });
-      expect(mriButton.className).not.toContain('thin-button-toggled');
+      expect(mriButton.className).not.toContain('button-toggled');
 
       await user.click(mriButton);
 
-      expect(mriButton.className).toContain('thin-button-toggled');
+      expect(mriButton.className).toContain('button-toggled');
     });
   });
 

@@ -156,11 +156,16 @@ export const PatientView = () => {
       <div className="shrink-0 flex flex-col items-center py-2 border-b border-border">
         <button
           type="button"
-          className="thin-button px-3 py-1 fixed top-5 left-5 z-50"
+          className="button px-3 py-1 fixed top-5 left-5 z-50"
           onClick={
             eeg || volumes.length > 0 || pendingEegFiles.length > 0 ? handleReset : handleLoadDemo
           }
           disabled={isLoading}
+          title={isDemoloading
+            ? 'Loading demo data…'
+            : eeg || volumes.length > 0 || pendingEegFiles.length > 0
+              ? 'Reset both viewers'
+              : 'Load demo data to test VIDEPE without needing your own files'}
         >
           {isDemoloading
             ? 'Loading…'

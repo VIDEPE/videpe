@@ -233,7 +233,7 @@ export const EegViewer = ({ data, channelNames }) => {
           <div className="flex flex-col items-center gap-1">
             <button
               type="button"
-              className="thin-button"
+              className="button button-icon"
               onClick={() => updateVisibleChannelCount(visibleChannelCount - 1)}
             >
               <ListChevronsDownUp size={ICON_SIZE} />
@@ -255,7 +255,7 @@ export const EegViewer = ({ data, channelNames }) => {
             />
             <button
               type="button"
-              className="thin-button"
+              className="button button-icon"
               onClick={() => updateVisibleChannelCount(visibleChannelCount + 1)}
             >
               <ListChevronsUpDown size={ICON_SIZE} />
@@ -381,7 +381,7 @@ export const EegViewer = ({ data, channelNames }) => {
           <label htmlFor="eeg-gain"
           className="text-xs text-foreground/60">Gain (µV)</label>
           <div className="flex items-center gap-1">
-            <button type="button" className="thin-button" onClick={() => updateYScale(yScale * 2)}>
+            <button type="button" className="button button-icon" onClick={() => updateYScale(yScale * 2)}>
               <ZoomOut size={ICON_SIZE} />
             </button>
             <input
@@ -399,7 +399,7 @@ export const EegViewer = ({ data, channelNames }) => {
               className="text-center border border-border rounded px-1 py-0.5 text-sm bg-background text-foreground [appearance:textfield]"
               aria-label="Gain (µV)"
             />
-            <button type="button" className="thin-button" onClick={() => updateYScale(yScale / 2)}>
+            <button type="button" className="button button-icon" onClick={() => updateYScale(yScale / 2)}>
               <ZoomIn size={ICON_SIZE} />
             </button>
           </div>
@@ -409,10 +409,10 @@ export const EegViewer = ({ data, channelNames }) => {
         <div className="flex flex-col items-center gap-0.5">
           <label htmlFor="eeg-time-shift-step" className="text-xs text-foreground/60">Time Shift (s)</label>
           <div className="flex items-center gap-1">
-            <button type="button" className="thin-button" onClick={() => setStartTime(0)}>
+            <button type="button" className="button button-icon" onClick={() => setStartTime(0)}>
               <ChevronFirst size={15} />
             </button>
-            <button type="button" className="thin-button" onClick={backwardshiftStartTime}>
+            <button type="button" className="button button-icon" onClick={backwardshiftStartTime}>
               <ChevronLeft size={ICON_SIZE} />
             </button>
             <input
@@ -429,12 +429,12 @@ export const EegViewer = ({ data, channelNames }) => {
               className="text-center border border-border rounded px-1 py-0.5 text-sm bg-background text-foreground [appearance:textfield]"
               aria-label="Time shift step (s)"
             />
-            <button type="button" className="thin-button" onClick={forwardshiftStartTime}>
+            <button type="button" className="button button-icon" onClick={forwardshiftStartTime}>
               <ChevronRight size={ICON_SIZE} />
             </button>
             <button
               type="button"
-              className="thin-button"
+              className="button button-icon"
               onClick={() => setStartTime(data[0][data[0].length - 1] - windowSize)}
             >
               <ChevronLast size={15} />
@@ -446,7 +446,7 @@ export const EegViewer = ({ data, channelNames }) => {
         <div className="flex flex-col items-center gap-0.5">
           <label htmlFor="eeg-window-size" className="text-xs text-foreground/60">Window Size (s)</label>
           <div className="flex items-center gap-1">
-            <button type="button" className="thin-button" onClick={decreaseWindowSize}>
+            <button type="button" className="button button-icon" onClick={decreaseWindowSize}>
               <Minus size={ICON_SIZE} />
             </button>
             <input
@@ -464,7 +464,7 @@ export const EegViewer = ({ data, channelNames }) => {
               className="text-center border border-border rounded px-1 py-0.5 text-sm bg-background text-foreground [appearance:textfield]"
               aria-label="Window size (s)"
             />
-            <button type="button" className="thin-button" onClick={increaseWindowSize}>
+            <button type="button" className="button button-icon" onClick={increaseWindowSize}>
               <Plus size={ICON_SIZE} />
             </button>
           </div>

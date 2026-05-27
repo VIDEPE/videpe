@@ -1,6 +1,8 @@
 import { useRef, useState, useEffect } from 'react';
 import { Maximize2, Minimize2, ArrowLeftRight, X} from 'lucide-react';
 
+const ICON_SIZE = 13;
+
 export const SplitPane = ({ leftLabel, rightLabel, left, right, onLeftReset, onRightReset }) => {
   const [splitPercent, setSplitPercent] = useState(50);// the percentage width of the left panel (when not maximized)
   const [maximized, setMaximized] = useState(null); // null | 'left' | 'right'
@@ -68,36 +70,39 @@ export const SplitPane = ({ leftLabel, rightLabel, left, right, onLeftReset, onR
     maximized === 'left' ? '0%' :
     swapped ? `${splitPercent}%` : `${100 - splitPercent}%`;
 
+  // Common styles for the traffic light buttons in the panel headers
+  const trafficBtn = 'inline-flex items-center justify-center w-4 h-4 rounded-full border-none cursor-pointer transition-all text-foreground/50 hover:text-black/70 bg-border';
+
   const panelHeader = (label, which, onReset) => (
     <div className="shrink-0 flex items-center justify-between px-3 py-1 border-b border-border bg-surface">
       <h2 style={{ margin: 0 }}>{label}</h2>
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1.5">
         {!maximized && (
           <button
             type="button"
-            className="thin-button"
+            className={`${trafficBtn} hover:bg-[#28C840]`}
             onClick={() => setSwapped((s) => !s)}
             title="Swap panels"
           >
-            <ArrowLeftRight size={14} />
+            <ArrowLeftRight size={ICON_SIZE} />
           </button>
         )}
         <button
           type="button"
-          className="thin-button"
+          className={`${trafficBtn} hover:bg-[#FFBD2E]`}
           onClick={() => toggleMaximize(which)}
           title={maximized === which ? 'Restore' : 'Maximize'}
         >
-          {maximized === which ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+          {maximized === which ? <Minimize2 size={ICON_SIZE} /> : <Maximize2 size={ICON_SIZE} />}
         </button>
         {onReset && (
           <button
             type="button"
-            className="thin-button"
+            className={`${trafficBtn} hover:bg-[#FF5F57]`}
             onClick={onReset}
             title="Reset viewer"
           >
-            <X size={14} />
+            <X size={ICON_SIZE} />
           </button>
         )}
       </div>
