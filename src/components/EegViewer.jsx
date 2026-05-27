@@ -7,6 +7,8 @@ import { minMaxDownsample } from '@/utils/downsample';
 
 const Y_AXIS_WIDTH = 60; // px for the y-axis area (channel name + tick space) — must match x-axis strip left padding
 const PLOT_RIGHT_PAD = 20; // px right padding — must match in both channel plots and x-axis strip so ticks align
+const OVERDRAW = 2; // canvas height multiplier — peaks bleed ±50% into adjacent lanes instead of clipping
+const MIN_PLOT_HEIGHT = 12; // minimum px per channel lane — prevents uPlot from collapsing at high channel counts
 const ICON_SIZE = 22; // default size for lucide icons in the controls, used to compute input widths
 const INPUT_MIN_CH = 3;    // minimum input width in ch units
 const INPUT_EXTRA_CH = 3;  // extra ch of breathing room beyond the value's character length
@@ -26,31 +28,27 @@ const buildChannelOptions = ({
   startTime,
   yScale,
 }) => {
-  const axisColor = isDarkMode ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.8)';
-  const gridColor = isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
-  const stroke =  isDarkMode ? 'rgb(255, 255, 255)' : 'rgba(0, 0, 0, 0.8)';
+  const stroke = isDarkMode ? 'rgb(255, 255, 255)' : 'rgba(0, 0, 0, 0.8)';
 
   return {
     width,
     height,
+    background: 'rgba(0,0,0,0)', // transparent so peaks from adjacent channels show through
     // All plots share the same syncKey — panning/zooming one moves all others
     cursor: { sync: { key: syncKey } },
     scales: {
       x: { time: false, range: [startTime, startTime + windowSize] },
-      y: { range: [-yScale, yScale] },
+      // y-range is extended by OVERDRAW so the center plotHeight pixels show ±yScale,
+      // while the overdraw areas above/below render values beyond ±yScale
+      y: { range: [-yScale * OVERDRAW, yScale * OVERDRAW] },
     },
     axes: [
       { show: false },
-      {
-        stroke: axisColor,
-        size: Y_AXIS_WIDTH,
-        grid: { stroke: gridColor },
-        filter: () => [],
-      },
+      { show: false }, // y-axis hidden; left padding below takes its place
     ],
     series: [{}, { stroke, width: 1 }],
     legend: { show: false },
-    padding: [4, PLOT_RIGHT_PAD, 4, 0],
+    padding: [0, PLOT_RIGHT_PAD, 0, Y_AXIS_WIDTH], // left padding replaces the hidden y-axis size; 0 top/bottom so overdraw areas aren't consumed by padding
   };
 };
 
@@ -89,7 +87,8 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
   const [yScaleStr, setYScaleStr] = useState(String(defaultYScale)); // separate state for the input string to allow temporary invalid states (e.g. empty string while editing) without breaking the numeric yScale used for plotting
   const [isDragging, setIsDragging] = useState(false); // true while the scrubber thumb is being dragged, so it stays highlighted
   // Clamp the visible channel count to a valid range whenever channelNames or the count changes
-  const clampChannelCount = (n) => Math.max(1, Math.min(channelNames.length, n));
+  const maxChannelsByHeight = channelAreaHeight > 0 ? Math.floor(channelAreaHeight / MIN_PLOT_HEIGHT) : channelNames.length;
+  const clampChannelCount = (n) => Math.max(1, Math.min(channelNames.length, maxChannelsByHeight, n));
   // Whenever on of the control variables changes, ensure it is still valid and update the input string to match
   const updateYScale = (newVal) => {
     const clamped = Math.max(1, Math.round(newVal));
@@ -150,6 +149,11 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
     if (containerRef.current) observer.observe(containerRef.current);
     return () => observer.disconnect();
   }, []);
+
+  // Re-clamp channel count whenever the container height changes (e.g. window resize, split-pane drag)
+  useEffect(() => {
+    updateVisibleChannelCount(visibleChannelCount);
+  }, [channelAreaHeight]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Signal onReady once the first measurement lands and charts have rendered
   const onReadyCalledRef = useRef(false);
@@ -288,29 +292,51 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
               {plotWidth > 0 &&
                 plotHeight > 0 &&
                 channelNames.map((name, i) => (
-                  <div key={name} style={{ height: plotHeight, overflow: 'hidden' }} className="relative">
+                  <div
+                    key={name}
+                    style={{
+                      height: plotHeight,
+                      overflow: 'visible',
+                      borderBottom: `1px solid ${isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}`,
+                    }}
+                    className="relative"
+                  >
                     <span
                       className="absolute left-0 top-1/2 -translate-y-1/2 text-xs text-center pointer-events-none z-10 px-0.5 truncate"
                       style={{ width: Y_AXIS_WIDTH }}
                     >
                       {name}
                     </span>
-                    <UplotReact
-                      options={buildChannelOptions({
-                        channelIndex: i,
-                        totalChannels: channelNames.length,
-                        isDarkMode,
-                        syncKey,
-                        width: plotWidth,
-                        height: plotHeight,
-                        windowSize,
-                        startTime,
-                        yScale,
-                      })}
-                      data={sampledData ? sampledData[i] : [data[0], data[i + 1]]}
-                      onCreate={() => {}}
-                      onDelete={() => {}}
+                    {/* Zero-line at y=0, aligned with the plot area (not drawn by uPlot to avoid grid issues) */}
+                    <div
+                      className="absolute pointer-events-none"
+                      style={{
+                        top: '50%',
+                        left: Y_AXIS_WIDTH,
+                        right: PLOT_RIGHT_PAD,
+                        height: 1,
+                        backgroundColor: isDarkMode ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.25)',
+                      }}
                     />
+                    {/* Canvas wrapper — absolutely positioned to center the taller canvas in the lane */}
+                    <div style={{ position: 'absolute', top: -(plotHeight * (OVERDRAW - 1) / 2), left: 0 }}>
+                      <UplotReact
+                        options={buildChannelOptions({
+                          channelIndex: i,
+                          totalChannels: channelNames.length,
+                          isDarkMode,
+                          syncKey,
+                          width: plotWidth,
+                          height: plotHeight * OVERDRAW,
+                          windowSize,
+                          startTime,
+                          yScale,
+                        })}
+                        data={sampledData ? sampledData[i] : [data[0], data[i + 1]]}
+                        onCreate={() => {}}
+                        onDelete={() => {}}
+                      />
+                    </div>
                   </div>
                 ))}
             </div>
