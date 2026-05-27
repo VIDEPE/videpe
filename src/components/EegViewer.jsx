@@ -93,6 +93,7 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
   const WINDOW_MAX_LENGTH = String(Math.ceil(tMax)).length + 2; // enough to display the max window size (tMax) with a comma + 1 decimal
   const SHIFT_MAX_LENGTH = 6; // covers up to 9999.9 s
   const GAIN_MAX_LENGTH = 5; // covers up to 99999 µV
+  const GAIN_MAX = 10 ** GAIN_MAX_LENGTH - 1; // 99999 — derived from GAIN_MAX_LENGTH so both stay in sync
   
   const defaultWindowSize = tMax < 20 ? Math.ceil(tMax) : 20; // default to showing the full recording if it's shorter than 20s, otherwise start with a 20s window
   const [windowSize, setWindowSize] = useState(defaultWindowSize); // seconds visible in the x-range, initialized to 20s or the full recording if shorter
@@ -116,7 +117,7 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
     Math.max(1, Math.min(channelNames.length, maxChannelsByHeight, n));
   // Whenever on of the control variables changes, ensure it is still valid and update the input string to match
   const updateYScale = (newVal) => {
-    const clamped = Math.max(1, Math.round(newVal));
+    const clamped = Math.max(1, Math.min(GAIN_MAX, Math.round(newVal)));
     setYScale(clamped);
     setYScaleStr(String(clamped));
   };

@@ -163,6 +163,19 @@ describe('EegViewer — window size controls', () => {
     expect(input).toHaveValue(5.8);
   });
 
+  it('does not increase window size beyond tMax via the + button', async () => {
+    const user = userEvent.setup();
+    renderViewer();
+    const input = screen.getByRole('spinbutton', { name: /window size/i });
+    const [, increaseBtn] = within(containerOf(input)).getAllByRole('button');
+
+    // Default windowSize=20, tMax=30. First click reaches 30 (the limit), second should stay there.
+    await user.click(increaseBtn);
+    await user.click(increaseBtn);
+
+    expect(input).toHaveValue(30);
+  });
+
   it('clamps to tMax and rounds to 1 decimal on blur when value exceeds recording length', () => {
     // tMax has more than one decimal place — the bug was that tMax was used verbatim
     // (e.g. "30.123456") instead of being rounded to 1 decimal ("30.1")
@@ -503,6 +516,19 @@ describe('EegViewer — gain controls', () => {
     const channelCalls = UplotReactMock.mock.calls.slice(0, channelNames.length);
     const yRanges = channelCalls.map((call) => call[0].options.scales.y.range);
     yRanges.forEach((range) => expect(range).toEqual(yRanges[0]));
+  });
+
+  it('does not increase gain beyond 99999 via the ZoomOut button', async () => {
+    const user = userEvent.setup();
+    renderViewer();
+    const gainInput = screen.getByRole('spinbutton', { name: /gain/i });
+    const [gainDownBtn] = within(containerOf(screen.getByText('Gain (µV)'))).getAllByRole('button');
+
+    // Set gain to 99999 (the 5-digit max), then click ZoomOut — which doubles to 199998 without a cap
+    fireEvent.change(gainInput, { target: { value: '99999' } });
+    await user.click(gainDownBtn);
+
+    expect(gainInput).toHaveValue(99999);
   });
 });
 
