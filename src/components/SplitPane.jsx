@@ -1,10 +1,10 @@
 import { useRef, useState, useEffect } from 'react';
-import { Maximize2, Minimize2, ArrowLeftRight, X} from 'lucide-react';
+import { Maximize2, Minimize2, ArrowLeftRight, X } from 'lucide-react';
 
 const ICON_SIZE = 13;
 
 export const SplitPane = ({ leftLabel, rightLabel, left, right, onLeftReset, onRightReset }) => {
-  const [splitPercent, setSplitPercent] = useState(50);// the percentage width of the left panel (when not maximized)
+  const [splitPercent, setSplitPercent] = useState(50); // the percentage width of the left panel (when not maximized)
   const [maximized, setMaximized] = useState(null); // null | 'left' | 'right'
   const [swapped, setSwapped] = useState(false); // whether the left/right content is swapped (affects which side splitPercent applies to)
   const containerRef = useRef(null); // for measuring dimensions and mouse position during drag
@@ -13,10 +13,12 @@ export const SplitPane = ({ leftLabel, rightLabel, left, right, onLeftReset, onR
   const isDraggingRef = useRef(false); // tracks whether the divider is currently being dragged, without causing re-renders
   const rafRef = useRef(null); // stores the pending requestAnimationFrame id so we can cancel it if needed
   const splitPercentRef = useRef(50); // mirrors splitPercent without triggering re-renders during drag
-  const swappedRef = useRef(false);   // mirrors swapped for use inside rAF callbacks
+  const swappedRef = useRef(false); // mirrors swapped for use inside rAF callbacks
 
   // Keep swappedRef in sync so rAF callbacks always read the current value
-  useEffect(() => { swappedRef.current = swapped; }, [swapped]);
+  useEffect(() => {
+    swappedRef.current = swapped;
+  }, [swapped]);
 
   useEffect(() => {
     const onMouseMove = (e) => {
@@ -61,17 +63,26 @@ export const SplitPane = ({ leftLabel, rightLabel, left, right, onLeftReset, onR
   // splitPercent is always the visual-left panel's percentage.
   // When swapped: NII is visual-left (order:1) with splitPercent%, EEG is visual-right (order:3) with (100-splitPercent)%.
   const leftWidth =
-    maximized === 'left' ? '100%' :
-    maximized === 'right' ? '0%' :
-    swapped ? `${100 - splitPercent}%` : `${splitPercent}%`;
+    maximized === 'left'
+      ? '100%'
+      : maximized === 'right'
+        ? '0%'
+        : swapped
+          ? `${100 - splitPercent}%`
+          : `${splitPercent}%`;
 
   const rightWidth =
-    maximized === 'right' ? '100%' :
-    maximized === 'left' ? '0%' :
-    swapped ? `${splitPercent}%` : `${100 - splitPercent}%`;
+    maximized === 'right'
+      ? '100%'
+      : maximized === 'left'
+        ? '0%'
+        : swapped
+          ? `${splitPercent}%`
+          : `${100 - splitPercent}%`;
 
   // Common styles for the traffic light buttons in the panel headers
-  const trafficBtn = 'inline-flex items-center justify-center w-4 h-4 rounded-full border-none cursor-pointer transition-all text-foreground/50 hover:text-black/70 bg-border';
+  const trafficBtn =
+    'inline-flex items-center justify-center w-4 h-4 rounded-full border-none cursor-pointer transition-all text-foreground/50 hover:text-black/70 bg-border';
 
   const panelHeader = (label, which, onReset) => (
     <div className="shrink-0 flex items-center justify-between px-3 py-1 border-b border-border bg-surface">
@@ -129,7 +140,10 @@ export const SplitPane = ({ leftLabel, rightLabel, left, right, onLeftReset, onR
         <div
           style={{ order: 2 }}
           className="w-1.5 shrink-0 cursor-col-resize mx-1 bg-border hover:bg-secondary active:bg-primary transition-colors select-none"
-          onMouseDown={(e) => { e.preventDefault(); isDraggingRef.current = true; }}
+          onMouseDown={(e) => {
+            e.preventDefault();
+            isDraggingRef.current = true;
+          }}
         />
       )}
 
