@@ -98,7 +98,7 @@ function SortableSettingsCard({ volume, index, settings, isExpanded, onToggleExp
             <select
               value={settings.colormap}
               onChange={(e) => onSettingChange(index, 'colormap', e.target.value)}
-              className="flex-1 bg-surface border border-border rounded px-2 py-0.5 text-foreground cursor-pointer"
+              className="flex-1 bg-surface border border-border rounded px-2 py-0.5 text-heading cursor-pointer"
               aria-label={`${label} colormap`}
             >
               {COLORMAP_OPTIONS.map(({ value, label: optionLabel }) => (
@@ -136,10 +136,10 @@ function SortableSettingsCard({ volume, index, settings, isExpanded, onToggleExp
 
 export const ImagingControls = ({ volumes, layerSettings, onSettingChange, onReorder }) => {
   // Track the expanded card by URL so the expanded state survives reordering
-  const [expandedUrl, setExpandedUrl] = useState(null);
+  const [expandedUrl, setExpandedUrl] = useState(null); // only one card can be expanded at a time, so this is either a URL or null
 
   return (
-    // DragDropProvider is triggered on drag end, which is when we want to update our layer order state and re-apply settings in NiiVue
+    // onDragEnd fires when the user releases a drag; we forward it to onReorder (a callback prop from NiiViewer) so the parent can update layer order state and reload NiiVue
     <DragDropProvider onDragEnd={onReorder}>
       <div className="flex flex-col gap-1 py-2 pl-1 pr-2">
         {volumes.map((volume, index) => (
