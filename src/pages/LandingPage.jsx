@@ -36,7 +36,7 @@ export const LandingPage = () => {
 
       {/*Landing Page main body */}
       <section id="hero" className="flex flex-col items-center justify-center gap-8 px-5 py-10">
-        <img src={logo} alt="VIDÉPÉ logo" className="w-120 app-logo" />
+        <img src={logo} alt="VIDEPE logo" className="w-120 app-logo" />
         <button
           type="button"
           className="button-lg w-40 flex justify-center text"

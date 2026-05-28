@@ -3,7 +3,7 @@ import { Maximize2, Minimize2, ArrowLeftRight, X } from 'lucide-react';
 
 const ICON_SIZE = 13;
 
-export const SplitPane = ({ leftLabel, rightLabel, left, right, onLeftReset, onRightReset }) => {
+export const SplitPane = ({ leftLabel, rightLabel, left, right, onLeftReset, onRightReset, onMaximizeChange }) => {
   const [splitPercent, setSplitPercent] = useState(50); // the percentage width of the left panel (when not maximized)
   const [maximized, setMaximized] = useState(null); // null | 'left' | 'right'
   const [swapped, setSwapped] = useState(false); // whether the left/right content is swapped (affects which side splitPercent applies to)
@@ -19,6 +19,10 @@ export const SplitPane = ({ leftLabel, rightLabel, left, right, onLeftReset, onR
   useEffect(() => {
     swappedRef.current = swapped;
   }, [swapped]);
+
+  useEffect(() => {
+    onMaximizeChange?.(maximized);
+  }, [maximized, onMaximizeChange]);
 
   useEffect(() => {
     const onMouseMove = (e) => {

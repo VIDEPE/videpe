@@ -41,6 +41,7 @@ export const PatientView = () => {
   const niiReadyResolveRef = useRef(null); // set before demo load; NiiViewer calls it when volumes are ready
   const [pendingEegFiles, setPendingEegFiles] = useState([]);
   const [eegHint, setEegHint] = useState(null);
+  const [maximizedPanel, setMaximizedPanel] = useState(null); // null | 'left' | 'right'
 
   // Handler for when EEG files are dropped or selected.
   // Files accumulate across drops until all required files for a format are present.
@@ -194,7 +195,7 @@ export const PatientView = () => {
             <span className="font-bold">V</span>isualization & <span className="font-bold">I</span>
             ntegration of <span className="font-bold">D</span>ata for{' '}
             <span className="font-bold">E</span>pilepsy <span className="font-bold">P</span>
-            re-surgical <span className="font-bold">E</span>valuation
+            resurgical <span className="font-bold">E</span>valuation
           </p>
         </div>
         <ThemeToggle />
@@ -205,6 +206,7 @@ export const PatientView = () => {
         rightLabel="Neuroimaging"
         onLeftReset={eeg || pendingEegFiles.length > 0 ? handleEegReset : undefined}
         onRightReset={volumes.length > 0 ? handleNiiReset : undefined}
+        onMaximizeChange={setMaximizedPanel}
         left={
           eeg ? (
             <EegViewer
@@ -225,7 +227,7 @@ export const PatientView = () => {
         }
         right={
           volumes.length > 0 ? (
-            <NiiViewer volumes={volumes} onReady={() => niiReadyResolveRef.current?.()} />
+            <NiiViewer volumes={volumes} isFullscreen={maximizedPanel === 'right'} onReady={() => niiReadyResolveRef.current?.()} />
           ) : (
             <FileDropZone
               onFiles={handleNiiFiles}
