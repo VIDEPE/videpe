@@ -15,76 +15,79 @@ vi.mock('@niivue/niivue', () => ({
       setColormap: vi.fn(),
       updateGLVolume: vi.fn(),
       setSliceType: vi.fn(),
-      opts: { isColorbar: false },
+      setMultiplanarLayout: vi.fn(),
+      setCornerOrientationText: vi.fn(),
+      opts: { isColorbar: false, multiplanarShowRender: null, multiplanarEqualSize: true },
       sliceTypeMultiplanar: 1,
       volumes: [],
     };
     return instance;
   }),
   SHOW_RENDER: { ALWAYS: 2 },
+  MULTIPLANAR_TYPE: { GRID: 2 },
 }));
 
 describe('detectVolumeType', () => {
   describe('BIDS suffix detection', () => {
-    it('detects T1w in .nii as MRI with gray colormap', () => {
-      expect(detectVolumeType('sub-01_T1w.nii')).toEqual({ type: 'MRI', colormap: 'gray' });
+    it('detects T1w in .nii as MRI', () => {
+      expect(detectVolumeType('sub-01_T1w.nii')).toEqual({ type: 'MRI' });
     });
 
     it('detects T1w in .nii.gz (compressed) as MRI — extension must not interfere', () => {
-      expect(detectVolumeType('sub-01_T1w.nii.gz')).toEqual({ type: 'MRI', colormap: 'gray' });
+      expect(detectVolumeType('sub-01_T1w.nii.gz')).toEqual({ type: 'MRI' });
     });
 
     it('detects T2w as MRI', () => {
-      expect(detectVolumeType('sub-01_ses-01_T2w.nii.gz')).toEqual({ type: 'MRI', colormap: 'gray' });
+      expect(detectVolumeType('sub-01_ses-01_T2w.nii.gz')).toEqual({ type: 'MRI' });
     });
 
     it('detects FLAIR as MRI', () => {
-      expect(detectVolumeType('sub-01_FLAIR.nii.gz')).toEqual({ type: 'MRI', colormap: 'gray' });
+      expect(detectVolumeType('sub-01_FLAIR.nii.gz')).toEqual({ type: 'MRI' });
     });
 
-    it('detects pet suffix as PET with viridis colormap', () => {
-      expect(detectVolumeType('sub-01_pet.nii.gz')).toEqual({ type: 'PET', colormap: 'viridis' });
+    it('detects pet suffix as PET', () => {
+      expect(detectVolumeType('sub-01_pet.nii.gz')).toEqual({ type: 'PET' });
     });
 
-    it('detects spect suffix as SPECT with magma colormap', () => {
-      expect(detectVolumeType('sub-01_spect.nii.gz')).toEqual({ type: 'SPECT', colormap: 'magma' });
+    it('detects spect suffix as SPECT', () => {
+      expect(detectVolumeType('sub-01_spect.nii.gz')).toEqual({ type: 'SPECT' });
     });
 
     it('does not match PET (uppercase) as BIDS pet — falls through to keyword', () => {
       // BIDS suffix 'pet' is lowercase; 'PET' does not match BIDS but keyword fallback catches it
-      expect(detectVolumeType('scan_PET.nii')).toEqual({ type: 'PET', colormap: 'viridis' });
+      expect(detectVolumeType('scan_PET.nii')).toEqual({ type: 'PET' });
     });
   });
 
   describe('keyword fallback for non-BIDS filenames', () => {
     it('detects t1 keyword as MRI', () => {
-      expect(detectVolumeType('my_t1_scan.nii')).toEqual({ type: 'MRI', colormap: 'gray' });
+      expect(detectVolumeType('my_t1_scan.nii')).toEqual({ type: 'MRI' });
     });
 
     it('detects fdg keyword as PET', () => {
-      expect(detectVolumeType('fdg_uptake.nii.gz')).toEqual({ type: 'PET', colormap: 'viridis' });
+      expect(detectVolumeType('fdg_uptake.nii.gz')).toEqual({ type: 'PET' });
     });
 
     it('detects siscom keyword as SPECT', () => {
-      expect(detectVolumeType('pat_siscom_17-13.nii')).toEqual({ type: 'SPECT', colormap: 'magma' });
+      expect(detectVolumeType('pat_siscom_17-13.nii')).toEqual({ type: 'SPECT' });
     });
 
     it('detects mprage keyword as MRI', () => {
-      expect(detectVolumeType('mprage.nii.gz')).toEqual({ type: 'MRI', colormap: 'gray' });
+      expect(detectVolumeType('mprage.nii.gz')).toEqual({ type: 'MRI' });
     });
   });
 
   describe('unknown filenames', () => {
-    it('returns the bare filename (no extension) as type with gray colormap', () => {
-      expect(detectVolumeType('scan.nii')).toEqual({ type: 'scan', colormap: 'gray' });
+    it('returns the filename without extension as type', () => {
+      expect(detectVolumeType('scan.nii')).toEqual({ type: 'scan' });
     });
 
     it('handles files with no extension', () => {
-      expect(detectVolumeType('unknown_volume')).toEqual({ type: 'unknown_volume', colormap: 'gray' });
+      expect(detectVolumeType('unknown_volume')).toEqual({ type: 'unknown_volume' });
     });
 
-    it('uses the full bare name when no _ separator is present', () => {
-      expect(detectVolumeType('brainmask.nii.gz')).toEqual({ type: 'brainmask', colormap: 'gray' });
+    it('uses the full name without extension when no _ separator is present', () => {
+      expect(detectVolumeType('brainmask.nii.gz')).toEqual({ type: 'brainmask' });
     });
   });
 });
@@ -97,24 +100,20 @@ describe('NiiViewer', () => {
       expect(result.every((layer) => layer.opacity === 1.0)).toBe(true);
     });
 
-    it('takes colormap from the volume object', () => {
-      const result = getInitialLayerSettings([
-        { type: 'MRI', colormap: 'gray' },
-        { type: 'PET', colormap: 'viridis' },
-        { type: 'SPECT', colormap: 'magma' },
-      ]);
+    it('derives colormap from volume type via TYPE_COLORMAP_DEFAULTS', () => {
+      const result = getInitialLayerSettings([{ type: 'MRI' }, { type: 'PET' }, { type: 'SPECT' }]);
       expect(result[0].colormap).toBe('gray');
       expect(result[1].colormap).toBe('viridis');
       expect(result[2].colormap).toBe('magma');
     });
 
-    it('defaults colormap to gray when not set on the volume', () => {
-      const result = getInitialLayerSettings([{ type: 'MRI' }]);
+    it('defaults colormap to gray for unknown types', () => {
+      const result = getInitialLayerSettings([{ type: 'unknown_scan' }]);
       expect(result[0].colormap).toBe('gray');
     });
 
     it('defaults invert and showColorbar to false', () => {
-      const result = getInitialLayerSettings([{ type: 'MRI', colormap: 'gray' }]);
+      const result = getInitialLayerSettings([{ type: 'MRI' }]);
       expect(result[0].invert).toBe(false);
       expect(result[0].showColorbar).toBe(false);
     });
@@ -161,8 +160,11 @@ describe('NiiViewer', () => {
           attachToCanvas: vi.fn(),
           loadVolumes: vi.fn().mockReturnValue(new Promise(() => {})),
           setOpacity: vi.fn(),
+          setColormap: vi.fn(),
           setSliceType: vi.fn(),
-          opts: {},
+          setMultiplanarLayout: vi.fn(),
+          setCornerOrientationText: vi.fn(),
+          opts: { isColorbar: false, multiplanarShowRender: null, multiplanarEqualSize: true },
           sliceTypeMultiplanar: 1,
           volumes: [],
         };
@@ -184,8 +186,11 @@ describe('NiiViewer', () => {
           attachToCanvas: vi.fn(),
           loadVolumes: vi.fn().mockRejectedValue(new Error('Network error')),
           setOpacity: vi.fn(),
+          setColormap: vi.fn(),
           setSliceType: vi.fn(),
-          opts: {},
+          setMultiplanarLayout: vi.fn(),
+          setCornerOrientationText: vi.fn(),
+          opts: { isColorbar: false, multiplanarShowRender: null, multiplanarEqualSize: true },
           sliceTypeMultiplanar: 1,
           volumes: [],
         };

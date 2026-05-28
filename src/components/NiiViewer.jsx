@@ -1,5 +1,5 @@
 ﻿import { useRef, useEffect, useState } from 'react';
-import { Niivue, SHOW_RENDER } from '@niivue/niivue';
+import { Niivue, SHOW_RENDER, MULTIPLANAR_TYPE } from '@niivue/niivue';
 import { getInitialLayerSettings } from './NiiViewer.utils';
 
 export const NiiViewer = ({ volumes = [], onReady }) => {
@@ -43,7 +43,8 @@ export const NiiViewer = ({ volumes = [], onReady }) => {
     // Guard clause — if no volumes provided, don't even try to initialize NiiVue
     if (!volumes.length) return;
 
-    setLayerSettings(getInitialLayerSettings(volumes));
+    const initialLayerSettings = getInitialLayerSettings(volumes);
+    setLayerSettings(initialLayerSettings);
     setLoading(true);
     setError(null);
 
@@ -54,11 +55,20 @@ export const NiiViewer = ({ volumes = [], onReady }) => {
           dragAndDropEnabled: false,
           show3Dcrosshair: true,
         });
-        nv.setSliceType(nv.sliceTypeMultiplanar); // show all 3 planes + 3D render
-        nv.opts.multiplanarShowRender = SHOW_RENDER.ALWAYS; // force the 3D render to show
+        // Always show volume render with slices
+        nv.opts.multiplanarShowRender = SHOW_RENDER.ALWAYS; // Always show volume render with slices
+        nv.setMultiplanarLayout(MULTIPLANAR_TYPE.GRID); // Set to grid layout (2x2)
+        nv.opts.multiplanarEqualSize = false; // disable equal size tiles to have crosshairs align in views
+        nv.setCornerOrientationText(false); // Show orientation text centered (default)
 
         nv.attachToCanvas(canvas.current);
         await nv.loadVolumes(volumes);
+
+        // Apply colormaps from initialLayerSettings — volumes no longer carry a colormap field
+        initialLayerSettings.forEach((layerSetting, index) => {
+          nv.setColormap(nv.volumes[index].id, layerSetting.colormap);
+        });
+
         nvRef.current = nv;
         setLoading(false);
         onReady?.();
