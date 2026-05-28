@@ -1,7 +1,7 @@
 ﻿import { describe, it, expect, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { getInitialVisibility, applyToggle, detectVolumeType } from '@/components/NiiViewer.utils';
+import { getInitialLayerSettings, detectVolumeType } from '@/components/NiiViewer.utils';
 import { NiiViewer } from '@/components/NiiViewer';
 
 vi.mock('@niivue/niivue', () => ({
@@ -9,11 +9,13 @@ vi.mock('@niivue/niivue', () => ({
     const instance = {
       attachToCanvas: vi.fn(),
       loadVolumes: vi.fn().mockImplementation(async function (vols) {
-        instance.volumes = vols; // mirrors what real NiiVue does so toggleVolume can look up by url
+        instance.volumes = vols; // mirrors what real NiiVue does so updateSetting can look up by url
       }),
       setOpacity: vi.fn(),
+      setColormap: vi.fn(),
+      updateGLVolume: vi.fn(),
       setSliceType: vi.fn(),
-      opts: {},
+      opts: { isColorbar: false },
       sliceTypeMultiplanar: 1,
       volumes: [],
     };
@@ -88,49 +90,33 @@ describe('detectVolumeType', () => {
 });
 
 describe('NiiViewer', () => {
-  describe('getInitialVisibility', () => {
-    it('hides PET when MRI, PET and SPECT are all loaded', () => {
-      expect(getInitialVisibility([{ type: 'MRI' }, { type: 'PET' }, { type: 'SPECT' }])).toEqual([
-        true,
-        false,
-        true,
+  describe('getInitialLayerSettings', () => {
+    it('starts all layers visible with full opacity', () => {
+      const result = getInitialLayerSettings([{ type: 'MRI' }, { type: 'PET' }, { type: 'SPECT' }]);
+      expect(result.every((layer) => layer.visible)).toBe(true);
+      expect(result.every((layer) => layer.opacity === 1.0)).toBe(true);
+    });
+
+    it('takes colormap from the volume object', () => {
+      const result = getInitialLayerSettings([
+        { type: 'MRI', colormap: 'gray' },
+        { type: 'PET', colormap: 'viridis' },
+        { type: 'SPECT', colormap: 'magma' },
       ]);
+      expect(result[0].colormap).toBe('gray');
+      expect(result[1].colormap).toBe('viridis');
+      expect(result[2].colormap).toBe('magma');
     });
 
-    it('shows a single volume', () => {
-      expect(getInitialVisibility([{ type: 'MRI' }])).toEqual([true]);
-      expect(getInitialVisibility([{ type: 'PET' }])).toEqual([true]);
-      expect(getInitialVisibility([{ type: 'SPECT' }])).toEqual([true]);
+    it('defaults colormap to gray when not set on the volume', () => {
+      const result = getInitialLayerSettings([{ type: 'MRI' }]);
+      expect(result[0].colormap).toBe('gray');
     });
 
-    it('shows both volumes when SPECT is loaded with either MRI or PET', () => {
-      expect(getInitialVisibility([{ type: 'PET' }, { type: 'SPECT' }])).toEqual([true, true]);
-      expect(getInitialVisibility([{ type: 'MRI' }, { type: 'SPECT' }])).toEqual([true, true]);
-    });
-  });
-
-  describe('applyToggle', () => {
-    const volumes = [{ type: 'MRI' }, { type: 'PET' }, { type: 'SPECT' }];
-
-    it('toggles a volume off', () => {
-      expect(applyToggle(volumes, [true, false, false], 0)).toEqual([false, false, false]);
-    });
-
-    it('toggles a volume on', () => {
-      expect(applyToggle(volumes, [false, false, false], 0)).toEqual([true, false, false]);
-    });
-
-    it('turning MRI on hides PET', () => {
-      expect(applyToggle(volumes, [false, true, true], 0)).toEqual([true, false, true]);
-    });
-
-    it('turning PET on hides MRI', () => {
-      expect(applyToggle(volumes, [true, false, true], 1)).toEqual([false, true, true]);
-    });
-
-    it('SPECT toggles independently of MRI and PET', () => {
-      expect(applyToggle(volumes, [true, false, true], 2)).toEqual([true, false, false]);
-      expect(applyToggle(volumes, [true, false, false], 2)).toEqual([true, false, true]);
+    it('defaults invert and showColorbar to false', () => {
+      const result = getInitialLayerSettings([{ type: 'MRI', colormap: 'gray' }]);
+      expect(result[0].invert).toBe(false);
+      expect(result[0].showColorbar).toBe(false);
     });
   });
 

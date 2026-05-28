@@ -1,33 +1,51 @@
 ﻿import { useRef, useEffect, useState } from 'react';
 import { Niivue, SHOW_RENDER } from '@niivue/niivue';
-import { getInitialVisibility, applyToggle } from './NiiViewer.utils';
+import { getInitialLayerSettings } from './NiiViewer.utils';
 
 export const NiiViewer = ({ volumes = [], onReady }) => {
-  // visible is an array of booleans indicating whether each volume is currently visible
-  const [visible, setVisible] = useState(() => getInitialVisibility(volumes));
-
-  const toggleVolume = (index) => {
-    const next = applyToggle(volumes, visible, index);
-    setVisible(next);
-    if (nvRef.current) {
-      // Only update opacity for volumes whose visibility changed
-      next.forEach((isVisible, i) => {
-        if (isVisible !== visible[i])
-          nvRef.current.setOpacity(
-            nvRef.current.volumes.findIndex((v) => v.url === volumes[i].url),
-            isVisible ? 1 : 0
-          );
-      });
-    }
-  };
+  // layerSettings is an array with one settings object per loaded layer (volume or mesh)
+  const [layerSettings, setLayerSettings] = useState(() => getInitialLayerSettings(volumes));
 
   const canvas = useRef();
   const nvRef = useRef();
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  const updateSetting = (layerIndex, key, value) => {
+    const nextLayerSettings = layerSettings.map((layerSetting, index) =>
+      index === layerIndex ? { ...layerSetting, [key]: value } : layerSetting
+    );
+    setLayerSettings(nextLayerSettings);
+
+    if (nvRef.current) {
+      const nv = nvRef.current;
+      const nvVolume = nv.volumes.find((nvVol) => nvVol.url === volumes[layerIndex].url);
+      if (!nvVolume) return;
+      const nvIndex = nv.volumes.indexOf(nvVolume);
+
+      if (key === 'visible') {
+        nv.setOpacity(nvIndex, value ? nextLayerSettings[layerIndex].opacity : 0);
+      } else if (key === 'opacity') {
+        if (nextLayerSettings[layerIndex].visible) nv.setOpacity(nvIndex, value);
+      } else if (key === 'colormap') {
+        nv.setColormap(nvVolume.id, value);
+      } else if (key === 'invert') {
+        nvVolume.colormapInvert = value;
+        nv.updateGLVolume();
+      } else if (key === 'showColorbar') {
+        nv.opts.isColorbar = nextLayerSettings.some((layerSetting) => layerSetting.showColorbar);
+        nv.updateGLVolume();
+      }
+    }
+  };
+
   useEffect(() => {
     // Guard clause — if no volumes provided, don't even try to initialize NiiVue
     if (!volumes.length) return;
+
+    setLayerSettings(getInitialLayerSettings(volumes));
+    setLoading(true);
+    setError(null);
 
     async function setupAndLoad() {
       try {
@@ -41,11 +59,6 @@ export const NiiViewer = ({ volumes = [], onReady }) => {
 
         nv.attachToCanvas(canvas.current);
         await nv.loadVolumes(volumes);
-
-        // Set initial visibility based on getInitialVisibility
-        getInitialVisibility(volumes).forEach((visibility, i) => {
-          if (!visibility) nv.setOpacity(i, 0);
-        });
         nvRef.current = nv;
         setLoading(false);
         onReady?.();
@@ -65,15 +78,15 @@ export const NiiViewer = ({ volumes = [], onReady }) => {
   return (
     <div className="">
       <div className="flex gap-2 justify-end py-2">
-        {volumes.map((volume, i) => (
+        {volumes.map((volume, index) => (
           <button
             key={volume.type}
             type="button"
-            onClick={() => toggleVolume(i)}
-            className={'button' + (visible[i] ? '' : ' button-toggled')}
+            onClick={() => updateSetting(index, 'visible', !layerSettings[index].visible)}
+            className={'button' + (layerSettings[index].visible ? '' : ' button-toggled')}
             aria-label={`Toggle ${volume.type} visibility`}
           >
-            {volume.type ?? `Volume ${i + 1}`}
+            {volume.type ?? `Volume ${index + 1}`}
           </button>
         ))}
       </div>
