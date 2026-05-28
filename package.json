@@ -12,6 +12,8 @@
     "test:run": "vitest run"
   },
   "dependencies": {
+    "@dnd-kit/helpers": "^0.4.0",
+    "@dnd-kit/react": "^0.4.0",
     "@niivue/niivue": "^0.68.2",
     "@tailwindcss/vite": "^4.3.0",
     "clsx": "^2.1.1",

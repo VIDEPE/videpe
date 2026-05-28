@@ -36,7 +36,7 @@ describe('ImagingControls', () => {
 
     it('falls back to "Volume N" when volume has no type', () => {
       renderControls([{ url: '/scan.nii' }], [makeSettings()]);
-      expect(screen.getByText('Volume 1')).toBeInTheDocument();
+      expect(screen.getByText('Layer 1')).toBeInTheDocument();
     });
 
     it('shows Hide button when volume is visible', () => {

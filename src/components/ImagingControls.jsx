@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { Eye, EyeOff, ChevronDown, ChevronUp, GripVertical } from 'lucide-react';
+import { DragDropProvider } from '@dnd-kit/react';
+import { useSortable } from '@dnd-kit/react/sortable';
 
 const COLORMAP_OPTIONS = [
   { value: 'gray', label: 'Grayscale' },
@@ -23,106 +25,135 @@ const ToggleSwitch = ({ checked, onChange, 'aria-label': ariaLabel }) => (
   </button>
 );
 
-export const ImagingControls = ({ volumes, layerSettings, onSettingChange }) => {
-  const [expandedIndex, setExpandedIndex] = useState(null);
+function SortableSettingsCard({ volume, index, settings, isExpanded, onToggleExpand, onSettingChange }) {
+  const { ref, handleRef, isDragging } = useSortable({ id: volume.url, index });
+  const label = volume.type ?? `Layer ${index + 1}`;
 
   return (
-    <div className="flex flex-col gap-1 py-2">
-      {volumes.map((volume, index) => {
-        const settings = layerSettings[index];
-        const isExpanded = expandedIndex === index;
-        const label = volume.type ?? `Volume ${index + 1}`;
+    <div
+      ref={ref}
+      className={`rounded border border-border bg-surface transition-opacity ${isDragging ? 'opacity-60' : ''}`}
+    >
+      {/* Always-visible header row */}
+      <div className="flex items-center gap-1.5 px-2 py-1.5">
+        {/* Drag handle — span rather than SVG (icon) so it can be focusable and gives a reliable pointer-event target */}
+        <span
+          ref={handleRef}
+          className="cursor-grab active:cursor-grabbing touch-none shrink-0"
+          aria-label={`Drag to reorder ${label}`}
+        >
+          <GripVertical size={16} className="text-border hover:text-secondary active:text-primary" />
+        </span>
 
-        return (
-          <div key={volume.url} className="rounded border border-border bg-surface">
-            {/* Always-visible header row */}
-            <div className="flex items-center gap-1.5 px-2 py-1.5">
-              {/* Drag handle — wired up in Step 4 */}
-              <GripVertical size={14} className="text-border shrink-0 cursor-grab" />
+        <span className="flex-1 text-sm font-medium text-heading truncate">{label}</span>
 
-              <span className="flex-1 text-sm font-medium text-heading truncate">{label}</span>
+        {/* Visibility toggle */}
+        <button
+          type="button"
+          onClick={() => onSettingChange(index, 'visible', !settings.visible)}
+          className="button button-icon shrink-0"
+          aria-label={`${settings.visible ? 'Hide' : 'Show'} ${label}`}
+          aria-pressed={!settings.visible}
+        >
+          {settings.visible ? <Eye size={14} /> : <EyeOff size={14} />}
+        </button>
 
-              <button
-                type="button"
-                onClick={() => onSettingChange(index, 'visible', !settings.visible)}
-                className="button button-icon"
-                aria-label={`${settings.visible ? 'Hide' : 'Show'} ${label}`}
-              >
-                {settings.visible ? <Eye size={14} /> : <EyeOff size={14} />}
-              </button>
+        {/* Expand/collapse toggle */}
+        <button
+          type="button"
+          onClick={onToggleExpand}
+          className="button button-icon"
+          title={isExpanded ? `Collapse ${label} controls` : `Expand ${label} controls`}
+          aria-label={isExpanded ? `Collapse ${label} controls` : `Expand ${label} controls`}
+          aria-expanded={isExpanded}
+        >
+          {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+        </button>
+      </div>
 
-              <button
-                type="button"
-                onClick={() => setExpandedIndex(isExpanded ? null : index)}
-                className="button button-icon"
-                aria-label={isExpanded ? `Collapse ${label} controls` : `Expand ${label} controls`}
-              >
-                {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-              </button>
-            </div>
-
-            {/* Expanded controls */}
-            {isExpanded && (
-              <div className="border-t border-border px-3 py-2.5 flex flex-col gap-3 text-sm">
-                {/* Opacity */}
-                <div className="flex items-center gap-3">
-                  <span className="w-20 shrink-0 text-foreground">Opacity</span>
-                  <input
-                    type="range"
-                    min={0}
-                    max={1}
-                    step={0.01}
-                    value={settings.opacity}
-                    onChange={(e) => onSettingChange(index, 'opacity', parseFloat(e.target.value))}
-                    className="flex-1"
-                    aria-label={`${label} opacity`}
-                  />
-                  <span className="w-9 text-right tabular-nums text-foreground">
-                    {Math.round(settings.opacity * 100)}%
-                  </span>
-                </div>
-
-                {/* Colormap */}
-                <div className="flex items-center gap-3">
-                  <span className="w-20 shrink-0 text-foreground">Colormap</span>
-                  <select
-                    value={settings.colormap}
-                    onChange={(e) => onSettingChange(index, 'colormap', e.target.value)}
-                    className="flex-1 bg-surface border border-border rounded px-2 py-0.5 text-foreground cursor-pointer"
-                    aria-label={`${label} colormap`}
-                  >
-                    {COLORMAP_OPTIONS.map(({ value, label: optionLabel }) => (
-                      <option key={value} value={value}>
-                        {optionLabel}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Invert */}
-                <div className="flex items-center justify-between">
-                  <span className="text-foreground">Invert</span>
-                  <ToggleSwitch
-                    checked={settings.invert}
-                    onChange={(value) => onSettingChange(index, 'invert', value)}
-                    aria-label={`Invert ${label} colormap`}
-                  />
-                </div>
-
-                {/* Show colorbar */}
-                <div className="flex items-center justify-between">
-                  <span className="text-foreground">Colorbar</span>
-                  <ToggleSwitch
-                    checked={settings.showColorbar}
-                    onChange={(value) => onSettingChange(index, 'showColorbar', value)}
-                    aria-label={`Show ${label} colorbar`}
-                  />
-                </div>
-              </div>
-            )}
+      {/* Expanded controls */}
+      {isExpanded && (
+        <div className="border-t border-border px-3 py-2.5 flex flex-col gap-3 text-sm">
+          {/* Opacity */}
+          <div className="flex items-center gap-3">
+            <span className="w-20 shrink-0 text-foreground">Opacity</span>
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.01}
+              value={settings.opacity}
+              onChange={(e) => onSettingChange(index, 'opacity', parseFloat(e.target.value))}
+              className="flex-1"
+              aria-label={`${label} opacity`}
+            />
+            <span className="w-9 text-right tabular-nums text-foreground">
+              {Math.round(settings.opacity * 100)}%
+            </span>
           </div>
-        );
-      })}
+
+          {/* Colormap */}
+          <div className="flex items-center gap-3">
+            <span className="w-20 shrink-0 text-foreground">Colormap</span>
+            <select
+              value={settings.colormap}
+              onChange={(e) => onSettingChange(index, 'colormap', e.target.value)}
+              className="flex-1 bg-surface border border-border rounded px-2 py-0.5 text-foreground cursor-pointer"
+              aria-label={`${label} colormap`}
+            >
+              {COLORMAP_OPTIONS.map(({ value, label: optionLabel }) => (
+                <option key={value} value={value}>
+                  {optionLabel}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Invert */}
+          <div className="flex items-center justify-between">
+            <span className="text-foreground">Invert</span>
+            <ToggleSwitch
+              checked={settings.invert}
+              onChange={(value) => onSettingChange(index, 'invert', value)}
+              aria-label={`Invert ${label} colormap`}
+            />
+          </div>
+
+          {/* Show colorbar */}
+          <div className="flex items-center justify-between">
+            <span className="text-foreground">Colorbar</span>
+            <ToggleSwitch
+              checked={settings.showColorbar}
+              onChange={(value) => onSettingChange(index, 'showColorbar', value)}
+              aria-label={`Show ${label} colorbar`}
+            />
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+export const ImagingControls = ({ volumes, layerSettings, onSettingChange, onReorder }) => {
+  // Track the expanded card by URL so the expanded state survives reordering
+  const [expandedUrl, setExpandedUrl] = useState(null);
+
+  return (
+    // DragDropProvider is triggered on drag end, which is when we want to update our layer order state and re-apply settings in NiiVue
+    <DragDropProvider onDragEnd={onReorder}>
+      <div className="flex flex-col gap-1 py-2 pl-1 pr-2">
+        {volumes.map((volume, index) => (
+          <SortableSettingsCard
+            key={volume.url}
+            volume={volume}
+            index={index}
+            settings={layerSettings[index]}
+            isExpanded={expandedUrl === volume.url}
+            onToggleExpand={() => setExpandedUrl(expandedUrl === volume.url ? null : volume.url)}
+            onSettingChange={onSettingChange}
+          />
+        ))}
+      </div>
+    </DragDropProvider>
   );
 };

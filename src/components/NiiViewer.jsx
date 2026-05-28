@@ -1,11 +1,14 @@
-﻿import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import { Niivue, SHOW_RENDER, MULTIPLANAR_TYPE } from '@niivue/niivue';
+import { move } from '@dnd-kit/helpers';
 import { getInitialLayerSettings } from './NiiViewer.utils';
 import { ImagingControls } from './ImagingControls';
 
 export const NiiViewer = ({ volumes = [], onReady }) => {
   // layerSettings is an array with one settings object per loaded layer (volume or mesh)
   const [layerSettings, setLayerSettings] = useState(() => getInitialLayerSettings(volumes));
+  // orderedVolumes mirrors volumes but can be rearranged by drag-to-reorder
+  const [orderedVolumes, setOrderedVolumes] = useState(volumes);
 
   const canvas = useRef();
   const nvRef = useRef();
@@ -20,7 +23,7 @@ export const NiiViewer = ({ volumes = [], onReady }) => {
 
     if (nvRef.current) {
       const nv = nvRef.current;
-      const nvVolume = nv.volumes.find((nvVol) => nvVol.url === volumes[layerIndex].url);
+      const nvVolume = nv.volumes.find((nvVol) => nvVol.url === orderedVolumes[layerIndex].url);
       if (!nvVolume) return;
       const nvIndex = nv.volumes.indexOf(nvVolume);
 
@@ -40,12 +43,50 @@ export const NiiViewer = ({ volumes = [], onReady }) => {
     }
   };
 
+  const handleReorder = async (event) => {
+    if (!nvRef.current) return;
+
+    const urls = orderedVolumes.map((volume) => volume.url);
+    const newUrls = move(urls, event);
+    if (newUrls === urls) return; // no change (canceled or same position)
+
+    const newOrderedVolumes = newUrls.map((url) => orderedVolumes.find((volume) => volume.url === url));
+    const newLayerSettings = newUrls.map((url) => {
+      const oldIndex = orderedVolumes.findIndex((volume) => volume.url === url);
+      return layerSettings[oldIndex];
+    });
+
+    setOrderedVolumes(newOrderedVolumes);
+    setLayerSettings(newLayerSettings);
+
+    // Reload NiiVue with the new layer order and re-apply all settings
+    const nv = nvRef.current;
+    setLoading(true);
+    try {
+      await nv.loadVolumes(newOrderedVolumes);
+      newLayerSettings.forEach((layerSetting, index) => {
+        nv.setColormap(nv.volumes[index].id, layerSetting.colormap);
+        nv.setOpacity(index, layerSetting.visible ? layerSetting.opacity : 0);
+        if (layerSetting.invert) {
+          nv.volumes[index].colormapInvert = true;
+        }
+      });
+      nv.opts.isColorbar = newLayerSettings.some((layerSetting) => layerSetting.showColorbar);
+      nv.updateGLVolume();
+    } catch (reorderError) {
+      setError(`Failed to reload after reorder: ${reorderError.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     // Guard clause — if no volumes provided, don't even try to initialize NiiVue
     if (!volumes.length) return;
 
     const initialLayerSettings = getInitialLayerSettings(volumes);
     setLayerSettings(initialLayerSettings);
+    setOrderedVolumes(volumes); // Reset order whenever the volumes prop changes
     setLoading(true);
     setError(null);
 
@@ -73,8 +114,8 @@ export const NiiViewer = ({ volumes = [], onReady }) => {
         nvRef.current = nv;
         setLoading(false);
         onReady?.();
-      } catch (error) {
-        setError(`Failed to load image: ${error.message}`);
+      } catch (loadError) {
+        setError(`Failed to load image: ${loadError.message}`);
         setLoading(false);
       }
     }
@@ -89,9 +130,10 @@ export const NiiViewer = ({ volumes = [], onReady }) => {
   return (
     <div className="">
       <ImagingControls
-        volumes={volumes}
+        volumes={orderedVolumes}
         layerSettings={layerSettings}
         onSettingChange={updateSetting}
+        onReorder={handleReorder}
       />
       <div style={{ width: '100%', height: '480px', position: 'relative' }}>
         {loading && !error && <p className="text-foreground">Loading image...</p>}
