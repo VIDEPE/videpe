@@ -20,7 +20,7 @@ export async function loadVolumesAndApplySettings(nv, volumes, layerSettings) {
   nv.updateGLVolume();
 }
 
-export const NiiViewer = ({ volumes = [], onReady }) => {
+export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
   // layerSettings is an array with one settings object per loaded layer (volume or mesh)
   const [layerSettings, setLayerSettings] = useState(() => getInitialLayerSettings(volumes));
   // orderedVolumes mirrors volumes but can be rearranged by drag-to-reorder
@@ -57,6 +57,11 @@ export const NiiViewer = ({ volumes = [], onReady }) => {
       }
     }
   };
+
+  useEffect(() => {
+    if (!nvRef.current) return;
+    nvRef.current.setMultiplanarLayout(isFullscreen ? MULTIPLANAR_TYPE.AUTO : MULTIPLANAR_TYPE.GRID);
+  }, [isFullscreen]);
 
   const handleReorder = async (event) => {
     if (!nvRef.current) return;
@@ -136,16 +141,16 @@ export const NiiViewer = ({ volumes = [], onReady }) => {
         onReorder={handleReorder}
       />
       {/* NiiVue Canvas — fills remaining height */}
-      <div className="relative flex-1 min-h-0">
+      <div className="relative flex-1 min-h-0 overflow-hidden">
         {loading && (
           <div
             data-testid="loading-spinner"
-            className="absolute inset-0 flex items-center justify-center"
+            className="absolute inset-0 z-10 flex items-center justify-center"
           >
             <div className="h-10 w-10 animate-spin rounded-full border-4 border-border border-t-primary" />
           </div>
         )}
-        <canvas ref={canvas} style={{ width: '100%', height: '100%' }} />
+        <canvas ref={canvas} className="absolute inset-0" />
       </div>
     </div>
   );
