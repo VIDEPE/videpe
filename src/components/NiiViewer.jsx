@@ -1,12 +1,13 @@
 import { useRef, useEffect, useState } from 'react';
 import { Niivue, SHOW_RENDER, MULTIPLANAR_TYPE } from '@niivue/niivue';
 import { move } from '@dnd-kit/helpers';
+import toast from 'react-hot-toast';
 import { getInitialLayerSettings } from './NiiViewer.utils';
 import { ImagingControls } from './ImagingControls';
 
 // Loads volumes into an existing NiiVue instance and applies all layer settings.
 // Extracted to avoid duplication between initial load and drag-to-reorder reload.
-async function loadVolumesAndApplySettings(nv, volumes, layerSettings) {
+export async function loadVolumesAndApplySettings(nv, volumes, layerSettings) {
   await nv.loadVolumes(volumes);
   layerSettings.forEach((layerSetting, index) => {
     nv.setColormap(nv.volumes[index].id, layerSetting.colormap);
@@ -24,11 +25,10 @@ export const NiiViewer = ({ volumes = [], onReady }) => {
   const [layerSettings, setLayerSettings] = useState(() => getInitialLayerSettings(volumes));
   // orderedVolumes mirrors volumes but can be rearranged by drag-to-reorder
   const [orderedVolumes, setOrderedVolumes] = useState(volumes);
+  const [loading, setLoading] = useState(true);
 
   const canvas = useRef();
   const nvRef = useRef();
-  const [error, setError] = useState(null);
-  const [loading, setLoading] = useState(true);
 
   const updateSetting = (layerIndex, key, value) => {
     const nextLayerSettings = layerSettings.map((layerSetting, index) =>
@@ -78,7 +78,7 @@ export const NiiViewer = ({ volumes = [], onReady }) => {
     try {
       await loadVolumesAndApplySettings(nvRef.current, newOrderedVolumes, newLayerSettings);
     } catch (reorderError) {
-      setError(`Failed to reload after reorder: ${reorderError.message}`);
+      toast.error(`Failed to reload after reorder: ${reorderError.message}`);
     } finally {
       setLoading(false);
     }
@@ -92,7 +92,6 @@ export const NiiViewer = ({ volumes = [], onReady }) => {
     setLayerSettings(initialLayerSettings);
     setOrderedVolumes(volumes); // Reset order whenever the volumes prop changes
     setLoading(true);
-    setError(null);
 
     async function setupAndLoad() {
       try {
@@ -110,11 +109,12 @@ export const NiiViewer = ({ volumes = [], onReady }) => {
         nv.attachToCanvas(canvas.current);
         await loadVolumesAndApplySettings(nv, volumes, initialLayerSettings);
 
+        // Store the NiiVue instance in a ref so we can call methods on it later (e.g. to update settings or reorder layers)
         nvRef.current = nv;
         setLoading(false);
         onReady?.();
       } catch (loadError) {
-        setError(`Failed to load image: ${loadError.message}`);
+        toast.error(`Failed to load image: ${loadError.message}`);
         setLoading(false);
       }
     }
@@ -137,8 +137,14 @@ export const NiiViewer = ({ volumes = [], onReady }) => {
       />
       {/* NiiVue Canvas */}
       <div style={{ width: '100%', height: '480px', position: 'relative' }}>
-        {loading && !error && <p className="text-foreground">Loading image...</p>}
-        {error && <p className="text-red-500">{error}</p>}
+        {loading && (
+          <div
+            data-testid="loading-spinner"
+            className="absolute inset-0 flex items-center justify-center"
+          >
+            <div className="h-10 w-10 animate-spin rounded-full border-4 border-border border-t-primary" />
+          </div>
+        )}
         <canvas ref={canvas} style={{ width: '100%', height: '100%' }} />
       </div>
     </div>

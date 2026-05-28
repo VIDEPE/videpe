@@ -1,7 +1,13 @@
-﻿import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { getInitialLayerSettings, detectVolumeType } from '@/components/NiiViewer.utils';
-import { NiiViewer } from '@/components/NiiViewer';
+import { NiiViewer, loadVolumesAndApplySettings } from '@/components/NiiViewer';
+
+vi.mock('react-hot-toast', () => ({
+  default: {
+    error: vi.fn(),
+  },
+}));
 
 vi.mock('@niivue/niivue', () => ({
   Niivue: vi.fn().mockImplementation(function () {
@@ -25,6 +31,89 @@ vi.mock('@niivue/niivue', () => ({
   SHOW_RENDER: { ALWAYS: 2 },
   MULTIPLANAR_TYPE: { GRID: 2 },
 }));
+
+describe('loadVolumesAndApplySettings', () => {
+  const makeVolume = (url, id) => ({ url, id });
+  const makeLayerSetting = (overrides = {}) => ({
+    colormap: 'gray',
+    visible: true,
+    opacity: 1.0,
+    invert: false,
+    showColorbar: false,
+    ...overrides,
+  });
+
+  let nv;
+  beforeEach(() => {
+    nv = {
+      loadVolumes: vi.fn().mockImplementation(async (vols) => {
+        nv.volumes = vols;
+      }),
+      setColormap: vi.fn(),
+      setOpacity: vi.fn(),
+      updateGLVolume: vi.fn(),
+      opts: { isColorbar: false },
+      volumes: [],
+    };
+  });
+
+  it('calls loadVolumes with the provided volumes', async () => {
+    const volumes = [makeVolume('/mri.nii', 'id-mri')];
+    await loadVolumesAndApplySettings(nv, volumes, [makeLayerSetting()]);
+    expect(nv.loadVolumes).toHaveBeenCalledWith(volumes);
+  });
+
+  it('sets colormap for each volume after loading', async () => {
+    const volumes = [makeVolume('/mri.nii', 'id-mri'), makeVolume('/pet.nii', 'id-pet')];
+    const settings = [makeLayerSetting({ colormap: 'gray' }), makeLayerSetting({ colormap: 'viridis' })];
+    await loadVolumesAndApplySettings(nv, volumes, settings);
+    expect(nv.setColormap).toHaveBeenCalledWith('id-mri', 'gray');
+    expect(nv.setColormap).toHaveBeenCalledWith('id-pet', 'viridis');
+  });
+
+  it('sets full opacity for a visible volume', async () => {
+    const volumes = [makeVolume('/mri.nii', 'id-mri')];
+    await loadVolumesAndApplySettings(nv, volumes, [makeLayerSetting({ visible: true, opacity: 0.7 })]);
+    expect(nv.setOpacity).toHaveBeenCalledWith(0, 0.7);
+  });
+
+  it('sets opacity to 0 for a hidden volume regardless of its opacity value', async () => {
+    const volumes = [makeVolume('/mri.nii', 'id-mri')];
+    await loadVolumesAndApplySettings(nv, volumes, [makeLayerSetting({ visible: false, opacity: 0.8 })]);
+    expect(nv.setOpacity).toHaveBeenCalledWith(0, 0);
+  });
+
+  it('sets colormapInvert on the volume object when invert is true', async () => {
+    const volumes = [makeVolume('/mri.nii', 'id-mri')];
+    await loadVolumesAndApplySettings(nv, volumes, [makeLayerSetting({ invert: true })]);
+    expect(nv.volumes[0].colormapInvert).toBe(true);
+  });
+
+  it('does not set colormapInvert when invert is false', async () => {
+    const volumes = [makeVolume('/mri.nii', 'id-mri')];
+    await loadVolumesAndApplySettings(nv, volumes, [makeLayerSetting({ invert: false })]);
+    expect(nv.volumes[0].colormapInvert).toBeUndefined();
+  });
+
+  it('sets isColorbar to true when any layer has showColorbar', async () => {
+    const volumes = [makeVolume('/mri.nii', 'id-mri'), makeVolume('/pet.nii', 'id-pet')];
+    const settings = [makeLayerSetting({ showColorbar: false }), makeLayerSetting({ showColorbar: true })];
+    await loadVolumesAndApplySettings(nv, volumes, settings);
+    expect(nv.opts.isColorbar).toBe(true);
+  });
+
+  it('sets isColorbar to false when no layer has showColorbar', async () => {
+    const volumes = [makeVolume('/mri.nii', 'id-mri')];
+    await loadVolumesAndApplySettings(nv, volumes, [makeLayerSetting({ showColorbar: false })]);
+    expect(nv.opts.isColorbar).toBe(false);
+  });
+
+  it('calls updateGLVolume after applying all settings', async () => {
+    const volumes = [makeVolume('/mri.nii', 'id-mri')];
+    await loadVolumesAndApplySettings(nv, volumes, [makeLayerSetting()]);
+    expect(nv.updateGLVolume).toHaveBeenCalledOnce();
+  });
+});
 
 describe('detectVolumeType', () => {
   describe('BIDS suffix detection', () => {
@@ -126,13 +215,13 @@ describe('NiiViewer', () => {
         { type: 'SPECT', url: '/spect.nii' },
       ];
       render(<NiiViewer volumes={volumes} />);
-      await waitFor(() => expect(screen.queryByText('Loading image...')).not.toBeInTheDocument());
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
       expect(screen.getByText('MRI')).toBeInTheDocument();
       expect(screen.getByText('PET')).toBeInTheDocument();
       expect(screen.getByText('SPECT')).toBeInTheDocument();
     });
 
-    it('shows "Loading image..." while volumes are loading', async () => {
+    it('shows a loading spinner while volumes are loading', async () => {
       const { Niivue } = await import('@niivue/niivue');
       // Block loadVolumes so the loading state never resolves during this test
       Niivue.mockImplementationOnce(function () {
@@ -141,6 +230,7 @@ describe('NiiViewer', () => {
           loadVolumes: vi.fn().mockReturnValue(new Promise(() => {})),
           setOpacity: vi.fn(),
           setColormap: vi.fn(),
+          updateGLVolume: vi.fn(),
           setSliceType: vi.fn(),
           setMultiplanarLayout: vi.fn(),
           setCornerOrientationText: vi.fn(),
@@ -151,15 +241,15 @@ describe('NiiViewer', () => {
       });
 
       render(<NiiViewer volumes={[{ type: 'MRI', url: '/mri.nii' }]} />);
-      expect(screen.getByText('Loading image...')).toBeInTheDocument();
+      expect(screen.getByTestId('loading-spinner')).toBeInTheDocument();
     });
 
-    it('hides "Loading image..." once volumes have loaded', async () => {
+    it('hides the loading spinner once volumes have loaded', async () => {
       render(<NiiViewer volumes={[{ type: 'MRI', url: '/mri.nii' }]} />);
-      await waitFor(() => expect(screen.queryByText('Loading image...')).not.toBeInTheDocument());
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
     });
 
-    it('shows an error message when loadVolumes rejects', async () => {
+    it('shows a toast error when loadVolumes rejects', async () => {
       const { Niivue } = await import('@niivue/niivue');
       Niivue.mockImplementationOnce(function () {
         return {
@@ -167,6 +257,7 @@ describe('NiiViewer', () => {
           loadVolumes: vi.fn().mockRejectedValue(new Error('Network error')),
           setOpacity: vi.fn(),
           setColormap: vi.fn(),
+          updateGLVolume: vi.fn(),
           setSliceType: vi.fn(),
           setMultiplanarLayout: vi.fn(),
           setCornerOrientationText: vi.fn(),
@@ -176,9 +267,12 @@ describe('NiiViewer', () => {
         };
       });
 
+      const { default: toast } = await import('react-hot-toast');
       render(<NiiViewer volumes={[{ type: 'MRI', url: '/mri.nii' }]} />);
 
-      await waitFor(() => expect(screen.getByText(/failed to load image/i)).toBeInTheDocument());
+      await waitFor(() =>
+        expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/failed to load image/i))
+      );
     });
   });
 });
