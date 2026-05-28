@@ -94,6 +94,7 @@ export const SplitPane = ({ leftLabel, rightLabel, left, right, onLeftReset, onR
             className={`${trafficBtn} hover:bg-[#28C840]`}
             onClick={() => setSwapped((s) => !s)}
             title="Swap panels"
+            aria-pressed={swapped}
           >
             <ArrowLeftRight size={ICON_SIZE} />
           </button>
@@ -103,6 +104,7 @@ export const SplitPane = ({ leftLabel, rightLabel, left, right, onLeftReset, onR
           className={`${trafficBtn} hover:bg-[#FFBD2E]`}
           onClick={() => toggleMaximize(which)}
           title={maximized === which ? 'Restore' : 'Maximize'}
+          aria-pressed={maximized === which}
         >
           {maximized === which ? <Minimize2 size={ICON_SIZE} /> : <Maximize2 size={ICON_SIZE} />}
         </button>

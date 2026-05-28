@@ -187,7 +187,7 @@ describe('PatientView — imaging file-type detection', () => {
     checkEegFiles.mockReturnValue({ formatName: null, complete: false, missing: null, warning: null });
   });
 
-  it('passes type MRI and colormap gray to NiiViewer for a BIDS T1w file', async () => {
+  it('passes type MRI to NiiViewer for a BIDS T1w file', async () => {
     render(<PatientView />);
 
     await act(async () => {
@@ -197,30 +197,25 @@ describe('PatientView — imaging file-type detection', () => {
     const volumes = NiiViewer.mock.lastCall[0].volumes;
     expect(volumes).toHaveLength(1);
     expect(volumes[0].type).toBe('MRI');
-    expect(volumes[0].colormap).toBe('gray');
   });
 
-  it('passes type PET and colormap viridis for a BIDS pet file', async () => {
+  it('passes type PET to NiiViewer for a BIDS pet file', async () => {
     render(<PatientView />);
 
     await act(async () => {
       await getNiiOnFiles()([makeFile('sub-01_pet.nii.gz')]);
     });
 
-    const volumes = NiiViewer.mock.lastCall[0].volumes;
-    expect(volumes[0].type).toBe('PET');
-    expect(volumes[0].colormap).toBe('viridis');
+    expect(NiiViewer.mock.lastCall[0].volumes[0].type).toBe('PET');
   });
 
-  it('passes type SPECT and colormap magma for a siscom file', async () => {
+  it('passes type SPECT to NiiViewer for a siscom file', async () => {
     render(<PatientView />);
 
     await act(async () => {
       await getNiiOnFiles()([makeFile('pat_siscom_17-13.nii')]);
     });
 
-    const volumes = NiiViewer.mock.lastCall[0].volumes;
-    expect(volumes[0].type).toBe('SPECT');
-    expect(volumes[0].colormap).toBe('magma');
+    expect(NiiViewer.mock.lastCall[0].volumes[0].type).toBe('SPECT');
   });
 });

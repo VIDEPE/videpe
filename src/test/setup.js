@@ -1,6 +1,13 @@
 ﻿import '@testing-library/jest-dom';
 import { vi } from 'vitest';
 
+// jsdom doesn't implement ResizeObserver — required by @dnd-kit/dom
+global.ResizeObserver = class ResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
+
 // jsdom doesn't implement matchMedia — provide a stub so components that read
 // OS colour-scheme preference (ThemeProvider) don't crash during tests
 Object.defineProperty(window, 'matchMedia', {

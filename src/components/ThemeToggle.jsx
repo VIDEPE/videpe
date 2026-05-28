@@ -6,9 +6,11 @@ export const ThemeToggle = () => {
 
   return (
     <button
+      type="button"
       onClick={toggleTheme}
       className="fixed top-5 right-5 z-50 p-2 rounded-full cursor-pointer"
       aria-label={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+      aria-pressed={isDarkMode}
     >
       {isDarkMode ? (
         <Moon className="h-7 w-7" style={{ stroke: 'rgba(253, 224, 71, 1)' }} />
