@@ -1,6 +1,5 @@
 ﻿import { describe, it, expect, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { getInitialLayerSettings, detectVolumeType } from '@/components/NiiViewer.utils';
 import { NiiViewer } from '@/components/NiiViewer';
 
@@ -119,27 +118,8 @@ describe('NiiViewer', () => {
     });
   });
 
-  describe('button style toggle behaviour', () => {
-    const volumes = [
-      { type: 'MRI', url: '/mri.nii' },
-      { type: 'PET', url: '/pet.nii' },
-    ];
-
-    it('button gets button-toggled class when clicked off', async () => {
-      const user = userEvent.setup();
-      render(<NiiViewer volumes={volumes} />);
-
-      const mriButton = screen.getByRole('button', { name: /toggle MRI/i });
-      expect(mriButton.className).not.toContain('button-toggled');
-
-      await user.click(mriButton);
-
-      expect(mriButton.className).toContain('button-toggled');
-    });
-  });
-
   describe('component rendering', () => {
-    it('renders one toggle button per volume', async () => {
+    it('renders a label for each loaded volume', async () => {
       const volumes = [
         { type: 'MRI', url: '/mri.nii' },
         { type: 'PET', url: '/pet.nii' },
@@ -147,9 +127,9 @@ describe('NiiViewer', () => {
       ];
       render(<NiiViewer volumes={volumes} />);
       await waitFor(() => expect(screen.queryByText('Loading image...')).not.toBeInTheDocument());
-      expect(screen.getByRole('button', { name: /toggle MRI/i })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /toggle PET/i })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /toggle SPECT/i })).toBeInTheDocument();
+      expect(screen.getByText('MRI')).toBeInTheDocument();
+      expect(screen.getByText('PET')).toBeInTheDocument();
+      expect(screen.getByText('SPECT')).toBeInTheDocument();
     });
 
     it('shows "Loading image..." while volumes are loading', async () => {

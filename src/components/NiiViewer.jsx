@@ -1,6 +1,7 @@
 ﻿import { useRef, useEffect, useState } from 'react';
 import { Niivue, SHOW_RENDER, MULTIPLANAR_TYPE } from '@niivue/niivue';
 import { getInitialLayerSettings } from './NiiViewer.utils';
+import { ImagingControls } from './ImagingControls';
 
 export const NiiViewer = ({ volumes = [], onReady }) => {
   // layerSettings is an array with one settings object per loaded layer (volume or mesh)
@@ -87,19 +88,11 @@ export const NiiViewer = ({ volumes = [], onReady }) => {
 
   return (
     <div className="">
-      <div className="flex gap-2 justify-end py-2">
-        {volumes.map((volume, index) => (
-          <button
-            key={volume.type}
-            type="button"
-            onClick={() => updateSetting(index, 'visible', !layerSettings[index].visible)}
-            className={'button' + (layerSettings[index].visible ? '' : ' button-toggled')}
-            aria-label={`Toggle ${volume.type} visibility`}
-          >
-            {volume.type ?? `Volume ${index + 1}`}
-          </button>
-        ))}
-      </div>
+      <ImagingControls
+        volumes={volumes}
+        layerSettings={layerSettings}
+        onSettingChange={updateSetting}
+      />
       <div style={{ width: '100%', height: '480px', position: 'relative' }}>
         {loading && !error && <p className="text-foreground">Loading image...</p>}
         {error && <p className="text-red-500">{error}</p>}
