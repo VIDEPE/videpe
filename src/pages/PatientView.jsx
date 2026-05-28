@@ -8,6 +8,7 @@ import { SplitPane } from '../components/SplitPane';
 import { loadBrainVisionEEG } from '../loaders/loadBrainVisionEEG';
 import { detectAndLoadEEG, checkEegFiles } from '../loaders/eegFormats';
 import { FileDropZone } from '../components/FileDropZone';
+import { detectVolumeType } from '../components/NiiViewer.utils';
 
 const DEMO_EEG = {
   header: 'demo_data/sub-synth_task-rest_eeg.vhdr',
@@ -15,9 +16,9 @@ const DEMO_EEG = {
 };
 
 const DEMO_VOLUMES = [
-  { url: 'demo_data/patT1.nii', colormap: 'gray', type: 'MRI' },
-  { url: 'demo_data/pat_PET_aligned.nii', colormap: 'viridis', type: 'PET' },
-  { url: 'demo_data/pat_siscom_17-13.nii', colormap: 'hot', type: 'SPECT', urlImgType: 'nii' },
+  { url: 'demo_data/patT1.nii', type: 'MRI' },
+  { url: 'demo_data/pat_PET_aligned.nii', type: 'PET' },
+  { url: 'demo_data/pat_siscom_17-13.nii', type: 'SPECT', urlImgType: 'nii' },
 ];
 
 export const PatientView = () => {
@@ -40,6 +41,7 @@ export const PatientView = () => {
   const niiReadyResolveRef = useRef(null); // set before demo load; NiiViewer calls it when volumes are ready
   const [pendingEegFiles, setPendingEegFiles] = useState([]);
   const [eegHint, setEegHint] = useState(null);
+  const [maximizedPanel, setMaximizedPanel] = useState(null); // null | 'left' | 'right'
 
   // Handler for when EEG files are dropped or selected.
   // Files accumulate across drops until all required files for a format are present.
@@ -93,13 +95,11 @@ export const PatientView = () => {
     try {
       const result = await toast.promise(
         Promise.all(
-          Array.from(files).map((f) => ({
+          Array.from(files).map((f) => {
             // NiiVue calls fetch(url) internally, so a blob: URL is needed — a plain filename would resolve as a relative HTTP request
-            url: URL.createObjectURL(f),
-            name: f.name,
-            colormap: 'gray',
-            type: f.name,
-          }))
+            const { type } = detectVolumeType(f.name);
+            return { url: URL.createObjectURL(f), name: f.name, type };
+          })
         ),
         {
           loading: 'Loading imaging data…',
@@ -195,7 +195,7 @@ export const PatientView = () => {
             <span className="font-bold">V</span>isualization & <span className="font-bold">I</span>
             ntegration of <span className="font-bold">D</span>ata for{' '}
             <span className="font-bold">E</span>pilepsy <span className="font-bold">P</span>
-            re-surgical <span className="font-bold">E</span>valuation
+            resurgical <span className="font-bold">E</span>valuation
           </p>
         </div>
         <ThemeToggle />
@@ -206,6 +206,7 @@ export const PatientView = () => {
         rightLabel="Neuroimaging"
         onLeftReset={eeg || pendingEegFiles.length > 0 ? handleEegReset : undefined}
         onRightReset={volumes.length > 0 ? handleNiiReset : undefined}
+        onMaximizeChange={setMaximizedPanel}
         left={
           eeg ? (
             <EegViewer
@@ -226,7 +227,7 @@ export const PatientView = () => {
         }
         right={
           volumes.length > 0 ? (
-            <NiiViewer volumes={volumes} onReady={() => niiReadyResolveRef.current?.()} />
+            <NiiViewer volumes={volumes} isFullscreen={maximizedPanel === 'right'} onReady={() => niiReadyResolveRef.current?.()} />
           ) : (
             <FileDropZone
               onFiles={handleNiiFiles}

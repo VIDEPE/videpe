@@ -1,108 +1,233 @@
-﻿import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import { getInitialVisibility, applyToggle } from '@/components/NiiViewer.utils';
-import { NiiViewer } from '@/components/NiiViewer';
+import { getInitialLayerSettings, detectVolumeType } from '@/components/NiiViewer.utils';
+import { NiiViewer, loadVolumesAndApplySettings } from '@/components/NiiViewer';
+
+vi.mock('react-hot-toast', () => ({
+  default: {
+    error: vi.fn(),
+  },
+}));
 
 vi.mock('@niivue/niivue', () => ({
   Niivue: vi.fn().mockImplementation(function () {
     const instance = {
       attachToCanvas: vi.fn(),
       loadVolumes: vi.fn().mockImplementation(async function (vols) {
-        instance.volumes = vols; // mirrors what real NiiVue does so toggleVolume can look up by url
+        instance.volumes = vols; // mirrors what real NiiVue does so updateSetting can look up by url
       }),
       setOpacity: vi.fn(),
+      setColormap: vi.fn(),
+      updateGLVolume: vi.fn(),
       setSliceType: vi.fn(),
-      opts: {},
+      setMultiplanarLayout: vi.fn(),
+      setCornerOrientationText: vi.fn(),
+      opts: { isColorbar: false, multiplanarShowRender: null, multiplanarEqualSize: true },
       sliceTypeMultiplanar: 1,
       volumes: [],
     };
     return instance;
   }),
   SHOW_RENDER: { ALWAYS: 2 },
+  MULTIPLANAR_TYPE: { GRID: 2 },
 }));
 
+describe('loadVolumesAndApplySettings', () => {
+  const makeVolume = (url, id) => ({ url, id });
+  const makeLayerSetting = (overrides = {}) => ({
+    colormap: 'gray',
+    visible: true,
+    opacity: 1.0,
+    invert: false,
+    showColorbar: false,
+    ...overrides,
+  });
+
+  let nv;
+  beforeEach(() => {
+    nv = {
+      loadVolumes: vi.fn().mockImplementation(async (vols) => {
+        nv.volumes = vols;
+      }),
+      setColormap: vi.fn(),
+      setOpacity: vi.fn(),
+      updateGLVolume: vi.fn(),
+      opts: { isColorbar: false },
+      volumes: [],
+    };
+  });
+
+  it('calls loadVolumes with the provided volumes', async () => {
+    const volumes = [makeVolume('/mri.nii', 'id-mri')];
+    await loadVolumesAndApplySettings(nv, volumes, [makeLayerSetting()]);
+    expect(nv.loadVolumes).toHaveBeenCalledWith(volumes);
+  });
+
+  it('sets colormap for each volume after loading', async () => {
+    const volumes = [makeVolume('/mri.nii', 'id-mri'), makeVolume('/pet.nii', 'id-pet')];
+    const settings = [makeLayerSetting({ colormap: 'gray' }), makeLayerSetting({ colormap: 'viridis' })];
+    await loadVolumesAndApplySettings(nv, volumes, settings);
+    expect(nv.setColormap).toHaveBeenCalledWith('id-mri', 'gray');
+    expect(nv.setColormap).toHaveBeenCalledWith('id-pet', 'viridis');
+  });
+
+  it('sets full opacity for a visible volume', async () => {
+    const volumes = [makeVolume('/mri.nii', 'id-mri')];
+    await loadVolumesAndApplySettings(nv, volumes, [makeLayerSetting({ visible: true, opacity: 0.7 })]);
+    expect(nv.setOpacity).toHaveBeenCalledWith(0, 0.7);
+  });
+
+  it('sets opacity to 0 for a hidden volume regardless of its opacity value', async () => {
+    const volumes = [makeVolume('/mri.nii', 'id-mri')];
+    await loadVolumesAndApplySettings(nv, volumes, [makeLayerSetting({ visible: false, opacity: 0.8 })]);
+    expect(nv.setOpacity).toHaveBeenCalledWith(0, 0);
+  });
+
+  it('sets colormapInvert on the volume object when invert is true', async () => {
+    const volumes = [makeVolume('/mri.nii', 'id-mri')];
+    await loadVolumesAndApplySettings(nv, volumes, [makeLayerSetting({ invert: true })]);
+    expect(nv.volumes[0].colormapInvert).toBe(true);
+  });
+
+  it('does not set colormapInvert when invert is false', async () => {
+    const volumes = [makeVolume('/mri.nii', 'id-mri')];
+    await loadVolumesAndApplySettings(nv, volumes, [makeLayerSetting({ invert: false })]);
+    expect(nv.volumes[0].colormapInvert).toBeUndefined();
+  });
+
+  it('sets isColorbar to true when any layer has showColorbar', async () => {
+    const volumes = [makeVolume('/mri.nii', 'id-mri'), makeVolume('/pet.nii', 'id-pet')];
+    const settings = [makeLayerSetting({ showColorbar: false }), makeLayerSetting({ showColorbar: true })];
+    await loadVolumesAndApplySettings(nv, volumes, settings);
+    expect(nv.opts.isColorbar).toBe(true);
+  });
+
+  it('sets isColorbar to false when no layer has showColorbar', async () => {
+    const volumes = [makeVolume('/mri.nii', 'id-mri')];
+    await loadVolumesAndApplySettings(nv, volumes, [makeLayerSetting({ showColorbar: false })]);
+    expect(nv.opts.isColorbar).toBe(false);
+  });
+
+  it('calls updateGLVolume after applying all settings', async () => {
+    const volumes = [makeVolume('/mri.nii', 'id-mri')];
+    await loadVolumesAndApplySettings(nv, volumes, [makeLayerSetting()]);
+    expect(nv.updateGLVolume).toHaveBeenCalledOnce();
+  });
+});
+
+describe('detectVolumeType', () => {
+  describe('BIDS suffix detection', () => {
+    it('detects T1w in .nii as MRI', () => {
+      expect(detectVolumeType('sub-01_T1w.nii')).toEqual({ type: 'MRI' });
+    });
+
+    it('detects T1w in .nii.gz (compressed) as MRI — extension must not interfere', () => {
+      expect(detectVolumeType('sub-01_T1w.nii.gz')).toEqual({ type: 'MRI' });
+    });
+
+    it('detects T2w as MRI', () => {
+      expect(detectVolumeType('sub-01_ses-01_T2w.nii.gz')).toEqual({ type: 'MRI' });
+    });
+
+    it('detects FLAIR as MRI', () => {
+      expect(detectVolumeType('sub-01_FLAIR.nii.gz')).toEqual({ type: 'MRI' });
+    });
+
+    it('detects pet suffix as PET', () => {
+      expect(detectVolumeType('sub-01_pet.nii.gz')).toEqual({ type: 'PET' });
+    });
+
+    it('detects spect suffix as SPECT', () => {
+      expect(detectVolumeType('sub-01_spect.nii.gz')).toEqual({ type: 'SPECT' });
+    });
+
+    it('does not match PET (uppercase) as BIDS pet — falls through to keyword', () => {
+      // BIDS suffix 'pet' is lowercase; 'PET' does not match BIDS but keyword fallback catches it
+      expect(detectVolumeType('scan_PET.nii')).toEqual({ type: 'PET' });
+    });
+  });
+
+  describe('keyword fallback for non-BIDS filenames', () => {
+    it('detects t1 keyword as MRI', () => {
+      expect(detectVolumeType('my_t1_scan.nii')).toEqual({ type: 'MRI' });
+    });
+
+    it('detects fdg keyword as PET', () => {
+      expect(detectVolumeType('fdg_uptake.nii.gz')).toEqual({ type: 'PET' });
+    });
+
+    it('detects siscom keyword as SPECT', () => {
+      expect(detectVolumeType('pat_siscom_17-13.nii')).toEqual({ type: 'SPECT' });
+    });
+
+    it('detects mprage keyword as MRI', () => {
+      expect(detectVolumeType('mprage.nii.gz')).toEqual({ type: 'MRI' });
+    });
+  });
+
+  describe('unknown filenames', () => {
+    it('returns the filename without extension as type', () => {
+      expect(detectVolumeType('scan.nii')).toEqual({ type: 'scan' });
+    });
+
+    it('handles files with no extension', () => {
+      expect(detectVolumeType('unknown_volume')).toEqual({ type: 'unknown_volume' });
+    });
+
+    it('uses the full name without extension when no _ separator is present', () => {
+      expect(detectVolumeType('brainmask.nii.gz')).toEqual({ type: 'brainmask' });
+    });
+  });
+});
+
 describe('NiiViewer', () => {
-  describe('getInitialVisibility', () => {
-    it('hides PET when MRI, PET and SPECT are all loaded', () => {
-      expect(getInitialVisibility([{ type: 'MRI' }, { type: 'PET' }, { type: 'SPECT' }])).toEqual([
-        true,
-        false,
-        true,
-      ]);
+  describe('getInitialLayerSettings', () => {
+    it('starts all layers visible', () => {
+      const result = getInitialLayerSettings([{ type: 'MRI' }, { type: 'PET' }, { type: 'SPECT' }]);
+      expect(result.every((layer) => layer.visible)).toBe(true);
     });
 
-    it('shows a single volume', () => {
-      expect(getInitialVisibility([{ type: 'MRI' }])).toEqual([true]);
-      expect(getInitialVisibility([{ type: 'PET' }])).toEqual([true]);
-      expect(getInitialVisibility([{ type: 'SPECT' }])).toEqual([true]);
+    it('first layer is fully opaque, subsequent layers default to 0.7', () => {
+      const result = getInitialLayerSettings([{ type: 'MRI' }, { type: 'PET' }, { type: 'SPECT' }]);
+      expect(result[0].opacity).toBe(1.0);
+      expect(result[1].opacity).toBe(0.7);
+      expect(result[2].opacity).toBe(0.7);
     });
 
-    it('shows both volumes when SPECT is loaded with either MRI or PET', () => {
-      expect(getInitialVisibility([{ type: 'PET' }, { type: 'SPECT' }])).toEqual([true, true]);
-      expect(getInitialVisibility([{ type: 'MRI' }, { type: 'SPECT' }])).toEqual([true, true]);
-    });
-  });
-
-  describe('applyToggle', () => {
-    const volumes = [{ type: 'MRI' }, { type: 'PET' }, { type: 'SPECT' }];
-
-    it('toggles a volume off', () => {
-      expect(applyToggle(volumes, [true, false, false], 0)).toEqual([false, false, false]);
+    it('derives colormap from volume type via TYPE_COLORMAP_DEFAULTS', () => {
+      const result = getInitialLayerSettings([{ type: 'MRI' }, { type: 'PET' }, { type: 'SPECT' }]);
+      expect(result[0].colormap).toBe('gray');
+      expect(result[1].colormap).toBe('viridis');
+      expect(result[2].colormap).toBe('magma');
     });
 
-    it('toggles a volume on', () => {
-      expect(applyToggle(volumes, [false, false, false], 0)).toEqual([true, false, false]);
+    it('defaults colormap to gray for unknown types', () => {
+      const result = getInitialLayerSettings([{ type: 'unknown_scan' }]);
+      expect(result[0].colormap).toBe('gray');
     });
 
-    it('turning MRI on hides PET', () => {
-      expect(applyToggle(volumes, [false, true, true], 0)).toEqual([true, false, true]);
-    });
-
-    it('turning PET on hides MRI', () => {
-      expect(applyToggle(volumes, [true, false, true], 1)).toEqual([false, true, true]);
-    });
-
-    it('SPECT toggles independently of MRI and PET', () => {
-      expect(applyToggle(volumes, [true, false, true], 2)).toEqual([true, false, false]);
-      expect(applyToggle(volumes, [true, false, false], 2)).toEqual([true, false, true]);
-    });
-  });
-
-  describe('button style toggle behaviour', () => {
-    const volumes = [
-      { type: 'MRI', url: '/mri.nii' },
-      { type: 'PET', url: '/pet.nii' },
-    ];
-
-    it('button gets button-toggled class when clicked off', async () => {
-      const user = userEvent.setup();
-      render(<NiiViewer volumes={volumes} />);
-
-      const mriButton = screen.getByRole('button', { name: /toggle MRI/i });
-      expect(mriButton.className).not.toContain('button-toggled');
-
-      await user.click(mriButton);
-
-      expect(mriButton.className).toContain('button-toggled');
+    it('defaults invert and showColorbar to false', () => {
+      const result = getInitialLayerSettings([{ type: 'MRI' }]);
+      expect(result[0].invert).toBe(false);
+      expect(result[0].showColorbar).toBe(false);
     });
   });
 
   describe('component rendering', () => {
-    it('renders one toggle button per volume', async () => {
+    it('renders a label for each loaded volume', async () => {
       const volumes = [
         { type: 'MRI', url: '/mri.nii' },
         { type: 'PET', url: '/pet.nii' },
         { type: 'SPECT', url: '/spect.nii' },
       ];
       render(<NiiViewer volumes={volumes} />);
-      await waitFor(() => expect(screen.queryByText('Loading image...')).not.toBeInTheDocument());
-      expect(screen.getByRole('button', { name: /toggle MRI/i })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /toggle PET/i })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /toggle SPECT/i })).toBeInTheDocument();
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+      expect(screen.getByText('MRI')).toBeInTheDocument();
+      expect(screen.getByText('PET')).toBeInTheDocument();
+      expect(screen.getByText('SPECT')).toBeInTheDocument();
     });
 
-    it('shows "Loading image..." while volumes are loading', async () => {
+    it('shows a loading spinner while volumes are loading', async () => {
       const { Niivue } = await import('@niivue/niivue');
       // Block loadVolumes so the loading state never resolves during this test
       Niivue.mockImplementationOnce(function () {
@@ -110,39 +235,50 @@ describe('NiiViewer', () => {
           attachToCanvas: vi.fn(),
           loadVolumes: vi.fn().mockReturnValue(new Promise(() => {})),
           setOpacity: vi.fn(),
+          setColormap: vi.fn(),
+          updateGLVolume: vi.fn(),
           setSliceType: vi.fn(),
-          opts: {},
+          setMultiplanarLayout: vi.fn(),
+          setCornerOrientationText: vi.fn(),
+          opts: { isColorbar: false, multiplanarShowRender: null, multiplanarEqualSize: true },
           sliceTypeMultiplanar: 1,
           volumes: [],
         };
       });
 
       render(<NiiViewer volumes={[{ type: 'MRI', url: '/mri.nii' }]} />);
-      expect(screen.getByText('Loading image...')).toBeInTheDocument();
+      expect(screen.getByTestId('loading-spinner')).toBeInTheDocument();
     });
 
-    it('hides "Loading image..." once volumes have loaded', async () => {
+    it('hides the loading spinner once volumes have loaded', async () => {
       render(<NiiViewer volumes={[{ type: 'MRI', url: '/mri.nii' }]} />);
-      await waitFor(() => expect(screen.queryByText('Loading image...')).not.toBeInTheDocument());
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
     });
 
-    it('shows an error message when loadVolumes rejects', async () => {
+    it('shows a toast error when loadVolumes rejects', async () => {
       const { Niivue } = await import('@niivue/niivue');
       Niivue.mockImplementationOnce(function () {
         return {
           attachToCanvas: vi.fn(),
           loadVolumes: vi.fn().mockRejectedValue(new Error('Network error')),
           setOpacity: vi.fn(),
+          setColormap: vi.fn(),
+          updateGLVolume: vi.fn(),
           setSliceType: vi.fn(),
-          opts: {},
+          setMultiplanarLayout: vi.fn(),
+          setCornerOrientationText: vi.fn(),
+          opts: { isColorbar: false, multiplanarShowRender: null, multiplanarEqualSize: true },
           sliceTypeMultiplanar: 1,
           volumes: [],
         };
       });
 
+      const { default: toast } = await import('react-hot-toast');
       render(<NiiViewer volumes={[{ type: 'MRI', url: '/mri.nii' }]} />);
 
-      await waitFor(() => expect(screen.getByText(/failed to load image/i)).toBeInTheDocument());
+      await waitFor(() =>
+        expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/failed to load image/i))
+      );
     });
   });
 });

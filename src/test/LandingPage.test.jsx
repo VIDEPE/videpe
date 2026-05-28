@@ -21,7 +21,7 @@ const renderPage = () =>
 describe('LandingPage', () => {
   it('renders the logo', () => {
     renderPage();
-    expect(screen.getByAltText(/vidépé logo/i)).toBeInTheDocument();
+    expect(screen.getByAltText(/videpe logo/i)).toBeInTheDocument();
   });
 
   it('renders the Get Started button', () => {

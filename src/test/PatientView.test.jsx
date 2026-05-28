@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { PatientView } from '@/pages/PatientView';
 import { checkEegFiles, detectAndLoadEEG } from '@/loaders/eegFormats';
 import { FileDropZone } from '@/components/FileDropZone';
+import { NiiViewer } from '@/components/NiiViewer';
 
 // toast.promise just runs and returns the promise; toast.error is a no-op
 vi.mock('react-hot-toast', () => ({
@@ -23,7 +24,7 @@ vi.mock('@/loaders/eegFormats', () => ({
 }));
 
 vi.mock('@/components/EegViewer', () => ({ EegViewer: () => <div data-testid="eeg-viewer" /> }));
-vi.mock('@/components/NiiViewer', () => ({ NiiViewer: () => <div data-testid="nii-viewer" /> }));
+vi.mock('@/components/NiiViewer', () => ({ NiiViewer: vi.fn(() => <div data-testid="nii-viewer" />) }));
 vi.mock('@/components/FileDropZone', () => ({ FileDropZone: vi.fn(() => null) }));
 vi.mock('@/components/ThemeToggle', () => ({ ThemeToggle: () => null }));
 
@@ -32,6 +33,12 @@ const makeFile = (name) => new File([''], name);
 // Returns the onFiles prop from the most recent render of the EEG drop zone
 const getEegOnFiles = () => {
   const calls = FileDropZone.mock.calls.filter(([p]) => p.label === 'Drop EEG files');
+  return calls.at(-1)[0].onFiles;
+};
+
+// Returns the onFiles prop from the most recent render of the imaging drop zone
+const getNiiOnFiles = () => {
+  const calls = FileDropZone.mock.calls.filter(([p]) => p.label === 'Drop imaging files');
   return calls.at(-1)[0].onFiles;
 };
 
@@ -170,5 +177,45 @@ describe('PatientView — EEG file accumulation', () => {
     const vhdrFiles = lastCallFiles.filter((f) => f.name.endsWith('.vhdr'));
     expect(vhdrFiles).toHaveLength(1);
     expect(vhdrFiles[0].name).toBe('sub02.vhdr');
+  });
+});
+
+describe('PatientView — imaging file-type detection', () => {
+  beforeEach(() => {
+    FileDropZone.mockClear();
+    NiiViewer.mockClear();
+    checkEegFiles.mockReturnValue({ formatName: null, complete: false, missing: null, warning: null });
+  });
+
+  it('passes type MRI to NiiViewer for a BIDS T1w file', async () => {
+    render(<PatientView />);
+
+    await act(async () => {
+      await getNiiOnFiles()([makeFile('sub-01_T1w.nii')]);
+    });
+
+    const volumes = NiiViewer.mock.lastCall[0].volumes;
+    expect(volumes).toHaveLength(1);
+    expect(volumes[0].type).toBe('MRI');
+  });
+
+  it('passes type PET to NiiViewer for a BIDS pet file', async () => {
+    render(<PatientView />);
+
+    await act(async () => {
+      await getNiiOnFiles()([makeFile('sub-01_pet.nii.gz')]);
+    });
+
+    expect(NiiViewer.mock.lastCall[0].volumes[0].type).toBe('PET');
+  });
+
+  it('passes type SPECT to NiiViewer for a siscom file', async () => {
+    render(<PatientView />);
+
+    await act(async () => {
+      await getNiiOnFiles()([makeFile('pat_siscom_17-13.nii')]);
+    });
+
+    expect(NiiViewer.mock.lastCall[0].volumes[0].type).toBe('SPECT');
   });
 });
