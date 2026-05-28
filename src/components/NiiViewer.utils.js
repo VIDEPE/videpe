@@ -36,9 +36,9 @@ export const detectVolumeType = (filename) => {
 // Colormap is derived from volume.type via TYPE_COLORMAP_DEFAULTS — volumes themselves
 // do not carry a colormap field.
 export const getInitialLayerSettings = (volumes) =>
-  volumes.map((volume) => ({
+  volumes.map((volume, index) => ({
     visible: true,
-    opacity: 1.0,
+    opacity: index === 0 ? 1.0 : 0.70, // first loaded layer is fully opaque, others slightly transparent by default
     colormap: TYPE_COLORMAP_DEFAULTS[volume.type] ?? 'gray',
     invert: false,
     showColorbar: false,
