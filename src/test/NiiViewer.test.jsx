@@ -1,7 +1,7 @@
 ﻿import { describe, it, expect, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { getInitialVisibility, applyToggle } from '@/components/NiiViewer.utils';
+import { getInitialVisibility, applyToggle, detectVolumeType } from '@/components/NiiViewer.utils';
 import { NiiViewer } from '@/components/NiiViewer';
 
 vi.mock('@niivue/niivue', () => ({
@@ -21,6 +21,71 @@ vi.mock('@niivue/niivue', () => ({
   }),
   SHOW_RENDER: { ALWAYS: 2 },
 }));
+
+describe('detectVolumeType', () => {
+  describe('BIDS suffix detection', () => {
+    it('detects T1w in .nii as MRI with gray colormap', () => {
+      expect(detectVolumeType('sub-01_T1w.nii')).toEqual({ type: 'MRI', colormap: 'gray' });
+    });
+
+    it('detects T1w in .nii.gz (compressed) as MRI — extension must not interfere', () => {
+      expect(detectVolumeType('sub-01_T1w.nii.gz')).toEqual({ type: 'MRI', colormap: 'gray' });
+    });
+
+    it('detects T2w as MRI', () => {
+      expect(detectVolumeType('sub-01_ses-01_T2w.nii.gz')).toEqual({ type: 'MRI', colormap: 'gray' });
+    });
+
+    it('detects FLAIR as MRI', () => {
+      expect(detectVolumeType('sub-01_FLAIR.nii.gz')).toEqual({ type: 'MRI', colormap: 'gray' });
+    });
+
+    it('detects pet suffix as PET with viridis colormap', () => {
+      expect(detectVolumeType('sub-01_pet.nii.gz')).toEqual({ type: 'PET', colormap: 'viridis' });
+    });
+
+    it('detects spect suffix as SPECT with magma colormap', () => {
+      expect(detectVolumeType('sub-01_spect.nii.gz')).toEqual({ type: 'SPECT', colormap: 'magma' });
+    });
+
+    it('does not match PET (uppercase) as BIDS pet — falls through to keyword', () => {
+      // BIDS suffix 'pet' is lowercase; 'PET' does not match BIDS but keyword fallback catches it
+      expect(detectVolumeType('scan_PET.nii')).toEqual({ type: 'PET', colormap: 'viridis' });
+    });
+  });
+
+  describe('keyword fallback for non-BIDS filenames', () => {
+    it('detects t1 keyword as MRI', () => {
+      expect(detectVolumeType('my_t1_scan.nii')).toEqual({ type: 'MRI', colormap: 'gray' });
+    });
+
+    it('detects fdg keyword as PET', () => {
+      expect(detectVolumeType('fdg_uptake.nii.gz')).toEqual({ type: 'PET', colormap: 'viridis' });
+    });
+
+    it('detects siscom keyword as SPECT', () => {
+      expect(detectVolumeType('pat_siscom_17-13.nii')).toEqual({ type: 'SPECT', colormap: 'magma' });
+    });
+
+    it('detects mprage keyword as MRI', () => {
+      expect(detectVolumeType('mprage.nii.gz')).toEqual({ type: 'MRI', colormap: 'gray' });
+    });
+  });
+
+  describe('unknown filenames', () => {
+    it('returns the bare filename (no extension) as type with gray colormap', () => {
+      expect(detectVolumeType('scan.nii')).toEqual({ type: 'scan', colormap: 'gray' });
+    });
+
+    it('handles files with no extension', () => {
+      expect(detectVolumeType('unknown_volume')).toEqual({ type: 'unknown_volume', colormap: 'gray' });
+    });
+
+    it('uses the full bare name when no _ separator is present', () => {
+      expect(detectVolumeType('brainmask.nii.gz')).toEqual({ type: 'brainmask', colormap: 'gray' });
+    });
+  });
+});
 
 describe('NiiViewer', () => {
   describe('getInitialVisibility', () => {

@@ -8,6 +8,7 @@ import { SplitPane } from '../components/SplitPane';
 import { loadBrainVisionEEG } from '../loaders/loadBrainVisionEEG';
 import { detectAndLoadEEG, checkEegFiles } from '../loaders/eegFormats';
 import { FileDropZone } from '../components/FileDropZone';
+import { detectVolumeType } from '../components/NiiViewer.utils';
 
 const DEMO_EEG = {
   header: 'demo_data/sub-synth_task-rest_eeg.vhdr',
@@ -17,7 +18,7 @@ const DEMO_EEG = {
 const DEMO_VOLUMES = [
   { url: 'demo_data/patT1.nii', colormap: 'gray', type: 'MRI' },
   { url: 'demo_data/pat_PET_aligned.nii', colormap: 'viridis', type: 'PET' },
-  { url: 'demo_data/pat_siscom_17-13.nii', colormap: 'hot', type: 'SPECT', urlImgType: 'nii' },
+  { url: 'demo_data/pat_siscom_17-13.nii', colormap: 'magma', type: 'SPECT', urlImgType: 'nii' },
 ];
 
 export const PatientView = () => {
@@ -93,13 +94,11 @@ export const PatientView = () => {
     try {
       const result = await toast.promise(
         Promise.all(
-          Array.from(files).map((f) => ({
+          Array.from(files).map((f) => {
             // NiiVue calls fetch(url) internally, so a blob: URL is needed — a plain filename would resolve as a relative HTTP request
-            url: URL.createObjectURL(f),
-            name: f.name,
-            colormap: 'gray',
-            type: f.name,
-          }))
+            const { type, colormap } = detectVolumeType(f.name);
+            return { url: URL.createObjectURL(f), name: f.name, colormap, type };
+          })
         ),
         {
           loading: 'Loading imaging data…',
