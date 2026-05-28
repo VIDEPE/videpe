@@ -127,7 +127,7 @@ export const NiiViewer = ({ volumes = [], onReady }) => {
   }, [volumes]);
 
   return (
-    <div className="">
+    <div className="h-full flex flex-col pb-3 px-2">
       {/* Controls panel */}
       <ImagingControls
         volumes={orderedVolumes}
@@ -135,8 +135,8 @@ export const NiiViewer = ({ volumes = [], onReady }) => {
         onSettingChange={updateSetting}
         onReorder={handleReorder}
       />
-      {/* NiiVue Canvas */}
-      <div style={{ width: '100%', height: '480px', position: 'relative' }}>
+      {/* NiiVue Canvas — fills remaining height */}
+      <div className="relative flex-1 min-h-0">
         {loading && (
           <div
             data-testid="loading-spinner"

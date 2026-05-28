@@ -141,7 +141,7 @@ export const ImagingControls = ({ volumes, layerSettings, onSettingChange, onReo
   return (
     // onDragEnd fires when the user releases a drag; we forward it to onReorder (a callback prop from NiiViewer) so the parent can update layer order state and reload NiiVue
     <DragDropProvider onDragEnd={onReorder}>
-      <div className="flex flex-col gap-1 py-2 pl-1 pr-2">
+      <div className="flex flex-col gap-1 py-2 px-1">
         {volumes.map((volume, index) => (
           <SortableSettingsCard
             key={volume.url}
