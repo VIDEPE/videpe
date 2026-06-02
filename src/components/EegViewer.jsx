@@ -47,7 +47,7 @@ const buildChannelOptions = ({
     height,
     background: 'rgba(0,0,0,0)', // transparent so peaks from adjacent channels show through
     // All plots share the same syncKey — panning/zooming one moves all others
-    cursor: { sync: { key: syncKey } },
+    cursor: { y: false, sync: { key: syncKey } },
     scales: {
       x: { time: false, range: [startTime, startTime + windowSize] },
       // y-range is extended by OVERDRAW so the center plotHeight pixels show ±yScale,
