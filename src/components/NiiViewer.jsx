@@ -6,7 +6,7 @@ import { getInitialLayerSettings } from './NiiViewer.utils';
 import { ImagingControls } from './ImagingControls';
 
 // Loads volumes into an existing NiiVue instance and applies all layer settings.
-// Extracted to avoid duplication between initial load and drag-to-reorder reload.
+// Used for initial load; reordering uses setVolume instead to avoid re-fetching.
 export async function loadVolumesAndApplySettings(nv, volumes, layerSettings) {
   await nv.loadVolumes(volumes);
   layerSettings.forEach((layerSetting, index) => {
@@ -63,13 +63,14 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
     nvRef.current.setMultiplanarLayout(isFullscreen ? MULTIPLANAR_TYPE.AUTO : MULTIPLANAR_TYPE.GRID);
   }, [isFullscreen]);
 
-  const handleReorder = async (event) => {
-    if (!nvRef.current) return;
+  const handleReorder = (event) => {
+    if (!nvRef.current) return; // Guard clause — if NiiVue isn't initialized yet, we can't reorder
 
-    const urls = orderedVolumes.map((volume) => volume.url);
-    const newUrls = move(urls, event);
+    const urls = orderedVolumes.map((volume) => volume.url); // Get the current order of URLs
+    const newUrls = move(urls, event); // Get the new order of URLs based on the drag event
     if (newUrls === urls) return; // no change (canceled or same position)
 
+    // Reorder the orderedVolumes and layerSettings arrays to match the new order of URLs
     const newOrderedVolumes = newUrls.map((url) => orderedVolumes.find((volume) => volume.url === url));
     const newLayerSettings = newUrls.map((url) => {
       const oldIndex = orderedVolumes.findIndex((volume) => volume.url === url);
@@ -79,14 +80,14 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
     setOrderedVolumes(newOrderedVolumes);
     setLayerSettings(newLayerSettings);
 
+    // Move the already-loaded NVImage to its new position in-memory — no re-fetch needed
+    const fromIndex = event.operation.source.initialIndex;
+    const toIndex = event.operation.source.index;
     setLoading(true);
-    try {
-      await loadVolumesAndApplySettings(nvRef.current, newOrderedVolumes, newLayerSettings);
-    } catch (reorderError) {
-      toast.error(`Failed to reload after reorder: ${reorderError.message}`);
-    } finally {
-      setLoading(false);
-    }
+    nvRef.current.setVolume(nvRef.current.volumes[fromIndex], toIndex);
+    nvRef.current.updateGLVolume();
+    // updateGLVolume schedules a GL redraw but returns before it paints — wait one frame before clearing the spinner
+    requestAnimationFrame(() => setLoading(false));
   };
 
   useEffect(() => {
