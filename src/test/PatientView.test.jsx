@@ -1,7 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import userEvent from '@testing-library/user-event';
 import { PatientView } from '@/pages/PatientView';
+
+const renderPatientView = () => render(<MemoryRouter><PatientView /></MemoryRouter>);
 import { checkEegFiles, detectAndLoadEEG } from '@/loaders/eegFormats';
 import { FileDropZone } from '@/components/FileDropZone';
 import { NiiViewer } from '@/components/NiiViewer';
@@ -59,7 +62,7 @@ describe('PatientView — button label', () => {
       missing: null,
       warning: null,
     });
-    render(<PatientView />);
+    renderPatientView();
     expect(getMainButton()).toHaveTextContent(/load demo/i);
   });
 
@@ -70,7 +73,7 @@ describe('PatientView — button label', () => {
       missing: ['.eeg'],
       warning: null,
     });
-    render(<PatientView />);
+    renderPatientView();
 
     await act(async () => {
       await getEegOnFiles()([makeFile('sub01.vhdr')]);
@@ -86,7 +89,7 @@ describe('PatientView — button label', () => {
       missing: [],
       warning: null,
     });
-    render(<PatientView />);
+    renderPatientView();
 
     await act(async () => {
       await getEegOnFiles()([makeFile('sub01.vhdr'), makeFile('sub01.eeg')]);
@@ -111,7 +114,7 @@ describe('PatientView — reset', () => {
 
   it('clicking Reset returns to "Load Demo" and removes EegViewer', async () => {
     const user = userEvent.setup();
-    render(<PatientView />);
+    renderPatientView();
 
     await act(async () => {
       await getEegOnFiles()([makeFile('sub01.vhdr'), makeFile('sub01.eeg')]);
@@ -139,7 +142,7 @@ describe('PatientView — EEG file accumulation', () => {
       })
       .mockReturnValue({ formatName: 'BrainVision', complete: true, missing: [], warning: null });
     detectAndLoadEEG.mockResolvedValue({ data: [[0, 1]], channelNames: ['Ch1'] });
-    render(<PatientView />);
+    renderPatientView();
 
     // First drop: header only
     await act(async () => {
@@ -165,7 +168,7 @@ describe('PatientView — EEG file accumulation', () => {
       missing: ['.eeg'],
       warning: null,
     });
-    render(<PatientView />);
+    renderPatientView();
 
     // Drop sub01.vhdr, then sub02.vhdr — the second should replace the first
     await act(async () => {
@@ -195,7 +198,7 @@ describe('PatientView — imaging file-type detection', () => {
   });
 
   it('passes type MRI to NiiViewer for a BIDS T1w file', async () => {
-    render(<PatientView />);
+    renderPatientView();
 
     await act(async () => {
       await getNiiOnFiles()([makeFile('sub-01_T1w.nii')]);
@@ -207,7 +210,7 @@ describe('PatientView — imaging file-type detection', () => {
   });
 
   it('passes type PET to NiiViewer for a BIDS pet file', async () => {
-    render(<PatientView />);
+    renderPatientView();
 
     await act(async () => {
       await getNiiOnFiles()([makeFile('sub-01_pet.nii.gz')]);
@@ -217,7 +220,7 @@ describe('PatientView — imaging file-type detection', () => {
   });
 
   it('passes type SPECT to NiiViewer for a siscom file', async () => {
-    render(<PatientView />);
+    renderPatientView();
 
     await act(async () => {
       await getNiiOnFiles()([makeFile('pat_siscom_17-13.nii')]);
