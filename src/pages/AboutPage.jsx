@@ -1,4 +1,4 @@
-﻿import { ExternalLink, BrainCircuit, ChartLine, FolderOpen, Columns2, FlaskConical, Monitor, ShieldCheck, ArrowLeft } from 'lucide-react';
+﻿import { ExternalLink, BrainCircuit, ChartLine, FolderOpen, Columns2, FlaskConical, Monitor, ShieldCheck, ArrowLeft, ArrowUp } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { CenteredLayout } from '../components/CenteredLayout';
 import { Footer } from '../components/Footer';
@@ -57,6 +57,15 @@ const FundingBadge = ({ children }) => (
 export const AboutPage = () => {
   return (
     <CenteredLayout>
+      <button
+        type="button"
+        onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+        className="fixed bottom-6 right-6 z-50 animate-bounce cursor-pointer"
+        style={{ background: 'none', border: 'none', color: 'var(--c-primary)' }}
+        aria-label="Scroll to top"
+      >
+        <ArrowUp size={26} strokeWidth={2.5} />
+      </button>
       <Link to="/" className="button fixed top-5 left-5 z-50 flex items-center gap-2 px-3 py-1">
         <ArrowLeft size={16} /> Back
       </Link>
