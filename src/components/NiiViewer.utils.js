@@ -1,6 +1,21 @@
 const MRI_BIDS_SUFFIXES = new Set([
-  'T1w', 'T2w', 'FLAIR', 'PDw', 'T1map', 'T2map', 'T2star', 'T1rho',
-  'PD', 'FLASH', 'angio', 'inplaneT1', 'inplaneT2', 'MTR', 'MTsat', 'MTS', 'MPM',
+  'T1w',
+  'T2w',
+  'FLAIR',
+  'PDw',
+  'T1map',
+  'T2map',
+  'T2star',
+  'T1rho',
+  'PD',
+  'FLASH',
+  'angio',
+  'inplaneT1',
+  'inplaneT2',
+  'MTR',
+  'MTsat',
+  'MTS',
+  'MPM',
 ]);
 
 // Single source of truth for type → default colormap mapping.
@@ -38,7 +53,7 @@ export const detectVolumeType = (filename) => {
 export const getInitialLayerSettings = (volumes) =>
   volumes.map((volume, index) => ({
     visible: true,
-    opacity: index === 0 ? 1.0 : 0.70, // first loaded layer is fully opaque, others slightly transparent by default
+    opacity: index === 0 ? 1.0 : 0.7, // first loaded layer is fully opaque, others slightly transparent by default
     colormap: TYPE_COLORMAP_DEFAULTS[volume.type] ?? 'gray',
     invert: false,
     showColorbar: false,

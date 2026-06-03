@@ -94,7 +94,7 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
   const SHIFT_MAX_LENGTH = 6; // covers up to 9999.9 s
   const GAIN_MAX_LENGTH = 5; // covers up to 99999 µV
   const GAIN_MAX = 10 ** GAIN_MAX_LENGTH - 1; // 99999 — derived from GAIN_MAX_LENGTH so both stay in sync
-  
+
   const defaultWindowSize = tMax < 20 ? Math.ceil(tMax) : 20; // default to showing the full recording if it's shorter than 20s, otherwise start with a 20s window
   const [windowSize, setWindowSize] = useState(defaultWindowSize); // seconds visible in the x-range, initialized to 20s or the full recording if shorter
   const [windowSizeStr, setWindowSizeStr] = useState(String(defaultWindowSize));

@@ -227,7 +227,11 @@ export const PatientView = () => {
         }
         right={
           volumes.length > 0 ? (
-            <NiiViewer volumes={volumes} isFullscreen={maximizedPanel === 'right'} onReady={() => niiReadyResolveRef.current?.()} />
+            <NiiViewer
+              volumes={volumes}
+              isFullscreen={maximizedPanel === 'right'}
+              onReady={() => niiReadyResolveRef.current?.()}
+            />
           ) : (
             <FileDropZone
               onFiles={handleNiiFiles}

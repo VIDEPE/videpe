@@ -16,11 +16,7 @@ const makeSettings = (overrides = {}) => ({
 
 const renderControls = (volumes, settings, onSettingChange = vi.fn()) =>
   render(
-    <ImagingControls
-      volumes={volumes}
-      layerSettings={settings}
-      onSettingChange={onSettingChange}
-    />
+    <ImagingControls volumes={volumes} layerSettings={settings} onSettingChange={onSettingChange} />
   );
 
 describe('ImagingControls', () => {

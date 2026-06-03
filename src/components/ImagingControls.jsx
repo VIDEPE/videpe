@@ -25,7 +25,14 @@ const ToggleSwitch = ({ checked, onChange, 'aria-label': ariaLabel }) => (
   </button>
 );
 
-function SortableSettingsCard({ volume, index, settings, isExpanded, onToggleExpand, onSettingChange }) {
+function SortableSettingsCard({
+  volume,
+  index,
+  settings,
+  isExpanded,
+  onToggleExpand,
+  onSettingChange,
+}) {
   const { ref, handleRef, isDragging } = useSortable({ id: volume.url, index });
   const label = volume.type ?? `Layer ${index + 1}`;
 
@@ -35,14 +42,17 @@ function SortableSettingsCard({ volume, index, settings, isExpanded, onToggleExp
       className={`rounded border border-border bg-surface transition-opacity ${isDragging ? 'opacity-60' : ''}`}
     >
       {/* Always-visible header row */}
-      <div className="flex items-center gap-1.5 px-2 py-1.5">
+      <div className="flex items-center gap-1.5 px-2 py-1">
         {/* Drag handle — span rather than SVG (icon) so it can be focusable and gives a reliable pointer-event target */}
         <span
           ref={handleRef}
           className="cursor-grab active:cursor-grabbing touch-none shrink-0"
           aria-label={`Drag to reorder ${label}`}
         >
-          <GripVertical size={16} className="text-border hover:text-secondary active:text-primary" />
+          <GripVertical
+            size={16}
+            className="text-border hover:text-secondary active:text-primary"
+          />
         </span>
 
         <span className="flex-1 text-sm font-medium text-heading truncate">{label}</span>
@@ -73,7 +83,7 @@ function SortableSettingsCard({ volume, index, settings, isExpanded, onToggleExp
 
       {/* Expanded controls */}
       {isExpanded && (
-        <div className="border-t border-border px-3 py-2.5 flex flex-col gap-3 text-sm">
+        <div className="border-t border-border px-3 py-1.5 flex flex-col gap-1.5 text-sm">
           {/* Opacity */}
           <div className="flex items-center gap-3">
             <span className="w-20 shrink-0 text-foreground">Opacity</span>
@@ -109,24 +119,26 @@ function SortableSettingsCard({ volume, index, settings, isExpanded, onToggleExp
             </select>
           </div>
 
-          {/* Invert */}
-          <div className="flex items-center justify-between">
-            <span className="text-foreground">Invert</span>
-            <ToggleSwitch
-              checked={settings.invert}
-              onChange={(value) => onSettingChange(index, 'invert', value)}
-              aria-label={`Invert ${label} colormap`}
-            />
-          </div>
+          <div className="flex flex-row">
+            {/* Invert */}
+            <div className="w-1/2 flex items-center gap-2.5">
+              <span className="text-foreground">Invert</span>
+              <ToggleSwitch
+                checked={settings.invert}
+                onChange={(value) => onSettingChange(index, 'invert', value)}
+                aria-label={`Invert ${label} colormap`}
+              />
+            </div>
 
-          {/* Show colorbar */}
-          <div className="flex items-center justify-between">
-            <span className="text-foreground">Colorbar</span>
-            <ToggleSwitch
-              checked={settings.showColorbar}
-              onChange={(value) => onSettingChange(index, 'showColorbar', value)}
-              aria-label={`Show ${label} colorbar`}
-            />
+            {/* Show colorbar */}
+            <div className="w-1/2 flex items-center gap-2.5">
+              <span className="text-foreground">Colorbar</span>
+              <ToggleSwitch
+                checked={settings.showColorbar}
+                onChange={(value) => onSettingChange(index, 'showColorbar', value)}
+                aria-label={`Show ${label} colorbar`}
+              />
+            </div>
           </div>
         </div>
       )}
@@ -141,7 +153,7 @@ export const ImagingControls = ({ volumes, layerSettings, onSettingChange, onReo
   return (
     // onDragEnd fires when the user releases a drag; we forward it to onReorder (a callback prop from NiiViewer) so the parent can update layer order state and reload NiiVue
     <DragDropProvider onDragEnd={onReorder}>
-      <div className="flex flex-col gap-1 py-2 px-1">
+      <div className="flex flex-col gap-1 py-1 px-1">
         {volumes.map((volume, index) => (
           <SortableSettingsCard
             key={volume.url}

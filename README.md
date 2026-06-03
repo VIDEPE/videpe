@@ -27,21 +27,21 @@ All data processing happens entirely in your browser — no files are ever uploa
 
 ## Supported formats
 
-| Modality | Formats |
-|---|---|
-| EEG | BrainVision (`.vhdr` + `.eeg`) |
-| Volumes | NIfTI (`.nii`, `.nii.gz`), MGH/MGZ, GIFTI, PLY, OBJ |
+| Modality | Formats                                             |
+| -------- | --------------------------------------------------- |
+| EEG      | BrainVision (`.vhdr` + `.eeg`)                      |
+| Volumes  | NIfTI (`.nii`, `.nii.gz`), MGH/MGZ, GIFTI, PLY, OBJ |
 
 ## Tech stack
 
-| Area | Library |
-|---|---|
-| Framework | React 19 + Vite 8 |
-| Routing | React Router v7 (HashRouter for GitHub Pages) |
-| Styling | Tailwind CSS v4 |
-| EEG plots | uPlot + uplot-react |
-| Neuroimaging | NiiVue |
-| Testing | Vitest + React Testing Library |
+| Area         | Library                                       |
+| ------------ | --------------------------------------------- |
+| Framework    | React 19 + Vite 8                             |
+| Routing      | React Router v7 (HashRouter for GitHub Pages) |
+| Styling      | Tailwind CSS v4                               |
+| EEG plots    | uPlot + uplot-react                           |
+| Neuroimaging | NiiVue                                        |
+| Testing      | Vitest + React Testing Library                |
 
 ## Getting started
 
