@@ -304,7 +304,7 @@ describe('NiiViewer', () => {
 
     it('calls nv.setColormap when the colormap setting changes', async () => {
       const { Niivue } = await import('@niivue/niivue');
-      render(<NiiViewer volumes={[{ type: 'MRI', url: '/mri.nii' }]} />);
+      render(<NiiViewer volumes={[{ type: 'MRI', url: '/mri.nii', id: 'mri-id' }]} />);
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
 
       // Expand the MRI card and change the colormap
@@ -312,7 +312,8 @@ describe('NiiViewer', () => {
       await userEvent.selectOptions(screen.getByLabelText('MRI colormap'), 'magma');
 
       const nv = Niivue.mock.results[Niivue.mock.results.length - 1].value;
-      expect(nv.setColormap).toHaveBeenCalledWith(expect.any(String), 'magma');
+      // toHaveBeenLastCalledWith isolates the handleSettingChange call from the initial loadVolumesAndApplySettings call
+      expect(nv.setColormap).toHaveBeenLastCalledWith('mri-id', 'magma');
     });
   });
 
