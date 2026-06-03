@@ -197,12 +197,12 @@ code {
     box-shadow: none;
   }
 
-  &[aria-pressed="true"] {
+  &[aria-pressed='true'] {
     background: var(--color-background);
     color: var(--color-primary);
   }
 
-  &[aria-expanded="false"] {
+  &[aria-expanded='false'] {
     background: var(--color-background);
     color: var(--color-primary);
   }
@@ -214,10 +214,18 @@ code {
 
 /* uPlot's default drag-selection uses rgba(0,0,0,0.07) — invisible on dark backgrounds */
 .dark .u-select {
-  background: color-mix(in srgb, var(--c-primary) 7%, transparent); /* a semi-transparent version of the primary color for better visibility on dark mode */
+  background: color-mix(
+    in srgb,
+    var(--c-primary) 7%,
+    transparent
+  ); /* a semi-transparent version of the primary color for better visibility on dark mode */
 }
 .light .u-select {
-  background: color-mix(in srgb, var(--c-primary) 7%, transparent); /* a semi-transparent version of the primary color for better visibility on dark mode */
+  background: color-mix(
+    in srgb,
+    var(--c-primary) 7%,
+    transparent
+  ); /* a semi-transparent version of the primary color for better visibility on dark mode */
 }
 
 /* ============================================

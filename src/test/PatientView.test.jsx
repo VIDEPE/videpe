@@ -24,7 +24,9 @@ vi.mock('@/loaders/eegFormats', () => ({
 }));
 
 vi.mock('@/components/EegViewer', () => ({ EegViewer: () => <div data-testid="eeg-viewer" /> }));
-vi.mock('@/components/NiiViewer', () => ({ NiiViewer: vi.fn(() => <div data-testid="nii-viewer" />) }));
+vi.mock('@/components/NiiViewer', () => ({
+  NiiViewer: vi.fn(() => <div data-testid="nii-viewer" />),
+}));
 vi.mock('@/components/FileDropZone', () => ({ FileDropZone: vi.fn(() => null) }));
 vi.mock('@/components/ThemeToggle', () => ({ ThemeToggle: () => null }));
 
@@ -184,7 +186,12 @@ describe('PatientView — imaging file-type detection', () => {
   beforeEach(() => {
     FileDropZone.mockClear();
     NiiViewer.mockClear();
-    checkEegFiles.mockReturnValue({ formatName: null, complete: false, missing: null, warning: null });
+    checkEegFiles.mockReturnValue({
+      formatName: null,
+      complete: false,
+      missing: null,
+      warning: null,
+    });
   });
 
   it('passes type MRI to NiiViewer for a BIDS T1w file', async () => {

@@ -25,7 +25,14 @@ const ToggleSwitch = ({ checked, onChange, 'aria-label': ariaLabel }) => (
   </button>
 );
 
-function SortableSettingsCard({ volume, index, settings, isExpanded, onToggleExpand, onSettingChange }) {
+function SortableSettingsCard({
+  volume,
+  index,
+  settings,
+  isExpanded,
+  onToggleExpand,
+  onSettingChange,
+}) {
   const { ref, handleRef, isDragging } = useSortable({ id: volume.url, index });
   const label = volume.type ?? `Layer ${index + 1}`;
 
@@ -42,7 +49,10 @@ function SortableSettingsCard({ volume, index, settings, isExpanded, onToggleExp
           className="cursor-grab active:cursor-grabbing touch-none shrink-0"
           aria-label={`Drag to reorder ${label}`}
         >
-          <GripVertical size={16} className="text-border hover:text-secondary active:text-primary" />
+          <GripVertical
+            size={16}
+            className="text-border hover:text-secondary active:text-primary"
+          />
         </span>
 
         <span className="flex-1 text-sm font-medium text-heading truncate">{label}</span>
@@ -129,8 +139,7 @@ function SortableSettingsCard({ volume, index, settings, isExpanded, onToggleExp
                 aria-label={`Show ${label} colorbar`}
               />
             </div>
-          </div>   
-          
+          </div>
         </div>
       )}
     </div>

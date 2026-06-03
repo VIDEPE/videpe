@@ -66,7 +66,10 @@ describe('loadVolumesAndApplySettings', () => {
 
   it('sets colormap for each volume after loading', async () => {
     const volumes = [makeVolume('/mri.nii', 'id-mri'), makeVolume('/pet.nii', 'id-pet')];
-    const settings = [makeLayerSetting({ colormap: 'gray' }), makeLayerSetting({ colormap: 'viridis' })];
+    const settings = [
+      makeLayerSetting({ colormap: 'gray' }),
+      makeLayerSetting({ colormap: 'viridis' }),
+    ];
     await loadVolumesAndApplySettings(nv, volumes, settings);
     expect(nv.setColormap).toHaveBeenCalledWith('id-mri', 'gray');
     expect(nv.setColormap).toHaveBeenCalledWith('id-pet', 'viridis');
@@ -74,13 +77,17 @@ describe('loadVolumesAndApplySettings', () => {
 
   it('sets full opacity for a visible volume', async () => {
     const volumes = [makeVolume('/mri.nii', 'id-mri')];
-    await loadVolumesAndApplySettings(nv, volumes, [makeLayerSetting({ visible: true, opacity: 0.7 })]);
+    await loadVolumesAndApplySettings(nv, volumes, [
+      makeLayerSetting({ visible: true, opacity: 0.7 }),
+    ]);
     expect(nv.setOpacity).toHaveBeenCalledWith(0, 0.7);
   });
 
   it('sets opacity to 0 for a hidden volume regardless of its opacity value', async () => {
     const volumes = [makeVolume('/mri.nii', 'id-mri')];
-    await loadVolumesAndApplySettings(nv, volumes, [makeLayerSetting({ visible: false, opacity: 0.8 })]);
+    await loadVolumesAndApplySettings(nv, volumes, [
+      makeLayerSetting({ visible: false, opacity: 0.8 }),
+    ]);
     expect(nv.setOpacity).toHaveBeenCalledWith(0, 0);
   });
 
@@ -110,7 +117,10 @@ describe('loadVolumesAndApplySettings', () => {
 
   it('sets colorbarVisible independently per volume', async () => {
     const volumes = [makeVolume('/mri.nii', 'id-mri'), makeVolume('/pet.nii', 'id-pet')];
-    const settings = [makeLayerSetting({ showColorbar: true }), makeLayerSetting({ showColorbar: false })];
+    const settings = [
+      makeLayerSetting({ showColorbar: true }),
+      makeLayerSetting({ showColorbar: false }),
+    ];
     await loadVolumesAndApplySettings(nv, volumes, settings);
     expect(nv.volumes[0].colorbarVisible).toBe(true);
     expect(nv.volumes[1].colorbarVisible).toBe(false);
@@ -118,7 +128,10 @@ describe('loadVolumesAndApplySettings', () => {
 
   it('sets isColorbar to true when any layer has showColorbar', async () => {
     const volumes = [makeVolume('/mri.nii', 'id-mri'), makeVolume('/pet.nii', 'id-pet')];
-    const settings = [makeLayerSetting({ showColorbar: false }), makeLayerSetting({ showColorbar: true })];
+    const settings = [
+      makeLayerSetting({ showColorbar: false }),
+      makeLayerSetting({ showColorbar: true }),
+    ];
     await loadVolumesAndApplySettings(nv, volumes, settings);
     expect(nv.opts.isColorbar).toBe(true);
   });

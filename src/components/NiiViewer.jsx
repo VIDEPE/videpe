@@ -30,72 +30,82 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
   const nvRef = useRef();
   const opacityRafRef = useRef(null); // pending rAF id for opacity updates — cancelled on each new drag event so only the latest value redraws
 
-  const handleSettingChange = useCallback((layerIndex, key, value) => {
-    const nextLayerSettings = layerSettings.map((layerSetting, index) =>
-      index === layerIndex ? { ...layerSetting, [key]: value } : layerSetting
-    );
-    setLayerSettings(nextLayerSettings);
+  const handleSettingChange = useCallback(
+    (layerIndex, key, value) => {
+      const nextLayerSettings = layerSettings.map((layerSetting, index) =>
+        index === layerIndex ? { ...layerSetting, [key]: value } : layerSetting
+      );
+      setLayerSettings(nextLayerSettings);
 
-    if (nvRef.current) {
-      const nv = nvRef.current;
-      // Find the corresponding NVVolume for this layer index — we have to do this by URL since layer order can change
-      // Note that due to object referencing changing nVVolume properties updates same properties inside nv for that specific volume
-      const nvVolume = nv.volumes.find((nvVol) => nvVol.url === orderedVolumes[layerIndex].url);
-      if (!nvVolume) return;
-      const nvIndex = nv.volumes.indexOf(nvVolume);
+      if (nvRef.current) {
+        const nv = nvRef.current;
+        // Find the corresponding NVVolume for this layer index — we have to do this by URL since layer order can change
+        // Note that due to object referencing changing nVVolume properties updates same properties inside nv for that specific volume
+        const nvVolume = nv.volumes.find((nvVol) => nvVol.url === orderedVolumes[layerIndex].url);
+        if (!nvVolume) return;
+        const nvIndex = nv.volumes.indexOf(nvVolume);
 
-      if (key === 'visible') {
-        nv.setOpacity(nvIndex, value ? nextLayerSettings[layerIndex].opacity : 0);
-      } else if (key === 'opacity') {
-        // Throttle to one GL redraw per frame — cancels any pending rAF so only the latest drag value redraws
-        if (nextLayerSettings[layerIndex].visible) {
-          if (opacityRafRef.current) cancelAnimationFrame(opacityRafRef.current);
-          opacityRafRef.current = requestAnimationFrame(() => nv.setOpacity(nvIndex, value));
+        if (key === 'visible') {
+          nv.setOpacity(nvIndex, value ? nextLayerSettings[layerIndex].opacity : 0);
+        } else if (key === 'opacity') {
+          // Throttle to one GL redraw per frame — cancels any pending rAF so only the latest drag value redraws
+          if (nextLayerSettings[layerIndex].visible) {
+            if (opacityRafRef.current) cancelAnimationFrame(opacityRafRef.current);
+            opacityRafRef.current = requestAnimationFrame(() => nv.setOpacity(nvIndex, value));
+          }
+        } else if (key === 'colormap') {
+          nv.setColormap(nvVolume.id, value);
+        } else if (key === 'invert') {
+          nvVolume.colormapInvert = value;
+          nv.updateGLVolume();
+        } else if (key === 'showColorbar') {
+          nvVolume.colorbarVisible = value;
+          nv.opts.isColorbar = nextLayerSettings.some((layerSetting) => layerSetting.showColorbar);
+          nv.updateGLVolume();
         }
-      } else if (key === 'colormap') {
-        nv.setColormap(nvVolume.id, value);
-      } else if (key === 'invert') {
-        nvVolume.colormapInvert = value;
-        nv.updateGLVolume();
-      } else if (key === 'showColorbar') {
-        nvVolume.colorbarVisible = value;
-        nv.opts.isColorbar = nextLayerSettings.some((layerSetting) => layerSetting.showColorbar);
-        nv.updateGLVolume();
       }
-    }
-  }, [layerSettings, orderedVolumes]);
+    },
+    [layerSettings, orderedVolumes]
+  );
 
   useEffect(() => {
     if (!nvRef.current) return;
-    nvRef.current.setMultiplanarLayout(isFullscreen ? MULTIPLANAR_TYPE.AUTO : MULTIPLANAR_TYPE.GRID);
+    nvRef.current.setMultiplanarLayout(
+      isFullscreen ? MULTIPLANAR_TYPE.AUTO : MULTIPLANAR_TYPE.GRID
+    );
   }, [isFullscreen]);
 
-  const handleReorder = useCallback((event) => {
-    if (!nvRef.current) return; // Guard clause — if NiiVue isn't initialized yet, we can't reorder
+  const handleReorder = useCallback(
+    (event) => {
+      if (!nvRef.current) return; // Guard clause — if NiiVue isn't initialized yet, we can't reorder
 
-    const urls = orderedVolumes.map((volume) => volume.url);  // Get the current order of URLs
-    const newUrls = move(urls, event); // Get the new order of URLs based on the drag event
-    if (newUrls === urls) return; // no change (canceled or same position)
+      const urls = orderedVolumes.map((volume) => volume.url); // Get the current order of URLs
+      const newUrls = move(urls, event); // Get the new order of URLs based on the drag event
+      if (newUrls === urls) return; // no change (canceled or same position)
 
-    // Reorder the orderedVolumes and layerSettings arrays to match the new order of URLs
-    const newOrderedVolumes = newUrls.map((url) => orderedVolumes.find((volume) => volume.url === url));
-    const newLayerSettings = newUrls.map((url) => {
-      const oldIndex = orderedVolumes.findIndex((volume) => volume.url === url);
-      return layerSettings[oldIndex];
-    });
+      // Reorder the orderedVolumes and layerSettings arrays to match the new order of URLs
+      const newOrderedVolumes = newUrls.map((url) =>
+        orderedVolumes.find((volume) => volume.url === url)
+      );
+      const newLayerSettings = newUrls.map((url) => {
+        const oldIndex = orderedVolumes.findIndex((volume) => volume.url === url);
+        return layerSettings[oldIndex];
+      });
 
-    setOrderedVolumes(newOrderedVolumes);
-    setLayerSettings(newLayerSettings);
+      setOrderedVolumes(newOrderedVolumes);
+      setLayerSettings(newLayerSettings);
 
-    // Move the already-loaded NVImage to its new position in-memory — no re-fetch needed
-    const fromIndex = event.operation.source.initialIndex;
-    const toIndex = event.operation.source.index;
-    setLoading(true);
-    nvRef.current.setVolume(nvRef.current.volumes[fromIndex], toIndex);
-    nvRef.current.updateGLVolume();
-    // updateGLVolume schedules a GL redraw but returns before it paints — wait one frame before clearing the spinner
-    requestAnimationFrame(() => setLoading(false));
-  }, [orderedVolumes, layerSettings]);
+      // Move the already-loaded NVImage to its new position in-memory — no re-fetch needed
+      const fromIndex = event.operation.source.initialIndex;
+      const toIndex = event.operation.source.index;
+      setLoading(true);
+      nvRef.current.setVolume(nvRef.current.volumes[fromIndex], toIndex);
+      nvRef.current.updateGLVolume();
+      // updateGLVolume schedules a GL redraw but returns before it paints — wait one frame before clearing the spinner
+      requestAnimationFrame(() => setLoading(false));
+    },
+    [orderedVolumes, layerSettings]
+  );
 
   useEffect(() => {
     // Guard clause — if no volumes provided, don't even try to initialize NiiVue
