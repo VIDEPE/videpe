@@ -2,6 +2,7 @@
 import { Link } from 'react-router-dom';
 import { CenteredLayout } from '../components/CenteredLayout';
 import { Footer } from '../components/Footer';
+import { ThemeToggle } from '../components/ThemeToggle';
 
 const NiiVueIcon = ({ size = 20 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -66,6 +67,7 @@ export const AboutPage = () => {
       >
         <ArrowUp size={26} strokeWidth={2.5} />
       </button>
+      <ThemeToggle />
       <Link to="/" className="button fixed top-5 left-5 z-50 flex items-center gap-2 px-3 py-1">
         <ArrowLeft size={16} /> Back
       </Link>
