@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useCallback } from 'react';
 import { Niivue, SHOW_RENDER, MULTIPLANAR_TYPE } from '@niivue/niivue';
 import { move } from '@dnd-kit/helpers';
 import toast from 'react-hot-toast';
@@ -28,8 +28,9 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
 
   const canvas = useRef();
   const nvRef = useRef();
+  const opacityRafRef = useRef(null); // pending rAF id for opacity updates — cancelled on each new drag event so only the latest value redraws
 
-  const handleSettingChange = (layerIndex, key, value) => {
+  const handleSettingChange = useCallback((layerIndex, key, value) => {
     const nextLayerSettings = layerSettings.map((layerSetting, index) =>
       index === layerIndex ? { ...layerSetting, [key]: value } : layerSetting
     );
@@ -46,7 +47,11 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
       if (key === 'visible') {
         nv.setOpacity(nvIndex, value ? nextLayerSettings[layerIndex].opacity : 0);
       } else if (key === 'opacity') {
-        if (nextLayerSettings[layerIndex].visible) nv.setOpacity(nvIndex, value);
+        // Throttle to one GL redraw per frame — cancels any pending rAF so only the latest drag value redraws
+        if (nextLayerSettings[layerIndex].visible) {
+          if (opacityRafRef.current) cancelAnimationFrame(opacityRafRef.current);
+          opacityRafRef.current = requestAnimationFrame(() => nv.setOpacity(nvIndex, value));
+        }
       } else if (key === 'colormap') {
         nv.setColormap(nvVolume.id, value);
       } else if (key === 'invert') {
@@ -58,14 +63,14 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
         nv.updateGLVolume();
       }
     }
-  };
+  }, [layerSettings, orderedVolumes]);
 
   useEffect(() => {
     if (!nvRef.current) return;
     nvRef.current.setMultiplanarLayout(isFullscreen ? MULTIPLANAR_TYPE.AUTO : MULTIPLANAR_TYPE.GRID);
   }, [isFullscreen]);
 
-  const handleReorder = (event) => {
+  const handleReorder = useCallback((event) => {
     if (!nvRef.current) return; // Guard clause — if NiiVue isn't initialized yet, we can't reorder
 
     const urls = orderedVolumes.map((volume) => volume.url);  // Get the current order of URLs
@@ -90,7 +95,7 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
     nvRef.current.updateGLVolume();
     // updateGLVolume schedules a GL redraw but returns before it paints — wait one frame before clearing the spinner
     requestAnimationFrame(() => setLoading(false));
-  };
+  }, [orderedVolumes, layerSettings]);
 
   useEffect(() => {
     // Guard clause — if no volumes provided, don't even try to initialize NiiVue

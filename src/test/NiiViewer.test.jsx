@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { getInitialLayerSettings, detectVolumeType } from '@/components/NiiViewer.utils';
 import { NiiViewer, loadVolumesAndApplySettings } from '@/components/NiiViewer';
 
@@ -299,6 +300,19 @@ describe('NiiViewer', () => {
       await waitFor(() =>
         expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/failed to load image/i))
       );
+    });
+
+    it('calls nv.setColormap when the colormap setting changes', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      render(<NiiViewer volumes={[{ type: 'MRI', url: '/mri.nii' }]} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      // Expand the MRI card and change the colormap
+      await userEvent.click(screen.getByRole('button', { name: 'Expand MRI controls' }));
+      await userEvent.selectOptions(screen.getByLabelText('MRI colormap'), 'magma');
+
+      const nv = Niivue.mock.results[Niivue.mock.results.length - 1].value;
+      expect(nv.setColormap).toHaveBeenCalledWith(expect.any(String), 'magma');
     });
   });
 });
