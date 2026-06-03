@@ -315,4 +315,40 @@ describe('NiiViewer', () => {
       expect(nv.setColormap).toHaveBeenCalledWith(expect.any(String), 'magma');
     });
   });
+
+  describe('handleSettingChange', () => {
+    // Helper: render NiiViewer, wait for load, return the nv mock instance with mocks cleared
+    const setup = async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      render(<NiiViewer volumes={[{ type: 'MRI', url: '/mri.nii' }]} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+      const nv = Niivue.mock.results[Niivue.mock.results.length - 1].value;
+      // Clear calls from initial load so assertions only count post-load interactions
+      nv.setOpacity.mockClear();
+      nv.updateGLVolume.mockClear();
+      return nv;
+    };
+
+    it('calls nv.setOpacity with 0 when hiding a visible volume', async () => {
+      const nv = await setup();
+      await userEvent.click(screen.getByRole('button', { name: 'Hide MRI' }));
+      expect(nv.setOpacity).toHaveBeenCalledWith(0, 0);
+    });
+
+    it('sets colormapInvert on the NVImage and calls updateGLVolume when invert is toggled', async () => {
+      const nv = await setup();
+      await userEvent.click(screen.getByRole('button', { name: 'Expand MRI controls' }));
+      await userEvent.click(screen.getByRole('switch', { name: 'Invert MRI colormap' }));
+      expect(nv.volumes[0].colormapInvert).toBe(true);
+      expect(nv.updateGLVolume).toHaveBeenCalledOnce();
+    });
+
+    it('sets colorbarVisible on the NVImage and calls updateGLVolume when colorbar is toggled', async () => {
+      const nv = await setup();
+      await userEvent.click(screen.getByRole('button', { name: 'Expand MRI controls' }));
+      await userEvent.click(screen.getByRole('switch', { name: 'Show MRI colorbar' }));
+      expect(nv.volumes[0].colorbarVisible).toBe(true);
+      expect(nv.updateGLVolume).toHaveBeenCalledOnce();
+    });
+  });
 });
