@@ -1,4 +1,5 @@
-﻿import { ExternalLink, BrainCircuit, ChartLine, FolderOpen, Columns2, FlaskConical, Monitor, ShieldCheck } from 'lucide-react';
+﻿import { ExternalLink, BrainCircuit, ChartLine, FolderOpen, Columns2, FlaskConical, Monitor, ShieldCheck, ArrowLeft } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { CenteredLayout } from '../components/CenteredLayout';
 import { Footer } from '../components/Footer';
 
@@ -56,6 +57,9 @@ const FundingBadge = ({ children }) => (
 export const AboutPage = () => {
   return (
     <CenteredLayout>
+      <Link to="/" className="button fixed top-5 left-5 z-50 flex items-center gap-2 px-3 py-1">
+        <ArrowLeft size={16} /> Back
+      </Link>
       <div className="px-5 py-10 max-w-3xl mx-auto w-full">
 
         <Section title="About VIDEPE">
@@ -71,7 +75,7 @@ export const AboutPage = () => {
               rel="noreferrer"
               style={{ color: 'var(--c-primary)' }}
             >
-              Vulliemoz Lab, UNIGE
+              Epilepsy and Brain Networks Lab, UNIGE
             </a>
             .
           </p>

@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
+import { ArrowLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { FullWidthLayout } from '../components/FullWidthLayout';
 import { ThemeToggle } from '../components/ThemeToggle';
@@ -168,27 +170,32 @@ export const PatientView = () => {
     <FullWidthLayout>
       {/* Top bar: title centered in flow; button and toggle are fixed like ThemeToggle */}
       <div className="shrink-0 flex flex-col items-center py-2 border-b border-border">
-        <button
-          type="button"
-          className="button px-3 py-1 fixed top-5 left-5 z-50"
-          onClick={
-            eeg || volumes.length > 0 || pendingEegFiles.length > 0 ? handleReset : handleLoadDemo
-          }
-          disabled={isLoading}
-          title={
-            isDemoloading
-              ? 'Loading demo data…'
+        <div className="fixed top-5 left-5 z-50 flex items-center gap-2">
+          <Link to="/" className="button flex items-center gap-2 px-3 py-1">
+            <ArrowLeft size={16} /> Back
+          </Link>
+          <button
+            type="button"
+            className="button px-3 py-1"
+            onClick={
+              eeg || volumes.length > 0 || pendingEegFiles.length > 0 ? handleReset : handleLoadDemo
+            }
+            disabled={isLoading}
+            title={
+              isDemoloading
+                ? 'Loading demo data…'
+                : eeg || volumes.length > 0 || pendingEegFiles.length > 0
+                  ? 'Reset both viewers'
+                  : 'Load demo data to test VIDEPE without needing your own files'
+            }
+          >
+            {isDemoloading
+              ? 'Loading…'
               : eeg || volumes.length > 0 || pendingEegFiles.length > 0
-                ? 'Reset both viewers'
-                : 'Load demo data to test VIDEPE without needing your own files'
-          }
-        >
-          {isDemoloading
-            ? 'Loading…'
-            : eeg || volumes.length > 0 || pendingEegFiles.length > 0
-              ? 'Reset'
-              : 'Load Demo'}
-        </button>
+                ? 'Reset'
+                : 'Load Demo'}
+          </button>
+        </div>
         <div className="pointer-events-none text-center">
           <h1 className="!mb-3">VIDEPE</h1>
           <p className="text-sm text-foreground/70 py-2">
