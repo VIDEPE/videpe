@@ -12,9 +12,8 @@ export async function loadVolumesAndApplySettings(nv, volumes, layerSettings) {
   layerSettings.forEach((layerSetting, index) => {
     nv.setColormap(nv.volumes[index].id, layerSetting.colormap);
     nv.setOpacity(index, layerSetting.visible ? layerSetting.opacity : 0);
-    if (layerSetting.invert) {
-      nv.volumes[index].colormapInvert = true;
-    }
+    if (layerSetting.invert) nv.volumes[index].colormapInvert = true;
+    nv.volumes[index].colorbarVisible = layerSetting.showColorbar;
   });
   nv.opts.isColorbar = layerSettings.some((layerSetting) => layerSetting.showColorbar);
   nv.updateGLVolume();
@@ -30,7 +29,7 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
   const canvas = useRef();
   const nvRef = useRef();
 
-  const updateSetting = (layerIndex, key, value) => {
+  const handleSettingChange = (layerIndex, key, value) => {
     const nextLayerSettings = layerSettings.map((layerSetting, index) =>
       index === layerIndex ? { ...layerSetting, [key]: value } : layerSetting
     );
@@ -38,6 +37,8 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
 
     if (nvRef.current) {
       const nv = nvRef.current;
+      // Find the corresponding NVVolume for this layer index — we have to do this by URL since layer order can change
+      // Note that due to object referencing changing nVVolume properties updates same properties inside nv for that specific volume
       const nvVolume = nv.volumes.find((nvVol) => nvVol.url === orderedVolumes[layerIndex].url);
       if (!nvVolume) return;
       const nvIndex = nv.volumes.indexOf(nvVolume);
@@ -52,6 +53,7 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
         nvVolume.colormapInvert = value;
         nv.updateGLVolume();
       } else if (key === 'showColorbar') {
+        nvVolume.colorbarVisible = value;
         nv.opts.isColorbar = nextLayerSettings.some((layerSetting) => layerSetting.showColorbar);
         nv.updateGLVolume();
       }
@@ -66,7 +68,7 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
   const handleReorder = (event) => {
     if (!nvRef.current) return; // Guard clause — if NiiVue isn't initialized yet, we can't reorder
 
-    const urls = orderedVolumes.map((volume) => volume.url); // Get the current order of URLs
+    const urls = orderedVolumes.map((volume) => volume.url);  // Get the current order of URLs
     const newUrls = move(urls, event); // Get the new order of URLs based on the drag event
     if (newUrls === urls) return; // no change (canceled or same position)
 
@@ -138,7 +140,7 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
       <ImagingControls
         volumes={orderedVolumes}
         layerSettings={layerSettings}
-        onSettingChange={updateSetting}
+        onSettingChange={handleSettingChange}
         onReorder={handleReorder}
       />
       {/* NiiVue Canvas — fills remaining height */}
