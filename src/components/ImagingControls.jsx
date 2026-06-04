@@ -96,7 +96,7 @@ function SortableSettingsCard({
               step={0.01}
               value={settings.opacity}
               onChange={(e) => onSettingChange(index, 'opacity', parseFloat(e.target.value))}
-              className="flex-1"
+              className="flex-1 cursor-pointer"
               aria-label={`${label} opacity`}
             />
             <span className="w-9 text-right tabular-nums text-foreground">
