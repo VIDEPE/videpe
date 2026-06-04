@@ -447,12 +447,10 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
               </div>
             </div>
           )}
-        </div>
-      </div>
 
-      {/* Gain: shrink/expand the shared y-range (all channels) */}
-      {/* shrink-0 pins the controls at the bottom, never squeezed by the channel area */}
-      <div className="shrink-0 flex flex-wrap justify-center gap-4 py-2">
+          {/* Gain: shrink/expand the shared y-range (all channels) */}
+          {/* shrink-0 pins the controls at the bottom, never squeezed by the channel area */}
+          <div className="shrink-0 flex flex-wrap justify-center gap-4 py-2">
         <div className="flex flex-col items-center gap-0.5">
           <label htmlFor="eeg-gain" className="text-xs text-foreground/60 select-none">
             Gain (µV)
@@ -564,6 +562,8 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
             <button type="button" className="button button-icon" onClick={increaseWindowSize}>
               <Plus size={ICON_SIZE} />
             </button>
+          </div>
+        </div>
           </div>
         </div>
       </div>
