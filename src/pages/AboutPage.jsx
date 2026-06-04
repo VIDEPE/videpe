@@ -92,7 +92,7 @@ export const AboutPage = () => {
 
         <Section title="Features">
           <div className="flex flex-col gap-4">
-            <div className="flex gap-3 p-4 rounded-lg border" style={{ borderColor: 'var(--c-primary)', background: 'var(--c-surface)' }}>
+            <div id="feature-privacy" className="flex gap-3 p-4 rounded-lg border" style={{ borderColor: 'var(--c-primary)', background: 'var(--c-surface)' }}>
               <ShieldCheck size={22} className="shrink-0 mt-0.5" style={{ color: 'var(--c-primary)' }} />
               <div>
                 <p className="font-semibold" style={{ color: 'var(--c-heading)' }}>Privacy-first: 100% local processing</p>
@@ -104,7 +104,7 @@ export const AboutPage = () => {
                 </p>
               </div>
             </div>
-            <div className="flex gap-3">
+            <div id="feature-eeg" className="flex gap-3">
               <ChartLine size={22} className="shrink-0 mt-0.5" style={{ color: 'var(--c-primary)' }} />
               <div>
                 <p className="font-semibold" style={{ color: 'var(--c-heading)' }}>EEG viewer</p>
@@ -115,7 +115,7 @@ export const AboutPage = () => {
                 </p>
               </div>
             </div>
-            <div className="flex gap-3">
+            <div id="feature-neuroimaging" className="flex gap-3">
               <Brain size={22} className="shrink-0 mt-0.5" style={{ color: 'var(--c-primary)' }} />
               <div>
                 <p className="font-semibold" style={{ color: 'var(--c-heading)' }}>Neuroimaging viewer</p>
@@ -126,7 +126,7 @@ export const AboutPage = () => {
                 </p>
               </div>
             </div>
-            <div className="flex gap-3">
+            <div id="feature-demo" className="flex gap-3">
               <FlaskConical size={22} className="shrink-0 mt-0.5" style={{ color: 'var(--c-primary)' }} />
               <div>
                 <p className="font-semibold" style={{ color: 'var(--c-heading)' }}>Built-in demo</p>
@@ -136,7 +136,7 @@ export const AboutPage = () => {
                 </p>
               </div>
             </div>
-            <div className="flex gap-3">
+            <div id="feature-drag-drop" className="flex gap-3">
               <FolderOpen size={22} className="shrink-0 mt-0.5" style={{ color: 'var(--c-primary)' }} />
               <div>
                 <p className="font-semibold" style={{ color: 'var(--c-heading)' }}>Drag &amp; drop file loading</p>
@@ -147,7 +147,7 @@ export const AboutPage = () => {
                 </p>
               </div>
             </div>
-            <div className="flex gap-3">
+            <div id="feature-split-view" className="flex gap-3">
               <Columns2 size={22} className="shrink-0 mt-0.5" style={{ color: 'var(--c-primary)' }} />
               <div>
                 <p className="font-semibold" style={{ color: 'var(--c-heading)' }}>Side-by-side split view</p>
@@ -157,7 +157,7 @@ export const AboutPage = () => {
                 </p>
               </div>
             </div>
-            <div className="flex gap-3">
+            <div id="feature-cross-platform" className="flex gap-3">
               <TabletSmartphone size={22} className="shrink-0 mt-0.5" style={{ color: 'var(--c-primary)' }} />
               <div>
                 <p className="font-semibold" style={{ color: 'var(--c-heading)' }}>Cross-platform</p>
@@ -167,7 +167,7 @@ export const AboutPage = () => {
                 </p>
               </div>
             </div>
-            <div className="flex gap-3">
+            <div id="feature-open-source" className="flex gap-3">
               <CodeXml size={22} className="shrink-0 mt-0.5" style={{ color: 'var(--c-primary)' }} />
               <div>
                 <p className="font-semibold" style={{ color: 'var(--c-heading)' }}>Open source</p>
