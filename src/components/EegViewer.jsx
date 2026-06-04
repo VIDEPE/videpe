@@ -268,7 +268,7 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
       <div className="flex-1 min-h-0 flex flex-row">
         {/* Left sidebar: justify-center now centers against the channel area height only */}
         <div className="shrink-0 flex flex-row items-center gap-1 px-1">
-          <span className="text-xs text-foreground/60 whitespace-nowrap [writing-mode:vertical-rl] rotate-180">
+          <span className="text-xs text-foreground/60 whitespace-nowrap [writing-mode:vertical-rl] rotate-180 select-none pointer-events-none">
             Channels
           </span>
           <div className="flex flex-col items-center gap-1">
@@ -335,7 +335,7 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
                     className="relative"
                   >
                     <span
-                      className="absolute left-0 top-1/2 -translate-y-1/2 text-xs text-center pointer-events-none z-10 px-0.5 truncate"
+                      className="absolute left-0 top-1/2 -translate-y-1/2 text-xs text-center pointer-events-none select-none z-10 px-0.5 truncate"
                       style={{ width: Y_AXIS_WIDTH }}
                     >
                       {name}
@@ -454,7 +454,7 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
       {/* shrink-0 pins the controls at the bottom, never squeezed by the channel area */}
       <div className="shrink-0 flex flex-wrap justify-center gap-4 py-2">
         <div className="flex flex-col items-center gap-0.5">
-          <label htmlFor="eeg-gain" className="text-xs text-foreground/60">
+          <label htmlFor="eeg-gain" className="text-xs text-foreground/60 select-none">
             Gain (µV)
           </label>
           <div className="flex items-center gap-1">
@@ -493,7 +493,7 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
 
         {/* Time Shift: move the x-range forward/backward by a user-defined step */}
         <div className="flex flex-col items-center gap-0.5">
-          <label htmlFor="eeg-time-shift-step" className="text-xs text-foreground/60">
+          <label htmlFor="eeg-time-shift-step" className="text-xs text-foreground/60 select-none">
             Time Shift (s)
           </label>
           <div className="flex items-center gap-1">
@@ -536,7 +536,7 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
 
         {/* Window Size: increase/decrease the total visible x-range */}
         <div className="flex flex-col items-center gap-0.5">
-          <label htmlFor="eeg-window-size" className="text-xs text-foreground/60">
+          <label htmlFor="eeg-window-size" className="text-xs text-foreground/60 select-none">
             Window Size (s)
           </label>
           <div className="flex items-center gap-1">

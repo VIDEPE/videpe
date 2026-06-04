@@ -221,11 +221,11 @@ describe('NiiViewer', () => {
       expect(result.every((layer) => layer.visible)).toBe(true);
     });
 
-    it('first layer is fully opaque, subsequent layers default to 0.7', () => {
+    it('first layer is fully opaque, subsequent layers default to 0.6', () => {
       const result = getInitialLayerSettings([{ type: 'MRI' }, { type: 'PET' }, { type: 'SPECT' }]);
       expect(result[0].opacity).toBe(1.0);
-      expect(result[1].opacity).toBe(0.7);
-      expect(result[2].opacity).toBe(0.7);
+      expect(result[1].opacity).toBe(0.6);
+      expect(result[2].opacity).toBe(0.6);
     });
 
     it('derives colormap from volume type via TYPE_COLORMAP_DEFAULTS', () => {

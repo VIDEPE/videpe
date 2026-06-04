@@ -83,10 +83,10 @@ function SortableSettingsCard({
 
       {/* Expanded controls */}
       {isExpanded && (
-        <div className="border-t border-border px-3 py-1.5 flex flex-col gap-1.5 text-sm">
+        <div className="border-t border-border px-3 py-1.5 flex flex-col gap-1.5 text-xs">
           {/* Opacity */}
           <div className="flex items-center gap-3">
-            <span className="w-20 shrink-0 text-foreground">Opacity</span>
+            <span className="w-20 shrink-0 text-foreground select-none pointer-events-none">Opacity</span>
             <input
               type="range"
               min={0}
@@ -104,11 +104,11 @@ function SortableSettingsCard({
 
           {/* Colormap */}
           <div className="flex items-center gap-3">
-            <span className="w-20 shrink-0 text-foreground">Colormap</span>
+            <span className="w-20 shrink-0 text-foreground select-none pointer-events-none">Colormap</span>
             <select
               value={settings.colormap}
               onChange={(e) => onSettingChange(index, 'colormap', e.target.value)}
-              className="flex-1 bg-surface border border-border rounded px-2 py-0.5 text-heading cursor-pointer"
+              className="flex-1 bg-surface border border-border rounded px-2 py-0.5 text-xs text-heading cursor-pointer"
               aria-label={`${label} colormap`}
             >
               {COLORMAP_OPTIONS.map(({ value, label: optionLabel }) => (
@@ -122,7 +122,7 @@ function SortableSettingsCard({
           <div className="flex flex-row">
             {/* Invert */}
             <div className="w-1/2 flex items-center gap-2.5">
-              <span className="text-foreground">Invert</span>
+              <span className="text-foreground select-none pointer-events-none">Invert</span>
               <ToggleSwitch
                 checked={settings.invert}
                 onChange={(value) => onSettingChange(index, 'invert', value)}
@@ -132,7 +132,7 @@ function SortableSettingsCard({
 
             {/* Show colorbar */}
             <div className="w-1/2 flex items-center gap-2.5">
-              <span className="text-foreground">Colorbar</span>
+              <span className="text-foreground select-none pointer-events-none">Colorbar</span>
               <ToggleSwitch
                 checked={settings.showColorbar}
                 onChange={(value) => onSettingChange(index, 'showColorbar', value)}

@@ -96,9 +96,10 @@ export const SplitPane = ({
   const trafficBtn =
     'inline-flex items-center justify-center w-4 h-4 rounded-full border-none cursor-pointer transition-all text-foreground/50 hover:text-black/70 bg-border';
 
+  // Helper to render the header for each panel, with label and control buttons
   const panelHeader = (label, which, onReset) => (
     <div className="shrink-0 flex items-center justify-between px-3 py-1 border-b border-border bg-surface">
-      <h2 style={{ margin: 0 }}>{label}</h2>
+      <h2 style={{ margin: 0 }} className="select-none pointer-events-none">{label}</h2>
       <div className="flex items-center gap-1.5">
         {!maximized && (
           <button
