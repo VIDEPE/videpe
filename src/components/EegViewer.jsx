@@ -127,9 +127,14 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
     setWindowSizeStr(String(clamped));
     // If the new window size would push the right edge past tMax, pull startTime back
     setStartTime((prev) => Math.max(0, Math.min(prev, tMax - clamped)));
+    // Shift step must never exceed window size — clamp it down if needed
+    if (shiftTimeStepSize > clamped) {
+      setShiftTimeStepSize(clamped);
+      setShiftTimeStepSizeStr(String(clamped));
+    }
   };
   const updateShiftTimeStepSize = (newVal) => {
-    const clamped = Math.max(1, Math.round(newVal * 10) / 10);
+    const clamped = Math.max(1, Math.min(windowSize, Math.round(newVal * 10) / 10));
     setShiftTimeStepSize(clamped);
     setShiftTimeStepSizeStr(String(clamped));
   };
@@ -505,13 +510,15 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
               id="eeg-time-shift-step"
               type="number"
               value={shiftTimeStepSizeStr}
+              min={1}
+              max={windowSize}
               style={{ width: inputWidth(shiftTimeStepSizeStr) }}
               onChange={(e) => {
                 if (e.target.value.length > SHIFT_MAX_LENGTH) return;
                 setShiftTimeStepSizeStr(e.target.value);
                 const val = Number(e.target.value);
                 if (e.target.value !== '' && !isNaN(val))
-                  setShiftTimeStepSize(Math.max(1, Math.round(val * 10) / 10));
+                  setShiftTimeStepSize(Math.max(1, Math.min(windowSize, Math.round(val * 10) / 10)));
               }}
               onBlur={() =>
                 updateShiftTimeStepSize(Number(shiftTimeStepSizeStr) || shiftTimeStepSize)

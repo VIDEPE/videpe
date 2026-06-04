@@ -762,6 +762,53 @@ describe('EegViewer — timeline scrubber', () => {
   });
 });
 
+describe('EegViewer — shift step capped by window size', () => {
+  it('shift step input has max attribute equal to the current window size', () => {
+    renderViewer();
+    const input = screen.getByRole('spinbutton', { name: /shift step/i });
+    // default windowSize = 20
+    expect(input).toHaveAttribute('max', '20');
+  });
+
+  it('shift step clamps to window size on blur when the typed value exceeds it', () => {
+    renderViewer();
+    const input = screen.getByRole('spinbutton', { name: /shift step/i });
+
+    fireEvent.change(input, { target: { value: '25' } }); // 25 > windowSize=20
+    fireEvent.blur(input);
+
+    expect(input).toHaveValue(20);
+  });
+
+  it('decreasing window size clamps an oversized shift step down to the new window size', async () => {
+    const user = userEvent.setup();
+    renderViewer();
+    const shiftInput = screen.getByRole('spinbutton', { name: /shift step/i });
+    const windowInput = screen.getByRole('spinbutton', { name: /window size/i });
+
+    // Set shift step to 15 (valid while window = 20)
+    fireEvent.change(shiftInput, { target: { value: '15' } });
+
+    // Decrease window size from 20 to 10 via the − button (step = 10)
+    const [decreaseWindowBtn] = within(containerOf(windowInput)).getAllByRole('button');
+    await user.click(decreaseWindowBtn);
+
+    expect(shiftInput).toHaveValue(10);
+  });
+
+  it('shift step max attribute updates when window size changes', async () => {
+    const user = userEvent.setup();
+    renderViewer();
+    const shiftInput = screen.getByRole('spinbutton', { name: /shift step/i });
+    const windowInput = screen.getByRole('spinbutton', { name: /window size/i });
+
+    const [decreaseWindowBtn] = within(containerOf(windowInput)).getAllByRole('button');
+    await user.click(decreaseWindowBtn); // 20 → 10
+
+    expect(shiftInput).toHaveAttribute('max', '10');
+  });
+});
+
 describe('EegViewer — time shift clamping', () => {
   // tMax=30, windowSize=20 → valid startTime range is [0, 10]
   const shiftButtons = () => {
