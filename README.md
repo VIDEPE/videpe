@@ -1,5 +1,7 @@
 # VIDEPE
 
+![Version](https://img.shields.io/badge/version-0.4.1-blue)
+
 **V**isualization & **I**ntegration of **D**ata for **E**pilepsy **P**resurgical **E**valuation
 
 A web-based viewer for EEG and neuroimaging data (MRI, PET, SPECT), developed at the [Epilepsy and Brain Networks Lab, UNIGE](https://www.unige.ch/medecine/neucli/groupes-de-recherche/serge-vulliemoz/open-science/videpe2).
