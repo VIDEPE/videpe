@@ -46,16 +46,16 @@ export const LandingPage = () => {
         </button>
       </section>
       <hr></hr>
-      <section id="documentation_section" className="grid grid-cols-1 md:grid-cols-2 mt-4 mb-8">
+      <section id="documentation_section" className="grid grid-cols-1 md:grid-cols-2 gap-y-8 md:gap-y-0 mt-4 mb-8">
         <div id="docs" className="flex flex-col items-center">
           <h2>Documentation</h2>
-          <ul className="list-none p-0 flex flex-col gap-2 mt-4 w-fit mx-auto">
-            <li>
+          <ul className="list-none p-0 flex flex-col gap-2 mt-4 min-w-44 mx-auto">
+            {/* <li>
               <a href={DOCS_URL} className="flex items-center gap-2">
                 <BookMarked size={iconSize} style={{ stroke: 'var(--c-primary)' }} />
                 Wiki (coming soonish)
               </a>
-            </li>
+            </li> */}
             <li>
               <a href={`${GITHUB_URL}#readme`} target="_blank" className="flex items-center gap-2">
                 <BookOpenText size={iconSize} style={{ stroke: 'var(--c-primary)' }} />
@@ -73,7 +73,7 @@ export const LandingPage = () => {
 
         <div id="connect" className="flex flex-col items-center">
           <h2>Connect with us</h2>
-          <ul className="list-none p-0 flex flex-col gap-2 mt-4 w-fit mx-auto">
+          <ul className="list-none p-0 flex flex-col gap-2 mt-4 min-w-44 mx-auto">
             <li>
               <a
                 href={GITHUB_URL}
