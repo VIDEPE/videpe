@@ -19,9 +19,9 @@ const renderPage = () =>
   );
 
 describe('LandingPage', () => {
-  it('renders the logo', () => {
+  it('renders the VIDEPE heading', () => {
     renderPage();
-    expect(screen.getByAltText(/videpe logo/i)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /videpe/i })).toBeInTheDocument();
   });
 
   it('renders the Get Started button', () => {

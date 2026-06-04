@@ -1,9 +1,10 @@
-﻿import { ExternalLink, BrainCircuit, ChartLine, FolderOpen, Columns2, FlaskConical, Monitor, ShieldCheck, ArrowLeft, ArrowUp } from 'lucide-react';
+﻿import { ExternalLink, BrainCircuit, ChartLine, FolderOpen, Columns2, FlaskConical, Monitor, ShieldCheck, ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useScrollToHash } from '@/utils/useScrollToHash';
 import { CenteredLayout } from '../components/CenteredLayout';
 import { Footer } from '../components/Footer';
 import { ThemeToggle } from '../components/ThemeToggle';
+import { ScrollToTopButton } from '../components/ScrollToTopButton';
 
 const NiiVueIcon = ({ size = 20 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -61,20 +62,12 @@ export const AboutPage = () => {
 
   return (
     <CenteredLayout footer={<Footer />}>
-      <button
-        type="button"
-        onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-        className="fixed bottom-6 right-6 z-50 animate-bounce cursor-pointer"
-        style={{ background: 'none', border: 'none', color: 'var(--c-primary)' }}
-        aria-label="Scroll to top"
-      >
-        <ArrowUp size={26} strokeWidth={2.5} />
-      </button>
+      <ScrollToTopButton />
       <ThemeToggle />
       <Link to="/" className="button fixed top-5 left-5 z-50 flex items-center gap-2 px-3 py-1">
         <ArrowLeft size={16} /> Back
       </Link>
-      <div className="px-5 py-10 max-w-3xl mx-auto w-full">
+      <div className="px-5 pt-16 pb-10 max-w-3xl mx-auto w-full">
 
         <Section title="About VIDEPE">
           <p>

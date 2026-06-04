@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { CenteredLayout } from '../components/CenteredLayout';
 import { Footer } from '../components/Footer';
+import { ScrollToTopButton } from '../components/ScrollToTopButton';
 
 // Icons & Logos
 import { Globe, BookMarked, BookOpenText, Info, Users, BrainCircuit } from 'lucide-react';
@@ -30,6 +31,7 @@ export const LandingPage = () => {
   const iconSize = 24;
   return (
     <CenteredLayout footer={<Footer />}>
+      <ScrollToTopButton />
       {/*Theme Toggle Button for switching themes */}
       <ThemeToggle />
 
