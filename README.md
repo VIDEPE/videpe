@@ -4,27 +4,33 @@
 
 A web-based viewer for EEG and neuroimaging data (MRI, PET, SPECT), developed at the [Epilepsy and Brain Networks Lab, UNIGE](https://www.unige.ch/medecine/neucli/groupes-de-recherche/serge-vulliemoz/open-science/videpe2).
 
+> **No installation needed** — just open [videpe.github.io/videpe](https://videpe.github.io/videpe/) in your browser and start exploring.
+
 ## Privacy-first: 100% local processing
 
-All data processing happens entirely in your browser — no files are ever uploaded to a server or sent anywhere remotely. This makes VIDEPE safe to use with sensitive medical data, including patient recordings, without any risk of data leaving your machine.
+All data processing happens entirely in your browser. No files are ever uploaded to a server, sent to a third party, or stored outside your own machine. This makes VIDEPE safe to use with sensitive medical data — including identifiable patient recordings — without any institutional data-sharing agreement or de-identification step.
 
 ## Features
 
-- **EEG viewer** — multichannel time-series plots with synchronized pan/zoom across all channels. Built on [uPlot](https://github.com/leeoniya/uplot).
-  - Adjustable gain, window size, and time-shift step
-  - Interactive timeline scrubber for fast navigation
-  - Configurable number of visible channels
-- **Neuroimaging viewer** — multiplanar + 3D rendering for NIfTI volumes. Built on [NiiVue](https://niivue.com/).
-  - Multi-layer support: load MRI, PET, and SPECT volumes simultaneously
-  - Per-layer controls: opacity, colormap (grayscale, viridis, magma, mako), colormap inversion, colorbar toggle
+- **EEG viewer** — high-performance multichannel viewer built on [uPlot](https://github.com/leeoniya/uplot), optimised for long recordings with many channels. All plots share a single time axis — panning or zooming one channel instantly updates all others.
+  - Adjustable gain (µV scale), window size, and time-shift step
+  - Interactive timeline scrubber for fast navigation across the full recording
+  - Configurable number of simultaneously visible channels
+  - Min-max downsampling keeps rendering fast at any zoom level
+- **Neuroimaging viewer** — full multiplanar and 3D rendering powered by [NiiVue](https://niivue.com/). Load multiple volumes simultaneously and adjust each one independently.
+  - Supports NIfTI (`.nii`, `.nii.gz`), MGH/MGZ, GIFTI, PLY, OBJ
+  - Multi-layer support for MRI, PET, and SPECT in one view
+  - Per-layer opacity, colormap (grayscale, viridis, magma, mako), inversion, and colorbar
   - Drag-to-reorder layers
-  - Adaptive layout: switches to auto layout when maximized, returns to grid when restored
-- **Built-in demo** — load a sample EEG + MRI/PET/SPECT dataset with one click to explore the viewer without your own files.
-- **Drag & drop file loading** — drop EEG or imaging files directly onto the viewer. Multi-file formats (e.g. BrainVision `.vhdr` + `.eeg`) can be dropped together or in separate drops.
-- **Side-by-side split view** — adjustable split between EEG and neuroimaging panels, with maximize, restore, and swap controls.
-- **Dark / Light mode** — OS preference detection with manual override.
-- **Cross-platform** — runs on modern browsers, including mobile devices.
-- **Open source** — licensed under [AGPL-3.0](LICENSE). All derivative works must remain open source. Contributions, bug reports, and feature requests are welcome.
+  - Switches to auto layout when maximised, restores to grid on collapse
+- **Built-in demo** — hit **Load Demo** to instantly load a synthetic EEG recording alongside aligned MRI, PET, and SPECT volumes. No upload, no account, no wait.
+- **Drag & drop file loading** — drop files directly onto either viewer panel. VIDEPE detects the format automatically and guides you when multiple files are required.
+  - EEG: BrainVision (`.vhdr` + `.eeg`) — drop both together or one at a time
+  - Volumes: NIfTI, MGH/MGZ, GIFTI, PLY, OBJ
+  - Drop multiple imaging files at once to load them as separate layers
+- **Side-by-side split view** — EEG and neuroimaging panels with a draggable divider. Each panel can be independently maximised, restored, or reset, and the two panels can be swapped without reloading any data.
+- **Cross-platform** — runs entirely in the browser, no installation or plugins required. Works on modern desktop and mobile browsers. Dark/light mode follows OS preference, with a manual toggle always available.
+- **Open source** — licensed under [AGPL-3.0](LICENSE). The source code is publicly available on [GitHub](https://github.com/VIDEPE/videpe). All derivative works must remain open source. Bug reports, feature requests, and pull requests are welcome.
 
 ## Supported formats
 
@@ -43,6 +49,10 @@ All data processing happens entirely in your browser — no files are ever uploa
 | EEG plots    | uPlot + uplot-react                           |
 | Neuroimaging | NiiVue                                        |
 | Testing      | Vitest + React Testing Library                |
+
+## Prerequisites
+
+VIDEPE uses [npm](https://www.npmjs.com/) to manage dependencies. npm is bundled with [Node.js](https://nodejs.org/en/download) — installing Node.js is all you need.
 
 ## Getting started
 
