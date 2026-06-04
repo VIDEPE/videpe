@@ -60,7 +60,7 @@ export const AboutPage = () => {
   useScrollToHash();
 
   return (
-    <CenteredLayout>
+    <CenteredLayout footer={<Footer />}>
       <button
         type="button"
         onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
@@ -264,7 +264,6 @@ export const AboutPage = () => {
         </Section>
 
       </div>
-      <Footer />
     </CenteredLayout>
   );
 };
