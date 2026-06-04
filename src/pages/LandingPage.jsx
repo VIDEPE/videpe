@@ -105,12 +105,13 @@ export const LandingPage = () => {
       <section id="hero" className="flex flex-col items-center justify-center gap-10 px-5 py-10">
         <div className="flex flex-col items-center gap-2 select-none pointer-events-none">
           <BrainCircuit
-            size={300}
+            size={220}
             strokeWidth={1}
             style={{ stroke: 'var(--c-primary)' }}
           />
           <h1 className="!mb-0 !text-6xl tracking-widest">VIDEPE</h1>
           <p className="text-lg text-foreground/60 tracking-wide text-center">Unifying Brain Data for Epilepsy Surgery</p>
+          <span className="text-xs text-foreground/40 border border-border/60 rounded-full px-2 py-0.5 mt-1">In Development</span>
         </div>
         {/* Features grid with icons, labels and descriptions */}
         <div ref={featuresRef} className="grid grid-cols-[repeat(2,9rem)] sm:grid-cols-[repeat(4,9rem)] gap-3">

@@ -12,8 +12,8 @@ const NiiVueIcon = ({ size = 20 }) => (
   </svg>
 );
 
-const Section = ({ title, id, children }) => (
-  <section id={id} className="mb-10">
+const Section = ({ title, id, className, children }) => (
+  <section id={id} className={`mb-10 ${className ?? ''}`}>
     <h2 className="mb-4">{title}</h2>
     {children}
   </section>
@@ -69,7 +69,7 @@ export const AboutPage = () => {
       </Link>
       <div className="px-5 pt-16 pb-10 max-w-3xl mx-auto w-full">
 
-        <Section title="About VIDEPE">
+        <Section title="About VIDEPE" className="!mb-2">
           <p>
             <strong>VIDEPE</strong> —{' '}
             <strong>V</strong>isualization &amp; <strong>I</strong>ntegration of <strong>D</strong>ata
@@ -85,6 +85,11 @@ export const AboutPage = () => {
               Epilepsy and Brain Networks Lab, UNIGE
             </a>
             .
+          </p>
+          <hr className="mt-4 mb-3" />
+          <p className="text-sm" style={{ color: 'var(--c-alert)', opacity: 0.7 }}>
+            VIDEPE is currently under active development. Features and interfaces may change, and
+            some functionality may be incomplete or subject to revision.
           </p>
         </Section>
 

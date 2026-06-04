@@ -205,6 +205,7 @@ export const PatientView = () => {
             <span className="font-bold">E</span>pilepsy <span className="font-bold">P</span>
             resurgical <span className="font-bold">E</span>valuation
           </p>
+          <span className="text-xs text-foreground/40 border border-border/60 rounded-full px-2 py-0.5">In Development</span>
         </div>
         <ThemeToggle />
       </div>

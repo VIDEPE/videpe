@@ -6,6 +6,8 @@ A web-based viewer for EEG and neuroimaging data (MRI, PET, SPECT), developed at
 
 > **No installation needed** — just open [videpe.github.io/videpe](https://videpe.github.io/videpe/) in your browser and start exploring.
 
+> **Note:** VIDEPE is currently under active development. Features and interfaces may change, and some functionality may be incomplete or subject to revision.
+
 ## Privacy-first: 100% local processing
 
 All data processing happens entirely in your browser. No files are ever uploaded to a server, sent to a third party, or stored outside your own machine. This makes VIDEPE safe to use with sensitive medical data — including identifiable patient recordings — without any institutional data-sharing agreement or de-identification step.
