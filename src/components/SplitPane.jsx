@@ -192,7 +192,7 @@ export const SplitPane = ({
         style={leftStyle}
       >
         {panelHeader(leftLabel, 'left', onLeftReset)}
-        <div className="flex-1 min-h-0">{left}</div>
+        <div className="flex-1 min-h-0 overflow-y-auto">{left}</div>
       </div>
 
       {/* Divider — always visually between the two panels (order:2).
@@ -225,7 +225,7 @@ export const SplitPane = ({
         style={rightStyle}
       >
         {panelHeader(rightLabel, 'right', onRightReset)}
-        <div className="flex-1 min-h-0">{right}</div>
+        <div className="flex-1 min-h-0 overflow-y-auto themed-scrollbar">{right}</div>
       </div>
     </div>
   );

@@ -40,7 +40,7 @@ function SortableSettingsCard({
   return (
     <div
       ref={ref}
-      className={`rounded border border-border bg-surface transition-opacity ${isDragging ? 'opacity-60' : ''}`}
+      className={`min-w-0 rounded border border-border bg-surface transition-opacity ${isDragging ? 'opacity-60' : ''}`}
     >
       {/* Always-visible header row */}
       <div className="flex items-center gap-1.5 px-2 py-1">
@@ -85,7 +85,7 @@ function SortableSettingsCard({
 
       {/* Expanded controls */}
       {isExpanded && (
-        <div className="border-t border-border px-3 py-1.5 flex flex-col gap-1.5 text-xs">
+        <div className="border-t border-border px-3 py-1.5 flex flex-col gap-1.5 text-xs overflow-hidden">
           {/* Opacity */}
           <div className="flex items-center gap-3">
             <span className="w-20 shrink-0 text-foreground select-none pointer-events-none">Opacity</span>
@@ -96,7 +96,7 @@ function SortableSettingsCard({
               step={0.01}
               value={settings.opacity}
               onChange={(e) => onSettingChange(index, 'opacity', parseFloat(e.target.value))}
-              className="flex-1 cursor-pointer"
+              className="flex-1 min-w-0 cursor-pointer"
               aria-label={`${label} opacity`}
             />
             <span className="w-9 text-right tabular-nums text-foreground">
@@ -110,7 +110,7 @@ function SortableSettingsCard({
             <select
               value={settings.colormap}
               onChange={(e) => onSettingChange(index, 'colormap', e.target.value)}
-              className="flex-1 bg-surface border border-border rounded px-2 py-0.5 text-xs text-heading cursor-pointer"
+              className="flex-1 min-w-0 bg-surface border border-border rounded px-2 py-0.5 text-xs text-heading cursor-pointer"
               aria-label={`${label} colormap`}
             >
               {COLORMAP_OPTIONS.map(({ value, label: optionLabel }) => (
