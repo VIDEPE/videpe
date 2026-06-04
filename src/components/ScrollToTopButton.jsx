@@ -16,7 +16,7 @@ export const ScrollToTopButton = ({ threshold = 200 }) => {
     <button
       type="button"
       onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-      className="fixed bottom-6 right-6 z-50 animate-bounce cursor-pointer"
+      className="fixed bottom-3 right-6 z-50 animate-bounce cursor-pointer"
       style={{ background: 'none', border: 'none', color: 'var(--c-primary)' }}
       aria-label="Scroll to top"
     >
