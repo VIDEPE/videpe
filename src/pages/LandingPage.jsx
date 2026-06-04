@@ -1,11 +1,13 @@
-﻿import { useNavigate } from 'react-router-dom';
+import { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Link } from 'react-router-dom';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { CenteredLayout } from '../components/CenteredLayout';
 import { Footer } from '../components/Footer';
+import { ScrollToTopButton } from '../components/ScrollToTopButton';
 
 // Icons & Logos
-import { Globe, BookMarked, BookOpenText, Info } from 'lucide-react';
+import { BrainCircuit, Globe, BookMarked, BookOpenText, Info, Users, Brain, ShieldCheck, ChartLine, FolderOpen, Columns2, FlaskConical, TabletSmartphone, CodeXml } from 'lucide-react';
 const GithubIcon = ({ size = 24, ...props }) => (
   <svg
     width={size}
@@ -18,7 +20,57 @@ const GithubIcon = ({ size = 24, ...props }) => (
     <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" />
   </svg>
 );
-import logo from '../assets/logo.svg';
+
+const FEATURES = [
+  {
+    icon: ShieldCheck,
+    label: 'Privacy-first',
+    description: 'Your patient data stays on your machine — nothing is uploaded or sent anywhere, ever.',
+    anchor: '#feature-privacy',
+  },
+  {
+    icon: ChartLine,
+    label: 'EEG Viewer',
+    description: 'Scroll through hundreds of channels with synchronized zoom and a scrubber that snaps to any moment.',
+    anchor: '#feature-eeg',
+  },
+  {
+    icon: Brain,
+    label: 'Neuroimaging',
+    description: 'Overlay MRI, PET, and SPECT in full 3D and fine-tune each layer — opacity, colormap, order.',
+    anchor: '#feature-neuroimaging',
+  },
+  {
+    icon: FlaskConical,
+    label: 'Built-in Demo',
+    description: <>Curious?<br />Try a full EEG + MRI/PET/SPECT dataset in one click — no files of your own needed.</>,
+    anchor: '#feature-demo',
+  },
+  {
+    icon: FolderOpen,
+    label: 'Drag & Drop',
+    description: 'Just drop your files onto the viewer — VIDEPE figures out the format automatically.',
+    anchor: '#feature-drag-drop',
+  },
+  {
+    icon: Columns2,
+    label: 'Split View',
+    description: 'View EEG alongside neuroimaging, go full-screen, or swap sides — all in one click.',
+    anchor: '#feature-split-view',
+  },
+  {
+    icon: TabletSmartphone,
+    label: 'Cross-Platform',
+    description: 'Works on any modern browser — desktop or mobile — in dark or light mode.',
+    anchor: '#feature-cross-platform',
+  },
+  {
+    icon: CodeXml,
+    label: 'Open Source',
+    description: 'Built in the open under AGPL-3.0 — inspect the code, contribute, or build on top of it.',
+    anchor: '#feature-open-source',
+  },
+];
 
 // Links"
 const GITHUB_URL = 'https://github.com/VIDEPE/videpe'; // Link to github page
@@ -29,32 +81,106 @@ const DOCS_URL = '#'; // TODO: add when available
 export const LandingPage = () => {
   const navigate = useNavigate();
   const iconSize = 24;
+  const [expandedLabel, setExpandedLabel] = useState(null);
+  const featuresRef = useRef(null);
+
+  useEffect(() => {
+    const handleClick = (e) => {
+      if (window.matchMedia('(hover: hover)').matches) return;
+      if (featuresRef.current && !featuresRef.current.contains(e.target))
+        setExpandedLabel(null);
+    };
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, []);
+
   return (
-    <CenteredLayout>
-      {/*Theme Toggle Button for switching themes */}
-      <ThemeToggle />
+    <CenteredLayout footer={<Footer />}>
+      <ScrollToTopButton />
+      {/* Theme toggle — normal page flow, sits at top-right and scrolls out of view as the page scrolls down */}
+      <div className="flex justify-end px-5 pt-5">
+        <ThemeToggle className="" />
+      </div>
 
       {/*Landing Page main body */}
-      <section id="hero" className="flex flex-col items-center justify-center gap-8 px-5 py-10">
-        <img src={logo} alt="VIDEPE logo" className="w-120 app-logo" />
+      {/* Hero section with logo, title, subtitle and call to action button */}
+      <section id="hero" className="flex flex-col items-center justify-center gap-10 px-5 py-10">
+        <div className="flex flex-col items-center gap-2 select-none pointer-events-none">
+          <BrainCircuit
+            size={220}
+            strokeWidth={1}
+            style={{ stroke: 'var(--c-primary)' }}
+          />
+          <h1 className="!mb-0 !text-6xl tracking-widest">VIDEPE</h1>
+          <p className="text-lg text-foreground/60 tracking-wide text-center">Unifying Brain Data for Epilepsy Surgery</p>
+          <span className="text-xs text-foreground/40 border border-border/60 rounded-full px-2 py-0.5 mt-1">In Development</span>
+        </div>
+        {/* Features grid with icons, labels and descriptions */}
+        <div ref={featuresRef} className="grid grid-cols-[repeat(2,9rem)] sm:grid-cols-[repeat(4,9rem)] gap-3">
+          {FEATURES.map(({ icon: Icon, label, description, anchor }) => {
+            const isExpanded = expandedLabel === label;
+            return (
+              <div
+                key={label}
+                className={`relative group ${isExpanded ? 'z-30' : 'z-0 hover:z-20'}`}
+                onClick={() => {
+                  if (!window.matchMedia('(hover: hover)').matches)
+                    setExpandedLabel(isExpanded ? null : label);
+                }}
+              >
+                {/* Static card — always visible, holds grid space */}
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-surface cursor-pointer">
+                  <Icon size={18} strokeWidth={1.5} style={{ stroke: 'var(--c-primary)' }} />
+                  <span className="text-xs font-medium text-heading select-none">{label}</span>
+                </div>
+                {/* Expanded overlay — fades in on hover or tap, overlays cards below */}
+                <div className={`absolute top-0 left-0 right-0 z-10 rounded-lg border border-primary bg-surface px-3 py-2 shadow-md transition-opacity duration-150 ${isExpanded ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                  <div className="flex items-center gap-2">
+                    <Icon size={18} strokeWidth={1.5} style={{ stroke: 'var(--c-primary)' }} />
+                    <span className="text-xs font-medium text-heading select-none">{label}</span>
+                  </div>
+                  <div className={`overflow-hidden transition-all duration-300 ease-out ${isExpanded ? 'max-h-40' : 'max-h-0 group-hover:max-h-40'}`}>
+                    <p className="pt-3 text-xs text-foreground">{description}</p>
+                    <Link
+                      to={`/about${anchor}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="inline-block mt-2 text-xs text-primary hover:underline"
+                    >
+                      Learn more →
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
         <button
           type="button"
-          className="button-lg w-40 flex justify-center text"
+          className="button-lg w-48 flex justify-center text"
           onClick={() => navigate('/patient-view')}
         >
           Get Started
         </button>
       </section>
       <hr></hr>
-      <section id="documentation_section" className="grid grid-cols-1 md:grid-cols-2 mt-4 mb-8">
+      {/* Documentation and Connect sections side by side on desktop, stacked on mobile */}
+      <section id="documentation_section" className="relative z-20 grid grid-cols-1 sm:grid-cols-2 gap-y-8 sm:gap-y-0 mt-4 mb-8">
+        {/* Learn more links with icons */}
         <div id="docs" className="flex flex-col items-center">
-          <h2>Documentation</h2>
-          <ul className="list-none p-0 flex flex-col gap-2 mt-4 w-fit mx-auto">
-            <li>
+          <h2>Learn more</h2>
+          <ul className="list-none p-0 flex flex-col items-start gap-2 mt-4 w-fit mx-auto">
+            {/* <li>
               <a href={DOCS_URL} className="flex items-center gap-2">
                 <BookMarked size={iconSize} style={{ stroke: 'var(--c-primary)' }} />
                 Wiki (coming soonish)
               </a>
+            </li> */}
+            <li>
+              <Link to="/about#about-videpe" className="flex items-center gap-2">
+                <Info size={iconSize} style={{ stroke: 'var(--c-primary)' }} />
+                About
+              </Link>
             </li>
             <li>
               <a href={`${GITHUB_URL}#readme`} target="_blank" className="flex items-center gap-2">
@@ -62,18 +188,19 @@ export const LandingPage = () => {
                 README
               </a>
             </li>
-            <li>
-              <Link to="/about" className="flex items-center gap-2">
-                <Info size={iconSize} style={{ stroke: 'var(--c-primary)' }} />
-                About
-              </Link>
-            </li>
           </ul>
         </div>
 
+       {/* Connect section with links to team page, github and UNIGE */}
         <div id="connect" className="flex flex-col items-center">
           <h2>Connect with us</h2>
-          <ul className="list-none p-0 flex flex-col gap-2 mt-4 w-fit mx-auto">
+          <ul className="list-none p-0 flex flex-col items-start gap-2 mt-4 w-fit mx-auto">
+            <li>
+              <Link to="/about#team" className="flex items-center gap-2">
+                <Users size={iconSize} style={{ stroke: 'var(--c-primary)' }} />
+                Team
+              </Link>
+            </li>
             <li>
               <a
                 href={GITHUB_URL}
@@ -106,8 +233,7 @@ export const LandingPage = () => {
           </ul>
         </div>
       </section>
-      {/*Footer with copyright and scroll to top button */}
-      <Footer />
+
     </CenteredLayout>
   );
 };

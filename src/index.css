@@ -9,7 +9,7 @@
   --c-border: rgb(185, 185, 185); /* borders, dividers */
   --c-primary: rgb(84, 127, 219); /* brand / accent color */
   --c-secondary: rgb(25, 92, 236); /* outlines */
-  --c-alert: rgb(240, 107, 20); /* warning messages, nondestructive actions */
+  --c-alert: rgb(250, 111, 18); /* warning messages, nondestructive actions */
   --c-shadow:
     rgba(0, 0, 0, 0.4) 0 6px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 8px -2px; /* box shadows */
 
@@ -39,7 +39,7 @@
   --c-border: rgba(46, 48, 58, 1); /* borders, dividers */
   --c-primary: rgba(132, 204, 252, 1); /* brand / accent color */
   --c-secondary: rgb(16, 56, 199); /* outlines */
-  --c-alert: rgb(235, 107, 20); /* warning messages, nondestructive actions */
+  --c-alert: rgb(250, 111, 18); /* warning messages, nondestructive actions */
   --c-shadow:
     rgba(255, 255, 255, 0.4) 0 6px 15px -3px, rgba(255, 255, 255, 0.25) 0 4px 8px -2px; /* box shadows color x y blur spread*/
 }
@@ -60,6 +60,12 @@
 
 body {
   margin: 0;
+}
+
+/* Minimum content width — browser window can be any size, but content never shrinks below this.
+   Set on #root (not body) so the browser window itself is not constrained; the scrollbar handles the overflow. */
+#root {
+  min-width: 400px;
 }
 
 .themed-scrollbar {
@@ -197,15 +203,35 @@ code {
     box-shadow: none;
   }
 
-  &[aria-pressed="true"] {
+  &[aria-pressed='true'] {
     background: var(--color-background);
     color: var(--color-primary);
   }
 
-  &[aria-expanded="false"] {
+  &[aria-expanded='false'] {
     background: var(--color-background);
     color: var(--color-primary);
   }
+}
+
+/* ============================================
+   uPlot overrides
+   ============================================ */
+
+/* uPlot's default drag-selection uses rgba(0,0,0,0.07) — invisible on dark backgrounds */
+.dark .u-select {
+  background: color-mix(
+    in srgb,
+    var(--c-primary) 7%,
+    transparent
+  ); /* a semi-transparent version of the primary color for better visibility on dark mode */
+}
+.light .u-select {
+  background: color-mix(
+    in srgb,
+    var(--c-primary) 7%,
+    transparent
+  ); /* a semi-transparent version of the primary color for better visibility on dark mode */
 }
 
 /* ============================================

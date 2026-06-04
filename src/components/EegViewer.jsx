@@ -47,7 +47,7 @@ const buildChannelOptions = ({
     height,
     background: 'rgba(0,0,0,0)', // transparent so peaks from adjacent channels show through
     // All plots share the same syncKey — panning/zooming one moves all others
-    cursor: { sync: { key: syncKey } },
+    cursor: { y: false, sync: { key: syncKey } },
     scales: {
       x: { time: false, range: [startTime, startTime + windowSize] },
       // y-range is extended by OVERDRAW so the center plotHeight pixels show ±yScale,
@@ -94,7 +94,7 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
   const SHIFT_MAX_LENGTH = 6; // covers up to 9999.9 s
   const GAIN_MAX_LENGTH = 5; // covers up to 99999 µV
   const GAIN_MAX = 10 ** GAIN_MAX_LENGTH - 1; // 99999 — derived from GAIN_MAX_LENGTH so both stay in sync
-  
+
   const defaultWindowSize = tMax < 20 ? Math.ceil(tMax) : 20; // default to showing the full recording if it's shorter than 20s, otherwise start with a 20s window
   const [windowSize, setWindowSize] = useState(defaultWindowSize); // seconds visible in the x-range, initialized to 20s or the full recording if shorter
   const [windowSizeStr, setWindowSizeStr] = useState(String(defaultWindowSize));
@@ -127,9 +127,14 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
     setWindowSizeStr(String(clamped));
     // If the new window size would push the right edge past tMax, pull startTime back
     setStartTime((prev) => Math.max(0, Math.min(prev, tMax - clamped)));
+    // Shift step must never exceed window size — clamp it down if needed
+    if (shiftTimeStepSize > clamped) {
+      setShiftTimeStepSize(clamped);
+      setShiftTimeStepSizeStr(String(clamped));
+    }
   };
   const updateShiftTimeStepSize = (newVal) => {
-    const clamped = Math.max(1, Math.round(newVal * 10) / 10);
+    const clamped = Math.max(1, Math.min(windowSize, Math.round(newVal * 10) / 10));
     setShiftTimeStepSize(clamped);
     setShiftTimeStepSizeStr(String(clamped));
   };
@@ -268,16 +273,17 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
       <div className="flex-1 min-h-0 flex flex-row">
         {/* Left sidebar: justify-center now centers against the channel area height only */}
         <div className="shrink-0 flex flex-row items-center gap-1 px-1">
-          <span className="text-xs text-foreground/60 whitespace-nowrap [writing-mode:vertical-rl] rotate-180">
+          <span className="text-xs text-foreground/60 whitespace-nowrap [writing-mode:vertical-rl] rotate-180 select-none pointer-events-none">
             Channels
           </span>
           <div className="flex flex-col items-center gap-1">
             <button
               type="button"
               className="button button-icon"
-              onClick={() => updateVisibleChannelCount(visibleChannelCount - 1)}
+              onClick={() => updateVisibleChannelCount(visibleChannelCount + 1)}
+              title="Show more channels"
             >
-              <ListChevronsDownUp size={ICON_SIZE} />
+              <ListChevronsUpDown size={ICON_SIZE} />
             </button>
             <input
               id="eeg-visible-channels"
@@ -302,9 +308,10 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
             <button
               type="button"
               className="button button-icon"
-              onClick={() => updateVisibleChannelCount(visibleChannelCount + 1)}
+              onClick={() => updateVisibleChannelCount(visibleChannelCount - 1)}
+              title="Show fewer channels"
             >
-              <ListChevronsUpDown size={ICON_SIZE} />
+              <ListChevronsDownUp size={ICON_SIZE} />
             </button>
           </div>
         </div>
@@ -335,7 +342,7 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
                     className="relative"
                   >
                     <span
-                      className="absolute left-0 top-1/2 -translate-y-1/2 text-xs text-center pointer-events-none z-10 px-0.5 truncate"
+                      className="absolute left-0 top-1/2 -translate-y-1/2 text-xs text-center pointer-events-none select-none z-10 px-0.5 truncate"
                       style={{ width: Y_AXIS_WIDTH }}
                     >
                       {name}
@@ -432,14 +439,14 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
                   {/* Left resize handle — secondary-coloured line extending above and below the thumb */}
                   <div
                     data-testid="timeline-resize-left"
-                    className="absolute left-0 w-0.5 cursor-ew-resize"
+                    className="absolute left-0 w-0.75 cursor-ew-resize"
                     style={{ top: '-4px', bottom: '-4px', backgroundColor: 'var(--c-secondary)' }}
                     onMouseDown={(e) => startDrag(e, 'resize-left')}
                   />
                   {/* Right resize handle */}
                   <div
                     data-testid="timeline-resize-right"
-                    className="absolute right-0 w-0.5 cursor-ew-resize"
+                    className="absolute right-0 w-0.75 cursor-ew-resize"
                     style={{ top: '-4px', bottom: '-4px', backgroundColor: 'var(--c-secondary)' }}
                     onMouseDown={(e) => startDrag(e, 'resize-right')}
                   />
@@ -447,14 +454,12 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
               </div>
             </div>
           )}
-        </div>
-      </div>
 
-      {/* Gain: shrink/expand the shared y-range (all channels) */}
-      {/* shrink-0 pins the controls at the bottom, never squeezed by the channel area */}
-      <div className="shrink-0 flex flex-wrap justify-center gap-4 py-2">
+          {/* Gain: shrink/expand the shared y-range (all channels) */}
+          {/* shrink-0 pins the controls at the bottom, never squeezed by the channel area */}
+          <div className="shrink-0 flex flex-wrap justify-center gap-4 py-2">
         <div className="flex flex-col items-center gap-0.5">
-          <label htmlFor="eeg-gain" className="text-xs text-foreground/60">
+          <label htmlFor="eeg-gain" className="text-xs text-foreground/60 select-none">
             Gain (µV)
           </label>
           <div className="flex items-center gap-1">
@@ -462,6 +467,7 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
               type="button"
               className="button button-icon"
               onClick={() => updateYScale(yScale * 2)}
+              title="Zoom out"
             >
               <ZoomOut size={ICON_SIZE} />
             </button>
@@ -485,6 +491,7 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
               type="button"
               className="button button-icon"
               onClick={() => updateYScale(yScale / 2)}
+              title="Zoom in"
             >
               <ZoomIn size={ICON_SIZE} />
             </button>
@@ -493,27 +500,29 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
 
         {/* Time Shift: move the x-range forward/backward by a user-defined step */}
         <div className="flex flex-col items-center gap-0.5">
-          <label htmlFor="eeg-time-shift-step" className="text-xs text-foreground/60">
+          <label htmlFor="eeg-time-shift-step" className="text-xs text-foreground/60 select-none">
             Time Shift (s)
           </label>
           <div className="flex items-center gap-1">
-            <button type="button" className="button button-icon" onClick={() => setStartTime(0)}>
+            <button type="button" className="button button-icon" onClick={() => setStartTime(0)} title="Jump to start">
               <ChevronFirst size={15} />
             </button>
-            <button type="button" className="button button-icon" onClick={backwardshiftStartTime}>
+            <button type="button" className="button button-icon" onClick={backwardshiftStartTime} title="Shift backward">
               <ChevronLeft size={ICON_SIZE} />
             </button>
             <input
               id="eeg-time-shift-step"
               type="number"
               value={shiftTimeStepSizeStr}
+              min={1}
+              max={windowSize}
               style={{ width: inputWidth(shiftTimeStepSizeStr) }}
               onChange={(e) => {
                 if (e.target.value.length > SHIFT_MAX_LENGTH) return;
                 setShiftTimeStepSizeStr(e.target.value);
                 const val = Number(e.target.value);
                 if (e.target.value !== '' && !isNaN(val))
-                  setShiftTimeStepSize(Math.max(1, Math.round(val * 10) / 10));
+                  setShiftTimeStepSize(Math.max(1, Math.min(windowSize, Math.round(val * 10) / 10)));
               }}
               onBlur={() =>
                 updateShiftTimeStepSize(Number(shiftTimeStepSizeStr) || shiftTimeStepSize)
@@ -521,13 +530,14 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
               className="text-center border border-border rounded px-1 py-0.5 text-sm bg-background text-foreground [appearance:textfield]"
               aria-label="Time shift step (s)"
             />
-            <button type="button" className="button button-icon" onClick={forwardshiftStartTime}>
+            <button type="button" className="button button-icon" onClick={forwardshiftStartTime} title="Shift forward">
               <ChevronRight size={ICON_SIZE} />
             </button>
             <button
               type="button"
               className="button button-icon"
               onClick={() => setStartTime(data[0][data[0].length - 1] - windowSize)}
+              title="Jump to end"
             >
               <ChevronLast size={15} />
             </button>
@@ -536,11 +546,11 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
 
         {/* Window Size: increase/decrease the total visible x-range */}
         <div className="flex flex-col items-center gap-0.5">
-          <label htmlFor="eeg-window-size" className="text-xs text-foreground/60">
+          <label htmlFor="eeg-window-size" className="text-xs text-foreground/60 select-none">
             Window Size (s)
           </label>
           <div className="flex items-center gap-1">
-            <button type="button" className="button button-icon" onClick={decreaseWindowSize}>
+            <button type="button" className="button button-icon" onClick={decreaseWindowSize} title="Decrease window size">
               <Minus size={ICON_SIZE} />
             </button>
             <input
@@ -561,9 +571,11 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
               className="text-center border border-border rounded px-1 py-0.5 text-sm bg-background text-foreground [appearance:textfield]"
               aria-label="Window size (s)"
             />
-            <button type="button" className="button button-icon" onClick={increaseWindowSize}>
+            <button type="button" className="button button-icon" onClick={increaseWindowSize} title="Increase window size">
               <Plus size={ICON_SIZE} />
             </button>
+          </div>
+        </div>
           </div>
         </div>
       </div>

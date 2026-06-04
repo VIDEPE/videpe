@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { getInitialLayerSettings, detectVolumeType } from '@/components/NiiViewer.utils';
 import { NiiViewer, loadVolumesAndApplySettings } from '@/components/NiiViewer';
 
@@ -65,7 +66,10 @@ describe('loadVolumesAndApplySettings', () => {
 
   it('sets colormap for each volume after loading', async () => {
     const volumes = [makeVolume('/mri.nii', 'id-mri'), makeVolume('/pet.nii', 'id-pet')];
-    const settings = [makeLayerSetting({ colormap: 'gray' }), makeLayerSetting({ colormap: 'viridis' })];
+    const settings = [
+      makeLayerSetting({ colormap: 'gray' }),
+      makeLayerSetting({ colormap: 'viridis' }),
+    ];
     await loadVolumesAndApplySettings(nv, volumes, settings);
     expect(nv.setColormap).toHaveBeenCalledWith('id-mri', 'gray');
     expect(nv.setColormap).toHaveBeenCalledWith('id-pet', 'viridis');
@@ -73,13 +77,17 @@ describe('loadVolumesAndApplySettings', () => {
 
   it('sets full opacity for a visible volume', async () => {
     const volumes = [makeVolume('/mri.nii', 'id-mri')];
-    await loadVolumesAndApplySettings(nv, volumes, [makeLayerSetting({ visible: true, opacity: 0.7 })]);
+    await loadVolumesAndApplySettings(nv, volumes, [
+      makeLayerSetting({ visible: true, opacity: 0.7 }),
+    ]);
     expect(nv.setOpacity).toHaveBeenCalledWith(0, 0.7);
   });
 
   it('sets opacity to 0 for a hidden volume regardless of its opacity value', async () => {
     const volumes = [makeVolume('/mri.nii', 'id-mri')];
-    await loadVolumesAndApplySettings(nv, volumes, [makeLayerSetting({ visible: false, opacity: 0.8 })]);
+    await loadVolumesAndApplySettings(nv, volumes, [
+      makeLayerSetting({ visible: false, opacity: 0.8 }),
+    ]);
     expect(nv.setOpacity).toHaveBeenCalledWith(0, 0);
   });
 
@@ -95,9 +103,35 @@ describe('loadVolumesAndApplySettings', () => {
     expect(nv.volumes[0].colormapInvert).toBeUndefined();
   });
 
+  it('sets colorbarVisible to true on a volume with showColorbar true', async () => {
+    const volumes = [makeVolume('/mri.nii', 'id-mri')];
+    await loadVolumesAndApplySettings(nv, volumes, [makeLayerSetting({ showColorbar: true })]);
+    expect(nv.volumes[0].colorbarVisible).toBe(true);
+  });
+
+  it('sets colorbarVisible to false on a volume with showColorbar false', async () => {
+    const volumes = [makeVolume('/mri.nii', 'id-mri')];
+    await loadVolumesAndApplySettings(nv, volumes, [makeLayerSetting({ showColorbar: false })]);
+    expect(nv.volumes[0].colorbarVisible).toBe(false);
+  });
+
+  it('sets colorbarVisible independently per volume', async () => {
+    const volumes = [makeVolume('/mri.nii', 'id-mri'), makeVolume('/pet.nii', 'id-pet')];
+    const settings = [
+      makeLayerSetting({ showColorbar: true }),
+      makeLayerSetting({ showColorbar: false }),
+    ];
+    await loadVolumesAndApplySettings(nv, volumes, settings);
+    expect(nv.volumes[0].colorbarVisible).toBe(true);
+    expect(nv.volumes[1].colorbarVisible).toBe(false);
+  });
+
   it('sets isColorbar to true when any layer has showColorbar', async () => {
     const volumes = [makeVolume('/mri.nii', 'id-mri'), makeVolume('/pet.nii', 'id-pet')];
-    const settings = [makeLayerSetting({ showColorbar: false }), makeLayerSetting({ showColorbar: true })];
+    const settings = [
+      makeLayerSetting({ showColorbar: false }),
+      makeLayerSetting({ showColorbar: true }),
+    ];
     await loadVolumesAndApplySettings(nv, volumes, settings);
     expect(nv.opts.isColorbar).toBe(true);
   });
@@ -187,11 +221,11 @@ describe('NiiViewer', () => {
       expect(result.every((layer) => layer.visible)).toBe(true);
     });
 
-    it('first layer is fully opaque, subsequent layers default to 0.7', () => {
+    it('first layer is fully opaque, subsequent layers default to 0.6', () => {
       const result = getInitialLayerSettings([{ type: 'MRI' }, { type: 'PET' }, { type: 'SPECT' }]);
       expect(result[0].opacity).toBe(1.0);
-      expect(result[1].opacity).toBe(0.7);
-      expect(result[2].opacity).toBe(0.7);
+      expect(result[1].opacity).toBe(0.6);
+      expect(result[2].opacity).toBe(0.6);
     });
 
     it('derives colormap from volume type via TYPE_COLORMAP_DEFAULTS', () => {
@@ -279,6 +313,56 @@ describe('NiiViewer', () => {
       await waitFor(() =>
         expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/failed to load image/i))
       );
+    });
+
+    it('calls nv.setColormap when the colormap setting changes', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      render(<NiiViewer volumes={[{ type: 'MRI', url: '/mri.nii', id: 'mri-id' }]} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      // Expand the MRI card and change the colormap
+      await userEvent.click(screen.getByRole('button', { name: 'Expand MRI controls' }));
+      await userEvent.selectOptions(screen.getByLabelText('MRI colormap'), 'magma');
+
+      const nv = Niivue.mock.results[Niivue.mock.results.length - 1].value;
+      // toHaveBeenLastCalledWith isolates the handleSettingChange call from the initial loadVolumesAndApplySettings call
+      expect(nv.setColormap).toHaveBeenLastCalledWith('mri-id', 'magma');
+    });
+  });
+
+  describe('handleSettingChange', () => {
+    // Helper: render NiiViewer, wait for load, return the nv mock instance with mocks cleared
+    const setup = async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      render(<NiiViewer volumes={[{ type: 'MRI', url: '/mri.nii' }]} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+      const nv = Niivue.mock.results[Niivue.mock.results.length - 1].value;
+      // Clear calls from initial load so assertions only count post-load interactions
+      nv.setOpacity.mockClear();
+      nv.updateGLVolume.mockClear();
+      return nv;
+    };
+
+    it('calls nv.setOpacity with 0 when hiding a visible volume', async () => {
+      const nv = await setup();
+      await userEvent.click(screen.getByRole('button', { name: 'Hide MRI' }));
+      expect(nv.setOpacity).toHaveBeenCalledWith(0, 0);
+    });
+
+    it('sets colormapInvert on the NVImage and calls updateGLVolume when invert is toggled', async () => {
+      const nv = await setup();
+      await userEvent.click(screen.getByRole('button', { name: 'Expand MRI controls' }));
+      await userEvent.click(screen.getByRole('switch', { name: 'Invert MRI colormap' }));
+      expect(nv.volumes[0].colormapInvert).toBe(true);
+      expect(nv.updateGLVolume).toHaveBeenCalledOnce();
+    });
+
+    it('sets colorbarVisible on the NVImage and calls updateGLVolume when colorbar is toggled', async () => {
+      const nv = await setup();
+      await userEvent.click(screen.getByRole('button', { name: 'Expand MRI controls' }));
+      await userEvent.click(screen.getByRole('switch', { name: 'Show MRI colorbar' }));
+      expect(nv.volumes[0].colorbarVisible).toBe(true);
+      expect(nv.updateGLVolume).toHaveBeenCalledOnce();
     });
   });
 });

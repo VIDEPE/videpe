@@ -16,11 +16,7 @@ const makeSettings = (overrides = {}) => ({
 
 const renderControls = (volumes, settings, onSettingChange = vi.fn()) =>
   render(
-    <ImagingControls
-      volumes={volumes}
-      layerSettings={settings}
-      onSettingChange={onSettingChange}
-    />
+    <ImagingControls volumes={volumes} layerSettings={settings} onSettingChange={onSettingChange} />
   );
 
 describe('ImagingControls', () => {
@@ -111,15 +107,39 @@ describe('ImagingControls', () => {
       return onSettingChange;
     };
 
-    it('opacity slider reflects current opacity value', async () => {
+    it('opacity slider reflects current opacity as a 0–1 value', async () => {
       await setup('MRI', makeSettings({ opacity: 0.6 }));
-      expect(screen.getByLabelText('MRI opacity')).toHaveValue('0.6');
+      expect(screen.getByLabelText('MRI opacity slider')).toHaveValue('0.6');
     });
 
-    it('opacity slider change calls onSettingChange with numeric value', async () => {
+    it('opacity number input reflects current opacity as a 0–100 integer', async () => {
+      await setup('MRI', makeSettings({ opacity: 0.6 }));
+      expect(screen.getByLabelText('MRI opacity')).toHaveValue(60);
+    });
+
+    it('opacity slider change calls onSettingChange with 0–1 float value', async () => {
       const onSettingChange = await setup('MRI', makeSettings({ opacity: 1.0 }));
-      fireEvent.change(screen.getByLabelText('MRI opacity'), { target: { value: '0.5' } });
+      fireEvent.change(screen.getByLabelText('MRI opacity slider'), { target: { value: '0.5' } });
       expect(onSettingChange).toHaveBeenCalledWith(0, 'opacity', 0.5);
+    });
+
+    it('opacity number input change calls onSettingChange with rounded 0–1 value', async () => {
+      const onSettingChange = await setup('MRI', makeSettings({ opacity: 1.0 }));
+      fireEvent.change(screen.getByLabelText('MRI opacity'), { target: { value: '75' } });
+      expect(onSettingChange).toHaveBeenCalledWith(0, 'opacity', 0.75);
+    });
+
+    it('opacity number input clamps to 0–100 on blur', async () => {
+      const onSettingChange = await setup('MRI', makeSettings({ opacity: 0.5 }));
+      fireEvent.change(screen.getByLabelText('MRI opacity'), { target: { value: '150' } });
+      fireEvent.blur(screen.getByLabelText('MRI opacity'));
+      expect(onSettingChange).toHaveBeenLastCalledWith(0, 'opacity', 1);
+    });
+
+    it('opacity slider change updates the number input display', async () => {
+      await setup('MRI', makeSettings({ opacity: 1.0 }));
+      fireEvent.change(screen.getByLabelText('MRI opacity slider'), { target: { value: '0.4' } });
+      expect(screen.getByLabelText('MRI opacity')).toHaveValue(40);
     });
 
     it('colormap select reflects current colormap', async () => {
