@@ -5,7 +5,7 @@ import { CenteredLayout } from '../components/CenteredLayout';
 import { Footer } from '../components/Footer';
 
 // Icons & Logos
-import { Globe, BookMarked, BookOpenText, Info } from 'lucide-react';
+import { Globe, BookMarked, BookOpenText, Info, Users } from 'lucide-react';
 const GithubIcon = ({ size = 24, ...props }) => (
   <svg
     width={size}
@@ -74,6 +74,12 @@ export const LandingPage = () => {
         <div id="connect" className="flex flex-col items-center">
           <h2>Connect with us</h2>
           <ul className="list-none p-0 flex flex-col gap-2 mt-4 min-w-44 mx-auto">
+            <li>
+              <Link to="/about#team" className="flex items-center gap-2">
+                <Users size={iconSize} style={{ stroke: 'var(--c-primary)' }} />
+                Team
+              </Link>
+            </li>
             <li>
               <a
                 href={GITHUB_URL}

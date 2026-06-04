@@ -1,5 +1,6 @@
 ﻿import { ExternalLink, BrainCircuit, ChartLine, FolderOpen, Columns2, FlaskConical, Monitor, ShieldCheck, ArrowLeft, ArrowUp } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useScrollToHash } from '@/utils/useScrollToHash';
 import { CenteredLayout } from '../components/CenteredLayout';
 import { Footer } from '../components/Footer';
 import { ThemeToggle } from '../components/ThemeToggle';
@@ -10,8 +11,8 @@ const NiiVueIcon = ({ size = 20 }) => (
   </svg>
 );
 
-const Section = ({ title, children }) => (
-  <section className="mb-10">
+const Section = ({ title, id, children }) => (
+  <section id={id} className="mb-10">
     <h2 className="mb-4">{title}</h2>
     {children}
   </section>
@@ -56,6 +57,8 @@ const FundingBadge = ({ children }) => (
 );
 
 export const AboutPage = () => {
+  useScrollToHash();
+
   return (
     <CenteredLayout>
       <button
@@ -176,7 +179,7 @@ export const AboutPage = () => {
 
         <hr className="mb-10" />
 
-        <Section title="Team">
+        <Section title="Team" id="team">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <PersonCard
               name="Nicolas Roehri"
