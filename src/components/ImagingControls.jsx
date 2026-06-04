@@ -10,14 +10,15 @@ const COLORMAP_OPTIONS = [
   { value: 'mako', label: 'Mako' },
 ];
 
-const ToggleSwitch = ({ checked, onChange, 'aria-label': ariaLabel }) => (
+const ToggleSwitch = ({ checked, onChange, 'aria-label': ariaLabel, title }) => (
   <button
     type="button"
     role="switch"
     aria-checked={checked}
     aria-label={ariaLabel}
+    title={title}
     onClick={() => onChange(!checked)}
-    className={`relative h-5 w-9 rounded-full transition-colors ${checked ? 'bg-primary' : 'bg-border'}`}
+    className={`relative h-5 w-9 rounded-full transition-colors cursor-pointer ${checked ? 'bg-primary' : 'bg-border'}`}
   >
     <span
       className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-background transition-transform ${checked ? 'translate-x-4' : 'translate-x-0'}`}
@@ -63,6 +64,7 @@ function SortableSettingsCard({
           onClick={() => onSettingChange(index, 'visible', !settings.visible)}
           className="button button-icon shrink-0"
           aria-label={`${settings.visible ? 'Hide' : 'Show'} ${label}`}
+          title={`${settings.visible ? 'Hide' : 'Show'} ${label}`}
           aria-pressed={!settings.visible}
         >
           {settings.visible ? <Eye size={14} /> : <EyeOff size={14} />}
@@ -127,6 +129,7 @@ function SortableSettingsCard({
                 checked={settings.invert}
                 onChange={(value) => onSettingChange(index, 'invert', value)}
                 aria-label={`Invert ${label} colormap`}
+                title={`Invert ${label} colormap`}
               />
             </div>
 
@@ -137,6 +140,7 @@ function SortableSettingsCard({
                 checked={settings.showColorbar}
                 onChange={(value) => onSettingChange(index, 'showColorbar', value)}
                 aria-label={`Show ${label} colorbar`}
+                title={`Show ${label} colorbar`}
               />
             </div>
           </div>

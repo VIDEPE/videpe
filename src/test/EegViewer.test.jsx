@@ -225,7 +225,7 @@ describe('EegViewer — channel count controls', () => {
     const user = userEvent.setup();
     renderViewer();
     const input = screen.getByRole('spinbutton', { name: /number of channels/i });
-    const [decreaseBtn] = within(containerOf(input)).getAllByRole('button');
+    const [, decreaseBtn] = within(containerOf(input)).getAllByRole('button');
 
     fireEvent.change(input, { target: { value: String(channelNames.length) } });
     await user.click(decreaseBtn);
@@ -237,7 +237,7 @@ describe('EegViewer — channel count controls', () => {
     const user = userEvent.setup();
     renderViewer();
     const input = screen.getByRole('spinbutton', { name: /number of channels/i });
-    const [decreaseBtn, increaseBtn] = within(containerOf(input)).getAllByRole('button');
+    const [increaseBtn, decreaseBtn] = within(containerOf(input)).getAllByRole('button');
 
     await user.click(decreaseBtn);
     await user.click(increaseBtn);
@@ -249,7 +249,7 @@ describe('EegViewer — channel count controls', () => {
     const user = userEvent.setup();
     renderViewer();
     const input = screen.getByRole('spinbutton', { name: /number of channels/i });
-    const [, increaseBtn] = within(containerOf(input)).getAllByRole('button');
+    const [increaseBtn] = within(containerOf(input)).getAllByRole('button');
 
     await user.click(increaseBtn);
     await user.click(increaseBtn);
@@ -262,7 +262,7 @@ describe('EegViewer — channel count controls', () => {
     const user = userEvent.setup();
     renderViewer();
     const input = screen.getByRole('spinbutton', { name: /number of channels/i });
-    const [decreaseBtn] = within(containerOf(input)).getAllByRole('button');
+    const [, decreaseBtn] = within(containerOf(input)).getAllByRole('button');
 
     fireEvent.change(input, { target: { value: '1' } });
     await user.click(decreaseBtn);

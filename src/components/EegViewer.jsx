@@ -280,9 +280,10 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
             <button
               type="button"
               className="button button-icon"
-              onClick={() => updateVisibleChannelCount(visibleChannelCount - 1)}
+              onClick={() => updateVisibleChannelCount(visibleChannelCount + 1)}
+              title="Show more channels"
             >
-              <ListChevronsDownUp size={ICON_SIZE} />
+              <ListChevronsUpDown size={ICON_SIZE} />
             </button>
             <input
               id="eeg-visible-channels"
@@ -307,9 +308,10 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
             <button
               type="button"
               className="button button-icon"
-              onClick={() => updateVisibleChannelCount(visibleChannelCount + 1)}
+              onClick={() => updateVisibleChannelCount(visibleChannelCount - 1)}
+              title="Show fewer channels"
             >
-              <ListChevronsUpDown size={ICON_SIZE} />
+              <ListChevronsDownUp size={ICON_SIZE} />
             </button>
           </div>
         </div>
@@ -465,6 +467,7 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
               type="button"
               className="button button-icon"
               onClick={() => updateYScale(yScale * 2)}
+              title="Zoom out"
             >
               <ZoomOut size={ICON_SIZE} />
             </button>
@@ -488,6 +491,7 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
               type="button"
               className="button button-icon"
               onClick={() => updateYScale(yScale / 2)}
+              title="Zoom in"
             >
               <ZoomIn size={ICON_SIZE} />
             </button>
@@ -500,10 +504,10 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
             Time Shift (s)
           </label>
           <div className="flex items-center gap-1">
-            <button type="button" className="button button-icon" onClick={() => setStartTime(0)}>
+            <button type="button" className="button button-icon" onClick={() => setStartTime(0)} title="Jump to start">
               <ChevronFirst size={15} />
             </button>
-            <button type="button" className="button button-icon" onClick={backwardshiftStartTime}>
+            <button type="button" className="button button-icon" onClick={backwardshiftStartTime} title="Shift backward">
               <ChevronLeft size={ICON_SIZE} />
             </button>
             <input
@@ -526,13 +530,14 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
               className="text-center border border-border rounded px-1 py-0.5 text-sm bg-background text-foreground [appearance:textfield]"
               aria-label="Time shift step (s)"
             />
-            <button type="button" className="button button-icon" onClick={forwardshiftStartTime}>
+            <button type="button" className="button button-icon" onClick={forwardshiftStartTime} title="Shift forward">
               <ChevronRight size={ICON_SIZE} />
             </button>
             <button
               type="button"
               className="button button-icon"
               onClick={() => setStartTime(data[0][data[0].length - 1] - windowSize)}
+              title="Jump to end"
             >
               <ChevronLast size={15} />
             </button>
@@ -545,7 +550,7 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
             Window Size (s)
           </label>
           <div className="flex items-center gap-1">
-            <button type="button" className="button button-icon" onClick={decreaseWindowSize}>
+            <button type="button" className="button button-icon" onClick={decreaseWindowSize} title="Decrease window size">
               <Minus size={ICON_SIZE} />
             </button>
             <input
@@ -566,7 +571,7 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
               className="text-center border border-border rounded px-1 py-0.5 text-sm bg-background text-foreground [appearance:textfield]"
               aria-label="Window size (s)"
             />
-            <button type="button" className="button button-icon" onClick={increaseWindowSize}>
+            <button type="button" className="button button-icon" onClick={increaseWindowSize} title="Increase window size">
               <Plus size={ICON_SIZE} />
             </button>
           </div>
