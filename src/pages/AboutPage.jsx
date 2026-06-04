@@ -92,92 +92,124 @@ export const AboutPage = () => {
 
         <Section title="Features">
           <div className="flex flex-col gap-4">
+
             <div id="feature-privacy" className="flex gap-3 p-4 rounded-lg border" style={{ borderColor: 'var(--c-primary)', background: 'var(--c-surface)' }}>
               <ShieldCheck size={22} className="shrink-0 mt-0.5" style={{ color: 'var(--c-primary)' }} />
               <div>
                 <p className="font-semibold" style={{ color: 'var(--c-heading)' }}>Privacy-first: 100% local processing</p>
-                <p className="text-sm" style={{ color: 'var(--c-foreground)' }}>
-                  All data processing happens entirely in your browser — no files are ever uploaded
-                  to a server or sent anywhere remotely. This makes VIDEPE safe to use with sensitive
-                  medical data, including patient recordings, without any risk of data leaving your
-                  machine.
+                <p className="text-sm mt-1" style={{ color: 'var(--c-foreground)' }}>
+                  All data processing happens entirely in your browser. No files are ever uploaded to
+                  a server, sent to a third party, or stored outside your own machine. This makes
+                  VIDEPE safe to use with sensitive medical data — including identifiable patient
+                  recordings — without any institutional data-sharing agreement or de-identification
+                  step.
                 </p>
               </div>
             </div>
+
             <div id="feature-eeg" className="flex gap-3">
               <ChartLine size={22} className="shrink-0 mt-0.5" style={{ color: 'var(--c-primary)' }} />
               <div>
                 <p className="font-semibold" style={{ color: 'var(--c-heading)' }}>EEG viewer</p>
-                <p className="text-sm" style={{ color: 'var(--c-foreground)' }}>
-                  Multichannel time-series plots with synchronized pan/zoom across all channels.
-                  Adjustable gain, window size, and time-shift step. Interactive timeline scrubber
-                  for fast navigation. Configurable number of visible channels.
+                <p className="text-sm mt-1" style={{ color: 'var(--c-foreground)' }}>
+                  A high-performance multichannel viewer built on <a href="https://github.com/leeoniya/uplot" target="_blank" rel="noreferrer" style={{ color: 'var(--c-primary)' }}>uPlot</a>, optimised
+                  for long EEG recordings with many channels. All plots share a single time axis —
+                  panning or zooming one channel instantly updates all others.
                 </p>
+                <ul className="text-sm mt-2 flex flex-col gap-1 list-disc list-inside" style={{ color: 'var(--c-foreground)' }}>
+                  <li>Adjustable gain (µV scale), window size, and time-shift step</li>
+                  <li>Interactive timeline scrubber for fast navigation across the full recording</li>
+                  <li>Configurable number of simultaneously visible channels</li>
+                  <li>Min-max downsampling keeps rendering fast at any zoom level</li>
+                </ul>
               </div>
             </div>
+
             <div id="feature-neuroimaging" className="flex gap-3">
               <Brain size={22} className="shrink-0 mt-0.5" style={{ color: 'var(--c-primary)' }} />
               <div>
                 <p className="font-semibold" style={{ color: 'var(--c-heading)' }}>Neuroimaging viewer</p>
-                <p className="text-sm" style={{ color: 'var(--c-foreground)' }}>
-                  Multiplanar + 3D rendering for NIfTI volumes. Multi-layer support for MRI, PET,
-                  and SPECT simultaneously. Per-layer controls for opacity, colormap, and colorbar.
-                  Drag-to-reorder layers.
+                <p className="text-sm mt-1" style={{ color: 'var(--c-foreground)' }}>
+                  Full multiplanar and 3D rendering powered by <a href="https://niivue.com/" target="_blank" rel="noreferrer" style={{ color: 'var(--c-primary)' }}>NiiVue</a>. Load multiple
+                  volumes simultaneously and adjust each one independently.
                 </p>
+                <ul className="text-sm mt-2 flex flex-col gap-1 list-disc list-inside" style={{ color: 'var(--c-foreground)' }}>
+                  <li>Supports NIfTI (.nii, .nii.gz), MGH/MGZ, GIFTI, PLY, OBJ</li>
+                  <li>Multi-layer support for MRI, PET, and SPECT in one view</li>
+                  <li>Per-layer opacity, colormap (grayscale, viridis, magma, mako), inversion, and colorbar</li>
+                  <li>Drag-to-reorder layers</li>
+                </ul>
               </div>
             </div>
+
             <div id="feature-demo" className="flex gap-3">
               <FlaskConical size={22} className="shrink-0 mt-0.5" style={{ color: 'var(--c-primary)' }} />
               <div>
                 <p className="font-semibold" style={{ color: 'var(--c-heading)' }}>Built-in demo</p>
-                <p className="text-sm" style={{ color: 'var(--c-foreground)' }}>
-                  Load a sample EEG + MRI/PET/SPECT dataset with one click to explore the viewer
-                  without your own files.
+                <p className="text-sm mt-1" style={{ color: 'var(--c-foreground)' }}>
+                  Want to explore VIDEPE before committing your own files? Hit <strong>Load Demo</strong> on
+                  the patient view to instantly load a synthetic EEG recording alongside aligned MRI,
+                  PET, and SPECT volumes — no upload, no account, no wait.
                 </p>
               </div>
             </div>
+
             <div id="feature-drag-drop" className="flex gap-3">
               <FolderOpen size={22} className="shrink-0 mt-0.5" style={{ color: 'var(--c-primary)' }} />
               <div>
                 <p className="font-semibold" style={{ color: 'var(--c-heading)' }}>Drag &amp; drop file loading</p>
-                <p className="text-sm" style={{ color: 'var(--c-foreground)' }}>
-                  Drop EEG or imaging files directly onto the viewer. Multi-file formats (e.g.
-                  BrainVision <code>.vhdr</code> + <code>.eeg</code>) can be dropped together or in
-                  separate drops.
+                <p className="text-sm mt-1" style={{ color: 'var(--c-foreground)' }}>
+                  Drop files directly onto either viewer panel. VIDEPE detects the format
+                  automatically and guides you when multiple files are required.
                 </p>
+                <ul className="text-sm mt-2 flex flex-col gap-1 list-disc list-inside" style={{ color: 'var(--c-foreground)' }}>
+                  <li>EEG: BrainVision (<code>.vhdr</code> + <code>.eeg</code>) — drop both together or one at a time</li>
+                  <li>Volumes: NIfTI, MGH/MGZ, GIFTI, PLY, OBJ</li>
+                  <li>Drop multiple imaging files at once to load them as separate layers</li>
+                </ul>
               </div>
             </div>
+
             <div id="feature-split-view" className="flex gap-3">
               <Columns2 size={22} className="shrink-0 mt-0.5" style={{ color: 'var(--c-primary)' }} />
               <div>
                 <p className="font-semibold" style={{ color: 'var(--c-heading)' }}>Side-by-side split view</p>
-                <p className="text-sm" style={{ color: 'var(--c-foreground)' }}>
-                  Adjustable split between EEG and neuroimaging panels, with maximize, restore, and
-                  swap controls.
+                <p className="text-sm mt-1" style={{ color: 'var(--c-foreground)' }}>
+                  EEG and neuroimaging panels sit side by side with a draggable divider. Each panel
+                  can be independently maximised, restored, or reset, and the two panels can be
+                  swapped without reloading any data.
                 </p>
               </div>
             </div>
+
             <div id="feature-cross-platform" className="flex gap-3">
               <TabletSmartphone size={22} className="shrink-0 mt-0.5" style={{ color: 'var(--c-primary)' }} />
               <div>
                 <p className="font-semibold" style={{ color: 'var(--c-heading)' }}>Cross-platform</p>
-                <p className="text-sm" style={{ color: 'var(--c-foreground)' }}>
-                  Runs on modern browsers including mobile. Dark/light mode with OS preference
-                  detection.
+                <p className="text-sm mt-1" style={{ color: 'var(--c-foreground)' }}>
+                  VIDEPE runs entirely in the browser — no installation, no plugins. It works on
+                  modern desktop and mobile browsers alike. The interface adapts to the available
+                  screen space, and dark or light mode is picked up from your OS preference
+                  automatically, with a manual toggle always available.
                 </p>
               </div>
             </div>
+
             <div id="feature-open-source" className="flex gap-3">
               <CodeXml size={22} className="shrink-0 mt-0.5" style={{ color: 'var(--c-primary)' }} />
               <div>
                 <p className="font-semibold" style={{ color: 'var(--c-heading)' }}>Open source</p>
-                <p className="text-sm" style={{ color: 'var(--c-foreground)' }}>
-                  VIDEPE is licensed under the GNU Affero General Public License v3 (AGPL-3.0) and
-                  publicly available on GitHub. All derivative works must remain open source.
-                  Contributions, bug reports, and feature requests are welcome.
+                <p className="text-sm mt-1" style={{ color: 'var(--c-foreground)' }}>
+                  VIDEPE is free and open source, licensed under the{' '}
+                  <a href="https://www.gnu.org/licenses/agpl-3.0.html" target="_blank" rel="noreferrer" style={{ color: 'var(--c-primary)' }}>GNU Affero General Public License v3</a>.
+                  The source code is publicly available on{' '}
+                  <a href="https://github.com/VIDEPE/videpe" target="_blank" rel="noreferrer" style={{ color: 'var(--c-primary)' }}>GitHub</a>.
+                  All derivative works must remain open source under the same licence.
+                  Bug reports, feature requests, and pull requests are welcome.
                 </p>
               </div>
             </div>
+
           </div>
         </Section>
 
