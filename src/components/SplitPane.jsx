@@ -19,6 +19,7 @@ export const SplitPane = ({
   const [splitPercent, setSplitPercent] = useState(50); // proportion of the first panel (0–100)
   const [maximized, setMaximized] = useState(null); // null | 'left' | 'right'
   const [swapped, setSwapped] = useState(false); // whether the left/right (or top/bottom) content is swapped
+  const [isDragging, setIsDragging] = useState(false); // true while the divider is being dragged — used to highlight it on touch where active: pseudo-class is unreliable
   const [isColumn, setIsColumn] = useState(
     () => typeof window !== 'undefined' && window.innerWidth < COLUMN_BREAKPOINT
   ); // true on narrow viewports — panels stack vertically instead of side by side
@@ -88,6 +89,7 @@ export const SplitPane = ({
     const stopDrag = () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       isDraggingRef.current = false;
+      setIsDragging(false);
       // Sync React state once at end of drag so subsequent renders use the correct value
       setSplitPercent(splitPercentRef.current);
     };
@@ -200,16 +202,18 @@ export const SplitPane = ({
           style={{ order: 2 }}
           className={
             isColumn
-              ? 'h-1.5 w-full shrink-0 cursor-row-resize my-1 bg-border hover:bg-secondary active:bg-primary transition-colors select-none'
-              : 'w-1.5 shrink-0 cursor-col-resize mx-1 bg-border hover:bg-secondary active:bg-primary transition-colors select-none'
+              ? `h-1.5 w-full shrink-0 cursor-row-resize my-1 transition-colors select-none ${isDragging ? 'bg-primary' : 'bg-border hover:bg-secondary'}`
+              : `w-1.5 shrink-0 cursor-col-resize mx-1 transition-colors select-none ${isDragging ? 'bg-primary' : 'bg-border hover:bg-secondary'}`
           }
           onMouseDown={(e) => {
             e.preventDefault();
             isDraggingRef.current = true;
+            setIsDragging(true);
           }}
           onTouchStart={(e) => {
             e.preventDefault();
             isDraggingRef.current = true;
+            setIsDragging(true);
           }}
         />
       )}
