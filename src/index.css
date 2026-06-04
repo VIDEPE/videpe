@@ -62,6 +62,12 @@ body {
   margin: 0;
 }
 
+/* Minimum content width — browser window can be any size, but content never shrinks below this.
+   Set on #root (not body) so the browser window itself is not constrained; the scrollbar handles the overflow. */
+#root {
+  min-width: 400px;
+}
+
 .themed-scrollbar {
   scrollbar-color: var(--c-border) var(--c-surface); /* Firefox */
 

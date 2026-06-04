@@ -97,8 +97,10 @@ export const LandingPage = () => {
   return (
     <CenteredLayout footer={<Footer />}>
       <ScrollToTopButton />
-      {/*Theme Toggle Button for switching themes */}
-      <ThemeToggle />
+      {/* Theme toggle — normal page flow, sits at top-right and scrolls out of view as the page scrolls down */}
+      <div className="flex justify-end px-5 pt-5">
+        <ThemeToggle className="" />
+      </div>
 
       {/*Landing Page main body */}
       {/* Hero section with logo, title, subtitle and call to action button */}
@@ -120,7 +122,7 @@ export const LandingPage = () => {
             return (
               <div
                 key={label}
-                className="relative group z-0 hover:z-20"
+                className={`relative group ${isExpanded ? 'z-30' : 'z-0 hover:z-20'}`}
                 onClick={() => {
                   if (!window.matchMedia('(hover: hover)').matches)
                     setExpandedLabel(isExpanded ? null : label);
@@ -163,7 +165,7 @@ export const LandingPage = () => {
       </section>
       <hr></hr>
       {/* Documentation and Connect sections side by side on desktop, stacked on mobile */}
-      <section id="documentation_section" className="grid grid-cols-1 sm:grid-cols-2 gap-y-8 sm:gap-y-0 mt-4 mb-8">
+      <section id="documentation_section" className="relative z-20 grid grid-cols-1 sm:grid-cols-2 gap-y-8 sm:gap-y-0 mt-4 mb-8">
         {/* Learn more links with icons */}
         <div id="docs" className="flex flex-col items-center">
           <h2>Learn more</h2>
@@ -175,7 +177,7 @@ export const LandingPage = () => {
               </a>
             </li> */}
             <li>
-              <Link to="/about" className="flex items-center gap-2">
+              <Link to="/about#about-videpe" className="flex items-center gap-2">
                 <Info size={iconSize} style={{ stroke: 'var(--c-primary)' }} />
                 About
               </Link>

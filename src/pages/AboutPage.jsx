@@ -63,13 +63,16 @@ export const AboutPage = () => {
   return (
     <CenteredLayout footer={<Footer />}>
       <ScrollToTopButton />
-      <ThemeToggle />
-      <Link to="/" className="button fixed top-5 left-5 z-50 flex items-center gap-2 px-3 py-1">
-        <ArrowLeft size={16} /> Back
-      </Link>
-      <div className="px-5 pt-16 pb-10 max-w-3xl mx-auto w-full">
+      {/* Navigation — normal page flow, sits at top and scrolls out of view as the page scrolls down */}
+      <div className="flex items-center justify-between px-5 pt-5">
+        <Link to="/" className="button flex items-center gap-2 px-3 py-1">
+          <ArrowLeft size={16} /> Back
+        </Link>
+        <ThemeToggle className="" />
+      </div>
+      <div className="px-5 pt-6 pb-10 max-w-3xl mx-auto w-full">
 
-        <Section title="About VIDEPE" className="!mb-2">
+        <Section id="about-videpe" title="About VIDEPE" className="!mb-2">
           <p>
             <strong>VIDEPE</strong> —{' '}
             <strong>V</strong>isualization &amp; <strong>I</strong>ntegration of <strong>D</strong>ata
