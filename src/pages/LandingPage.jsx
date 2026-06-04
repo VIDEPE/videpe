@@ -167,7 +167,7 @@ export const LandingPage = () => {
         {/* Learn more links with icons */}
         <div id="docs" className="flex flex-col items-center">
           <h2>Learn more</h2>
-          <ul className="list-none p-0 flex flex-col items-center gap-2 mt-4 min-w-44 mx-auto">
+          <ul className="list-none p-0 flex flex-col items-start gap-2 mt-4 w-fit mx-auto">
             {/* <li>
               <a href={DOCS_URL} className="flex items-center gap-2">
                 <BookMarked size={iconSize} style={{ stroke: 'var(--c-primary)' }} />
@@ -192,7 +192,7 @@ export const LandingPage = () => {
        {/* Connect section with links to team page, github and UNIGE */}
         <div id="connect" className="flex flex-col items-center">
           <h2>Connect with us</h2>
-          <ul className="list-none p-0 flex flex-col items-center gap-2 mt-4 min-w-44 mx-auto">
+          <ul className="list-none p-0 flex flex-col items-start gap-2 mt-4 w-fit mx-auto">
             <li>
               <Link to="/about#team" className="flex items-center gap-2">
                 <Users size={iconSize} style={{ stroke: 'var(--c-primary)' }} />
