@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Eye, EyeOff, ChevronDown, ChevronUp, GripVertical } from 'lucide-react';
 import { DragDropProvider } from '@dnd-kit/react';
 import { useSortable } from '@dnd-kit/react/sortable';
@@ -36,6 +36,19 @@ function SortableSettingsCard({
 }) {
   const { ref, handleRef, isDragging } = useSortable({ id: volume.url, index });
   const label = volume.type ?? `Layer ${index + 1}`;
+
+  // Local string state — allows typing a partial value (e.g. empty string) without breaking the numeric opacity
+  const [opacityStr, setOpacityStr] = useState(() => String(Math.round(settings.opacity * 100)));
+  // Sync when opacity changes externally (e.g. slider drag, visibility toggle, data reset)
+  useEffect(() => {
+    setOpacityStr(String(Math.round(settings.opacity * 100)));
+  }, [settings.opacity]);
+
+  const updateOpacity = (raw) => {
+    const clamped = Math.max(0, Math.min(100, Math.round(Number(raw) || 0)));
+    setOpacityStr(String(clamped));
+    onSettingChange(index, 'opacity', clamped / 100);
+  };
 
   return (
     <div
@@ -95,13 +108,34 @@ function SortableSettingsCard({
               max={1}
               step={0.01}
               value={settings.opacity}
-              onChange={(e) => onSettingChange(index, 'opacity', parseFloat(e.target.value))}
+              onChange={(e) => {
+                const val = parseFloat(e.target.value);
+                setOpacityStr(String(Math.round(val * 100)));
+                onSettingChange(index, 'opacity', val);
+              }}
               className="flex-1 min-w-0 cursor-pointer"
-              aria-label={`${label} opacity`}
+              aria-label={`${label} opacity slider`}
             />
-            <span className="w-9 text-right tabular-nums text-foreground">
-              {Math.round(settings.opacity * 100)}%
-            </span>
+            <div className="flex items-center">
+              <input
+                type="number"
+                value={opacityStr}
+                min={0}
+                max={100}
+                step={1}
+                style={{ width: 'calc(3ch + 2rem)' }}
+                onChange={(e) => {
+                  setOpacityStr(e.target.value);
+                  const val = Number(e.target.value);
+                  if (e.target.value !== '' && !isNaN(val))
+                    onSettingChange(index, 'opacity', Math.max(0, Math.min(100, Math.round(val))) / 100);
+                }}
+                onBlur={() => updateOpacity(opacityStr)}
+                className="text-center border border-border rounded px-1 py-0.5 text-xs bg-background text-foreground [appearance:textfield]"
+                aria-label={`${label} opacity`}
+              />
+              <span className="text-foreground select-none pointer-events-none">%</span>
+            </div>
           </div>
 
           {/* Colormap */}
