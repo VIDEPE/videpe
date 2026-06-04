@@ -1,4 +1,4 @@
-﻿import { ExternalLink, BrainCircuit, ChartLine, FolderOpen, Columns2, FlaskConical, Monitor, ShieldCheck, ArrowLeft } from 'lucide-react';
+﻿import { ExternalLink, Brain, ChartLine, FolderOpen, Columns2, FlaskConical, TabletSmartphone, ShieldCheck, ArrowLeft, CodeXml } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useScrollToHash } from '@/utils/useScrollToHash';
 import { CenteredLayout } from '../components/CenteredLayout';
@@ -116,13 +116,23 @@ export const AboutPage = () => {
               </div>
             </div>
             <div className="flex gap-3">
-              <BrainCircuit size={22} className="shrink-0 mt-0.5" style={{ color: 'var(--c-primary)' }} />
+              <Brain size={22} className="shrink-0 mt-0.5" style={{ color: 'var(--c-primary)' }} />
               <div>
                 <p className="font-semibold" style={{ color: 'var(--c-heading)' }}>Neuroimaging viewer</p>
                 <p className="text-sm" style={{ color: 'var(--c-foreground)' }}>
                   Multiplanar + 3D rendering for NIfTI volumes. Multi-layer support for MRI, PET,
                   and SPECT simultaneously. Per-layer controls for opacity, colormap, and colorbar.
                   Drag-to-reorder layers.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <FlaskConical size={22} className="shrink-0 mt-0.5" style={{ color: 'var(--c-primary)' }} />
+              <div>
+                <p className="font-semibold" style={{ color: 'var(--c-heading)' }}>Built-in demo</p>
+                <p className="text-sm" style={{ color: 'var(--c-foreground)' }}>
+                  Load a sample EEG + MRI/PET/SPECT dataset with one click to explore the viewer
+                  without your own files.
                 </p>
               </div>
             </div>
@@ -148,22 +158,23 @@ export const AboutPage = () => {
               </div>
             </div>
             <div className="flex gap-3">
-              <FlaskConical size={22} className="shrink-0 mt-0.5" style={{ color: 'var(--c-primary)' }} />
-              <div>
-                <p className="font-semibold" style={{ color: 'var(--c-heading)' }}>Built-in demo</p>
-                <p className="text-sm" style={{ color: 'var(--c-foreground)' }}>
-                  Load a sample EEG + MRI/PET/SPECT dataset with one click to explore the viewer
-                  without your own files.
-                </p>
-              </div>
-            </div>
-            <div className="flex gap-3">
-              <Monitor size={22} className="shrink-0 mt-0.5" style={{ color: 'var(--c-primary)' }} />
+              <TabletSmartphone size={22} className="shrink-0 mt-0.5" style={{ color: 'var(--c-primary)' }} />
               <div>
                 <p className="font-semibold" style={{ color: 'var(--c-heading)' }}>Cross-platform</p>
                 <p className="text-sm" style={{ color: 'var(--c-foreground)' }}>
                   Runs on modern browsers including mobile. Dark/light mode with OS preference
                   detection.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <CodeXml size={22} className="shrink-0 mt-0.5" style={{ color: 'var(--c-primary)' }} />
+              <div>
+                <p className="font-semibold" style={{ color: 'var(--c-heading)' }}>Open source</p>
+                <p className="text-sm" style={{ color: 'var(--c-foreground)' }}>
+                  VIDEPE is licensed under the GNU Affero General Public License v3 (AGPL-3.0) and
+                  publicly available on GitHub. All derivative works must remain open source.
+                  Contributions, bug reports, and feature requests are welcome.
                 </p>
               </div>
             </div>

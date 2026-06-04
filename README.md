@@ -19,11 +19,12 @@ All data processing happens entirely in your browser — no files are ever uploa
   - Per-layer controls: opacity, colormap (grayscale, viridis, magma, mako), colormap inversion, colorbar toggle
   - Drag-to-reorder layers
   - Adaptive layout: switches to auto layout when maximized, returns to grid when restored
+- **Built-in demo** — load a sample EEG + MRI/PET/SPECT dataset with one click to explore the viewer without your own files.
 - **Drag & drop file loading** — drop EEG or imaging files directly onto the viewer. Multi-file formats (e.g. BrainVision `.vhdr` + `.eeg`) can be dropped together or in separate drops.
 - **Side-by-side split view** — adjustable split between EEG and neuroimaging panels, with maximize, restore, and swap controls.
-- **Built-in demo** — load a sample EEG + MRI/PET/SPECT dataset with one click to explore the viewer without your own files.
 - **Dark / Light mode** — OS preference detection with manual override.
 - **Cross-platform** — runs on modern browsers, including mobile devices.
+- **Open source** — licensed under [AGPL-3.0](LICENSE). All derivative works must remain open source. Contributions, bug reports, and feature requests are welcome.
 
 ## Supported formats
 
