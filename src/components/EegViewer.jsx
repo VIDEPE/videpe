@@ -439,14 +439,14 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
                   {/* Left resize handle — secondary-coloured line extending above and below the thumb */}
                   <div
                     data-testid="timeline-resize-left"
-                    className="absolute left-0 w-0.5 cursor-ew-resize"
+                    className="absolute left-0 w-0.75 cursor-ew-resize"
                     style={{ top: '-4px', bottom: '-4px', backgroundColor: 'var(--c-secondary)' }}
                     onMouseDown={(e) => startDrag(e, 'resize-left')}
                   />
                   {/* Right resize handle */}
                   <div
                     data-testid="timeline-resize-right"
-                    className="absolute right-0 w-0.5 cursor-ew-resize"
+                    className="absolute right-0 w-0.75 cursor-ew-resize"
                     style={{ top: '-4px', bottom: '-4px', backgroundColor: 'var(--c-secondary)' }}
                     onMouseDown={(e) => startDrag(e, 'resize-right')}
                   />
