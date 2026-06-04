@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Eye, EyeOff, ChevronDown, ChevronUp, GripVertical } from 'lucide-react';
 import { DragDropProvider } from '@dnd-kit/react';
 import { useSortable } from '@dnd-kit/react/sortable';
@@ -10,14 +10,15 @@ const COLORMAP_OPTIONS = [
   { value: 'mako', label: 'Mako' },
 ];
 
-const ToggleSwitch = ({ checked, onChange, 'aria-label': ariaLabel }) => (
+const ToggleSwitch = ({ checked, onChange, 'aria-label': ariaLabel, title }) => (
   <button
     type="button"
     role="switch"
     aria-checked={checked}
     aria-label={ariaLabel}
+    title={title}
     onClick={() => onChange(!checked)}
-    className={`relative h-5 w-9 rounded-full transition-colors ${checked ? 'bg-primary' : 'bg-border'}`}
+    className={`relative h-5 w-9 rounded-full transition-colors cursor-pointer ${checked ? 'bg-primary' : 'bg-border'}`}
   >
     <span
       className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-background transition-transform ${checked ? 'translate-x-4' : 'translate-x-0'}`}
@@ -36,10 +37,23 @@ function SortableSettingsCard({
   const { ref, handleRef, isDragging } = useSortable({ id: volume.url, index });
   const label = volume.type ?? `Layer ${index + 1}`;
 
+  // Local string state — allows typing a partial value (e.g. empty string) without breaking the numeric opacity
+  const [opacityStr, setOpacityStr] = useState(() => String(Math.round(settings.opacity * 100)));
+  // Sync when opacity changes externally (e.g. slider drag, visibility toggle, data reset)
+  useEffect(() => {
+    setOpacityStr(String(Math.round(settings.opacity * 100)));
+  }, [settings.opacity]);
+
+  const updateOpacity = (raw) => {
+    const clamped = Math.max(0, Math.min(100, Math.round(Number(raw) || 0)));
+    setOpacityStr(String(clamped));
+    onSettingChange(index, 'opacity', clamped / 100);
+  };
+
   return (
     <div
       ref={ref}
-      className={`rounded border border-border bg-surface transition-opacity ${isDragging ? 'opacity-60' : ''}`}
+      className={`min-w-0 rounded border border-border bg-surface transition-opacity ${isDragging ? 'opacity-60' : ''}`}
     >
       {/* Always-visible header row */}
       <div className="flex items-center gap-1.5 px-2 py-1">
@@ -63,6 +77,7 @@ function SortableSettingsCard({
           onClick={() => onSettingChange(index, 'visible', !settings.visible)}
           className="button button-icon shrink-0"
           aria-label={`${settings.visible ? 'Hide' : 'Show'} ${label}`}
+          title={`${settings.visible ? 'Hide' : 'Show'} ${label}`}
           aria-pressed={!settings.visible}
         >
           {settings.visible ? <Eye size={14} /> : <EyeOff size={14} />}
@@ -83,7 +98,7 @@ function SortableSettingsCard({
 
       {/* Expanded controls */}
       {isExpanded && (
-        <div className="border-t border-border px-3 py-1.5 flex flex-col gap-1.5 text-xs">
+        <div className="border-t border-border px-3 py-1.5 flex flex-col gap-1.5 text-xs overflow-hidden">
           {/* Opacity */}
           <div className="flex items-center gap-3">
             <span className="w-20 shrink-0 text-foreground select-none pointer-events-none">Opacity</span>
@@ -93,13 +108,34 @@ function SortableSettingsCard({
               max={1}
               step={0.01}
               value={settings.opacity}
-              onChange={(e) => onSettingChange(index, 'opacity', parseFloat(e.target.value))}
-              className="flex-1"
-              aria-label={`${label} opacity`}
+              onChange={(e) => {
+                const val = parseFloat(e.target.value);
+                setOpacityStr(String(Math.round(val * 100)));
+                onSettingChange(index, 'opacity', val);
+              }}
+              className="flex-1 min-w-0 cursor-pointer"
+              aria-label={`${label} opacity slider`}
             />
-            <span className="w-9 text-right tabular-nums text-foreground">
-              {Math.round(settings.opacity * 100)}%
-            </span>
+            <div className="flex items-center">
+              <input
+                type="number"
+                value={opacityStr}
+                min={0}
+                max={100}
+                step={1}
+                style={{ width: 'calc(3ch + 2rem)' }}
+                onChange={(e) => {
+                  setOpacityStr(e.target.value);
+                  const val = Number(e.target.value);
+                  if (e.target.value !== '' && !isNaN(val))
+                    onSettingChange(index, 'opacity', Math.max(0, Math.min(100, Math.round(val))) / 100);
+                }}
+                onBlur={() => updateOpacity(opacityStr)}
+                className="text-center border border-border rounded px-1 py-0.5 text-xs bg-background text-foreground [appearance:textfield]"
+                aria-label={`${label} opacity`}
+              />
+              <span className="text-foreground select-none pointer-events-none">%</span>
+            </div>
           </div>
 
           {/* Colormap */}
@@ -108,7 +144,7 @@ function SortableSettingsCard({
             <select
               value={settings.colormap}
               onChange={(e) => onSettingChange(index, 'colormap', e.target.value)}
-              className="flex-1 bg-surface border border-border rounded px-2 py-0.5 text-xs text-heading cursor-pointer"
+              className="flex-1 min-w-0 bg-surface border border-border rounded px-2 py-0.5 text-xs text-heading cursor-pointer"
               aria-label={`${label} colormap`}
             >
               {COLORMAP_OPTIONS.map(({ value, label: optionLabel }) => (
@@ -127,6 +163,7 @@ function SortableSettingsCard({
                 checked={settings.invert}
                 onChange={(value) => onSettingChange(index, 'invert', value)}
                 aria-label={`Invert ${label} colormap`}
+                title={`Invert ${label} colormap`}
               />
             </div>
 
@@ -137,6 +174,7 @@ function SortableSettingsCard({
                 checked={settings.showColorbar}
                 onChange={(value) => onSettingChange(index, 'showColorbar', value)}
                 aria-label={`Show ${label} colorbar`}
+                title={`Show ${label} colorbar`}
               />
             </div>
           </div>

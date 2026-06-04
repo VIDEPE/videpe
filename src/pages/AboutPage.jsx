@@ -12,8 +12,8 @@ const NiiVueIcon = ({ size = 20 }) => (
   </svg>
 );
 
-const Section = ({ title, id, children }) => (
-  <section id={id} className="mb-10">
+const Section = ({ title, id, className, children }) => (
+  <section id={id} className={`mb-10 ${className ?? ''}`}>
     <h2 className="mb-4">{title}</h2>
     {children}
   </section>
@@ -63,13 +63,16 @@ export const AboutPage = () => {
   return (
     <CenteredLayout footer={<Footer />}>
       <ScrollToTopButton />
-      <ThemeToggle />
-      <Link to="/" className="button fixed top-5 left-5 z-50 flex items-center gap-2 px-3 py-1">
-        <ArrowLeft size={16} /> Back
-      </Link>
-      <div className="px-5 pt-16 pb-10 max-w-3xl mx-auto w-full">
+      {/* Navigation — normal page flow, sits at top and scrolls out of view as the page scrolls down */}
+      <div className="flex items-center justify-between px-5 pt-5">
+        <Link to="/" className="button flex items-center gap-2 px-3 py-1">
+          <ArrowLeft size={16} /> Back
+        </Link>
+        <ThemeToggle className="" />
+      </div>
+      <div className="px-5 pt-6 pb-10 max-w-3xl mx-auto w-full">
 
-        <Section title="About VIDEPE">
+        <Section id="about-videpe" title="About VIDEPE" className="!mb-2">
           <p>
             <strong>VIDEPE</strong> —{' '}
             <strong>V</strong>isualization &amp; <strong>I</strong>ntegration of <strong>D</strong>ata
@@ -85,6 +88,11 @@ export const AboutPage = () => {
               Epilepsy and Brain Networks Lab, UNIGE
             </a>
             .
+          </p>
+          <hr className="mt-4 mb-3" />
+          <p className="text-sm" style={{ color: 'var(--c-alert)', opacity: 0.7 }}>
+            VIDEPE is currently under active development. Features and interfaces may change, and
+            some functionality may be incomplete or subject to revision.
           </p>
         </Section>
 

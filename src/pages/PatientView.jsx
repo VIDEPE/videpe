@@ -168,10 +168,10 @@ export const PatientView = () => {
 
   return (
     <FullWidthLayout>
-      {/* Top bar: title centered in flow; button and toggle are fixed like ThemeToggle */}
-      <div className="shrink-0 flex flex-col items-center py-2 border-b border-border">
-        {/* The "Back" link and "Load Demo" / "Reset" button are grouped together on the left, while the title is centered and non-interactive. */}
-        <div className="fixed top-5 left-5 z-50 flex items-center gap-2">
+      {/* Top bar: 3-column flex row so the title is always geometrically between the left buttons and right toggle */}
+      <div className="shrink-0 flex items-start border-b border-border">
+        {/* Left column: Back + Load Demo in normal flow — top bar never scrolls so fixed isn't needed */}
+        <div className="shrink-0 flex flex-col items-start gap-2 px-5 py-3 z-10">
           <Link to="/" className="button flex items-center gap-2 px-3 py-1">
             <ArrowLeft size={16} /> Back
           </Link>
@@ -197,7 +197,9 @@ export const PatientView = () => {
                 : 'Load Demo'}
           </button>
         </div>
-        <div className="select-none pointer-events-none text-center">
+
+        {/* Center column: title always stays between the two side columns */}
+        <div className="flex-1 min-w-0 flex flex-col items-center justify-center py-2 text-center select-none pointer-events-none">
           <h1 className="!mb-3">VIDEPE</h1>
           <p className="text-sm text-foreground/70 py-2">
             <span className="font-bold">V</span>isualization & <span className="font-bold">I</span>
@@ -205,8 +207,14 @@ export const PatientView = () => {
             <span className="font-bold">E</span>pilepsy <span className="font-bold">P</span>
             resurgical <span className="font-bold">E</span>valuation
           </p>
+          <span className="text-xs text-foreground/40 border border-border/60 rounded-full px-2 py-0.5">In Development</span>
         </div>
-        <ThemeToggle />
+
+        {/* Right column: ThemeToggle rendered inline (not fixed) — top bar never scrolls so fixed isn't needed,
+            and inline keeps it locked to the layout as the window resizes */}
+        <div className="shrink-0 flex items-start px-5 py-3">
+          <ThemeToggle className="" />
+        </div>
       </div>
 
       <SplitPane

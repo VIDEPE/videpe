@@ -158,8 +158,9 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
         onSettingChange={handleSettingChange}
         onReorder={handleReorder}
       />
-      {/* NiiVue Canvas — fills remaining height */}
-      <div className="relative flex-1 min-h-0 overflow-hidden">
+      {/* NiiVue Canvas — fills remaining height, but never shrinks below 350px.
+          If the controls panel above expands past the point where 350px remains, the parent scrolls. */}
+      <div className="relative flex-1 min-h-[350px] overflow-hidden">
         {loading && (
           <div
             data-testid="loading-spinner"

@@ -1,14 +1,14 @@
 import { Sun, Moon } from 'lucide-react';
 import { useTheme } from '@/components/ThemeContext';
 
-export const ThemeToggle = () => {
+export const ThemeToggle = ({ className = 'fixed top-5 right-5 z-50' }) => {
   const { isDarkMode, toggleTheme } = useTheme();
 
   return (
     <button
       type="button"
       onClick={toggleTheme}
-      className="fixed top-5 right-5 z-50 p-2 rounded-full cursor-pointer"
+      className={`${className} p-2 rounded-full cursor-pointer`}
       aria-label={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
       aria-pressed={isDarkMode}
     >
