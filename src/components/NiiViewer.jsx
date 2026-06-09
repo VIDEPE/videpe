@@ -28,7 +28,9 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
 
   const canvas = useRef();
   const nvRef = useRef();
+  const canvasContainerRef = useRef();
   const opacityRafRef = useRef(null); // pending rAF id for opacity updates — cancelled on each new drag event so only the latest value redraws
+  const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
 
   const handleSettingChange = useCallback(
     (layerIndex, key, value) => {
@@ -68,12 +70,29 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
     [layerSettings, orderedVolumes]
   );
 
+  // Track the canvas container's dimensions so the layout effect can react to resizes
+  // (browser window resize, split-pane drag, etc.). Disconnects on unmount to avoid leaks.
+  useEffect(() => {
+    const canvasContainer = canvasContainerRef.current;
+    if (!canvasContainer) return;
+    const canvasSizeObserver = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      setCanvasSize({ width, height });
+    });
+    canvasSizeObserver.observe(canvasContainer); // Start observing the canvas container for size changes
+    return () => canvasSizeObserver.disconnect(); // Clean up the observer on unmount
+  }, []);
+
+  // Switch between AUTO (panels in a row) and GRID (2×2) based on aspect ratio.
+  // AUTO is used when the canvas is at least twice as wide as it is tall.
+  // height > 0 guards against the initial {0,0} state incorrectly triggering AUTO.
   useEffect(() => {
     if (!nvRef.current) return;
+    const isWide = canvasSize.height > 0 && canvasSize.width >= 2 * canvasSize.height;
     nvRef.current.setMultiplanarLayout(
-      isFullscreen ? MULTIPLANAR_TYPE.AUTO : MULTIPLANAR_TYPE.GRID
+      isWide ? MULTIPLANAR_TYPE.AUTO : MULTIPLANAR_TYPE.GRID
     );
-  }, [isFullscreen]);
+  }, [canvasSize]);
 
   const handleReorder = useCallback(
     (event) => {
@@ -160,7 +179,7 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
       />
       {/* NiiVue Canvas — fills remaining height, but never shrinks below 350px.
           If the controls panel above expands past the point where 350px remains, the parent scrolls. */}
-      <div className="relative flex-1 min-h-[350px] overflow-hidden">
+      <div ref={canvasContainerRef} className="relative flex-1 min-h-[350px] overflow-hidden">
         {loading && (
           <div
             data-testid="loading-spinner"
