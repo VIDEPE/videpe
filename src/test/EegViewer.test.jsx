@@ -112,7 +112,7 @@ describe('EegViewer — window size controls', () => {
     const user = userEvent.setup();
     renderViewer();
     const input = screen.getByRole('spinbutton', { name: /window size/i });
-    const [, increaseBtn] = within(containerOf(input)).getAllByRole('button');
+    const increaseBtn = within(containerOf(input)).getByRole('button', { name: 'Increase window size' });
 
     await user.click(increaseBtn);
 
@@ -123,7 +123,7 @@ describe('EegViewer — window size controls', () => {
     const user = userEvent.setup();
     renderViewer();
     const input = screen.getByRole('spinbutton', { name: /window size/i });
-    const [decreaseBtn] = within(containerOf(input)).getAllByRole('button');
+    const decreaseBtn = within(containerOf(input)).getByRole('button', { name: 'Decrease window size' });
 
     await user.click(decreaseBtn);
 
@@ -134,7 +134,7 @@ describe('EegViewer — window size controls', () => {
     const user = userEvent.setup();
     renderViewer();
     const input = screen.getByRole('spinbutton', { name: /window size/i });
-    const [decreaseBtn] = within(containerOf(input)).getAllByRole('button');
+    const decreaseBtn = within(containerOf(input)).getByRole('button', { name: 'Decrease window size' });
 
     // Drive value to 1 via the input, then try to go lower
     fireEvent.change(input, { target: { value: '1' } });
@@ -167,7 +167,7 @@ describe('EegViewer — window size controls', () => {
     const user = userEvent.setup();
     renderViewer();
     const input = screen.getByRole('spinbutton', { name: /window size/i });
-    const [, increaseBtn] = within(containerOf(input)).getAllByRole('button');
+    const increaseBtn = within(containerOf(input)).getByRole('button', { name: 'Increase window size' });
 
     // Default windowSize=20, tMax=30. First click reaches 30 (the limit), second should stay there.
     await user.click(increaseBtn);
@@ -184,12 +184,13 @@ describe('EegViewer — window size controls', () => {
     // Shift forward to startTime=10 using two > clicks (default step=5).
     // Window is then [10, 30] — right edge exactly touches tMax=30.
     const shiftInput = screen.getByRole('spinbutton', { name: /shift step/i });
-    const shiftBtns = within(shiftInput.closest('div')).getAllByRole('button');
-    await user.click(shiftBtns[2]); // > : startTime 0 → 5
-    await user.click(shiftBtns[2]); // > : startTime 5 → 10
+    const shiftContainer = within(shiftInput.closest('div'));
+    const forwardBtn = shiftContainer.getByRole('button', { name: 'Shift forward' });
+    await user.click(forwardBtn); // > : startTime 0 → 5
+    await user.click(forwardBtn); // > : startTime 5 → 10
 
     const windowInput = screen.getByRole('spinbutton', { name: /window size/i });
-    const [, increaseBtn] = within(containerOf(windowInput)).getAllByRole('button');
+    const increaseBtn = within(containerOf(windowInput)).getByRole('button', { name: 'Increase window size' });
 
     UplotReactMock.mockClear();
     await user.click(increaseBtn); // tries windowSize 20→30; without fix startTime stays 10, end=40
@@ -225,7 +226,7 @@ describe('EegViewer — channel count controls', () => {
     const user = userEvent.setup();
     renderViewer();
     const input = screen.getByRole('spinbutton', { name: /number of channels/i });
-    const [, decreaseBtn] = within(containerOf(input)).getAllByRole('button');
+    const decreaseBtn = within(containerOf(input)).getByRole('button', { name: 'Show fewer channels' });
 
     fireEvent.change(input, { target: { value: String(channelNames.length) } });
     await user.click(decreaseBtn);
@@ -237,7 +238,9 @@ describe('EegViewer — channel count controls', () => {
     const user = userEvent.setup();
     renderViewer();
     const input = screen.getByRole('spinbutton', { name: /number of channels/i });
-    const [increaseBtn, decreaseBtn] = within(containerOf(input)).getAllByRole('button');
+    const channelControls = within(containerOf(input));
+    const increaseBtn = channelControls.getByRole('button', { name: 'Show more channels' });
+    const decreaseBtn = channelControls.getByRole('button', { name: 'Show fewer channels' });
 
     await user.click(decreaseBtn);
     await user.click(increaseBtn);
@@ -249,7 +252,7 @@ describe('EegViewer — channel count controls', () => {
     const user = userEvent.setup();
     renderViewer();
     const input = screen.getByRole('spinbutton', { name: /number of channels/i });
-    const [increaseBtn] = within(containerOf(input)).getAllByRole('button');
+    const increaseBtn = within(containerOf(input)).getByRole('button', { name: 'Show more channels' });
 
     await user.click(increaseBtn);
     await user.click(increaseBtn);
@@ -262,7 +265,7 @@ describe('EegViewer — channel count controls', () => {
     const user = userEvent.setup();
     renderViewer();
     const input = screen.getByRole('spinbutton', { name: /number of channels/i });
-    const [, decreaseBtn] = within(containerOf(input)).getAllByRole('button');
+    const decreaseBtn = within(containerOf(input)).getByRole('button', { name: 'Show fewer channels' });
 
     fireEvent.change(input, { target: { value: '1' } });
     await user.click(decreaseBtn);
@@ -292,20 +295,26 @@ describe('EegViewer — channel count controls', () => {
 });
 
 describe('EegViewer — start/end navigation', () => {
-  const shiftButtons = () => {
+  const shiftControls = () => {
     const input = screen.getByRole('spinbutton', { name: /shift step/i });
-    return within(containerOf(input)).getAllByRole('button');
-    // order: [|<,  <,  >,  >|]
+    const scope = within(containerOf(input));
+    return {
+      jumpToStartBtn: scope.getByRole('button', { name: 'Jump to start' }),
+      backwardBtn: scope.getByRole('button', { name: 'Shift backward' }),
+      forwardBtn: scope.getByRole('button', { name: 'Shift forward' }),
+      jumpToEndBtn: scope.getByRole('button', { name: 'Jump to end' }),
+    };
   };
 
   it('|< resets start time to 0', async () => {
     const { default: UplotReactMock } = await import('uplot-react');
     const user = userEvent.setup();
     renderViewer();
+    const { jumpToStartBtn, forwardBtn } = shiftControls();
 
-    await user.click(shiftButtons()[2]); // > to move away from 0
+    await user.click(forwardBtn); // > to move away from 0
     UplotReactMock.mockClear();
-    await user.click(shiftButtons()[0]); // |<
+    await user.click(jumpToStartBtn); // |<
 
     const range = UplotReactMock.mock.calls[0][0].options.scales.x.range;
     expect(range[0]).toBe(0);
@@ -315,9 +324,10 @@ describe('EegViewer — start/end navigation', () => {
     const { default: UplotReactMock } = await import('uplot-react');
     const user = userEvent.setup();
     renderViewer();
+    const { jumpToEndBtn } = shiftControls();
 
     UplotReactMock.mockClear();
-    await user.click(shiftButtons()[3]); // >|
+    await user.click(jumpToEndBtn); // >|
 
     const range = UplotReactMock.mock.calls[0][0].options.scales.x.range;
     const lastTimestamp = data[0][data[0].length - 1];
@@ -329,9 +339,10 @@ describe('EegViewer — start/end navigation', () => {
     const { default: UplotReactMock } = await import('uplot-react');
     const user = userEvent.setup();
     renderViewer();
+    const { forwardBtn } = shiftControls();
 
     UplotReactMock.mockClear();
-    await user.click(shiftButtons()[2]); // >
+    await user.click(forwardBtn); // >
 
     const range = UplotReactMock.mock.calls[0][0].options.scales.x.range;
     expect(range[0]).toBe(5);
@@ -341,10 +352,11 @@ describe('EegViewer — start/end navigation', () => {
     const { default: UplotReactMock } = await import('uplot-react');
     const user = userEvent.setup();
     renderViewer();
+    const { backwardBtn, forwardBtn } = shiftControls();
 
-    await user.click(shiftButtons()[2]); // > to move away from 0
+    await user.click(forwardBtn); // > to move away from 0
     UplotReactMock.mockClear();
-    await user.click(shiftButtons()[1]); // <
+    await user.click(backwardBtn); // <
 
     const range = UplotReactMock.mock.calls[0][0].options.scales.x.range;
     expect(range[0]).toBe(0);
@@ -354,10 +366,11 @@ describe('EegViewer — start/end navigation', () => {
     const { default: UplotReactMock } = await import('uplot-react');
     const user = userEvent.setup();
     renderViewer();
+    const { backwardBtn, forwardBtn } = shiftControls();
 
-    await user.click(shiftButtons()[2]); // > advance to 5
-    await user.click(shiftButtons()[1]); // < back to 0
-    await user.click(shiftButtons()[1]); // < try to go below 0 — state unchanged, no re-render
+    await user.click(forwardBtn); // > advance to 5
+    await user.click(backwardBtn); // < back to 0
+    await user.click(backwardBtn); // < try to go below 0 — state unchanged, no re-render
 
     // Last render (from the first < click) had startTime=0
     const lastRange = UplotReactMock.mock.calls.at(-1)[0].options.scales.x.range;
@@ -366,23 +379,17 @@ describe('EegViewer — start/end navigation', () => {
 });
 
 describe('EegViewer — shift step size effect', () => {
-  const shiftButtons = () => {
-    const input = screen.getByRole('spinbutton', { name: /shift step/i });
-    return within(containerOf(input)).getAllByRole('button');
-    // order: [|<, <, >, >|]
-  };
-
   it('changing the shift step changes the jump distance of the > button', async () => {
     const { default: UplotReactMock } = await import('uplot-react');
     const user = userEvent.setup();
     renderViewer();
 
-    fireEvent.change(screen.getByRole('spinbutton', { name: /shift step/i }), {
-      target: { value: '10' },
-    });
+    const shiftInput = screen.getByRole('spinbutton', { name: /shift step/i });
+    fireEvent.change(shiftInput, { target: { value: '10' } });
 
+    const forwardBtn = within(containerOf(shiftInput)).getByRole('button', { name: 'Shift forward' });
     UplotReactMock.mockClear();
-    await user.click(shiftButtons()[2]); // >
+    await user.click(forwardBtn); // >
 
     const range = UplotReactMock.mock.calls[0][0].options.scales.x.range;
     expect(range[0]).toBe(10);
@@ -468,63 +475,62 @@ describe('EegViewer — plot rendering', () => {
 });
 
 describe('EegViewer — gain controls', () => {
-  it('gain + halves the y-range (increase gain)', async () => {
+  it('zoom in button halves the plot y-range', async () => {
     const { default: UplotReactMock } = await import('uplot-react');
     const user = userEvent.setup();
     renderViewer();
 
-    const [, gainUpBtn] = within(containerOf(screen.getByText('Gain (µV)'))).getAllByRole('button');
+    const zoomInBtn = within(containerOf(screen.getByText('Gain (µV)'))).getByRole('button', { name: 'Zoom in' });
     UplotReactMock.mockClear();
-    await user.click(gainUpBtn);
+    await user.click(zoomInBtn);
 
-    const [lo, hi] = UplotReactMock.mock.calls[0][0].options.scales.y.range;
-    expect(lo).toBeCloseTo((-INITIAL_Y_SCALE / 2) * OVERDRAW, 3);
-    expect(hi).toBeCloseTo((INITIAL_Y_SCALE / 2) * OVERDRAW, 3);
+    const [yMin, yMax] = UplotReactMock.mock.calls[0][0].options.scales.y.range;
+    expect(yMin).toBeCloseTo((-INITIAL_Y_SCALE / 2) * OVERDRAW, 3);
+    expect(yMax).toBeCloseTo((INITIAL_Y_SCALE / 2) * OVERDRAW, 3);
   });
 
-  it('gain − doubles the y-range (decrease gain)', async () => {
+  it('zoom out button doubles the plot y-range', async () => {
     const { default: UplotReactMock } = await import('uplot-react');
     const user = userEvent.setup();
     renderViewer();
 
-    const [gainDownBtn] = within(containerOf(screen.getByText('Gain (µV)'))).getAllByRole('button');
+    const zoomOutBtn = within(containerOf(screen.getByText('Gain (µV)'))).getByRole('button', { name: 'Zoom out' });
     UplotReactMock.mockClear();
-    await user.click(gainDownBtn);
+    await user.click(zoomOutBtn);
 
-    const [lo, hi] = UplotReactMock.mock.calls[0][0].options.scales.y.range;
-    expect(lo).toBeCloseTo(-INITIAL_Y_SCALE * 2 * OVERDRAW, 3);
-    expect(hi).toBeCloseTo(INITIAL_Y_SCALE * 2 * OVERDRAW, 3);
+    const [yMin, yMax] = UplotReactMock.mock.calls[0][0].options.scales.y.range;
+    expect(yMin).toBeCloseTo(-INITIAL_Y_SCALE * 2 * OVERDRAW, 3);
+    expect(yMax).toBeCloseTo(INITIAL_Y_SCALE * 2 * OVERDRAW, 3);
   });
 
-  it('gain + rounds the halved y-scale to the nearest integer', async () => {
+  it('zoom in rounds plot y-range to nearest 0.001', async () => {
     const { default: UplotReactMock } = await import('uplot-react');
     const user = userEvent.setup();
     renderViewer();
 
-    // Set gain to 5 so halving gives 2.5, which Math.round rounds up to 3
+    // Set gain to 0.003 so halving gives 0.0015, which rounds to 0.002 at 3dp
     fireEvent.change(screen.getByRole('spinbutton', { name: /gain/i }), {
-      target: { value: '5' },
+      target: { value: '0.003' },
     });
 
-    const [, gainUpBtn] = within(containerOf(screen.getByText('Gain (µV)'))).getAllByRole('button');
+    const zoomInBtn = within(containerOf(screen.getByText('Gain (µV)'))).getByRole('button', { name: 'Zoom in' });
     UplotReactMock.mockClear();
-    await user.click(gainUpBtn);
+    await user.click(zoomInBtn);
 
-    const [lo, hi] = UplotReactMock.mock.calls[0][0].options.scales.y.range;
-    // 5 / 2 = 2.5 → Math.round(2.5) = 3, not 2 or 2.5
-    expect(lo).toBe(-3 * OVERDRAW);
-    expect(hi).toBe(3 * OVERDRAW);
+    const [yMin, yMax] = UplotReactMock.mock.calls[0][0].options.scales.y.range;
+    // 0.003 / 2 = 0.0015 → Math.round(0.0015 × 1000) / 1000 = 2/1000 = 0.002
+    expect(yMin).toBe(-0.002 * OVERDRAW);
+    expect(yMax).toBe(0.002 * OVERDRAW);
   });
 
-  it('rounds gain to nearest integer on blur', () => {
+  it('clamps gain to GAIN_MIN (0.001) on blur when 0 is entered', () => {
     renderViewer();
     const input = screen.getByRole('spinbutton', { name: /gain/i });
 
-    // 3.5 → Math.round(3.5) = 4
-    fireEvent.change(input, { target: { value: '3.5' } });
+    fireEvent.change(input, { target: { value: '0' } });
     fireEvent.blur(input);
 
-    expect(input).toHaveValue(4);
+    expect(input).toHaveValue(0.001);
   });
 
   it('all channels share the same y-range after gain change', async () => {
@@ -532,9 +538,9 @@ describe('EegViewer — gain controls', () => {
     const user = userEvent.setup();
     renderViewer();
 
-    const [, gainUpBtn] = within(containerOf(screen.getByText('Gain (µV)'))).getAllByRole('button');
+    const zoomInBtn = within(containerOf(screen.getByText('Gain (µV)'))).getByRole('button', { name: 'Zoom in' });
     UplotReactMock.mockClear();
-    await user.click(gainUpBtn);
+    await user.click(zoomInBtn);
 
     const channelCalls = UplotReactMock.mock.calls.slice(0, channelNames.length);
     const yRanges = channelCalls.map((call) => call[0].options.scales.y.range);
@@ -545,13 +551,26 @@ describe('EegViewer — gain controls', () => {
     const user = userEvent.setup();
     renderViewer();
     const gainInput = screen.getByRole('spinbutton', { name: /gain/i });
-    const [gainDownBtn] = within(containerOf(screen.getByText('Gain (µV)'))).getAllByRole('button');
+    const zoomOutBtn = within(containerOf(screen.getByText('Gain (µV)'))).getByRole('button', { name: 'Zoom out' });
 
     // Set gain to 99999 (the 5-digit max), then click ZoomOut — which doubles to 199998 without a cap
     fireEvent.change(gainInput, { target: { value: '99999' } });
-    await user.click(gainDownBtn);
+    await user.click(zoomOutBtn);
 
     expect(gainInput).toHaveValue(99999);
+  });
+
+  it('does not decrease gain below GAIN_MIN (0.001) via the Zoom in button', async () => {
+    const user = userEvent.setup();
+    renderViewer();
+    const gainInput = screen.getByRole('spinbutton', { name: /gain/i });
+    const zoomInBtn = within(containerOf(screen.getByText('Gain (µV)'))).getByRole('button', { name: 'Zoom in' });
+
+    // Set gain to 0.001 (GAIN_MIN), then click Zoom in — which would halve to 0.0005 without a clamp
+    fireEvent.change(gainInput, { target: { value: '0.001' } });
+    await user.click(zoomInBtn);
+
+    expect(gainInput).toHaveValue(0.001);
   });
 });
 
@@ -790,7 +809,7 @@ describe('EegViewer — shift step capped by window size', () => {
     fireEvent.change(shiftInput, { target: { value: '15' } });
 
     // Decrease window size from 20 to 10 via the − button (step = 10)
-    const [decreaseWindowBtn] = within(containerOf(windowInput)).getAllByRole('button');
+    const decreaseWindowBtn = within(containerOf(windowInput)).getByRole('button', { name: 'Decrease window size' });
     await user.click(decreaseWindowBtn);
 
     expect(shiftInput).toHaveValue(10);
@@ -802,7 +821,7 @@ describe('EegViewer — shift step capped by window size', () => {
     const shiftInput = screen.getByRole('spinbutton', { name: /shift step/i });
     const windowInput = screen.getByRole('spinbutton', { name: /window size/i });
 
-    const [decreaseWindowBtn] = within(containerOf(windowInput)).getAllByRole('button');
+    const decreaseWindowBtn = within(containerOf(windowInput)).getByRole('button', { name: 'Decrease window size' });
     await user.click(decreaseWindowBtn); // 20 → 10
 
     expect(shiftInput).toHaveAttribute('max', '10');
@@ -811,10 +830,13 @@ describe('EegViewer — shift step capped by window size', () => {
 
 describe('EegViewer — time shift clamping', () => {
   // tMax=30, windowSize=20 → valid startTime range is [0, 10]
-  const shiftButtons = () => {
+  const shiftControls = () => {
     const input = screen.getByRole('spinbutton', { name: /shift step/i });
-    return within(input.closest('div')).getAllByRole('button');
-    // order: [|<, <, >, >|]
+    const scope = within(input.closest('div'));
+    return {
+      backwardBtn: scope.getByRole('button', { name: 'Shift backward' }),
+      forwardBtn: scope.getByRole('button', { name: 'Shift forward' }),
+    };
   };
 
   it('forward shift clamps at tMax − windowSize', async () => {
@@ -827,8 +849,9 @@ describe('EegViewer — time shift clamping', () => {
       target: { value: '25' },
     });
 
+    const { forwardBtn } = shiftControls();
     UplotReactMock.mockClear();
-    await user.click(shiftButtons()[2]); // >
+    await user.click(forwardBtn); // >
 
     // startTime should be clamped at tMax − windowSize = 10, not 25
     const range = UplotReactMock.mock.calls[0][0].options.scales.x.range;
@@ -840,14 +863,15 @@ describe('EegViewer — time shift clamping', () => {
     const { default: UplotReactMock } = await import('uplot-react');
     const user = userEvent.setup();
     renderViewer();
+    const { forwardBtn } = shiftControls();
 
     // step=5: two clicks reach the ceiling (0 → 5 → 10 = tMax − windowSize)
-    await user.click(shiftButtons()[2]);
-    await user.click(shiftButtons()[2]);
+    await user.click(forwardBtn);
+    await user.click(forwardBtn);
 
     // Third click: clamped value equals current state → React skips re-render
     UplotReactMock.mockClear();
-    await user.click(shiftButtons()[2]);
+    await user.click(forwardBtn);
     expect(UplotReactMock).not.toHaveBeenCalled();
   });
 
@@ -855,15 +879,16 @@ describe('EegViewer — time shift clamping', () => {
     const { default: UplotReactMock } = await import('uplot-react');
     const user = userEvent.setup();
     renderViewer();
+    const { backwardBtn, forwardBtn } = shiftControls();
 
     // Set a step large enough to undershoot in one click from any position
     fireEvent.change(screen.getByRole('spinbutton', { name: /shift step/i }), {
       target: { value: '25' },
     });
-    await user.click(shiftButtons()[2]); // first move forward so < has somewhere to go
+    await user.click(forwardBtn); // first move forward so < has somewhere to go
 
     UplotReactMock.mockClear();
-    await user.click(shiftButtons()[1]); // <
+    await user.click(backwardBtn); // <
 
     // startTime should be clamped at 0, not negative
     const range = UplotReactMock.mock.calls[0][0].options.scales.x.range;
