@@ -92,7 +92,7 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
   const CHANNEL_MAX_LENGTH = String(channelNames.length).length; // enough to display the max channel count, e.g. "128"
   const WINDOW_MAX_LENGTH = String(Math.ceil(tMax)).length + 2; // enough to display the max window size (tMax) with a comma + 1 decimal
   const SHIFT_MAX_LENGTH = 6; // covers up to 9999.9 s
-  const GAIN_MAX_LENGTH = 5; // covers up to 99999 µV
+  const GAIN_MAX_LENGTH = 5; // covers 0.0001 to 99999 µV
   const GAIN_MAX = 10 ** GAIN_MAX_LENGTH - 1; // 99999 — derived from GAIN_MAX_LENGTH so both stay in sync
   const GAIN_MIN = 10 ** -(GAIN_MAX_LENGTH-2); // 0.001 minimum gain (with GAIN_MAX_LENGTH char length) to prevent uPlot from breaking with a zero or negative y-range
 
