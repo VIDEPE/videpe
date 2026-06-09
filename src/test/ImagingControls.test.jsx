@@ -30,12 +30,15 @@ describe('ImagingControls', () => {
       expect(screen.getByText('PET')).toBeInTheDocument();
     });
 
-    it('appends subtype to label when subtype is present', () => {
+    it('renders subtype with a dash prefix in muted style when subtype is present', () => {
       renderControls(
         [{ type: 'MRI', subtype: 'T1w', url: '/t1w.nii' }],
         [makeSettings()]
       );
-      expect(screen.getByText('MRI - T1w')).toBeInTheDocument();
+      expect(screen.getByText('MRI')).toBeInTheDocument();
+      const subtypeEl = screen.getByText('- T1w');
+      expect(subtypeEl).toBeInTheDocument();
+      expect(subtypeEl).toHaveClass('text-foreground/60');
     });
 
     it('shows only type when subtype is null', () => {
