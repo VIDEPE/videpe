@@ -30,6 +30,22 @@ describe('ImagingControls', () => {
       expect(screen.getByText('PET')).toBeInTheDocument();
     });
 
+    it('appends subtype to label when subtype is present', () => {
+      renderControls(
+        [{ type: 'MRI', subtype: 'T1w', url: '/t1w.nii' }],
+        [makeSettings()]
+      );
+      expect(screen.getByText('MRI - T1w')).toBeInTheDocument();
+    });
+
+    it('shows only type when subtype is null', () => {
+      renderControls(
+        [{ type: 'PET', subtype: null, url: '/pet.nii' }],
+        [makeSettings({ colormap: 'viridis' })]
+      );
+      expect(screen.getByText('PET')).toBeInTheDocument();
+    });
+
     it('falls back to "Volume N" when volume has no type', () => {
       renderControls([{ url: '/scan.nii' }], [makeSettings()]);
       expect(screen.getByText('Layer 1')).toBeInTheDocument();

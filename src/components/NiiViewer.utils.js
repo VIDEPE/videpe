@@ -26,7 +26,8 @@ export const TYPE_COLORMAP_DEFAULTS = {
 };
 
 // Detects imaging modality from a filename using BIDS suffix first, then keyword fallback.
-// Returns { type } where type is 'MRI', 'PET', 'SPECT', or the filename without extension for unknowns.
+// Returns { type, subtype } where type is 'MRI', 'PET', 'SPECT', or nameWithoutExtension for unknowns.
+// subtype is the BIDS suffix for MRI (e.g. 'T1w', 'T2star'), nameWithoutExtension for PET/SPECT/keyword matches, null for unknowns.
 export const detectVolumeType = (filename) => {
   // Strip everything from the first '.' onward (handles .nii.gz, .dcm, etc.)
   const dotIndex = filename.indexOf('.');
@@ -34,17 +35,17 @@ export const detectVolumeType = (filename) => {
   const lastSegment = nameWithoutExtension.split('_').at(-1);
   const lower = filename.toLowerCase();
 
-  // Pass 1: BIDS suffix (case-sensitive)
-  if (MRI_BIDS_SUFFIXES.has(lastSegment)) return { type: 'MRI' };
-  if (lastSegment === 'pet') return { type: 'PET' };
-  if (lastSegment === 'spect') return { type: 'SPECT' };
-  
-  // Pass 2: keyword fallback (case-insensitive, for non-BIDS filenames)
-  if (/t1|t2|flair|mri|mprage|bravo/.test(lower)) return { type: 'MRI' };
-  if (/pet|fdg/.test(lower)) return { type: 'PET' };
-  if (/spect|siscom/.test(lower)) return { type: 'SPECT' };
+  // Pass 1: BIDS suffix (case-sensitive) — all use nameWithoutExtension as subtype for consistency
+  if (MRI_BIDS_SUFFIXES.has(lastSegment)) return { type: 'MRI', subtype: nameWithoutExtension };
+  if (lastSegment === 'pet') return { type: 'PET', subtype: nameWithoutExtension };
+  if (lastSegment === 'spect') return { type: 'SPECT', subtype: nameWithoutExtension };
 
-  return { type: nameWithoutExtension };
+  // Pass 2: keyword fallback (case-insensitive, for non-BIDS filenames) — use nameWithoutExtension as subtype so files are distinguishable in the UI
+  if (/t1|t2|flair|mri|mprage|bravo/.test(lower)) return { type: 'MRI', subtype: nameWithoutExtension };
+  if (/pet|fdg/.test(lower)) return { type: 'PET', subtype: nameWithoutExtension };
+  if (/spect|siscom/.test(lower)) return { type: 'SPECT', subtype: nameWithoutExtension };
+
+  return { type: nameWithoutExtension, subtype: null };
 };
 
 // Returns an array of display settings, one per layer (volume or mesh).

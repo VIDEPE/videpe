@@ -35,7 +35,10 @@ function SortableSettingsCard({
   onSettingChange,
 }) {
   const { ref, handleRef, isDragging } = useSortable({ id: volume.url, index });
-  const label = volume.type ?? `Layer ${index + 1}`;
+  // Label is "type - subtype" if subtype exists, otherwise just "type". If neither exists, fallback to "Layer {index}"
+  const label = volume.type
+    ? volume.type + (volume.subtype ? ` - ${volume.subtype}` : '')
+    : `Layer ${index + 1}`;
 
   // Local string state — allows typing a partial value (e.g. empty string) without breaking the numeric opacity
   const [opacityStr, setOpacityStr] = useState(() => String(Math.round(settings.opacity * 100)));
