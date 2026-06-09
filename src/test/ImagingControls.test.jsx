@@ -30,6 +30,25 @@ describe('ImagingControls', () => {
       expect(screen.getByText('PET')).toBeInTheDocument();
     });
 
+    it('renders subtype with a dash prefix in muted style when subtype is present', () => {
+      renderControls(
+        [{ type: 'MRI', subtype: 'T1w', url: '/t1w.nii' }],
+        [makeSettings()]
+      );
+      expect(screen.getByText('MRI')).toBeInTheDocument();
+      const subtypeEl = screen.getByText('- T1w');
+      expect(subtypeEl).toBeInTheDocument();
+      expect(subtypeEl).toHaveClass('text-foreground/60');
+    });
+
+    it('shows only type when subtype is null', () => {
+      renderControls(
+        [{ type: 'PET', subtype: null, url: '/pet.nii' }],
+        [makeSettings({ colormap: 'viridis' })]
+      );
+      expect(screen.getByText('PET')).toBeInTheDocument();
+    });
+
     it('falls back to "Volume N" when volume has no type', () => {
       renderControls([{ url: '/scan.nii' }], [makeSettings()]);
       expect(screen.getByText('Layer 1')).toBeInTheDocument();

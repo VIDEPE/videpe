@@ -151,65 +151,69 @@ describe('loadVolumesAndApplySettings', () => {
 
 describe('detectVolumeType', () => {
   describe('BIDS suffix detection', () => {
-    it('detects T1w in .nii as MRI', () => {
-      expect(detectVolumeType('sub-01_T1w.nii')).toEqual({ type: 'MRI' });
+    it('detects T1w in .nii as MRI with nameWithoutExtension as subtype', () => {
+      expect(detectVolumeType('sub-01_T1w.nii')).toEqual({ type: 'MRI', subtype: 'sub-01_T1w' });
     });
 
     it('detects T1w in .nii.gz (compressed) as MRI — extension must not interfere', () => {
-      expect(detectVolumeType('sub-01_T1w.nii.gz')).toEqual({ type: 'MRI' });
+      expect(detectVolumeType('sub-01_T1w.nii.gz')).toEqual({ type: 'MRI', subtype: 'sub-01_T1w' });
     });
 
-    it('detects T2w as MRI', () => {
-      expect(detectVolumeType('sub-01_ses-01_T2w.nii.gz')).toEqual({ type: 'MRI' });
+    it('detects T2w as MRI with nameWithoutExtension as subtype', () => {
+      expect(detectVolumeType('sub-01_ses-01_T2w.nii.gz')).toEqual({ type: 'MRI', subtype: 'sub-01_ses-01_T2w' });
     });
 
-    it('detects FLAIR as MRI', () => {
-      expect(detectVolumeType('sub-01_FLAIR.nii.gz')).toEqual({ type: 'MRI' });
+    it('detects FLAIR as MRI with nameWithoutExtension as subtype', () => {
+      expect(detectVolumeType('sub-01_FLAIR.nii.gz')).toEqual({ type: 'MRI', subtype: 'sub-01_FLAIR' });
     });
 
-    it('detects pet suffix as PET', () => {
-      expect(detectVolumeType('sub-01_pet.nii.gz')).toEqual({ type: 'PET' });
+    it('detects T2star as MRI with nameWithoutExtension as subtype', () => {
+      expect(detectVolumeType('sub-01_T2star.nii.gz')).toEqual({ type: 'MRI', subtype: 'sub-01_T2star' });
     });
 
-    it('detects spect suffix as SPECT', () => {
-      expect(detectVolumeType('sub-01_spect.nii.gz')).toEqual({ type: 'SPECT' });
+    it('detects pet suffix as PET with nameWithoutExtension as subtype', () => {
+      expect(detectVolumeType('sub-01_pet.nii.gz')).toEqual({ type: 'PET', subtype: 'sub-01_pet' });
     });
 
-    it('does not match PET (uppercase) as BIDS pet — falls through to keyword', () => {
+    it('detects spect suffix as SPECT with nameWithoutExtension as subtype', () => {
+      expect(detectVolumeType('sub-01_spect.nii.gz')).toEqual({ type: 'SPECT', subtype: 'sub-01_spect' });
+    });
+
+    it('does not match PET (uppercase) as BIDS pet — falls through to keyword with nameWithoutExtension as subtype', () => {
       // BIDS suffix 'pet' is lowercase; 'PET' does not match BIDS but keyword fallback catches it
-      expect(detectVolumeType('scan_PET.nii')).toEqual({ type: 'PET' });
+      expect(detectVolumeType('scan_PET.nii')).toEqual({ type: 'PET', subtype: 'scan_PET' });
     });
   });
 
   describe('keyword fallback for non-BIDS filenames', () => {
-    it('detects t1 keyword as MRI', () => {
-      expect(detectVolumeType('my_t1_scan.nii')).toEqual({ type: 'MRI' });
+    it('detects t1 keyword as MRI with nameWithoutExtension as subtype', () => {
+      expect(detectVolumeType('my_t1_scan.nii')).toEqual({ type: 'MRI', subtype: 'my_t1_scan' });
     });
 
-    it('detects fdg keyword as PET', () => {
-      expect(detectVolumeType('fdg_uptake.nii.gz')).toEqual({ type: 'PET' });
+    it('detects fdg keyword as PET with nameWithoutExtension as subtype', () => {
+      expect(detectVolumeType('fdg_uptake.nii.gz')).toEqual({ type: 'PET', subtype: 'fdg_uptake' });
     });
 
-    it('detects siscom keyword as SPECT', () => {
-      expect(detectVolumeType('pat_siscom_17-13.nii')).toEqual({ type: 'SPECT' });
+    it('detects siscom keyword as SPECT with nameWithoutExtension as subtype', () => {
+      expect(detectVolumeType('pat_siscom_17-13.nii')).toEqual({ type: 'SPECT', subtype: 'pat_siscom_17-13' });
     });
 
-    it('detects mprage keyword as MRI', () => {
-      expect(detectVolumeType('mprage.nii.gz')).toEqual({ type: 'MRI' });
+    it('detects mprage keyword as MRI with nameWithoutExtension as subtype', () => {
+      expect(detectVolumeType('mprage.nii.gz')).toEqual({ type: 'MRI', subtype: 'mprage' });
     });
   });
 
   describe('unknown filenames', () => {
-    it('returns the filename without extension as type', () => {
-      expect(detectVolumeType('scan.nii')).toEqual({ type: 'scan' });
+    it('returns the filename without extension as type with no subtype', () => {
+      expect(detectVolumeType('scan.nii')).toEqual({ type: 'scan', subtype: null });
     });
 
     it('handles files with no extension', () => {
-      expect(detectVolumeType('unknown_volume')).toEqual({ type: 'unknown_volume' });
+      expect(detectVolumeType('unknown_volume')).toEqual({ type: 'unknown_volume', subtype: null });
     });
 
     it('uses the full name without extension when no _ separator is present', () => {
-      expect(detectVolumeType('brainmask.nii.gz')).toEqual({ type: 'brainmask' });
+      expect(detectVolumeType('brainmask.nii.gz')).toEqual({ type: 'brainmask', subtype: null });
     });
   });
 });

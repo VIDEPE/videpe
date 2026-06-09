@@ -18,9 +18,9 @@ const DEMO_EEG = {
 };
 
 const DEMO_VOLUMES = [
-  { url: 'demo_data/patT1.nii', type: 'MRI' },
-  { url: 'demo_data/pat_PET_aligned.nii', type: 'PET' },
-  { url: 'demo_data/pat_siscom_17-13.nii', type: 'SPECT', urlImgType: 'nii' },
+  { url: 'demo_data/patT1.nii', ...detectVolumeType('patT1.nii') },
+  { url: 'demo_data/pat_PET_aligned.nii', ...detectVolumeType('pat_PET_aligned.nii') },
+  { url: 'demo_data/pat_siscom_17-13.nii', ...detectVolumeType('pat_siscom_17-13.nii'), urlImgType: 'nii' },
 ];
 
 export const PatientView = () => {
@@ -99,8 +99,8 @@ export const PatientView = () => {
         Promise.all(
           Array.from(files).map((f) => {
             // NiiVue calls fetch(url) internally, so a blob: URL is needed — a plain filename would resolve as a relative HTTP request
-            const { type } = detectVolumeType(f.name);
-            return { url: URL.createObjectURL(f), name: f.name, type };
+            const { type, subtype } = detectVolumeType(f.name);
+            return { url: URL.createObjectURL(f), name: f.name, type, subtype };
           })
         ),
         {

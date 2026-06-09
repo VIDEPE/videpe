@@ -35,7 +35,10 @@ function SortableSettingsCard({
   onSettingChange,
 }) {
   const { ref, handleRef, isDragging } = useSortable({ id: volume.url, index });
-  const label = volume.type ?? `Layer ${index + 1}`;
+  // Label is either "type - subtype" (e.g. "MRI - T1") or just "type" if no subtype, or "Layer {index}" as a fallback if no type
+  const label = volume.type
+    ? volume.type + (volume.subtype ? ` - ${volume.subtype}` : '')
+    : `Layer ${index + 1}`;
 
   // Local string state — allows typing a partial value (e.g. empty string) without breaking the numeric opacity
   const [opacityStr, setOpacityStr] = useState(() => String(Math.round(settings.opacity * 100)));
@@ -69,7 +72,10 @@ function SortableSettingsCard({
           />
         </span>
 
-        <span className="flex-1 text-sm font-medium text-heading truncate">{label}</span>
+        <span className="flex-1 text-sm font-medium text-heading truncate">
+          {volume.type ?? `Layer ${index + 1}`}
+          {volume.subtype && <span className="text-xs font-normal text-foreground/60 ml-1">- {volume.subtype}</span>}
+        </span>
 
         {/* Visibility toggle */}
         <button
