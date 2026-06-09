@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { getInitialLayerSettings, detectVolumeType } from '@/components/NiiViewer.utils';
 import { NiiViewer, loadVolumesAndApplySettings } from '@/components/NiiViewer';
@@ -30,7 +30,7 @@ vi.mock('@niivue/niivue', () => ({
     return instance;
   }),
   SHOW_RENDER: { ALWAYS: 2 },
-  MULTIPLANAR_TYPE: { GRID: 2 },
+  MULTIPLANAR_TYPE: { GRID: 2, AUTO: 3 },
 }));
 
 describe('loadVolumesAndApplySettings', () => {
@@ -327,6 +327,56 @@ describe('NiiViewer', () => {
       const nv = Niivue.mock.results[Niivue.mock.results.length - 1].value;
       // toHaveBeenLastCalledWith isolates the handleSettingChange call from the initial loadVolumesAndApplySettings call
       expect(nv.setColormap).toHaveBeenLastCalledWith('mri-id', 'magma');
+    });
+  });
+
+  describe('canvas aspect ratio layout', () => {
+    let resizeCallback;
+
+    beforeEach(() => {
+      global.ResizeObserver = class {
+        constructor(cb) { resizeCallback = cb; }
+        observe() {}
+        disconnect() {}
+      };
+    });
+
+    const setup = async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      render(<NiiViewer volumes={[{ type: 'MRI', url: '/mri.nii' }]} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+      const nv = Niivue.mock.results[Niivue.mock.results.length - 1].value;
+      nv.setMultiplanarLayout.mockClear();
+      return nv;
+    };
+
+    it('switches to AUTO layout when canvas width is at least 2× the height', async () => {
+      const { MULTIPLANAR_TYPE } = await import('@niivue/niivue');
+      const nv = await setup();
+
+      act(() => { resizeCallback([{ contentRect: { width: 800, height: 200 } }]); });
+
+      expect(nv.setMultiplanarLayout).toHaveBeenCalledWith(MULTIPLANAR_TYPE.AUTO);
+    });
+
+    it('uses GRID layout when canvas width is less than 2× the height', async () => {
+      const { MULTIPLANAR_TYPE } = await import('@niivue/niivue');
+      const nv = await setup();
+
+      act(() => { resizeCallback([{ contentRect: { width: 400, height: 300 } }]); });
+
+      expect(nv.setMultiplanarLayout).toHaveBeenCalledWith(MULTIPLANAR_TYPE.GRID);
+    });
+
+    it('switches back to GRID when canvas becomes narrow again', async () => {
+      const { MULTIPLANAR_TYPE } = await import('@niivue/niivue');
+      const nv = await setup();
+
+      act(() => { resizeCallback([{ contentRect: { width: 800, height: 200 } }]); });
+      nv.setMultiplanarLayout.mockClear();
+      act(() => { resizeCallback([{ contentRect: { width: 400, height: 300 } }]); });
+
+      expect(nv.setMultiplanarLayout).toHaveBeenCalledWith(MULTIPLANAR_TYPE.GRID);
     });
   });
 
