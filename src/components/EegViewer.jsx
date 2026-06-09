@@ -94,6 +94,7 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
   const SHIFT_MAX_LENGTH = 6; // covers up to 9999.9 s
   const GAIN_MAX_LENGTH = 5; // covers up to 99999 µV
   const GAIN_MAX = 10 ** GAIN_MAX_LENGTH - 1; // 99999 — derived from GAIN_MAX_LENGTH so both stay in sync
+  const GAIN_MIN = 10 ** -(GAIN_MAX_LENGTH-2); // 0.001 minimum gain (with GAIN_MAX_LENGTH char length) to prevent uPlot from breaking with a zero or negative y-range
 
   const defaultWindowSize = tMax < 20 ? Math.ceil(tMax) : 20; // default to showing the full recording if it's shorter than 20s, otherwise start with a 20s window
   const [windowSize, setWindowSize] = useState(defaultWindowSize); // seconds visible in the x-range, initialized to 20s or the full recording if shorter
@@ -117,7 +118,8 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
     Math.max(1, Math.min(channelNames.length, maxChannelsByHeight, n));
   // Whenever on of the control variables changes, ensure it is still valid and update the input string to match
   const updateYScale = (newVal) => {
-    const clamped = Math.max(1, Math.min(GAIN_MAX, Math.round(newVal)));
+    const rounded_newVal = Math.round(newVal * 10 ** (GAIN_MAX_LENGTH - 2)) / 10 ** (GAIN_MAX_LENGTH - 2);
+    const clamped = Math.max(GAIN_MIN, Math.min(GAIN_MAX, rounded_newVal));
     setYScale(clamped);
     setYScaleStr(String(clamped));
   };
@@ -426,7 +428,8 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
                     Math.max(0, Math.min(tMax - windowSize, ratio * tMax - windowSize / 2))
                   );
                 }}
-              >
+              > 
+                {/* Timeline thumb */}
                 <div
                   data-testid="timeline-thumb"
                   style={{
@@ -481,7 +484,7 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
                 if (e.target.value.length > GAIN_MAX_LENGTH) return;
                 setYScaleStr(e.target.value);
                 const val = Number(e.target.value);
-                if (e.target.value !== '' && !isNaN(val)) setYScale(Math.max(1, val));
+                if (e.target.value !== '' && !isNaN(val)) setYScale(Math.max(GAIN_MIN, val));
               }}
               onBlur={() => updateYScale(Number(yScaleStr) || yScale)}
               className="text-center border border-border rounded px-1 py-0.5 text-sm bg-background text-foreground [appearance:textfield]"
