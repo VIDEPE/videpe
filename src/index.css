@@ -190,6 +190,16 @@ code {
     transform: scale(0.93);
     box-shadow: none;
   }
+
+  &[aria-pressed='false'] {
+    background: var(--color-background);
+    color: var(--color-primary);
+  }
+
+  &[aria-expanded='false'] {
+    background: var(--color-background);
+    color: var(--color-primary);
+  }
 }
 
 /* Icon-only variant: tighter padding, no shadow — for dense control toolbars */
@@ -201,16 +211,6 @@ code {
   }
   &:active {
     box-shadow: none;
-  }
-
-  &[aria-pressed='true'] {
-    background: var(--color-background);
-    color: var(--color-primary);
-  }
-
-  &[aria-expanded='false'] {
-    background: var(--color-background);
-    color: var(--color-primary);
   }
 }
 

@@ -112,7 +112,9 @@ describe('EegViewer — window size controls', () => {
     const user = userEvent.setup();
     renderViewer();
     const input = screen.getByRole('spinbutton', { name: /window size/i });
-    const increaseBtn = within(containerOf(input)).getByRole('button', { name: 'Increase window size' });
+    const increaseBtn = within(containerOf(input)).getByRole('button', {
+      name: 'Increase window size',
+    });
 
     await user.click(increaseBtn);
 
@@ -123,7 +125,9 @@ describe('EegViewer — window size controls', () => {
     const user = userEvent.setup();
     renderViewer();
     const input = screen.getByRole('spinbutton', { name: /window size/i });
-    const decreaseBtn = within(containerOf(input)).getByRole('button', { name: 'Decrease window size' });
+    const decreaseBtn = within(containerOf(input)).getByRole('button', {
+      name: 'Decrease window size',
+    });
 
     await user.click(decreaseBtn);
 
@@ -134,7 +138,9 @@ describe('EegViewer — window size controls', () => {
     const user = userEvent.setup();
     renderViewer();
     const input = screen.getByRole('spinbutton', { name: /window size/i });
-    const decreaseBtn = within(containerOf(input)).getByRole('button', { name: 'Decrease window size' });
+    const decreaseBtn = within(containerOf(input)).getByRole('button', {
+      name: 'Decrease window size',
+    });
 
     // Drive value to 1 via the input, then try to go lower
     fireEvent.change(input, { target: { value: '1' } });
@@ -167,7 +173,9 @@ describe('EegViewer — window size controls', () => {
     const user = userEvent.setup();
     renderViewer();
     const input = screen.getByRole('spinbutton', { name: /window size/i });
-    const increaseBtn = within(containerOf(input)).getByRole('button', { name: 'Increase window size' });
+    const increaseBtn = within(containerOf(input)).getByRole('button', {
+      name: 'Increase window size',
+    });
 
     // Default windowSize=20, tMax=30. First click reaches 30 (the limit), second should stay there.
     await user.click(increaseBtn);
@@ -190,7 +198,9 @@ describe('EegViewer — window size controls', () => {
     await user.click(forwardBtn); // > : startTime 5 → 10
 
     const windowInput = screen.getByRole('spinbutton', { name: /window size/i });
-    const increaseBtn = within(containerOf(windowInput)).getByRole('button', { name: 'Increase window size' });
+    const increaseBtn = within(containerOf(windowInput)).getByRole('button', {
+      name: 'Increase window size',
+    });
 
     UplotReactMock.mockClear();
     await user.click(increaseBtn); // tries windowSize 20→30; without fix startTime stays 10, end=40
@@ -226,7 +236,9 @@ describe('EegViewer — channel count controls', () => {
     const user = userEvent.setup();
     renderViewer();
     const input = screen.getByRole('spinbutton', { name: /number of channels/i });
-    const decreaseBtn = within(containerOf(input)).getByRole('button', { name: 'Show fewer channels' });
+    const decreaseBtn = within(containerOf(input)).getByRole('button', {
+      name: 'Show fewer channels',
+    });
 
     fireEvent.change(input, { target: { value: String(channelNames.length) } });
     await user.click(decreaseBtn);
@@ -252,7 +264,9 @@ describe('EegViewer — channel count controls', () => {
     const user = userEvent.setup();
     renderViewer();
     const input = screen.getByRole('spinbutton', { name: /number of channels/i });
-    const increaseBtn = within(containerOf(input)).getByRole('button', { name: 'Show more channels' });
+    const increaseBtn = within(containerOf(input)).getByRole('button', {
+      name: 'Show more channels',
+    });
 
     await user.click(increaseBtn);
     await user.click(increaseBtn);
@@ -265,7 +279,9 @@ describe('EegViewer — channel count controls', () => {
     const user = userEvent.setup();
     renderViewer();
     const input = screen.getByRole('spinbutton', { name: /number of channels/i });
-    const decreaseBtn = within(containerOf(input)).getByRole('button', { name: 'Show fewer channels' });
+    const decreaseBtn = within(containerOf(input)).getByRole('button', {
+      name: 'Show fewer channels',
+    });
 
     fireEvent.change(input, { target: { value: '1' } });
     await user.click(decreaseBtn);
@@ -387,7 +403,9 @@ describe('EegViewer — shift step size effect', () => {
     const shiftInput = screen.getByRole('spinbutton', { name: /shift step/i });
     fireEvent.change(shiftInput, { target: { value: '10' } });
 
-    const forwardBtn = within(containerOf(shiftInput)).getByRole('button', { name: 'Shift forward' });
+    const forwardBtn = within(containerOf(shiftInput)).getByRole('button', {
+      name: 'Shift forward',
+    });
     UplotReactMock.mockClear();
     await user.click(forwardBtn); // >
 
@@ -480,7 +498,9 @@ describe('EegViewer — gain controls', () => {
     const user = userEvent.setup();
     renderViewer();
 
-    const zoomInBtn = within(containerOf(screen.getByText('Gain (µV)'))).getByRole('button', { name: 'Zoom in' });
+    const zoomInBtn = within(containerOf(screen.getByText('Gain (µV)'))).getByRole('button', {
+      name: 'Zoom in',
+    });
     UplotReactMock.mockClear();
     await user.click(zoomInBtn);
 
@@ -494,7 +514,9 @@ describe('EegViewer — gain controls', () => {
     const user = userEvent.setup();
     renderViewer();
 
-    const zoomOutBtn = within(containerOf(screen.getByText('Gain (µV)'))).getByRole('button', { name: 'Zoom out' });
+    const zoomOutBtn = within(containerOf(screen.getByText('Gain (µV)'))).getByRole('button', {
+      name: 'Zoom out',
+    });
     UplotReactMock.mockClear();
     await user.click(zoomOutBtn);
 
@@ -513,7 +535,9 @@ describe('EegViewer — gain controls', () => {
       target: { value: '0.003' },
     });
 
-    const zoomInBtn = within(containerOf(screen.getByText('Gain (µV)'))).getByRole('button', { name: 'Zoom in' });
+    const zoomInBtn = within(containerOf(screen.getByText('Gain (µV)'))).getByRole('button', {
+      name: 'Zoom in',
+    });
     UplotReactMock.mockClear();
     await user.click(zoomInBtn);
 
@@ -538,7 +562,9 @@ describe('EegViewer — gain controls', () => {
     const user = userEvent.setup();
     renderViewer();
 
-    const zoomInBtn = within(containerOf(screen.getByText('Gain (µV)'))).getByRole('button', { name: 'Zoom in' });
+    const zoomInBtn = within(containerOf(screen.getByText('Gain (µV)'))).getByRole('button', {
+      name: 'Zoom in',
+    });
     UplotReactMock.mockClear();
     await user.click(zoomInBtn);
 
@@ -551,7 +577,9 @@ describe('EegViewer — gain controls', () => {
     const user = userEvent.setup();
     renderViewer();
     const gainInput = screen.getByRole('spinbutton', { name: /gain/i });
-    const zoomOutBtn = within(containerOf(screen.getByText('Gain (µV)'))).getByRole('button', { name: 'Zoom out' });
+    const zoomOutBtn = within(containerOf(screen.getByText('Gain (µV)'))).getByRole('button', {
+      name: 'Zoom out',
+    });
 
     // Set gain to 99999 (the 5-digit max), then click ZoomOut — which doubles to 199998 without a cap
     fireEvent.change(gainInput, { target: { value: '99999' } });
@@ -564,7 +592,9 @@ describe('EegViewer — gain controls', () => {
     const user = userEvent.setup();
     renderViewer();
     const gainInput = screen.getByRole('spinbutton', { name: /gain/i });
-    const zoomInBtn = within(containerOf(screen.getByText('Gain (µV)'))).getByRole('button', { name: 'Zoom in' });
+    const zoomInBtn = within(containerOf(screen.getByText('Gain (µV)'))).getByRole('button', {
+      name: 'Zoom in',
+    });
 
     // Set gain to 0.001 (GAIN_MIN), then click Zoom in — which would halve to 0.0005 without a clamp
     fireEvent.change(gainInput, { target: { value: '0.001' } });
@@ -809,7 +839,9 @@ describe('EegViewer — shift step capped by window size', () => {
     fireEvent.change(shiftInput, { target: { value: '15' } });
 
     // Decrease window size from 20 to 10 via the − button (step = 10)
-    const decreaseWindowBtn = within(containerOf(windowInput)).getByRole('button', { name: 'Decrease window size' });
+    const decreaseWindowBtn = within(containerOf(windowInput)).getByRole('button', {
+      name: 'Decrease window size',
+    });
     await user.click(decreaseWindowBtn);
 
     expect(shiftInput).toHaveValue(10);
@@ -821,7 +853,9 @@ describe('EegViewer — shift step capped by window size', () => {
     const shiftInput = screen.getByRole('spinbutton', { name: /shift step/i });
     const windowInput = screen.getByRole('spinbutton', { name: /window size/i });
 
-    const decreaseWindowBtn = within(containerOf(windowInput)).getByRole('button', { name: 'Decrease window size' });
+    const decreaseWindowBtn = within(containerOf(windowInput)).getByRole('button', {
+      name: 'Decrease window size',
+    });
     await user.click(decreaseWindowBtn); // 20 → 10
 
     expect(shiftInput).toHaveAttribute('max', '10');

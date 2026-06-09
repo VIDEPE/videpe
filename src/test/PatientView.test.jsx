@@ -4,7 +4,12 @@ import { MemoryRouter } from 'react-router-dom';
 import userEvent from '@testing-library/user-event';
 import { PatientView } from '@/pages/PatientView';
 
-const renderPatientView = () => render(<MemoryRouter><PatientView /></MemoryRouter>);
+const renderPatientView = () =>
+  render(
+    <MemoryRouter>
+      <PatientView />
+    </MemoryRouter>
+  );
 import { loadBrainVisionEEG } from '@/loaders/loadBrainVisionEEG';
 import { checkEegFiles, detectAndLoadEEG } from '@/loaders/eegFormats';
 import { FileDropZone } from '@/components/FileDropZone';
@@ -190,7 +195,12 @@ describe('PatientView — demo loading', () => {
   beforeEach(() => {
     FileDropZone.mockClear();
     NiiViewer.mockClear();
-    checkEegFiles.mockReturnValue({ formatName: null, complete: false, missing: null, warning: null });
+    checkEegFiles.mockReturnValue({
+      formatName: null,
+      complete: false,
+      missing: null,
+      warning: null,
+    });
   });
 
   it('passes demo volumes with correct type and subtype to NiiViewer', async () => {

@@ -4,6 +4,14 @@ import userEvent from '@testing-library/user-event';
 import { getInitialLayerSettings, detectVolumeType } from '@/components/NiiViewer.utils';
 import { NiiViewer, loadVolumesAndApplySettings } from '@/components/NiiViewer';
 
+const SLICE_TYPE_OPTIONS = [
+  { ariaLabel: 'Axial view', key: 'AXIAL' },
+  { ariaLabel: 'Coronal view', key: 'CORONAL' },
+  { ariaLabel: 'Sagittal view', key: 'SAGITTAL' },
+  { ariaLabel: 'Multiplanar view', key: 'MULTIPLANAR' },
+  { ariaLabel: '3D view', key: 'RENDER' },
+];
+
 vi.mock('react-hot-toast', () => ({
   default: {
     error: vi.fn(),
@@ -31,6 +39,13 @@ vi.mock('@niivue/niivue', () => ({
   }),
   SHOW_RENDER: { ALWAYS: 2 },
   MULTIPLANAR_TYPE: { GRID: 2, AUTO: 3 },
+  SLICE_TYPE: {
+    AXIAL: 0,
+    CORONAL: 1,
+    SAGITTAL: 2,
+    MULTIPLANAR: 3,
+    RENDER: 4,
+  },
 }));
 
 describe('loadVolumesAndApplySettings', () => {
@@ -417,6 +432,50 @@ describe('NiiViewer', () => {
       await userEvent.click(screen.getByRole('switch', { name: 'Show MRI colorbar' }));
       expect(nv.volumes[0].colorbarVisible).toBe(true);
       expect(nv.updateGLVolume).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe('handleSliceTypeChange', () => {
+     // Helper: render NiiViewer, wait for load, return the nv mock instance with mocks cleared
+    const setup = async () => {
+      const { Niivue, SLICE_TYPE } = await import('@niivue/niivue');
+      render(<NiiViewer volumes={[{ type: 'MRI', url: '/mri.nii' }]} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+      const nv = Niivue.mock.results[Niivue.mock.results.length - 1].value;
+      // Clear calls from initial load so assertions only count post-load interactions
+      nv.setSliceType.mockClear();
+      return { nv, SLICE_TYPE };
+    };
+    
+    it.each(SLICE_TYPE_OPTIONS.map(option => [option.ariaLabel, option.key]))
+    ('calls setSliceType with %s', async (ariaLabel, sliceTypeKey) => {
+      const { nv, SLICE_TYPE } = await setup();
+      await userEvent.click(screen.getByRole('button', { name: ariaLabel }));
+      expect(nv.setSliceType).toHaveBeenCalledWith(SLICE_TYPE[sliceTypeKey]);
+    });
+
+    it('renders all slice type buttons', async () => {
+      await setup();
+      expect(screen.getByRole('button', { name: 'Axial view' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Coronal view' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Sagittal view' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Multiplanar view' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '3D view' })).toBeInTheDocument();
+    });
+
+    it.each(SLICE_TYPE_OPTIONS.map(option => [option.ariaLabel]))
+    ("clicking %s sets aria-pressed correctly", async (ariaLabel) => {
+      const allLabels = SLICE_TYPE_OPTIONS.map(option => option.ariaLabel);
+      await setup();
+      // click the button
+      await userEvent.click(screen.getByRole('button', { name: ariaLabel }));
+      // the clicked button should have aria-pressed true
+      expect(screen.getByRole('button', { name: ariaLabel })).toHaveAttribute('aria-pressed', 'true');
+      // all other buttons should have aria-pressed false
+      for (const otherLabel of allLabels.filter(l => l !== ariaLabel)) {
+        expect(screen.getByRole('button', { name: otherLabel })).toHaveAttribute('aria-pressed', 'false');
+      }
+
     });
   });
 });

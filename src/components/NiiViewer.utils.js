@@ -41,7 +41,8 @@ export const detectVolumeType = (filename) => {
   if (lastSegment === 'spect') return { type: 'SPECT', subtype: nameWithoutExtension };
 
   // Pass 2: keyword fallback (case-insensitive, for non-BIDS filenames) — use nameWithoutExtension as subtype so files are distinguishable in the UI
-  if (/t1|t2|flair|mri|mprage|bravo/.test(lower)) return { type: 'MRI', subtype: nameWithoutExtension };
+  if (/t1|t2|flair|mri|mprage|bravo/.test(lower))
+    return { type: 'MRI', subtype: nameWithoutExtension };
   if (/pet|fdg/.test(lower)) return { type: 'PET', subtype: nameWithoutExtension };
   if (/spect|siscom/.test(lower)) return { type: 'SPECT', subtype: nameWithoutExtension };
 

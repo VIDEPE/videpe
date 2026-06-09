@@ -74,7 +74,9 @@ function SortableSettingsCard({
 
         <span className="flex-1 text-sm font-medium text-heading truncate">
           {volume.type ?? `Layer ${index + 1}`}
-          {volume.subtype && <span className="text-xs font-normal text-foreground/60 ml-1">- {volume.subtype}</span>}
+          {volume.subtype && (
+            <span className="text-xs font-normal text-foreground/60 ml-1">- {volume.subtype}</span>
+          )}
         </span>
 
         {/* Visibility toggle */}
@@ -84,7 +86,7 @@ function SortableSettingsCard({
           className="button button-icon shrink-0"
           aria-label={`${settings.visible ? 'Hide' : 'Show'} ${label}`}
           title={`${settings.visible ? 'Hide' : 'Show'} ${label}`}
-          aria-pressed={!settings.visible}
+          aria-pressed={settings.visible}
         >
           {settings.visible ? <Eye size={14} /> : <EyeOff size={14} />}
         </button>
@@ -107,7 +109,9 @@ function SortableSettingsCard({
         <div className="border-t border-border px-3 py-1.5 flex flex-col gap-1.5 text-xs overflow-hidden">
           {/* Opacity */}
           <div className="flex items-center gap-3">
-            <span className="w-20 shrink-0 text-foreground select-none pointer-events-none">Opacity</span>
+            <span className="w-20 shrink-0 text-foreground select-none pointer-events-none">
+              Opacity
+            </span>
             <input
               type="range"
               min={0}
@@ -134,7 +138,11 @@ function SortableSettingsCard({
                   setOpacityStr(e.target.value);
                   const val = Number(e.target.value);
                   if (e.target.value !== '' && !isNaN(val))
-                    onSettingChange(index, 'opacity', Math.max(0, Math.min(100, Math.round(val))) / 100);
+                    onSettingChange(
+                      index,
+                      'opacity',
+                      Math.max(0, Math.min(100, Math.round(val))) / 100
+                    );
                 }}
                 onBlur={() => updateOpacity(opacityStr)}
                 className="text-center border border-border rounded px-1 py-0.5 text-xs bg-background text-foreground [appearance:textfield]"
@@ -146,7 +154,9 @@ function SortableSettingsCard({
 
           {/* Colormap */}
           <div className="flex items-center gap-3">
-            <span className="w-20 shrink-0 text-foreground select-none pointer-events-none">Colormap</span>
+            <span className="w-20 shrink-0 text-foreground select-none pointer-events-none">
+              Colormap
+            </span>
             <select
               value={settings.colormap}
               onChange={(e) => onSettingChange(index, 'colormap', e.target.value)}

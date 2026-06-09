@@ -20,7 +20,11 @@ const DEMO_EEG = {
 const DEMO_VOLUMES = [
   { url: 'demo_data/patT1.nii', ...detectVolumeType('patT1.nii') },
   { url: 'demo_data/pat_PET_aligned.nii', ...detectVolumeType('pat_PET_aligned.nii') },
-  { url: 'demo_data/pat_siscom_17-13.nii', ...detectVolumeType('pat_siscom_17-13.nii'), urlImgType: 'nii' },
+  {
+    url: 'demo_data/pat_siscom_17-13.nii',
+    ...detectVolumeType('pat_siscom_17-13.nii'),
+    urlImgType: 'nii',
+  },
 ];
 
 export const PatientView = () => {
@@ -207,7 +211,9 @@ export const PatientView = () => {
             <span className="font-bold">E</span>pilepsy <span className="font-bold">P</span>
             resurgical <span className="font-bold">E</span>valuation
           </p>
-          <span className="text-xs text-foreground/40 border border-border/60 rounded-full px-2 py-0.5">In Development</span>
+          <span className="text-xs text-foreground/40 border border-border/60 rounded-full px-2 py-0.5">
+            In Development
+          </span>
         </div>
 
         {/* Right column: ThemeToggle rendered inline (not fixed) — top bar never scrolls so fixed isn't needed,

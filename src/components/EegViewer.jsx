@@ -94,7 +94,7 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
   const SHIFT_MAX_LENGTH = 6; // covers up to 9999.9 s
   const GAIN_MAX_LENGTH = 5; // covers 0.0001 to 99999 µV
   const GAIN_MAX = 10 ** GAIN_MAX_LENGTH - 1; // 99999 — derived from GAIN_MAX_LENGTH so both stay in sync
-  const GAIN_MIN = 10 ** -(GAIN_MAX_LENGTH-2); // 0.001 minimum gain (with GAIN_MAX_LENGTH char length) to prevent uPlot from breaking with a zero or negative y-range
+  const GAIN_MIN = 10 ** -(GAIN_MAX_LENGTH - 2); // 0.001 minimum gain (with GAIN_MAX_LENGTH char length) to prevent uPlot from breaking with a zero or negative y-range
 
   const defaultWindowSize = tMax < 20 ? Math.ceil(tMax) : 20; // default to showing the full recording if it's shorter than 20s, otherwise start with a 20s window
   const [windowSize, setWindowSize] = useState(defaultWindowSize); // seconds visible in the x-range, initialized to 20s or the full recording if shorter
@@ -118,7 +118,8 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
     Math.max(1, Math.min(channelNames.length, maxChannelsByHeight, n));
   // Whenever on of the control variables changes, ensure it is still valid and update the input string to match
   const updateYScale = (newVal) => {
-    const rounded_newVal = Math.round(newVal * 10 ** (GAIN_MAX_LENGTH - 2)) / 10 ** (GAIN_MAX_LENGTH - 2);
+    const rounded_newVal =
+      Math.round(newVal * 10 ** (GAIN_MAX_LENGTH - 2)) / 10 ** (GAIN_MAX_LENGTH - 2);
     const clamped = Math.max(GAIN_MIN, Math.min(GAIN_MAX, rounded_newVal));
     setYScale(clamped);
     setYScaleStr(String(clamped));
@@ -428,7 +429,7 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
                     Math.max(0, Math.min(tMax - windowSize, ratio * tMax - windowSize / 2))
                   );
                 }}
-              > 
+              >
                 {/* Timeline thumb */}
                 <div
                   data-testid="timeline-thumb"
@@ -461,124 +462,154 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
           {/* Gain: shrink/expand the shared y-range (all channels) */}
           {/* shrink-0 pins the controls at the bottom, never squeezed by the channel area */}
           <div className="shrink-0 flex flex-wrap justify-center gap-4 py-2">
-        <div className="flex flex-col items-center gap-0.5">
-          <label htmlFor="eeg-gain" className="text-xs text-foreground/60 select-none">
-            Gain (µV)
-          </label>
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              className="button button-icon"
-              onClick={() => updateYScale(yScale * 2)}
-              title="Zoom out"
-            >
-              <ZoomOut size={ICON_SIZE} />
-            </button>
-            <input
-              id="eeg-gain"
-              type="number"
-              value={yScaleStr}
-              min={1}
-              style={{ width: inputWidth(yScaleStr) }}
-              onChange={(e) => {
-                if (e.target.value.length > GAIN_MAX_LENGTH) return;
-                setYScaleStr(e.target.value);
-                const val = Number(e.target.value);
-                if (e.target.value !== '' && !isNaN(val)) setYScale(Math.max(GAIN_MIN, val));
-              }}
-              onBlur={() => updateYScale(Number(yScaleStr) || yScale)}
-              className="text-center border border-border rounded px-1 py-0.5 text-sm bg-background text-foreground [appearance:textfield]"
-              aria-label="Gain (µV)"
-            />
-            <button
-              type="button"
-              className="button button-icon"
-              onClick={() => updateYScale(yScale / 2)}
-              title="Zoom in"
-            >
-              <ZoomIn size={ICON_SIZE} />
-            </button>
-          </div>
-        </div>
+            <div className="flex flex-col items-center gap-0.5">
+              <label htmlFor="eeg-gain" className="text-xs text-foreground/60 select-none">
+                Gain (µV)
+              </label>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  className="button button-icon"
+                  onClick={() => updateYScale(yScale * 2)}
+                  title="Zoom out"
+                >
+                  <ZoomOut size={ICON_SIZE} />
+                </button>
+                <input
+                  id="eeg-gain"
+                  type="number"
+                  value={yScaleStr}
+                  min={1}
+                  style={{ width: inputWidth(yScaleStr) }}
+                  onChange={(e) => {
+                    if (e.target.value.length > GAIN_MAX_LENGTH) return;
+                    setYScaleStr(e.target.value);
+                    const val = Number(e.target.value);
+                    if (e.target.value !== '' && !isNaN(val)) setYScale(Math.max(GAIN_MIN, val));
+                  }}
+                  onBlur={() => updateYScale(Number(yScaleStr) || yScale)}
+                  className="text-center border border-border rounded px-1 py-0.5 text-sm bg-background text-foreground [appearance:textfield]"
+                  aria-label="Gain (µV)"
+                />
+                <button
+                  type="button"
+                  className="button button-icon"
+                  onClick={() => updateYScale(yScale / 2)}
+                  title="Zoom in"
+                >
+                  <ZoomIn size={ICON_SIZE} />
+                </button>
+              </div>
+            </div>
 
-        {/* Time Shift: move the x-range forward/backward by a user-defined step */}
-        <div className="flex flex-col items-center gap-0.5">
-          <label htmlFor="eeg-time-shift-step" className="text-xs text-foreground/60 select-none">
-            Time Shift (s)
-          </label>
-          <div className="flex items-center gap-1">
-            <button type="button" className="button button-icon" onClick={() => setStartTime(0)} title="Jump to start">
-              <ChevronFirst size={15} />
-            </button>
-            <button type="button" className="button button-icon" onClick={backwardshiftStartTime} title="Shift backward">
-              <ChevronLeft size={ICON_SIZE} />
-            </button>
-            <input
-              id="eeg-time-shift-step"
-              type="number"
-              value={shiftTimeStepSizeStr}
-              min={1}
-              max={windowSize}
-              style={{ width: inputWidth(shiftTimeStepSizeStr) }}
-              onChange={(e) => {
-                if (e.target.value.length > SHIFT_MAX_LENGTH) return;
-                setShiftTimeStepSizeStr(e.target.value);
-                const val = Number(e.target.value);
-                if (e.target.value !== '' && !isNaN(val))
-                  setShiftTimeStepSize(Math.max(1, Math.min(windowSize, Math.round(val * 10) / 10)));
-              }}
-              onBlur={() =>
-                updateShiftTimeStepSize(Number(shiftTimeStepSizeStr) || shiftTimeStepSize)
-              }
-              className="text-center border border-border rounded px-1 py-0.5 text-sm bg-background text-foreground [appearance:textfield]"
-              aria-label="Time shift step (s)"
-            />
-            <button type="button" className="button button-icon" onClick={forwardshiftStartTime} title="Shift forward">
-              <ChevronRight size={ICON_SIZE} />
-            </button>
-            <button
-              type="button"
-              className="button button-icon"
-              onClick={() => setStartTime(data[0][data[0].length - 1] - windowSize)}
-              title="Jump to end"
-            >
-              <ChevronLast size={15} />
-            </button>
-          </div>
-        </div>
+            {/* Time Shift: move the x-range forward/backward by a user-defined step */}
+            <div className="flex flex-col items-center gap-0.5">
+              <label
+                htmlFor="eeg-time-shift-step"
+                className="text-xs text-foreground/60 select-none"
+              >
+                Time Shift (s)
+              </label>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  className="button button-icon"
+                  onClick={() => setStartTime(0)}
+                  title="Jump to start"
+                >
+                  <ChevronFirst size={15} />
+                </button>
+                <button
+                  type="button"
+                  className="button button-icon"
+                  onClick={backwardshiftStartTime}
+                  title="Shift backward"
+                >
+                  <ChevronLeft size={ICON_SIZE} />
+                </button>
+                <input
+                  id="eeg-time-shift-step"
+                  type="number"
+                  value={shiftTimeStepSizeStr}
+                  min={1}
+                  max={windowSize}
+                  style={{ width: inputWidth(shiftTimeStepSizeStr) }}
+                  onChange={(e) => {
+                    if (e.target.value.length > SHIFT_MAX_LENGTH) return;
+                    setShiftTimeStepSizeStr(e.target.value);
+                    const val = Number(e.target.value);
+                    if (e.target.value !== '' && !isNaN(val))
+                      setShiftTimeStepSize(
+                        Math.max(1, Math.min(windowSize, Math.round(val * 10) / 10))
+                      );
+                  }}
+                  onBlur={() =>
+                    updateShiftTimeStepSize(Number(shiftTimeStepSizeStr) || shiftTimeStepSize)
+                  }
+                  className="text-center border border-border rounded px-1 py-0.5 text-sm bg-background text-foreground [appearance:textfield]"
+                  aria-label="Time shift step (s)"
+                />
+                <button
+                  type="button"
+                  className="button button-icon"
+                  onClick={forwardshiftStartTime}
+                  title="Shift forward"
+                >
+                  <ChevronRight size={ICON_SIZE} />
+                </button>
+                <button
+                  type="button"
+                  className="button button-icon"
+                  onClick={() => setStartTime(data[0][data[0].length - 1] - windowSize)}
+                  title="Jump to end"
+                >
+                  <ChevronLast size={15} />
+                </button>
+              </div>
+            </div>
 
-        {/* Window Size: increase/decrease the total visible x-range */}
-        <div className="flex flex-col items-center gap-0.5">
-          <label htmlFor="eeg-window-size" className="text-xs text-foreground/60 select-none">
-            Window Size (s)
-          </label>
-          <div className="flex items-center gap-1">
-            <button type="button" className="button button-icon" onClick={decreaseWindowSize} title="Decrease window size">
-              <Minus size={ICON_SIZE} />
-            </button>
-            <input
-              id="eeg-window-size"
-              type="number"
-              value={windowSizeStr}
-              min={1}
-              style={{ width: inputWidth(windowSizeStr) }}
-              max={tMax}
-              onChange={(e) => {
-                if (e.target.value.length > WINDOW_MAX_LENGTH) return;
-                setWindowSizeStr(e.target.value);
-                const val = Number(e.target.value);
-                if (e.target.value !== '' && !isNaN(val) && val > 0)
-                  setWindowSize(Math.max(1, Math.min(tMax, val)));
-              }}
-              onBlur={() => updateWindowSize(Number(windowSizeStr) || windowSize)}
-              className="text-center border border-border rounded px-1 py-0.5 text-sm bg-background text-foreground [appearance:textfield]"
-              aria-label="Window size (s)"
-            />
-            <button type="button" className="button button-icon" onClick={increaseWindowSize} title="Increase window size">
-              <Plus size={ICON_SIZE} />
-            </button>
-          </div>
-        </div>
+            {/* Window Size: increase/decrease the total visible x-range */}
+            <div className="flex flex-col items-center gap-0.5">
+              <label htmlFor="eeg-window-size" className="text-xs text-foreground/60 select-none">
+                Window Size (s)
+              </label>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  className="button button-icon"
+                  onClick={decreaseWindowSize}
+                  title="Decrease window size"
+                >
+                  <Minus size={ICON_SIZE} />
+                </button>
+                <input
+                  id="eeg-window-size"
+                  type="number"
+                  value={windowSizeStr}
+                  min={1}
+                  style={{ width: inputWidth(windowSizeStr) }}
+                  max={tMax}
+                  onChange={(e) => {
+                    if (e.target.value.length > WINDOW_MAX_LENGTH) return;
+                    setWindowSizeStr(e.target.value);
+                    const val = Number(e.target.value);
+                    if (e.target.value !== '' && !isNaN(val) && val > 0)
+                      setWindowSize(Math.max(1, Math.min(tMax, val)));
+                  }}
+                  onBlur={() => updateWindowSize(Number(windowSizeStr) || windowSize)}
+                  className="text-center border border-border rounded px-1 py-0.5 text-sm bg-background text-foreground [appearance:textfield]"
+                  aria-label="Window size (s)"
+                />
+                <button
+                  type="button"
+                  className="button button-icon"
+                  onClick={increaseWindowSize}
+                  title="Increase window size"
+                >
+                  <Plus size={ICON_SIZE} />
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>

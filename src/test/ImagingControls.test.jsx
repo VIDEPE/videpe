@@ -31,10 +31,7 @@ describe('ImagingControls', () => {
     });
 
     it('renders subtype with a dash prefix in muted style when subtype is present', () => {
-      renderControls(
-        [{ type: 'MRI', subtype: 'T1w', url: '/t1w.nii' }],
-        [makeSettings()]
-      );
+      renderControls([{ type: 'MRI', subtype: 'T1w', url: '/t1w.nii' }], [makeSettings()]);
       expect(screen.getByText('MRI')).toBeInTheDocument();
       const subtypeEl = screen.getByText('- T1w');
       expect(subtypeEl).toBeInTheDocument();
