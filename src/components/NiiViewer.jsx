@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
-import { Niivue, SHOW_RENDER, MULTIPLANAR_TYPE } from '@niivue/niivue';
+import { Niivue, SHOW_RENDER, MULTIPLANAR_TYPE, SLICE_TYPE } from '@niivue/niivue';
 import { move } from '@dnd-kit/helpers';
 import toast from 'react-hot-toast';
 import { getInitialLayerSettings } from './NiiViewer.utils';
@@ -31,6 +31,20 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
   const canvasContainerRef = useRef();
   const opacityRafRef = useRef(null); // pending rAF id for opacity updates — cancelled on each new drag event so only the latest value redraws
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
+
+  const [activeSliceType, setActiveSliceType] = useState(SLICE_TYPE.MULTIPLANAR);
+  const sliceTypeOptions = [
+    { sliceType: SLICE_TYPE.AXIAL, label: 'Axial', buttonLabel: 'Ax' },
+    { sliceType: SLICE_TYPE.CORONAL, label: 'Coronal', buttonLabel: 'Co' },
+    { sliceType: SLICE_TYPE.SAGITTAL, label: 'Sagittal', buttonLabel: 'Sa' },
+    { sliceType: SLICE_TYPE.MULTIPLANAR, label: 'Multiplanar', buttonLabel: 'MP' },
+    { sliceType: SLICE_TYPE.RENDER, label: '3D', buttonLabel: '3D' },
+  ];
+
+  const handleSliceTypeChange = (sliceType) => {
+    setActiveSliceType(sliceType);
+    nvRef.current?.setSliceType(sliceType);
+  };
 
   const handleSettingChange = useCallback(
     (layerIndex, key, value) => {
@@ -89,9 +103,7 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
   useEffect(() => {
     if (!nvRef.current) return;
     const isWide = canvasSize.height > 0 && canvasSize.width >= 2 * canvasSize.height;
-    nvRef.current.setMultiplanarLayout(
-      isWide ? MULTIPLANAR_TYPE.AUTO : MULTIPLANAR_TYPE.GRID
-    );
+    nvRef.current.setMultiplanarLayout(isWide ? MULTIPLANAR_TYPE.AUTO : MULTIPLANAR_TYPE.GRID);
   }, [canvasSize]);
 
   const handleReorder = useCallback(
@@ -177,18 +189,38 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
         onSettingChange={handleSettingChange}
         onReorder={handleReorder}
       />
-      {/* NiiVue Canvas — fills remaining height, but never shrinks below 350px.
+      {/* The canvas + loading spinner are in a flex item that fills the remaining height, but never shrinks below 350px.
           If the controls panel above expands past the point where 350px remains, the parent scrolls. */}
-      <div ref={canvasContainerRef} className="relative flex-1 min-h-[350px] overflow-hidden">
-        {loading && (
-          <div
-            data-testid="loading-spinner"
-            className="absolute inset-0 z-10 flex items-center justify-center"
-          >
-            <div className="h-10 w-10 animate-spin rounded-full border-4 border-border border-t-primary" />
-          </div>
-        )}
-        <canvas ref={canvas} className="absolute inset-0" />
+      <div className="flex flex-row flex-1 min-h-[350px]">
+        {/* NiiVue Canvas */}
+        <div ref={canvasContainerRef} className="relative flex-1 overflow-hidden">
+          {/* Loading spinner overlay — absolute to cover the canvas, with a higher z-index so it appears on top */}
+          {loading && (
+            <div
+              data-testid="loading-spinner"
+              className="absolute inset-0 z-10 flex items-center justify-center"
+            >
+              <div className="h-10 w-10 animate-spin rounded-full border-4 border-border border-t-primary" />
+            </div>
+          )}
+          <canvas ref={canvas} className="absolute inset-0" />
+        </div>
+        <div className="flex flex-col w-8 pt-2 items-center">
+          {/* Viewer controls with Ax, Co, Sa, MP and 3D buttons */}
+          {sliceTypeOptions.map(({ sliceType, label, buttonLabel }) => (
+            <button
+              key={sliceType}
+              type="button"
+              className="button size-xs"
+              onClick={() => handleSliceTypeChange(sliceType)}
+              title={`${label} view`}
+              aria-label={`${label} view`}
+              aria-pressed={activeSliceType === sliceType}
+            >
+              {buttonLabel}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );

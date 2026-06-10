@@ -34,8 +34,12 @@ export const SplitPane = ({
   const isColumnRef = useRef(isColumn); // mirrors isColumn for use inside rAF callbacks
 
   // Keep refs in sync with state so rAF callbacks always read current values
-  useEffect(() => { swappedRef.current = swapped; }, [swapped]);
-  useEffect(() => { isColumnRef.current = isColumn; }, [isColumn]);
+  useEffect(() => {
+    swappedRef.current = swapped;
+  }, [swapped]);
+  useEffect(() => {
+    isColumnRef.current = isColumn;
+  }, [isColumn]);
 
   // Watch the sm breakpoint and switch layout mode when it crosses
   useEffect(() => {
@@ -66,8 +70,14 @@ export const SplitPane = ({
         // Column mode clamps from a minimum pixel height so short screens stay usable.
         const colMinPct = Math.min(50, (MIN_PANEL_PX / rect.height) * 100);
         const pct = isCol
-          ? Math.min(100 - colMinPct, Math.max(colMinPct, ((clientY - rect.top) / rect.height) * 100))
-          : Math.min(ROW_MAX_PCT, Math.max(ROW_MIN_PCT, ((clientX - rect.left) / rect.width) * 100));
+          ? Math.min(
+              100 - colMinPct,
+              Math.max(colMinPct, ((clientY - rect.top) / rect.height) * 100)
+            )
+          : Math.min(
+              ROW_MAX_PCT,
+              Math.max(ROW_MIN_PCT, ((clientX - rect.left) / rect.width) * 100)
+            );
         splitPercentRef.current = pct;
 
         // Directly write the new size into the DOM — skips React render cycle entirely during drag.
@@ -118,10 +128,13 @@ export const SplitPane = ({
   // Compute the share of space each panel gets (0–100).
   // When maximized, one panel gets everything and the other nothing.
   const leftGrow =
-    maximized === 'left' ? 100
-    : maximized === 'right' ? 0
-    : swapped ? 100 - splitPercent
-    : splitPercent;
+    maximized === 'left'
+      ? 100
+      : maximized === 'right'
+        ? 0
+        : swapped
+          ? 100 - splitPercent
+          : splitPercent;
   const rightGrow = 100 - leftGrow;
 
   // Row mode uses explicit widths (same as before); column mode uses flex-grow so height allocation
@@ -141,7 +154,9 @@ export const SplitPane = ({
   // Helper to render the header for each panel, with label and control buttons
   const panelHeader = (label, which, onReset) => (
     <div className="shrink-0 flex items-center justify-between px-3 py-1 border-b border-border bg-surface">
-      <h2 style={{ margin: 0 }} className="select-none pointer-events-none">{label}</h2>
+      <h2 style={{ margin: 0 }} className="select-none pointer-events-none">
+        {label}
+      </h2>
       <div className="flex items-center gap-1.5">
         {!maximized && (
           <button
@@ -181,16 +196,9 @@ export const SplitPane = ({
   // Instead, their CSS order property is toggled between 1 and 3, with the divider fixed at order 2.
   // This means the viewers never unmount when swapped, so EEG state (zoom, scroll position) is preserved
   return (
-    <div
-      ref={containerRef}
-      className={`flex-1 min-h-0 flex ${isColumn ? 'flex-col' : 'flex-row'}`}
-    >
+    <div ref={containerRef} className={`flex-1 min-h-0 flex ${isColumn ? 'flex-col' : 'flex-row'}`}>
       {/* Left/top content — DOM-first; visually right/bottom when swapped (order:3) */}
-      <div
-        ref={leftPanelRef}
-        className="flex flex-col min-h-0 overflow-hidden"
-        style={leftStyle}
-      >
+      <div ref={leftPanelRef} className="flex flex-col min-h-0 overflow-hidden" style={leftStyle}>
         {panelHeader(leftLabel, 'left', onLeftReset)}
         <div className="flex-1 min-h-0 overflow-y-auto">{left}</div>
       </div>
@@ -219,11 +227,7 @@ export const SplitPane = ({
       )}
 
       {/* Right/bottom content — DOM-second; visually left/top when swapped (order:1) */}
-      <div
-        ref={rightPanelRef}
-        className="flex flex-col min-h-0 overflow-hidden"
-        style={rightStyle}
-      >
+      <div ref={rightPanelRef} className="flex flex-col min-h-0 overflow-hidden" style={rightStyle}>
         {panelHeader(rightLabel, 'right', onRightReset)}
         <div className="flex-1 min-h-0 overflow-y-auto themed-scrollbar">{right}</div>
       </div>
