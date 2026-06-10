@@ -862,6 +862,140 @@ describe('EegViewer — shift step capped by window size', () => {
   });
 });
 
+describe('EegViewer — keyboard navigation', () => {
+  // tMax=30, windowSize=20 (initial), startTime=0 (initial), shiftTimeStepSize=5 (initial)
+  const viewer = () => screen.getByTestId('eeg-viewer-container');
+
+  it('renders a keyboard shortcuts hint with a tooltip', () => {
+    renderViewer();
+    expect(screen.getByTitle(/keyboard navigation/i)).toBeInTheDocument();
+  });
+
+  it('clicking the viewer background focuses it', () => {
+    renderViewer();
+    fireEvent.mouseDown(viewer());
+    expect(viewer()).toHaveFocus();
+  });
+
+  it('clicking a button does not move focus to the viewer container', async () => {
+    const user = userEvent.setup();
+    renderViewer();
+    const zoomInBtn = within(containerOf(screen.getByText('Gain (µV)'))).getByRole('button', {
+      name: 'Zoom in',
+    });
+
+    await user.click(zoomInBtn);
+
+    expect(viewer()).not.toHaveFocus();
+  });
+
+  it('ArrowUp halves the gain (zoom in)', async () => {
+    const { default: UplotReactMock } = await import('uplot-react');
+    renderViewer();
+
+    UplotReactMock.mockClear();
+    fireEvent.keyDown(viewer(), { key: 'ArrowUp' });
+
+    const [yMin, yMax] = UplotReactMock.mock.calls[0][0].options.scales.y.range;
+    expect(yMin).toBeCloseTo((-INITIAL_Y_SCALE / 2) * OVERDRAW, 3);
+    expect(yMax).toBeCloseTo((INITIAL_Y_SCALE / 2) * OVERDRAW, 3);
+  });
+
+  it('ArrowDown doubles the gain (zoom out)', async () => {
+    const { default: UplotReactMock } = await import('uplot-react');
+    renderViewer();
+
+    UplotReactMock.mockClear();
+    fireEvent.keyDown(viewer(), { key: 'ArrowDown' });
+
+    const [yMin, yMax] = UplotReactMock.mock.calls[0][0].options.scales.y.range;
+    expect(yMin).toBeCloseTo(-INITIAL_Y_SCALE * 2 * OVERDRAW, 3);
+    expect(yMax).toBeCloseTo(INITIAL_Y_SCALE * 2 * OVERDRAW, 3);
+  });
+
+  it('ArrowRight pans forward by the shift step', async () => {
+    const { default: UplotReactMock } = await import('uplot-react');
+    renderViewer();
+
+    UplotReactMock.mockClear();
+    fireEvent.keyDown(viewer(), { key: 'ArrowRight' });
+
+    const range = UplotReactMock.mock.calls[0][0].options.scales.x.range;
+    expect(range[0]).toBe(5);
+  });
+
+  it('ArrowLeft pans backward by the shift step', async () => {
+    const { default: UplotReactMock } = await import('uplot-react');
+    renderViewer();
+
+    fireEvent.keyDown(viewer(), { key: 'ArrowRight' }); // startTime 0 → 5
+    UplotReactMock.mockClear();
+    fireEvent.keyDown(viewer(), { key: 'ArrowLeft' }); // startTime 5 → 0
+
+    const range = UplotReactMock.mock.calls[0][0].options.scales.x.range;
+    expect(range[0]).toBe(0);
+  });
+
+  it('PageDown jumps forward by one window, clamped to tMax − windowSize', async () => {
+    const { default: UplotReactMock } = await import('uplot-react');
+    renderViewer();
+
+    UplotReactMock.mockClear();
+    fireEvent.keyDown(viewer(), { key: 'PageDown' });
+
+    const range = UplotReactMock.mock.calls[0][0].options.scales.x.range;
+    expect(range[0]).toBe(10); // min(tMax-windowSize, 0+windowSize) = min(10, 20) = 10
+    expect(range[1]).toBe(30);
+  });
+
+  it('PageUp jumps backward by one window, clamped at 0', async () => {
+    const { default: UplotReactMock } = await import('uplot-react');
+    renderViewer();
+
+    fireEvent.keyDown(viewer(), { key: 'PageDown' }); // startTime 0 → 10
+    UplotReactMock.mockClear();
+    fireEvent.keyDown(viewer(), { key: 'PageUp' }); // startTime 10 → 0
+
+    const range = UplotReactMock.mock.calls[0][0].options.scales.x.range;
+    expect(range[0]).toBe(0);
+  });
+
+  it('Home jumps to the beginning of the recording', async () => {
+    const { default: UplotReactMock } = await import('uplot-react');
+    renderViewer();
+
+    fireEvent.keyDown(viewer(), { key: 'ArrowRight' }); // startTime 0 → 5
+    UplotReactMock.mockClear();
+    fireEvent.keyDown(viewer(), { key: 'Home' });
+
+    const range = UplotReactMock.mock.calls[0][0].options.scales.x.range;
+    expect(range[0]).toBe(0);
+  });
+
+  it('End jumps to the end of the recording', async () => {
+    const { default: UplotReactMock } = await import('uplot-react');
+    renderViewer();
+
+    UplotReactMock.mockClear();
+    fireEvent.keyDown(viewer(), { key: 'End' });
+
+    const range = UplotReactMock.mock.calls[0][0].options.scales.x.range;
+    const lastTimestamp = data[0][data[0].length - 1];
+    expect(range[1]).toBeCloseTo(lastTimestamp, 5);
+  });
+
+  it('does not respond to keyboard shortcuts while an input is focused', async () => {
+    const { default: UplotReactMock } = await import('uplot-react');
+    renderViewer();
+    const gainInput = screen.getByRole('spinbutton', { name: /gain/i });
+
+    UplotReactMock.mockClear();
+    fireEvent.keyDown(gainInput, { key: 'ArrowUp' });
+
+    expect(UplotReactMock).not.toHaveBeenCalled();
+  });
+});
+
 describe('EegViewer — time shift clamping', () => {
   // tMax=30, windowSize=20 → valid startTime range is [0, 10]
   const shiftControls = () => {
