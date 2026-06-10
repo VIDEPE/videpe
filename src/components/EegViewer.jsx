@@ -328,7 +328,7 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
     <div
       ref={viewerRef}
       data-testid="eeg-viewer-container"
-      className="w-full h-full flex flex-col relative outline-none focus-visible:ring-2 focus-visible:ring-secondary focus-visible:ring-inset"
+      className="w-full h-full flex flex-col relative focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-secondary focus-visible:-outline-offset-2"
       tabIndex={0}
       onMouseDown={focusViewer}
       onKeyDown={handleKeyDown}
