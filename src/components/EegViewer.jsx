@@ -337,7 +337,7 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
       <div
         className="absolute bottom-1 right-1 z-20 text-foreground/40 hover:text-foreground/80 transition-colors"
         title={
-          'Click the viewer to enable keyboard navigation:\n' +
+          'Click the EEG viewer to enable keyboard navigation (blue outline when active):\n' +
           '· ↑/↓\t\tGain adjustment\n' +
           '· ←/→\t     Move a time step\n' +
           '· Page ↑/↓       Jump entire time window\n' +
