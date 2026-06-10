@@ -175,15 +175,24 @@ describe('detectVolumeType', () => {
     });
 
     it('detects T2w as MRI with nameWithoutExtension as subtype', () => {
-      expect(detectVolumeType('sub-01_ses-01_T2w.nii.gz')).toEqual({ type: 'MRI', subtype: 'sub-01_ses-01_T2w' });
+      expect(detectVolumeType('sub-01_ses-01_T2w.nii.gz')).toEqual({
+        type: 'MRI',
+        subtype: 'sub-01_ses-01_T2w',
+      });
     });
 
     it('detects FLAIR as MRI with nameWithoutExtension as subtype', () => {
-      expect(detectVolumeType('sub-01_FLAIR.nii.gz')).toEqual({ type: 'MRI', subtype: 'sub-01_FLAIR' });
+      expect(detectVolumeType('sub-01_FLAIR.nii.gz')).toEqual({
+        type: 'MRI',
+        subtype: 'sub-01_FLAIR',
+      });
     });
 
     it('detects T2star as MRI with nameWithoutExtension as subtype', () => {
-      expect(detectVolumeType('sub-01_T2star.nii.gz')).toEqual({ type: 'MRI', subtype: 'sub-01_T2star' });
+      expect(detectVolumeType('sub-01_T2star.nii.gz')).toEqual({
+        type: 'MRI',
+        subtype: 'sub-01_T2star',
+      });
     });
 
     it('detects pet suffix as PET with nameWithoutExtension as subtype', () => {
@@ -191,7 +200,10 @@ describe('detectVolumeType', () => {
     });
 
     it('detects spect suffix as SPECT with nameWithoutExtension as subtype', () => {
-      expect(detectVolumeType('sub-01_spect.nii.gz')).toEqual({ type: 'SPECT', subtype: 'sub-01_spect' });
+      expect(detectVolumeType('sub-01_spect.nii.gz')).toEqual({
+        type: 'SPECT',
+        subtype: 'sub-01_spect',
+      });
     });
 
     it('does not match PET (uppercase) as BIDS pet — falls through to keyword with nameWithoutExtension as subtype', () => {
@@ -210,7 +222,10 @@ describe('detectVolumeType', () => {
     });
 
     it('detects siscom keyword as SPECT with nameWithoutExtension as subtype', () => {
-      expect(detectVolumeType('pat_siscom_17-13.nii')).toEqual({ type: 'SPECT', subtype: 'pat_siscom_17-13' });
+      expect(detectVolumeType('pat_siscom_17-13.nii')).toEqual({
+        type: 'SPECT',
+        subtype: 'pat_siscom_17-13',
+      });
     });
 
     it('detects mprage keyword as MRI with nameWithoutExtension as subtype', () => {
@@ -354,7 +369,9 @@ describe('NiiViewer', () => {
 
     beforeEach(() => {
       global.ResizeObserver = class {
-        constructor(cb) { resizeCallback = cb; }
+        constructor(cb) {
+          resizeCallback = cb;
+        }
         observe() {}
         disconnect() {}
       };
@@ -373,7 +390,9 @@ describe('NiiViewer', () => {
       const { MULTIPLANAR_TYPE } = await import('@niivue/niivue');
       const nv = await setup();
 
-      act(() => { resizeCallback([{ contentRect: { width: 800, height: 200 } }]); });
+      act(() => {
+        resizeCallback([{ contentRect: { width: 800, height: 200 } }]);
+      });
 
       expect(nv.setMultiplanarLayout).toHaveBeenCalledWith(MULTIPLANAR_TYPE.AUTO);
     });
@@ -382,7 +401,9 @@ describe('NiiViewer', () => {
       const { MULTIPLANAR_TYPE } = await import('@niivue/niivue');
       const nv = await setup();
 
-      act(() => { resizeCallback([{ contentRect: { width: 400, height: 300 } }]); });
+      act(() => {
+        resizeCallback([{ contentRect: { width: 400, height: 300 } }]);
+      });
 
       expect(nv.setMultiplanarLayout).toHaveBeenCalledWith(MULTIPLANAR_TYPE.GRID);
     });
@@ -391,9 +412,13 @@ describe('NiiViewer', () => {
       const { MULTIPLANAR_TYPE } = await import('@niivue/niivue');
       const nv = await setup();
 
-      act(() => { resizeCallback([{ contentRect: { width: 800, height: 200 } }]); });
+      act(() => {
+        resizeCallback([{ contentRect: { width: 800, height: 200 } }]);
+      });
       nv.setMultiplanarLayout.mockClear();
-      act(() => { resizeCallback([{ contentRect: { width: 400, height: 300 } }]); });
+      act(() => {
+        resizeCallback([{ contentRect: { width: 400, height: 300 } }]);
+      });
 
       expect(nv.setMultiplanarLayout).toHaveBeenCalledWith(MULTIPLANAR_TYPE.GRID);
     });
@@ -436,7 +461,7 @@ describe('NiiViewer', () => {
   });
 
   describe('handleSliceTypeChange', () => {
-     // Helper: render NiiViewer, wait for load, return the nv mock instance with mocks cleared
+    // Helper: render NiiViewer, wait for load, return the nv mock instance with mocks cleared
     const setup = async () => {
       const { Niivue, SLICE_TYPE } = await import('@niivue/niivue');
       render(<NiiViewer volumes={[{ type: 'MRI', url: '/mri.nii' }]} />);
@@ -446,13 +471,15 @@ describe('NiiViewer', () => {
       nv.setSliceType.mockClear();
       return { nv, SLICE_TYPE };
     };
-    
-    it.each(SLICE_TYPE_OPTIONS.map(option => [option.ariaLabel, option.key]))
-    ('calls setSliceType with %s', async (ariaLabel, sliceTypeKey) => {
-      const { nv, SLICE_TYPE } = await setup();
-      await userEvent.click(screen.getByRole('button', { name: ariaLabel }));
-      expect(nv.setSliceType).toHaveBeenCalledWith(SLICE_TYPE[sliceTypeKey]);
-    });
+
+    it.each(SLICE_TYPE_OPTIONS.map((option) => [option.ariaLabel, option.key]))(
+      'calls setSliceType with %s',
+      async (ariaLabel, sliceTypeKey) => {
+        const { nv, SLICE_TYPE } = await setup();
+        await userEvent.click(screen.getByRole('button', { name: ariaLabel }));
+        expect(nv.setSliceType).toHaveBeenCalledWith(SLICE_TYPE[sliceTypeKey]);
+      }
+    );
 
     it('renders all slice type buttons', async () => {
       await setup();
@@ -463,19 +490,26 @@ describe('NiiViewer', () => {
       expect(screen.getByRole('button', { name: '3D view' })).toBeInTheDocument();
     });
 
-    it.each(SLICE_TYPE_OPTIONS.map(option => [option.ariaLabel]))
-    ("clicking %s sets aria-pressed correctly", async (ariaLabel) => {
-      const allLabels = SLICE_TYPE_OPTIONS.map(option => option.ariaLabel);
-      await setup();
-      // click the button
-      await userEvent.click(screen.getByRole('button', { name: ariaLabel }));
-      // the clicked button should have aria-pressed true
-      expect(screen.getByRole('button', { name: ariaLabel })).toHaveAttribute('aria-pressed', 'true');
-      // all other buttons should have aria-pressed false
-      for (const otherLabel of allLabels.filter(l => l !== ariaLabel)) {
-        expect(screen.getByRole('button', { name: otherLabel })).toHaveAttribute('aria-pressed', 'false');
+    it.each(SLICE_TYPE_OPTIONS.map((option) => [option.ariaLabel]))(
+      'clicking %s sets aria-pressed correctly',
+      async (ariaLabel) => {
+        const allLabels = SLICE_TYPE_OPTIONS.map((option) => option.ariaLabel);
+        await setup();
+        // click the button
+        await userEvent.click(screen.getByRole('button', { name: ariaLabel }));
+        // the clicked button should have aria-pressed true
+        expect(screen.getByRole('button', { name: ariaLabel })).toHaveAttribute(
+          'aria-pressed',
+          'true'
+        );
+        // all other buttons should have aria-pressed false
+        for (const otherLabel of allLabels.filter((l) => l !== ariaLabel)) {
+          expect(screen.getByRole('button', { name: otherLabel })).toHaveAttribute(
+            'aria-pressed',
+            'false'
+          );
+        }
       }
-
-    });
+    );
   });
 });

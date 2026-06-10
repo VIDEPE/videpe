@@ -205,13 +205,13 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
           )}
           <canvas ref={canvas} className="absolute inset-0" />
         </div>
-        <div className="flex flex-col w-8">
+        <div className="flex flex-col w-8 pt-2 items-center">
           {/* Viewer controls with Ax, Co, Sa, MP and 3D buttons */}
           {sliceTypeOptions.map(({ sliceType, label, buttonLabel }) => (
             <button
               key={sliceType}
               type="button"
-              className="button"
+              className="button size-xs"
               onClick={() => handleSliceTypeChange(sliceType)}
               title={`${label} view`}
               aria-label={`${label} view`}
