@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { getInitialLayerSettings, detectVolumeType } from '@/components/NiiViewer.utils';
@@ -375,6 +375,12 @@ describe('NiiViewer', () => {
         observe() {}
         disconnect() {}
       };
+      // shouldAdvanceTime keeps real-time-driven helpers like waitFor working alongside fake timers
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
     });
 
     const setup = async () => {
@@ -392,6 +398,7 @@ describe('NiiViewer', () => {
 
       act(() => {
         resizeCallback([{ contentRect: { width: 800, height: 200 } }]);
+        vi.advanceTimersByTime(150); // flush the resize-size debounce
       });
 
       expect(nv.setMultiplanarLayout).toHaveBeenCalledWith(MULTIPLANAR_TYPE.AUTO);
@@ -403,6 +410,7 @@ describe('NiiViewer', () => {
 
       act(() => {
         resizeCallback([{ contentRect: { width: 400, height: 300 } }]);
+        vi.advanceTimersByTime(150); // flush the resize-size debounce
       });
 
       expect(nv.setMultiplanarLayout).toHaveBeenCalledWith(MULTIPLANAR_TYPE.GRID);
@@ -414,10 +422,12 @@ describe('NiiViewer', () => {
 
       act(() => {
         resizeCallback([{ contentRect: { width: 800, height: 200 } }]);
+        vi.advanceTimersByTime(150); // flush the resize-size debounce
       });
       nv.setMultiplanarLayout.mockClear();
       act(() => {
         resizeCallback([{ contentRect: { width: 400, height: 300 } }]);
+        vi.advanceTimersByTime(150); // flush the resize-size debounce
       });
 
       expect(nv.setMultiplanarLayout).toHaveBeenCalledWith(MULTIPLANAR_TYPE.GRID);
