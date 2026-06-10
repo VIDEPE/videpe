@@ -111,6 +111,7 @@ function SortableSettingsCard({
         className={`grid transition-[grid-template-rows] duration-200 ease-in-out ${
           isExpanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
         }`}
+        aria-hidden={!isExpanded}
       >
         <div className="overflow-hidden">
           <div className="border-t border-border px-3 py-1.5 flex flex-col gap-1.5 text-xs">
