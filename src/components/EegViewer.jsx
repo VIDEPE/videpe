@@ -328,11 +328,24 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
     <div
       ref={viewerRef}
       data-testid="eeg-viewer-container"
-      className="w-full h-full flex flex-col outline-none focus-visible:ring-2 focus-visible:ring-secondary focus-visible:ring-inset"
+      className="w-full h-full flex flex-col relative outline-none focus-visible:ring-2 focus-visible:ring-secondary focus-visible:ring-inset"
       tabIndex={0}
       onMouseDown={focusViewer}
       onKeyDown={handleKeyDown}
     >
+      {/* Keyboard shortcut hint — bottom-right corner of the viewer pane */}
+      <div
+        className="absolute bottom-1 right-1 z-20 text-foreground/40 hover:text-foreground/80 transition-colors"
+        title={
+          'Click the viewer to enable keyboard navigation:\n' +
+          '· ↑/↓\t\tGain adjustment\n' +
+          '· ←/→\t     Move a time step\n' +
+          '· Page ↑/↓       Jump entire time window\n' +
+          '· Home/End    Jump to start/end'
+        }
+      >
+        <Keyboard size={16} />
+      </div>
       {/* Plot row: sidebar + channel plots side by side; flex-1 so controls sit below */}
       <div className="flex-1 min-h-0 flex flex-row">
         {/* Left sidebar: justify-center now centers against the channel area height only */}
@@ -454,7 +467,7 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
 
           {/* Fixed x-axis strip — always visible, never scrolls with the channels */}
           {plotWidth > 0 && (
-            <div className="shrink-0 relative" style={{ height: X_AXIS_HEIGHT }}>
+            <div className="shrink-0" style={{ height: X_AXIS_HEIGHT }}>
               <UplotReact
                 options={{
                   width: plotWidth,
@@ -470,19 +483,6 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
                 onCreate={() => {}}
                 onDelete={() => {}}
               />
-              {/* Keyboard shortcut hint — sits in the right padding of the x-axis strip, below the scrollbar */}
-              <div
-                className="absolute right-1 top-1/2 -translate-y-1/2 z-20 text-foreground/40 hover:text-foreground/80 transition-colors"
-                title={
-                  'Click the viewer to enable keyboard navigation:\n' +
-                  '· ↑/↓\t\tGain adjustment\n' +
-                  '· ←/→\t     Move a time step\n' +
-                  '· Page ↑/↓       Jump entire time window\n' +
-                  '· Home/End    Jump to start/end'
-                }
-              >
-                <Keyboard size={16} />
-              </div>
             </div>
           )}
 
