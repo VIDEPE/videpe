@@ -13,6 +13,7 @@ import {
   Minus,
   ListChevronsUpDown,
   ListChevronsDownUp,
+  Keyboard,
 } from 'lucide-react';
 import { minMaxDownsample } from '@/utils/downsample';
 
@@ -269,9 +270,69 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
     setStartTime((start) => Math.max(0, start - shiftTimeStepSize));
   };
 
+  // Keyboard navigation: Up/Down adjust gain, Left/Right pan by the shift step,
+  // Page Up/Down jump by a full window, Home/End jump to the start/end of the recording.
+  // Ignored while an input/textarea/select has focus so typing and the native number-input
+  // arrow-key behavior aren't hijacked.
+  const handleKeyDown = (e) => {
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+    switch (e.key) {
+      case 'ArrowUp':
+        e.preventDefault();
+        updateYScale(yScale / 2);
+        break;
+      case 'ArrowDown':
+        e.preventDefault();
+        updateYScale(yScale * 2);
+        break;
+      case 'ArrowLeft':
+        e.preventDefault();
+        backwardshiftStartTime();
+        break;
+      case 'ArrowRight':
+        e.preventDefault();
+        forwardshiftStartTime();
+        break;
+      case 'PageUp':
+        e.preventDefault();
+        setStartTime((start) => Math.max(0, start - windowSize));
+        break;
+      case 'PageDown':
+        e.preventDefault();
+        setStartTime((start) => Math.min(tMax - windowSize, start + windowSize));
+        break;
+      case 'Home':
+        e.preventDefault();
+        setStartTime(0);
+        break;
+      case 'End':
+        e.preventDefault();
+        setStartTime(tMax - windowSize);
+        break;
+      default:
+        break;
+    }
+  };
+
+  // Clicking anywhere in the viewer (other than a button/input) moves keyboard focus to the
+  // container so the shortcuts above become active, without stealing focus from form controls
+  const viewerRef = useRef(null);
+  const focusViewer = (e) => {
+    if (e.target.closest('button, input, textarea, select')) return;
+    viewerRef.current?.focus();
+  };
+
   return (
     // h-full fills the flex column in PatientView; flex-col stacks the plot row above the controls
-    <div className="w-full h-full flex flex-col">
+    // tabIndex + onKeyDown make the viewer keyboard-navigable once focused (see handleKeyDown)
+    <div
+      ref={viewerRef}
+      data-testid="eeg-viewer-container"
+      className="w-full h-full flex flex-col outline-none focus-visible:ring-2 focus-visible:ring-secondary focus-visible:ring-inset"
+      tabIndex={0}
+      onMouseDown={focusViewer}
+      onKeyDown={handleKeyDown}
+    >
       {/* Plot row: sidebar + channel plots side by side; flex-1 so controls sit below */}
       <div className="flex-1 min-h-0 flex flex-row">
         {/* Left sidebar: justify-center now centers against the channel area height only */}
@@ -393,7 +454,7 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
 
           {/* Fixed x-axis strip — always visible, never scrolls with the channels */}
           {plotWidth > 0 && (
-            <div className="shrink-0" style={{ height: X_AXIS_HEIGHT }}>
+            <div className="shrink-0 relative" style={{ height: X_AXIS_HEIGHT }}>
               <UplotReact
                 options={{
                   width: plotWidth,
@@ -409,6 +470,19 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
                 onCreate={() => {}}
                 onDelete={() => {}}
               />
+              {/* Keyboard shortcut hint — sits in the right padding of the x-axis strip, below the scrollbar */}
+              <div
+                className="absolute right-1 top-1/2 -translate-y-1/2 z-20 text-foreground/40 hover:text-foreground/80 transition-colors"
+                title={
+                  'Click the viewer to enable keyboard navigation:\n' +
+                  '· ↑/↓\t\tGain adjustment\n' +
+                  '· ←/→\t     Move a time step\n' +
+                  '· Page ↑/↓       Jump entire time window\n' +
+                  '· Home/End    Jump to start/end'
+                }
+              >
+                <Keyboard size={16} />
+              </div>
             </div>
           )}
 
