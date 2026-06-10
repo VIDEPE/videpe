@@ -30,6 +30,7 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
   const nvRef = useRef();
   const canvasContainerRef = useRef();
   const opacityRafRef = useRef(null); // pending rAF id for opacity updates — cancelled on each new drag event so only the latest value redraws
+  const canvasSizeTimeoutRef = useRef(null); // pending debounce timeout for canvas size updates
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
 
   const [activeSliceType, setActiveSliceType] = useState(SLICE_TYPE.MULTIPLANAR);
@@ -91,10 +92,18 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
     if (!canvasContainer) return;
     const canvasSizeObserver = new ResizeObserver(([entry]) => {
       const { width, height } = entry.contentRect;
-      setCanvasSize({ width, height });
+      // Debounce — fires on every frame during the SplitPane resize/maximize transition;
+      // wait for it to settle before triggering a multiplanar layout switch
+      if (canvasSizeTimeoutRef.current) clearTimeout(canvasSizeTimeoutRef.current);
+      canvasSizeTimeoutRef.current = setTimeout(() => {
+        setCanvasSize({ width, height });
+      }, 150);
     });
     canvasSizeObserver.observe(canvasContainer); // Start observing the canvas container for size changes
-    return () => canvasSizeObserver.disconnect(); // Clean up the observer on unmount
+    return () => {
+      canvasSizeObserver.disconnect(); // Clean up the observer on unmount
+      if (canvasSizeTimeoutRef.current) clearTimeout(canvasSizeTimeoutRef.current); // Clear any pending debounce timeout on unmount
+    };
   }, []);
 
   // Switch between AUTO (panels in a row) and GRID (2×2) based on aspect ratio.
@@ -102,7 +111,7 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
   // height > 0 guards against the initial {0,0} state incorrectly triggering AUTO.
   useEffect(() => {
     if (!nvRef.current) return;
-    const isWide = canvasSize.height > 0 && canvasSize.width >= 2 * canvasSize.height;
+    const isWide = canvasSize.height > 0 && canvasSize.width >= 1.75 * canvasSize.height;
     nvRef.current.setMultiplanarLayout(isWide ? MULTIPLANAR_TYPE.AUTO : MULTIPLANAR_TYPE.GRID);
   }, [canvasSize]);
 
@@ -205,7 +214,7 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
           )}
           <canvas ref={canvas} className="absolute inset-0" />
         </div>
-        <div className="flex flex-col w-8 pt-2 items-center">
+        <div className="flex flex-col w-8 gap-0.5 pt-2 items-center">
           {/* Viewer controls with Ax, Co, Sa, MP and 3D buttons */}
           {sliceTypeOptions.map(({ sliceType, label, buttonLabel }) => (
             <button

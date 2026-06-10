@@ -123,7 +123,7 @@ export const SplitPane = ({
     };
   }, []);
 
-  const toggleMaximize = (which) => setMaximized((prev) => (prev === which ? null : which));
+  const toggleMaximize = (side) => setMaximized((prev) => (prev === side ? null : side));
 
   // Compute the share of space each panel gets (0–100).
   // When maximized, one panel gets everything and the other nothing.
@@ -152,7 +152,7 @@ export const SplitPane = ({
     'inline-flex items-center justify-center w-4 h-4 rounded-full border-none cursor-pointer transition-all text-foreground/50 hover:text-black/70 bg-border';
 
   // Helper to render the header for each panel, with label and control buttons
-  const panelHeader = (label, which, onReset) => (
+  const panelHeader = (label, side, onReset) => (
     <div className="shrink-0 flex items-center justify-between px-3 py-1 border-b border-border bg-surface">
       <h2 style={{ margin: 0 }} className="select-none pointer-events-none">
         {label}
@@ -172,11 +172,11 @@ export const SplitPane = ({
         <button
           type="button"
           className={`${trafficBtn} hover:bg-[#FFBD2E]`}
-          onClick={() => toggleMaximize(which)}
-          title={maximized === which ? 'Restore' : 'Maximize'}
-          aria-pressed={maximized === which}
+          onClick={() => toggleMaximize(side)}
+          title={maximized === side ? 'Restore' : 'Maximize'}
+          aria-pressed={maximized === side}
         >
-          {maximized === which ? <Minimize2 size={ICON_SIZE} /> : <Maximize2 size={ICON_SIZE} />}
+          {maximized === side ? <Minimize2 size={ICON_SIZE} /> : <Maximize2 size={ICON_SIZE} />}
         </button>
         {onReset && (
           <button
@@ -198,7 +198,11 @@ export const SplitPane = ({
   return (
     <div ref={containerRef} className={`flex-1 min-h-0 flex ${isColumn ? 'flex-col' : 'flex-row'}`}>
       {/* Left/top content — DOM-first; visually right/bottom when swapped (order:3) */}
-      <div ref={leftPanelRef} className="flex flex-col min-h-0 overflow-hidden" style={leftStyle}>
+      <div
+        ref={leftPanelRef}
+        className={`flex flex-col min-h-0 overflow-hidden ${isDragging ? '' : 'transition-[width,flex-grow] duration-200 ease-in-out'}`}
+        style={leftStyle}
+      >
         {panelHeader(leftLabel, 'left', onLeftReset)}
         <div className="flex-1 min-h-0 overflow-y-auto">{left}</div>
       </div>
@@ -227,7 +231,11 @@ export const SplitPane = ({
       )}
 
       {/* Right/bottom content — DOM-second; visually left/top when swapped (order:1) */}
-      <div ref={rightPanelRef} className="flex flex-col min-h-0 overflow-hidden" style={rightStyle}>
+      <div
+        ref={rightPanelRef}
+        className={`flex flex-col min-h-0 overflow-hidden ${isDragging ? '' : 'transition-[width,flex-grow] duration-200 ease-in-out'}`}
+        style={rightStyle}
+      >
         {panelHeader(rightLabel, 'right', onRightReset)}
         <div className="flex-1 min-h-0 overflow-y-auto themed-scrollbar">{right}</div>
       </div>
