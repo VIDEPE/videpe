@@ -111,7 +111,7 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
   // height > 0 guards against the initial {0,0} state incorrectly triggering AUTO.
   useEffect(() => {
     if (!nvRef.current) return;
-    const isWide = canvasSize.height > 0 && canvasSize.width >= 2 * canvasSize.height;
+    const isWide = canvasSize.height > 0 && canvasSize.width >= 1.75 * canvasSize.height;
     nvRef.current.setMultiplanarLayout(isWide ? MULTIPLANAR_TYPE.AUTO : MULTIPLANAR_TYPE.GRID);
   }, [canvasSize]);
 
