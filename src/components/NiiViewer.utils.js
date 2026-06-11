@@ -28,10 +28,12 @@ export const TYPE_COLORMAP_DEFAULTS = {
 // Returns an array of display settings, one per layer (volume or mesh).
 // Colormap is derived from volume.type via TYPE_COLORMAP_DEFAULTS — volumes themselves
 // do not carry a colormap field.
-export const getInitialLayerSettings = (volumes) =>
+// startIndex is the position of volumes[0] among all loaded layers — pass the count of
+// already-loaded volumes when appending so only the very first layer overall gets full opacity.
+export const getInitialLayerSettings = (volumes, startIndex = 0) =>
   volumes.map((volume, index) => ({
     visible: true,
-    opacity: index === 0 ? 1.0 : 0.6, // first loaded layer is fully opaque, others slightly transparent by default
+    opacity: startIndex + index === 0 ? 1.0 : 0.6, // first loaded layer is fully opaque, others slightly transparent by default
     colormap: TYPE_COLORMAP_DEFAULTS[volume.type] ?? 'gray',
     invert: false,
     showColorbar: false,

@@ -25,6 +25,10 @@ vi.mock('@niivue/niivue', () => ({
       loadVolumes: vi.fn().mockImplementation(async function (vols) {
         instance.volumes = vols; // mirrors what real NiiVue does so updateSetting can look up by url
       }),
+      addVolumesFromUrl: vi.fn().mockImplementation(async function (vols) {
+        // mirrors what real NiiVue does — appends the newly loaded volumes to the existing ones
+        instance.volumes = [...instance.volumes, ...vols];
+      }),
       setOpacity: vi.fn(),
       setColormap: vi.fn(),
       updateGLVolume: vi.fn(),
@@ -322,6 +326,12 @@ describe('NiiViewer', () => {
       expect(result[0].invert).toBe(false);
       expect(result[0].showColorbar).toBe(false);
     });
+
+    it('with startIndex > 0 (volumes already loaded), the first new volume does not get full opacity', () => {
+      const result = getInitialLayerSettings([{ type: 'PET' }, { type: 'SPECT' }], 1);
+      expect(result[0].opacity).toBe(0.6);
+      expect(result[1].opacity).toBe(0.6);
+    });
   });
 
   describe('component rendering', () => {
@@ -564,5 +574,20 @@ describe('NiiViewer', () => {
         }
       }
     );
+  });
+
+  describe('appending volumes via the file drop zone', () => {
+    it('does not give a newly-appended volume full opacity when other volumes are already loaded', async () => {
+      render(<NiiViewer volumes={[{ type: 'MRI', url: '/mri.nii' }]} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      const input = document.querySelector('input[type="file"]');
+      await userEvent.upload(input, new File(['data'], 'scan.nii'));
+
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      await userEvent.click(screen.getByRole('button', { name: 'Expand scan controls' }));
+      expect(screen.getByLabelText('scan opacity')).toHaveValue(60);
+    });
   });
 });

@@ -108,10 +108,11 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
     setLoading(true);
     // Convert the FileList to an array of volume objects with { url, name, type, subtype }
     const newVolumes = filesToVolumes(files);
-    const newLayerSettings = getInitialLayerSettings(newVolumes);
-
-    // Append the new volumes/settings to the existing state
     const allVolumes = [...orderedVolumes, ...newVolumes];
+
+    // startIndex tells getInitialLayerSettings these volumes aren't the first layers overall,
+    // so the first new volume gets 0.6 opacity instead of being treated as layer 0
+    const newLayerSettings = getInitialLayerSettings(newVolumes, orderedVolumes.length);
     const allLayerSettings = [...layerSettings, ...newLayerSettings];
     setOrderedVolumes(allVolumes);
     setLayerSettings(allLayerSettings);
