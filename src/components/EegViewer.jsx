@@ -270,42 +270,66 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
     setStartTime((start) => Math.max(0, start - shiftTimeStepSize));
   };
 
+  // Clicking anywhere in the viewer (other than a button/input) moves keyboard focus to the
+  // container so the shortcuts above become active, without stealing focus from form controls
+  const viewerRef = useRef(null);
+  const focusViewer = (e) => {
+    // If the click originated from a button or input, don't move focus to the container
+    // this allows users to click the controls and then use the keyboard without interruption, e.g. click the gain input and then type a number or use the arrow keys to adjust it.
+    if (e.target.closest('button, input, textarea, select')) return;
+    // Otherwise, focus the container to enable keyboard shortcuts
+    viewerRef.current?.focus();
+  };
+
   // Keyboard navigation: Up/Down adjust gain, Left/Right pan by the shift step,
   // Page Up/Down jump by a full window, Home/End jump to the start/end of the recording.
-  // Ignored while an input/textarea/select has focus so typing and the native number-input
-  // arrow-key behavior aren't hijacked.
   const handleKeyDown = (e) => {
-    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+    // Guard clause to ignore key presses when focused on anything other than
+    // the viewer container — this allows form controls to receive focus and handle their own key events
+    if (e.target !== viewerRef.current) return;
     switch (e.key) {
       case 'ArrowUp':
-        e.preventDefault();
+        // Zoom in (halve the y-range)
+        e.preventDefault(); // prevent arrow keys from scrolling the page
         updateYScale(yScale / 2);
         break;
       case 'ArrowDown':
+        // Zoom out (double the y-range)
         e.preventDefault();
         updateYScale(yScale * 2);
         break;
       case 'ArrowLeft':
+        // Pan left by the shift step
         e.preventDefault();
         backwardshiftStartTime();
         break;
       case 'ArrowRight':
+        // Pan right by the shift step
         e.preventDefault();
         forwardshiftStartTime();
         break;
       case 'PageUp':
+        // Jump back by a full window
         e.preventDefault();
         setStartTime((start) => Math.max(0, start - windowSize));
         break;
       case 'PageDown':
+        // Jump forward by a full window
+        e.preventDefault();
+        setStartTime((start) => Math.min(tMax - windowSize, start + windowSize));
+        break;
+      case ' ':
+        // Jump forward by a full window
         e.preventDefault();
         setStartTime((start) => Math.min(tMax - windowSize, start + windowSize));
         break;
       case 'Home':
+        // Jump to the start of the recording
         e.preventDefault();
         setStartTime(0);
         break;
       case 'End':
+        // Jump to the end of the recording
         e.preventDefault();
         setStartTime(tMax - windowSize);
         break;
@@ -314,34 +338,27 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
     }
   };
 
-  // Clicking anywhere in the viewer (other than a button/input) moves keyboard focus to the
-  // container so the shortcuts above become active, without stealing focus from form controls
-  const viewerRef = useRef(null);
-  const focusViewer = (e) => {
-    if (e.target.closest('button, input, textarea, select')) return;
-    viewerRef.current?.focus();
-  };
-
   return (
     // h-full fills the flex column in PatientView; flex-col stacks the plot row above the controls
     // tabIndex + onKeyDown make the viewer keyboard-navigable once focused (see handleKeyDown)
     <div
       ref={viewerRef}
       data-testid="eeg-viewer-container"
-      className="w-full h-full flex flex-col relative focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-secondary focus-visible:-outline-offset-2"
+      className="w-full h-full flex flex-col group relative focus:outline-solid focus:outline-2 focus:outline-secondary focus:-outline-offset-2"
       tabIndex={0}
       onMouseDown={focusViewer}
       onKeyDown={handleKeyDown}
     >
       {/* Keyboard shortcut hint — bottom-right corner of the viewer pane */}
       <div
-        className="absolute bottom-1 right-1 z-20 text-foreground/40 hover:text-foreground/80 transition-colors"
+        className="absolute bottom-2 right-2 z-20 text-foreground/40 hover:text-foreground/80 group-focus:text-secondary transition-colors"
         title={
           'Click the EEG viewer to enable keyboard navigation (blue outline when active):\n' +
-          '· ↑/↓\t\tGain adjustment\n' +
-          '· ←/→\t     Move a time step\n' +
-          '· Page ↑/↓       Jump entire time window\n' +
-          '· Home/End    Jump to start/end'
+          '· ↑/↓\t\tGain adjustment up/down\n' +
+          '· ←/→\t     Move a time step back/forward\n' +
+          '· Space\t   Jump a time window forward\n' +
+          '· Page ↑/↓       Jump a time window back/forward\n' +
+          '· Home/End   Jump to start/end'
         }
       >
         <Keyboard size={16} />
