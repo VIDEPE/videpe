@@ -8,7 +8,7 @@
   --c-surface: rgb(235, 235, 235); /* cards, panels, code blocks */
   --c-border: rgb(185, 185, 185); /* borders, dividers */
   --c-primary: rgb(84, 127, 219); /* brand / accent color */
-  --c-secondary: rgb(25, 92, 236); /* outlines */
+  --c-secondary: rgb(18, 74, 196); /* outlines */
   --c-alert: rgb(250, 111, 18); /* warning messages, nondestructive actions */
   --c-shadow:
     rgba(0, 0, 0, 0.4) 0 6px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 8px -2px; /* box shadows */

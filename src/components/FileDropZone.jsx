@@ -59,13 +59,23 @@ export const FileDropZone = ({
     >
       {compact ? (
         <>
-          <Upload className="h-4 w-4 shrink-0 text-foreground/50 group-hover:text-primary/80 transition-colors" />
+          <Upload
+            className={cn(
+              'h-4 w-4 shrink-0 group-hover:text-primary transition-colors',
+              isDraggingOver ? 'text-secondary' : 'text-[color-mix(in_srgb,var(--c-border),var(--c-foreground)_40%)]'
+            )}
+          />
           {/* The label is the main instruction (e.g., "Drop additional files"). */}
           <p className="text-xs font-medium text-foreground">{label}</p>
         </>
       ) : (
         <>
-          <Upload className="h-10 w-10 text-foreground/50 group-hover:text-primary/80 transition-colors" />
+          <Upload
+            className={cn(
+              'h-10 w-10 group-hover:text-primary transition-colors',
+              isDraggingOver ? 'text-secondary' : 'text-[color-mix(in_srgb,var(--c-border),var(--c-foreground)_40%)]'
+            )}
+          />
           {/* The label is the main instruction (e.g., "Drop EEG files"). */}
           <p className="text-sm font-medium text-foreground">{label}</p>
           {/* The description provides format details (e.g., "BrainVision: .vhdr + .eeg").*/}
