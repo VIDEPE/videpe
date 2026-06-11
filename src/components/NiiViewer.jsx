@@ -230,16 +230,19 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
   return (
     <div className="h-full flex flex-col pb-3 px-2">
       {/* Div holding Controls and collapsable FileDropZone, above the canvas*/}
-      <div className="flex flex-row-2">
-        {/* Controls panel */}
-        <ImagingControls
-          volumes={orderedVolumes}
-          layerSettings={layerSettings}
-          onSettingChange={handleSettingChange}
-          onReorder={handleReorder}
-        />
-        {/* File drop zone that allows loading of additional files while the NiiViewer is active*/}
-        <div className="">
+      <div className="flex items-start gap-1">
+        {/* Controls panel — fills the remaining width */}
+        <div className="flex-1 min-w-0">
+          <ImagingControls
+            volumes={orderedVolumes}
+            layerSettings={layerSettings}
+            onSettingChange={handleSettingChange}
+            onReorder={handleReorder}
+          />
+        </div>
+        {/* File drop zone that allows loading of additional files while the NiiViewer is active —
+            fixed, roughly square, and hugs the right edge */}
+        <div className="flex w-48 h-40 shrink-0">
           <FileDropZone
             onFiles={handleNiiFiles}
             accepted_formats=".nii,.nii.gz,.mgh,.mgz,.gii,.ply,.obj"
