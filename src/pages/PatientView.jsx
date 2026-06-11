@@ -98,22 +98,29 @@ export const PatientView = () => {
   // Handler for when imaging files are dropped or selected. It reads the files as ArrayBuffers and prepares them for visualization, updating state accordingly.
   const handleNiiFiles = async (files) => {
     setIsLoading(true);
+    // niiReady resolves once NiiViewer finishes loading the new volumes (see onReady below)
+    const niiReady = new Promise((resolve) => {
+      niiReadyResolveRef.current = resolve;
+    });
     try {
-      const result = await toast.promise(
-        Promise.all(
-          Array.from(files).map((f) => {
-            // NiiVue calls fetch(url) internally, so a blob: URL is needed — a plain filename would resolve as a relative HTTP request
-            const { type, subtype } = detectVolumeType(f.name);
-            return { url: URL.createObjectURL(f), name: f.name, type, subtype };
-          })
-        ),
+      await toast.promise(
+        (async () => {
+          const result = await Promise.all(
+            Array.from(files).map((f) => {
+              // NiiVue calls fetch(url) internally, so a blob: URL is needed — a plain filename would resolve as a relative HTTP request
+              const { type, subtype } = detectVolumeType(f.name);
+              return { url: URL.createObjectURL(f), name: f.name, type, subtype };
+            })
+          );
+          setVolumes(result);
+          await niiReady;
+        })(),
         {
           loading: 'Loading imaging data…',
           success: 'Imaging data loaded!',
           error: (err) => `Error loading imaging data:\n${err.message}`,
         }
       );
-      setVolumes(result);
     } finally {
       setIsLoading(false);
     }

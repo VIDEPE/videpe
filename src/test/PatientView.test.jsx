@@ -53,7 +53,8 @@ const getNiiOnFiles = () => {
   return calls.at(-1)[0].onFiles;
 };
 
-const getMainButton = () => screen.getByRole('button', { name: /^(load demo|reset|loading…)$/i });
+const getDemoResetButton = () =>
+  screen.getByRole('button', { name: /^(load demo|reset|loading…)$/i });
 
 describe('PatientView — button label', () => {
   beforeEach(() => {
@@ -69,7 +70,7 @@ describe('PatientView — button label', () => {
       warning: null,
     });
     renderPatientView();
-    expect(getMainButton()).toHaveTextContent(/load demo/i);
+    expect(getDemoResetButton()).toHaveTextContent(/load demo/i);
   });
 
   it('shows "Reset" when there are pending EEG files', async () => {
@@ -85,7 +86,7 @@ describe('PatientView — button label', () => {
       await getEegOnFiles()([makeFile('sub01.vhdr')]);
     });
 
-    expect(getMainButton()).toHaveTextContent(/reset/i);
+    expect(getDemoResetButton()).toHaveTextContent(/reset/i);
   });
 
   it('shows "Reset" and renders EegViewer after EEG loads successfully', async () => {
@@ -101,7 +102,7 @@ describe('PatientView — button label', () => {
       await getEegOnFiles()([makeFile('sub01.vhdr'), makeFile('sub01.eeg')]);
     });
 
-    expect(getMainButton()).toHaveTextContent(/reset/i);
+    expect(getDemoResetButton()).toHaveTextContent(/reset/i);
     expect(screen.getByTestId('eeg-viewer')).toBeInTheDocument();
   });
 });
@@ -126,9 +127,9 @@ describe('PatientView — reset', () => {
       await getEegOnFiles()([makeFile('sub01.vhdr'), makeFile('sub01.eeg')]);
     });
 
-    await user.click(getMainButton()); // Reset
+    await user.click(getDemoResetButton()); // Reset
 
-    expect(getMainButton()).toHaveTextContent(/load demo/i);
+    expect(getDemoResetButton()).toHaveTextContent(/load demo/i);
     expect(screen.queryByTestId('eeg-viewer')).not.toBeInTheDocument();
   });
 });
@@ -237,8 +238,8 @@ describe('PatientView — demo loading', () => {
     fireEvent.click(screen.getByRole('button', { name: /load demo/i }));
 
     await waitFor(() => {
-      expect(getMainButton()).toHaveTextContent(/loading/i);
-      expect(getMainButton()).toBeDisabled();
+      expect(getDemoResetButton()).toHaveTextContent(/loading/i);
+      expect(getDemoResetButton()).toBeDisabled();
     });
   });
 
@@ -251,7 +252,7 @@ describe('PatientView — demo loading', () => {
     renderPatientView();
     fireEvent.click(screen.getByRole('button', { name: /load demo/i }));
 
-    await waitFor(() => expect(getMainButton()).toHaveTextContent(/load demo/i));
+    await waitFor(() => expect(getDemoResetButton()).toHaveTextContent(/load demo/i));
     expect(screen.queryByTestId('nii-viewer')).not.toBeInTheDocument();
   });
 });
@@ -268,55 +269,96 @@ describe('PatientView — imaging file-type detection', () => {
     });
   });
 
+  // Fire-and-forget — handleNiiFiles awaits NiiViewer's onReady, which the mock never calls,
+  // so the returned promise never settles. waitFor flushes pending microtasks between
+  // retries, letting setVolumes fire so we can inspect the props passed to NiiViewer.
   it('passes type MRI to NiiViewer for a BIDS T1w file', async () => {
     renderPatientView();
 
-    await act(async () => {
-      await getNiiOnFiles()([makeFile('sub-01_T1w.nii')]);
-    });
+    getNiiOnFiles()([makeFile('sub-01_T1w.nii')]);
 
-    const volumes = NiiViewer.mock.lastCall[0].volumes;
-    expect(volumes).toHaveLength(1);
-    expect(volumes[0].type).toBe('MRI');
+    await waitFor(() => {
+      expect(NiiViewer.mock.lastCall[0].volumes).toHaveLength(1);
+    });
+    expect(NiiViewer.mock.lastCall[0].volumes[0].type).toBe('MRI');
   });
 
   it('passes subtype as nameWithoutExtension to NiiViewer for a BIDS T1w file', async () => {
     renderPatientView();
 
-    await act(async () => {
-      await getNiiOnFiles()([makeFile('sub-01_T1w.nii')]);
-    });
+    getNiiOnFiles()([makeFile('sub-01_T1w.nii')]);
 
+    await waitFor(() => {
+      expect(NiiViewer.mock.lastCall[0].volumes).toHaveLength(1);
+    });
     expect(NiiViewer.mock.lastCall[0].volumes[0].subtype).toBe('sub-01_T1w');
   });
 
   it('passes subtype as nameWithoutExtension to NiiViewer for a keyword-matched file', async () => {
     renderPatientView();
 
-    await act(async () => {
-      await getNiiOnFiles()([makeFile('patT1.nii')]);
-    });
+    getNiiOnFiles()([makeFile('patT1.nii')]);
 
+    await waitFor(() => {
+      expect(NiiViewer.mock.lastCall[0].volumes).toHaveLength(1);
+    });
     expect(NiiViewer.mock.lastCall[0].volumes[0].subtype).toBe('patT1');
   });
 
   it('passes type PET to NiiViewer for a BIDS pet file', async () => {
     renderPatientView();
 
-    await act(async () => {
-      await getNiiOnFiles()([makeFile('sub-01_pet.nii.gz')]);
-    });
+    getNiiOnFiles()([makeFile('sub-01_pet.nii.gz')]);
 
+    await waitFor(() => {
+      expect(NiiViewer.mock.lastCall[0].volumes).toHaveLength(1);
+    });
     expect(NiiViewer.mock.lastCall[0].volumes[0].type).toBe('PET');
   });
 
   it('passes type SPECT to NiiViewer for a siscom file', async () => {
     renderPatientView();
 
-    await act(async () => {
-      await getNiiOnFiles()([makeFile('pat_siscom_17-13.nii')]);
+    getNiiOnFiles()([makeFile('pat_siscom_17-13.nii')]);
+
+    await waitFor(() => {
+      expect(NiiViewer.mock.lastCall[0].volumes).toHaveLength(1);
+    });
+    expect(NiiViewer.mock.lastCall[0].volumes[0].type).toBe('SPECT');
+  });
+});
+
+describe('PatientView — imaging loading state', () => {
+  beforeEach(() => {
+    FileDropZone.mockClear();
+    NiiViewer.mockClear();
+    checkEegFiles.mockReturnValue({
+      formatName: null,
+      complete: false,
+      missing: null,
+      warning: null,
+    });
+  });
+
+  it('keeps the demo/reset button disabled until NiiViewer signals it is ready', async () => {
+    renderPatientView();
+
+    // Fire-and-forget — handleNiiFiles awaits NiiViewer's onReady, which the mock only calls
+    // once we trigger it manually below. waitFor flushes pending microtasks between retries,
+    // letting setVolumes/setIsLoading fire.
+    getNiiOnFiles()([makeFile('sub-01_T1w.nii')]);
+
+    await waitFor(() => {
+      expect(getDemoResetButton()).toBeDisabled();
     });
 
-    expect(NiiViewer.mock.lastCall[0].volumes[0].type).toBe('SPECT');
+    // Simulate NiiViewer finishing its load
+    await act(async () => {
+      NiiViewer.mock.lastCall[0].onReady();
+    });
+
+    await waitFor(() => {
+      expect(getDemoResetButton()).not.toBeDisabled();
+    });
   });
 });

@@ -4,6 +4,7 @@ import { move } from '@dnd-kit/helpers';
 import toast from 'react-hot-toast';
 import { getInitialLayerSettings } from './NiiViewer.utils';
 import { ImagingControls } from './ImagingControls';
+import { FileDropZone } from '../components/FileDropZone';
 
 // Loads volumes into an existing NiiVue instance and applies all layer settings.
 // Used for initial load; reordering uses setVolume instead to avoid re-fetching.
@@ -191,13 +192,24 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
 
   return (
     <div className="h-full flex flex-col pb-3 px-2">
-      {/* Controls panel */}
-      <ImagingControls
-        volumes={orderedVolumes}
-        layerSettings={layerSettings}
-        onSettingChange={handleSettingChange}
-        onReorder={handleReorder}
-      />
+      {/* Div holding Controls and collapsable FileDropZone, above the canvas*/}
+      <div className="flex flex-row-2">
+        {/* Controls panel */}
+        <ImagingControls
+          volumes={orderedVolumes}
+          layerSettings={layerSettings}
+          onSettingChange={handleSettingChange}
+          onReorder={handleReorder}
+        />
+        {/* File drop zone that allows loading of additional files while the NiiViewer is active*/}
+        {/* <FileDropZone
+          onFiles={handleNiiFiles}
+          accepted_formats=".nii,.nii.gz,.mgh,.mgz,.gii,.ply,.obj"
+          label="Drop imaging files"
+          description="Volumes: NIfTI, MGH, GIFTI, PLY, OBJ, …"
+        /> */}
+      </div>
+
       {/* The canvas + loading spinner are in a flex item that fills the remaining height, but never shrinks below 350px.
           If the controls panel above expands past the point where 350px remains, the parent scrolls. */}
       <div className="flex flex-row flex-1 min-h-[350px]">
