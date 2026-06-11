@@ -331,14 +331,14 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
     <div
       ref={viewerRef}
       data-testid="eeg-viewer-container"
-      className="w-full h-full flex flex-col relative focus:outline-solid focus:outline-2 focus:outline-secondary focus:-outline-offset-2"
+      className="w-full h-full flex flex-col group relative focus:outline-solid focus:outline-2 focus:outline-secondary focus:-outline-offset-2"
       tabIndex={0}
       onMouseDown={focusViewer}
       onKeyDown={handleKeyDown}
     >
       {/* Keyboard shortcut hint — bottom-right corner of the viewer pane */}
       <div
-        className="absolute bottom-1 right-1 z-20 text-foreground/40 hover:text-foreground/80 transition-colors"
+        className="absolute bottom-2 right-2 z-20 text-foreground/40 hover:text-foreground/80 group-focus:text-secondary transition-colors"
         title={
           'Click the EEG viewer to enable keyboard navigation (blue outline when active):\n' +
           '· ↑/↓\t\tGain adjustment\n' +
