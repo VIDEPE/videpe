@@ -290,7 +290,7 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
     switch (e.key) {
       case 'ArrowUp':
         // Zoom in (halve the y-range)
-        e.preventDefault();
+        e.preventDefault(); // prevent arrow keys from scrolling the page
         updateYScale(yScale / 2);
         break;
       case 'ArrowDown':
@@ -318,7 +318,7 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
         e.preventDefault();
         setStartTime((start) => Math.min(tMax - windowSize, start + windowSize));
         break;
-      case 'Space':
+      case ' ':
         // Jump forward by a full window
         e.preventDefault();
         setStartTime((start) => Math.min(tMax - windowSize, start + windowSize));
