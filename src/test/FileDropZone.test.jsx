@@ -89,6 +89,23 @@ describe('FileDropZone — drop interactions', () => {
   });
 });
 
+describe('FileDropZone — compact mode', () => {
+  it('renders only the icon and label, omitting description and drag instructions', () => {
+    renderZone({ compact: true, label: 'Drop additional files', description: 'Should not show' });
+    expect(screen.getByText('Drop additional files')).toBeInTheDocument();
+    expect(screen.queryByText('Should not show')).not.toBeInTheDocument();
+    expect(screen.queryByText(/drag & drop/i)).not.toBeInTheDocument();
+  });
+
+  it('still calls onFiles when files are dropped', () => {
+    renderZone({ compact: true, label: 'Drop additional files' });
+    const file = makeFile('sub01.vhdr');
+    const zone = screen.getByText('Drop additional files').closest('div[class]');
+    fireEvent.drop(zone, { dataTransfer: { files: [file] } });
+    expect(onFiles).toHaveBeenCalledOnce();
+  });
+});
+
 describe('FileDropZone — file input', () => {
   it('calls onFiles when files are selected via the file input', () => {
     const { container } = renderZone();

@@ -10,7 +10,7 @@ import { SplitPane } from '../components/SplitPane';
 import { loadBrainVisionEEG } from '../loaders/loadBrainVisionEEG';
 import { detectAndLoadEEG, checkEegFiles } from '../loaders/eegFormats';
 import { FileDropZone } from '../components/FileDropZone';
-import { detectVolumeType } from '../components/NiiViewer.utils';
+import { detectVolumeType, filesToVolumes } from '../components/NiiViewer.utils';
 
 const DEMO_EEG = {
   header: 'demo_data/sub-synth_task-rest_eeg.vhdr',
@@ -98,22 +98,23 @@ export const PatientView = () => {
   // Handler for when imaging files are dropped or selected. It reads the files as ArrayBuffers and prepares them for visualization, updating state accordingly.
   const handleNiiFiles = async (files) => {
     setIsLoading(true);
+    // niiReady resolves once NiiViewer finishes loading the new volumes (see onReady below)
+    const niiReady = new Promise((resolve) => {
+      niiReadyResolveRef.current = resolve;
+    });
     try {
-      const result = await toast.promise(
-        Promise.all(
-          Array.from(files).map((f) => {
-            // NiiVue calls fetch(url) internally, so a blob: URL is needed — a plain filename would resolve as a relative HTTP request
-            const { type, subtype } = detectVolumeType(f.name);
-            return { url: URL.createObjectURL(f), name: f.name, type, subtype };
-          })
-        ),
+      await toast.promise(
+        (async () => {
+          const result = await Promise.all(filesToVolumes(files));
+          setVolumes(result);
+          await niiReady;
+        })(),
         {
           loading: 'Loading imaging data…',
           success: 'Imaging data loaded!',
           error: (err) => `Error loading imaging data:\n${err.message}`,
         }
       );
-      setVolumes(result);
     } finally {
       setIsLoading(false);
     }
@@ -237,14 +238,17 @@ export const PatientView = () => {
               onReady={() => eegReadyResolveRef.current?.()}
             />
           ) : (
-            <FileDropZone
-              onFiles={handleEegFiles}
-              accepted_formats=".vhdr,.eeg"
-              label="Drop EEG files"
-              description="BrainVision: .vhdr + .eeg"
-              pendingFiles={pendingEegFiles}
-              hint={eegHint}
-            />
+            <div className="h-full p-2">
+              <FileDropZone
+                onFiles={handleEegFiles}
+                accepted_formats=".vhdr,.eeg"
+                label="Drop EEG files"
+                description="BrainVision: .vhdr + .eeg"
+                pendingFiles={pendingEegFiles}
+                hint={eegHint}
+                className="h-full min-h-48"
+              />
+            </div>
           )
         }
         right={
@@ -255,12 +259,15 @@ export const PatientView = () => {
               onReady={() => niiReadyResolveRef.current?.()}
             />
           ) : (
-            <FileDropZone
-              onFiles={handleNiiFiles}
-              accepted_formats=".nii,.nii.gz,.mgh,.mgz,.gii,.ply,.obj"
-              label="Drop imaging files"
-              description="Volumes: NIfTI, MGH, GIFTI, PLY, OBJ, …"
-            />
+            <div className="h-full p-2">
+              <FileDropZone
+                onFiles={handleNiiFiles}
+                accepted_formats=".nii,.nii.gz,.mgh,.mgz,.gii,.ply,.obj"
+                label="Drop imaging files"
+                description="Volumes: NIfTI, MGH, GIFTI, PLY, OBJ, …"
+                className="h-full min-h-48"
+              />
+            </div>
           )
         }
       />
