@@ -270,12 +270,23 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
     setStartTime((start) => Math.max(0, start - shiftTimeStepSize));
   };
 
+  // Clicking anywhere in the viewer (other than a button/input) moves keyboard focus to the
+  // container so the shortcuts above become active, without stealing focus from form controls
+  const viewerRef = useRef(null);
+  const focusViewer = (e) => {
+    // If the click originated from a button or input, don't move focus to the container
+    // this allows users to click the controls and then use the keyboard without interruption, e.g. click the gain input and then type a number or use the arrow keys to adjust it.
+    if (e.target.closest('button, input, textarea, select')) return;
+    // Otherwise, focus the container to enable keyboard shortcuts
+    viewerRef.current?.focus();
+  };
+
   // Keyboard navigation: Up/Down adjust gain, Left/Right pan by the shift step,
   // Page Up/Down jump by a full window, Home/End jump to the start/end of the recording.
-  // Ignored while an input/textarea/select has focus so typing and the native number-input
-  // arrow-key behavior aren't hijacked.
   const handleKeyDown = (e) => {
-    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+    // Guard clause to ignore key presses when focused on anything other than
+    // the viewer container — this allows form controls to receive focus and handle their own key events
+    if (e.target !== viewerRef.current) return;
     switch (e.key) {
       case 'ArrowUp':
         e.preventDefault();
@@ -314,21 +325,13 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
     }
   };
 
-  // Clicking anywhere in the viewer (other than a button/input) moves keyboard focus to the
-  // container so the shortcuts above become active, without stealing focus from form controls
-  const viewerRef = useRef(null);
-  const focusViewer = (e) => {
-    if (e.target.closest('button, input, textarea, select')) return;
-    viewerRef.current?.focus();
-  };
-
   return (
     // h-full fills the flex column in PatientView; flex-col stacks the plot row above the controls
     // tabIndex + onKeyDown make the viewer keyboard-navigable once focused (see handleKeyDown)
     <div
       ref={viewerRef}
       data-testid="eeg-viewer-container"
-      className="w-full h-full flex flex-col relative focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-secondary focus-visible:-outline-offset-2"
+      className="w-full h-full flex flex-col relative focus:outline-solid focus:outline-2 focus:outline-secondary focus:-outline-offset-2"
       tabIndex={0}
       onMouseDown={focusViewer}
       onKeyDown={handleKeyDown}
