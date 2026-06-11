@@ -43,13 +43,13 @@ export const FileDropZone = ({
       className={cn(
         'border-2 cursor-pointer transition-colors group', // group for linking hover styles to children (=<Upload> icon)
         compact
-          ? 'rounded-sm flex flex-row items-center justify-center gap-2 px-3 py-1.5'
+          ? 'rounded-sm flex flex-row items-center justify-center gap-2 px-3 py-1.5 mx-1'
           : 'rounded-xl flex-1 flex flex-col items-center text-center justify-center gap-3 p-2',
         isDraggingOver
           ? 'border-solid border-primary bg-primary/10'
           : hasPending
-            ? 'border-dashed border-alert bg-surface'
-            : 'border-dashed border-border hover:border-primary/70 bg-surface',
+            ? 'border-dashed border-alert bg-background'
+            : 'border-dashed border-border hover:border-primary/70 bg-background',
         className
       )}
       onClick={() => inputRef.current?.click()} // Trigger file dialog on click in the <input> element below. (?.) is to safely do nothing if inputRef.current is null (e.g., before the component mounts).
@@ -62,7 +62,9 @@ export const FileDropZone = ({
           <Upload
             className={cn(
               'h-4 w-4 shrink-0 group-hover:text-primary transition-colors',
-              isDraggingOver ? 'text-secondary' : 'text-[color-mix(in_srgb,var(--c-border),var(--c-foreground)_40%)]'
+              isDraggingOver
+                ? 'text-primary'
+                : 'text-[color-mix(in_srgb,var(--c-border),var(--c-foreground)_40%)]'
             )}
           />
           {/* The label is the main instruction (e.g., "Drop additional files"). */}
@@ -73,7 +75,9 @@ export const FileDropZone = ({
           <Upload
             className={cn(
               'h-10 w-10 group-hover:text-primary transition-colors',
-              isDraggingOver ? 'text-secondary' : 'text-[color-mix(in_srgb,var(--c-border),var(--c-foreground)_40%)]'
+              isDraggingOver
+                ? 'text-primary'
+                : 'text-[color-mix(in_srgb,var(--c-border),var(--c-foreground)_40%)]'
             )}
           />
           {/* The label is the main instruction (e.g., "Drop EEG files"). */}
