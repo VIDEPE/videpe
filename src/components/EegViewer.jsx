@@ -289,34 +289,47 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
     if (e.target !== viewerRef.current) return;
     switch (e.key) {
       case 'ArrowUp':
+        // Zoom in (halve the y-range)
         e.preventDefault();
         updateYScale(yScale / 2);
         break;
       case 'ArrowDown':
+        // Zoom out (double the y-range)
         e.preventDefault();
         updateYScale(yScale * 2);
         break;
       case 'ArrowLeft':
+        // Pan left by the shift step
         e.preventDefault();
         backwardshiftStartTime();
         break;
       case 'ArrowRight':
+        // Pan right by the shift step
         e.preventDefault();
         forwardshiftStartTime();
         break;
       case 'PageUp':
+        // Jump back by a full window
         e.preventDefault();
         setStartTime((start) => Math.max(0, start - windowSize));
         break;
       case 'PageDown':
+        // Jump forward by a full window
+        e.preventDefault();
+        setStartTime((start) => Math.min(tMax - windowSize, start + windowSize));
+        break;
+      case 'Space':
+        // Jump forward by a full window
         e.preventDefault();
         setStartTime((start) => Math.min(tMax - windowSize, start + windowSize));
         break;
       case 'Home':
+        // Jump to the start of the recording
         e.preventDefault();
         setStartTime(0);
         break;
       case 'End':
+        // Jump to the end of the recording
         e.preventDefault();
         setStartTime(tMax - windowSize);
         break;
@@ -341,10 +354,11 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
         className="absolute bottom-2 right-2 z-20 text-foreground/40 hover:text-foreground/80 group-focus:text-secondary transition-colors"
         title={
           'Click the EEG viewer to enable keyboard navigation (blue outline when active):\n' +
-          '· ↑/↓\t\tGain adjustment\n' +
-          '· ←/→\t     Move a time step\n' +
-          '· Page ↑/↓       Jump entire time window\n' +
-          '· Home/End    Jump to start/end'
+          '· ↑/↓\t\tGain adjustment up/down\n' +
+          '· ←/→\t     Move a time step back/forward\n' +
+          '· Space\t   Jump a time window forward\n' +
+          '· Page ↑/↓       Jump a time window back/forward\n' +
+          '· Home/End   Jump to start/end'
         }
       >
         <Keyboard size={16} />
