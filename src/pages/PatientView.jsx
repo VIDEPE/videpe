@@ -238,14 +238,17 @@ export const PatientView = () => {
               onReady={() => eegReadyResolveRef.current?.()}
             />
           ) : (
-            <FileDropZone
-              onFiles={handleEegFiles}
-              accepted_formats=".vhdr,.eeg"
-              label="Drop EEG files"
-              description="BrainVision: .vhdr + .eeg"
-              pendingFiles={pendingEegFiles}
-              hint={eegHint}
-            />
+            <div className="h-full p-2">
+              <FileDropZone
+                onFiles={handleEegFiles}
+                accepted_formats=".vhdr,.eeg"
+                label="Drop EEG files"
+                description="BrainVision: .vhdr + .eeg"
+                pendingFiles={pendingEegFiles}
+                hint={eegHint}
+                className="h-full min-h-48"
+              />
+            </div>
           )
         }
         right={
@@ -256,12 +259,15 @@ export const PatientView = () => {
               onReady={() => niiReadyResolveRef.current?.()}
             />
           ) : (
-            <FileDropZone
-              onFiles={handleNiiFiles}
-              accepted_formats=".nii,.nii.gz,.mgh,.mgz,.gii,.ply,.obj"
-              label="Drop imaging files"
-              description="Volumes: NIfTI, MGH, GIFTI, PLY, OBJ, …"
-            />
+            <div className="h-full p-2">
+              <FileDropZone
+                onFiles={handleNiiFiles}
+                accepted_formats=".nii,.nii.gz,.mgh,.mgz,.gii,.ply,.obj"
+                label="Drop imaging files"
+                description="Volumes: NIfTI, MGH, GIFTI, PLY, OBJ, …"
+                className="h-full min-h-48"
+              />
+            </div>
           )
         }
       />

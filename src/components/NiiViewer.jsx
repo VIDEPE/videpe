@@ -246,7 +246,7 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
           <FileDropZone
             onFiles={handleNiiFiles}
             accepted_formats=".nii,.nii.gz,.mgh,.mgz,.gii,.ply,.obj"
-            label="Drop imaging files"
+            label="Drop additional files"
             description="Volumes: NIfTI, MGH, GIFTI, PLY, OBJ, …"
           />
         </div>

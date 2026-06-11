@@ -9,6 +9,7 @@ export const FileDropZone = ({
   description,
   pendingFiles,
   hint,
+  className,
 }) => {
   const inputRef = useRef(null);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
@@ -39,14 +40,15 @@ export const FileDropZone = ({
   return (
     <div
       className={cn(
-        'flex-1 flex flex-col items-center text-center justify-center gap-3 m-2 rounded-lg',
+        'flex-1 flex flex-col items-center text-center justify-center gap-3 p-2 rounded-lg',
         'border-2 cursor-pointer transition-colors',
         'group', // for linking hover styles to children (=<Upload> icon)
         isDraggingOver
           ? 'border-solid border-primary bg-primary/10'
           : hasPending
             ? 'border-dashed border-alert bg-surface'
-            : 'border-dashed border-border hover:border-primary/70 bg-surface'
+            : 'border-dashed border-border hover:border-primary/70 bg-surface',
+        className
       )}
       onClick={() => inputRef.current?.click()} // Trigger file dialog on click in the <input> element below. (?.) is to safely do nothing if inputRef.current is null (e.g., before the component mounts).
       onDragOver={handleDragOver}
