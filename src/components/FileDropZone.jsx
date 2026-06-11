@@ -10,6 +10,7 @@ export const FileDropZone = ({
   pendingFiles,
   hint,
   className,
+  compact = false,
 }) => {
   const inputRef = useRef(null);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
@@ -40,9 +41,10 @@ export const FileDropZone = ({
   return (
     <div
       className={cn(
-        'flex-1 flex flex-col items-center text-center justify-center gap-3 p-2 rounded-lg',
-        'border-2 cursor-pointer transition-colors',
-        'group', // for linking hover styles to children (=<Upload> icon)
+        'border-2 cursor-pointer transition-colors group', // group for linking hover styles to children (=<Upload> icon)
+        compact
+          ? 'rounded-sm flex flex-row items-center justify-center gap-2 px-3 py-1.5'
+          : 'rounded-xl flex-1 flex flex-col items-center text-center justify-center gap-3 p-2',
         isDraggingOver
           ? 'border-solid border-primary bg-primary/10'
           : hasPending
@@ -55,30 +57,42 @@ export const FileDropZone = ({
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      <Upload className="h-10 w-10 text-foreground/50 group-hover:text-primary/80 transition-colors" />
-      {/* The label is the main instruction (e.g., "Drop EEG files"). */}
-      <p className="text-sm font-medium text-foreground">{label}</p>
-      {/* The description provides format details (e.g., "BrainVision: .vhdr + .eeg").*/}
-      <p className="text-xs text-foreground/50">{description}</p>
-      {/* If there are pending files that are not yet complete, show them here with a checkmark. */}
-      {hasPending && (
-        <div className="flex flex-col items-center gap-1">
-          {pendingFiles.map((f) => (
-            <span
-              key={f.name}
-              className="flex items-center gap-1 text-xs font-semibold text-green-600 dark:text-green-400"
-            >
-              <FileCheck className="h-4 w-4 shrink-0" />
-              {f.name}
-            </span>
-          ))}
-        </div>
+      {compact ? (
+        <>
+          <Upload className="h-4 w-4 shrink-0 text-foreground/50 group-hover:text-primary/80 transition-colors" />
+          {/* The label is the main instruction (e.g., "Drop additional files"). */}
+          <p className="text-xs font-medium text-foreground">{label}</p>
+        </>
+      ) : (
+        <>
+          <Upload className="h-10 w-10 text-foreground/50 group-hover:text-primary/80 transition-colors" />
+          {/* The label is the main instruction (e.g., "Drop EEG files"). */}
+          <p className="text-sm font-medium text-foreground">{label}</p>
+          {/* The description provides format details (e.g., "BrainVision: .vhdr + .eeg").*/}
+          <p className="text-xs text-foreground/50">{description}</p>
+          {/* If there are pending files that are not yet complete, show them here with a checkmark. */}
+          {hasPending && (
+            <div className="flex flex-col items-center gap-1">
+              {pendingFiles.map((f) => (
+                <span
+                  key={f.name}
+                  className="flex items-center gap-1 text-xs font-semibold text-green-600 dark:text-green-400"
+                >
+                  <FileCheck className="h-4 w-4 shrink-0" />
+                  {f.name}
+                </span>
+              ))}
+            </div>
+          )}
+          {/* The hint is only shown when there are pending files that are not yet complete, providing specific feedback on what's missing. */}
+          {hint && (
+            <p className="text-xs text-alert font-bold text-center px-4 whitespace-pre-line">
+              {hint}
+            </p>
+          )}
+          <p className="text-xs text-foreground/50">Drag & Drop / Click to Browse</p>
+        </>
       )}
-      {/* The hint is only shown when there are pending files that are not yet complete, providing specific feedback on what's missing. */}
-      {hint && (
-        <p className="text-xs text-alert font-bold text-center px-4 whitespace-pre-line">{hint}</p>
-      )}
-      <p className="text-xs text-foreground/50">Drag & Drop / Click to Browse</p>
       <input
         ref={inputRef}
         type="file"

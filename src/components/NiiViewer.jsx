@@ -228,28 +228,21 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
   }, [volumes]);
 
   return (
-    <div className="h-full flex flex-col pb-3 px-2">
-      {/* Div holding Controls and collapsable FileDropZone, above the canvas*/}
-      <div className="flex items-start gap-1">
-        {/* Controls panel — fills the remaining width */}
-        <div className="flex-1 min-w-0">
-          <ImagingControls
-            volumes={orderedVolumes}
-            layerSettings={layerSettings}
-            onSettingChange={handleSettingChange}
-            onReorder={handleReorder}
-          />
-        </div>
-        {/* File drop zone that allows loading of additional files while the NiiViewer is active —
-            fixed, roughly square, and hugs the right edge */}
-        <div className="flex w-48 h-40 shrink-0">
-          <FileDropZone
-            onFiles={handleNiiFiles}
-            accepted_formats=".nii,.nii.gz,.mgh,.mgz,.gii,.ply,.obj"
-            label="Drop additional files"
-            description="Volumes: NIfTI, MGH, GIFTI, PLY, OBJ, …"
-          />
-        </div>
+    <div className="h-full flex flex-col pb-3 px-2 gap-2">
+      {/* Controls panel, with a compact drop zone below it for loading additional files while the NiiViewer is active */}
+      <div className="flex flex-col">
+        <ImagingControls
+          volumes={orderedVolumes}
+          layerSettings={layerSettings}
+          onSettingChange={handleSettingChange}
+          onReorder={handleReorder}
+        />
+        <FileDropZone
+          onFiles={handleNiiFiles}
+          accepted_formats=".nii,.nii.gz,.mgh,.mgz,.gii,.ply,.obj"
+          label="Drop additional files"
+          compact
+        />
       </div>
 
       {/* The canvas + loading spinner are in a flex item that fills the remaining height, but never shrinks below 350px.
