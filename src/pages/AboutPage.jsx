@@ -213,8 +213,13 @@ export const AboutPage = () => {
                   <li>
                     Interactive timeline scrubber for fast navigation across the full recording
                   </li>
+                  <li>
+                    Keyboard navigation — arrow keys for gain/panning, Page Up/Down and Space for
+                    window jumps, Home/End to jump to the start/end
+                  </li>
                   <li>Configurable number of simultaneously visible channels</li>
                   <li>Min-max downsampling keeps rendering fast at any zoom level</li>
+
                 </ul>
               </div>
             </div>
@@ -247,7 +252,12 @@ export const AboutPage = () => {
                     Per-layer opacity, colormap (grayscale, viridis, magma, mako), inversion, and
                     colorbar
                   </li>
-                  <li>Drag-to-reorder layers</li>
+                  <li>
+                    Drag-to-reorder layers, with a modality subtype label shown on each volume
+                  </li>
+                  <li>
+                    Slice view buttons for axial, coronal, sagittal, multiplanar, and 3D render
+                  </li>
                 </ul>
               </div>
             </div>
@@ -294,7 +304,10 @@ export const AboutPage = () => {
                     or one at a time
                   </li>
                   <li>Volumes: NIfTI, MGH/MGZ, GIFTI, PLY, OBJ</li>
-                  <li>Drop multiple imaging files at once to load them as separate layers</li>
+                  <li>
+                    Drop multiple imaging files at once to load them as separate layers, or append
+                    them to an already-active neuroimaging viewer
+                  </li>
                 </ul>
               </div>
             </div>
