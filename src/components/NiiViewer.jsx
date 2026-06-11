@@ -1,21 +1,36 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
-import { Niivue, SHOW_RENDER, MULTIPLANAR_TYPE } from '@niivue/niivue';
+import { Niivue, SHOW_RENDER, MULTIPLANAR_TYPE, SLICE_TYPE } from '@niivue/niivue';
 import { move } from '@dnd-kit/helpers';
 import toast from 'react-hot-toast';
-import { getInitialLayerSettings } from './NiiViewer.utils';
+import { getInitialLayerSettings, filesToVolumes } from './NiiViewer.utils';
 import { ImagingControls } from './ImagingControls';
+import { FileDropZone } from '../components/FileDropZone';
 
 // Loads volumes into an existing NiiVue instance and applies all layer settings.
-// Used for initial load; reordering uses setVolume instead to avoid re-fetching.
-export async function loadVolumesAndApplySettings(nv, volumes, layerSettings) {
-  await nv.loadVolumes(volumes);
+// volumes/layerSettings are the FULL desired lists (existing + new) — any volumes
+// already present in nv.volumes are left in place and only the new ones are loaded.
+// Reordering uses setVolume instead, since that doesn't need a re-fetch.
+export async function syncVolumesAndApplySettings(nv, volumes, layerSettings) {
+  const indexOffset = nv.volumes.length; // Volumes before this index are already loaded into nv.
+  const newVolumes = volumes.slice(indexOffset);
+  if (newVolumes.length > 0) {
+    if (indexOffset === 0) {
+      await nv.loadVolumes(newVolumes);
+    } else {
+      await nv.addVolumesFromUrl(newVolumes);
+    }
+  }
+
+  // nv.volumes now matches volumes 1:1, so settings can be applied by index directly.
   layerSettings.forEach((layerSetting, index) => {
-    nv.setColormap(nv.volumes[index].id, layerSetting.colormap);
+    const nvVolume = nv.volumes[index];
+    nv.setColormap(nvVolume.id, layerSetting.colormap);
     nv.setOpacity(index, layerSetting.visible ? layerSetting.opacity : 0);
-    if (layerSetting.invert) nv.volumes[index].colormapInvert = true;
-    nv.volumes[index].colorbarVisible = layerSetting.showColorbar;
+    if (layerSetting.invert) nvVolume.colormapInvert = true;
+    nvVolume.colorbarVisible = layerSetting.showColorbar;
   });
   nv.opts.isColorbar = layerSettings.some((layerSetting) => layerSetting.showColorbar);
+  // GL redraw to apply settings
   nv.updateGLVolume();
 }
 
@@ -28,7 +43,24 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
 
   const canvas = useRef();
   const nvRef = useRef();
+  const canvasContainerRef = useRef();
   const opacityRafRef = useRef(null); // pending rAF id for opacity updates — cancelled on each new drag event so only the latest value redraws
+  const canvasSizeTimeoutRef = useRef(null); // pending debounce timeout for canvas size updates
+  const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
+
+  const [activeSliceType, setActiveSliceType] = useState(SLICE_TYPE.MULTIPLANAR);
+  const sliceTypeOptions = [
+    { sliceType: SLICE_TYPE.AXIAL, label: 'Axial', buttonLabel: 'Ax' },
+    { sliceType: SLICE_TYPE.CORONAL, label: 'Coronal', buttonLabel: 'Co' },
+    { sliceType: SLICE_TYPE.SAGITTAL, label: 'Sagittal', buttonLabel: 'Sa' },
+    { sliceType: SLICE_TYPE.MULTIPLANAR, label: 'Multiplanar', buttonLabel: 'MP' },
+    { sliceType: SLICE_TYPE.RENDER, label: '3D', buttonLabel: '3D' },
+  ];
+
+  const handleSliceTypeChange = (sliceType) => {
+    setActiveSliceType(sliceType);
+    nvRef.current?.setSliceType(sliceType);
+  };
 
   const handleSettingChange = useCallback(
     (layerIndex, key, value) => {
@@ -68,12 +100,58 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
     [layerSettings, orderedVolumes]
   );
 
+  // Handler for when imaging files are dropped or selected. It reads the files as ArrayBuffers and prepares them for visualization, updating state accordingly.
+  const handleNiiFiles = async (files) => {
+    if (!nvRef.current) return; // Guard clause — if NiiVue isn't initialized yet, there's nothing to append to
+
+    // show loading spinner
+    setLoading(true);
+    // Convert the FileList to an array of volume objects with { url, name, type, subtype }
+    const newVolumes = filesToVolumes(files);
+    const allVolumes = [...orderedVolumes, ...newVolumes];
+
+    // startIndex tells getInitialLayerSettings these volumes aren't the first layers overall,
+    // so the first new volume gets 0.6 opacity instead of being treated as layer 0
+    const newLayerSettings = getInitialLayerSettings(newVolumes, orderedVolumes.length);
+    const allLayerSettings = [...layerSettings, ...newLayerSettings];
+    setOrderedVolumes(allVolumes);
+    setLayerSettings(allLayerSettings);
+
+    // Load only the new volumes into the existing NiiVue instance and reapply all layer settings
+    await syncVolumesAndApplySettings(nvRef.current, allVolumes, allLayerSettings);
+    // updateGLVolume schedules a GL redraw but returns before it paints — wait one frame before clearing the spinner
+    requestAnimationFrame(() => setLoading(false));
+  };
+
+  // Track the canvas container's dimensions so the layout effect can react to resizes
+  // (browser window resize, split-pane drag, etc.). Disconnects on unmount to avoid leaks.
+  useEffect(() => {
+    const canvasContainer = canvasContainerRef.current;
+    if (!canvasContainer) return;
+    const canvasSizeObserver = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      // Debounce — fires on every frame during the SplitPane resize/maximize transition;
+      // wait for it to settle before triggering a multiplanar layout switch
+      if (canvasSizeTimeoutRef.current) clearTimeout(canvasSizeTimeoutRef.current);
+      canvasSizeTimeoutRef.current = setTimeout(() => {
+        setCanvasSize({ width, height });
+      }, 150);
+    });
+    canvasSizeObserver.observe(canvasContainer); // Start observing the canvas container for size changes
+    return () => {
+      canvasSizeObserver.disconnect(); // Clean up the observer on unmount
+      if (canvasSizeTimeoutRef.current) clearTimeout(canvasSizeTimeoutRef.current); // Clear any pending debounce timeout on unmount
+    };
+  }, []);
+
+  // Switch between AUTO (panels in a row) and GRID (2×2) based on aspect ratio.
+  // AUTO is used when the canvas is at least twice as wide as it is tall.
+  // height > 0 guards against the initial {0,0} state incorrectly triggering AUTO.
   useEffect(() => {
     if (!nvRef.current) return;
-    nvRef.current.setMultiplanarLayout(
-      isFullscreen ? MULTIPLANAR_TYPE.AUTO : MULTIPLANAR_TYPE.GRID
-    );
-  }, [isFullscreen]);
+    const isWide = canvasSize.height > 0 && canvasSize.width >= 1.75 * canvasSize.height;
+    nvRef.current.setMultiplanarLayout(isWide ? MULTIPLANAR_TYPE.AUTO : MULTIPLANAR_TYPE.GRID);
+  }, [canvasSize]);
 
   const handleReorder = useCallback(
     (event) => {
@@ -130,7 +208,7 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
         nv.setCornerOrientationText(false); // Show orientation text centered (default)
 
         nv.attachToCanvas(canvas.current);
-        await loadVolumesAndApplySettings(nv, volumes, initialLayerSettings);
+        await syncVolumesAndApplySettings(nv, volumes, initialLayerSettings);
 
         // Store the NiiVue instance in a ref so we can call methods on it later (e.g. to update settings or reorder layers)
         nvRef.current = nv;
@@ -150,26 +228,57 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
   }, [volumes]);
 
   return (
-    <div className="h-full flex flex-col pb-3 px-2">
-      {/* Controls panel */}
-      <ImagingControls
-        volumes={orderedVolumes}
-        layerSettings={layerSettings}
-        onSettingChange={handleSettingChange}
-        onReorder={handleReorder}
-      />
-      {/* NiiVue Canvas — fills remaining height, but never shrinks below 350px.
+    <div className="h-full flex flex-col pb-3 px-2 gap-2">
+      {/* Controls panel, with a compact drop zone below it for loading additional files while the NiiViewer is active */}
+      <div className="flex flex-col">
+        <ImagingControls
+          volumes={orderedVolumes}
+          layerSettings={layerSettings}
+          onSettingChange={handleSettingChange}
+          onReorder={handleReorder}
+        />
+        <FileDropZone
+          onFiles={handleNiiFiles}
+          accepted_formats=".nii,.nii.gz,.mgh,.mgz,.gii,.ply,.obj"
+          label="Drop additional files"
+          compact
+        />
+      </div>
+
+      {/* The canvas + loading spinner are in a flex item that fills the remaining height, but never shrinks below 350px.
           If the controls panel above expands past the point where 350px remains, the parent scrolls. */}
-      <div className="relative flex-1 min-h-[350px] overflow-hidden">
-        {loading && (
-          <div
-            data-testid="loading-spinner"
-            className="absolute inset-0 z-10 flex items-center justify-center"
-          >
-            <div className="h-10 w-10 animate-spin rounded-full border-4 border-border border-t-primary" />
+      <div className="flex flex-row flex-1 min-h-[350px]">
+        {/* NiiVue Canvas */}
+        <div ref={canvasContainerRef} className="relative flex-1 overflow-hidden">
+          {/* Loading spinner overlay — absolute to cover the canvas, with a higher z-index so it appears on top */}
+          {loading && (
+            <div
+              data-testid="loading-spinner"
+              className="absolute inset-0 z-10 flex items-center justify-center"
+            >
+              <div className="h-10 w-10 animate-spin rounded-full border-4 border-border border-t-primary" />
+            </div>
+          )}
+          <canvas ref={canvas} className="absolute inset-0" />
+        </div>
+        <div className="">
+          <div className="flex flex-col w-8 gap-0.5 pt-2 items-center rounded-md border-1 border-border">
+            {/* Viewer controls with Ax, Co, Sa, MP and 3D buttons */}
+            {sliceTypeOptions.map(({ sliceType, label, buttonLabel }) => (
+              <button
+                key={sliceType}
+                type="button"
+                className="button size-xs"
+                onClick={() => handleSliceTypeChange(sliceType)}
+                title={`${label} view`}
+                aria-label={`${label} view`}
+                aria-pressed={activeSliceType === sliceType}
+              >
+                {buttonLabel}
+              </button>
+            ))}
           </div>
-        )}
-        <canvas ref={canvas} className="absolute inset-0" />
+        </div>
       </div>
     </div>
   );

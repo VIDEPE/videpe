@@ -30,6 +30,22 @@ describe('ImagingControls', () => {
       expect(screen.getByText('PET')).toBeInTheDocument();
     });
 
+    it('renders subtype with a dash prefix in muted style when subtype is present', () => {
+      renderControls([{ type: 'MRI', subtype: 'T1w', url: '/t1w.nii' }], [makeSettings()]);
+      expect(screen.getByText('MRI')).toBeInTheDocument();
+      const subtypeEl = screen.getByText('- T1w');
+      expect(subtypeEl).toBeInTheDocument();
+      expect(subtypeEl).toHaveClass('text-foreground/60');
+    });
+
+    it('shows only type when subtype is null', () => {
+      renderControls(
+        [{ type: 'PET', subtype: null, url: '/pet.nii' }],
+        [makeSettings({ colormap: 'viridis' })]
+      );
+      expect(screen.getByText('PET')).toBeInTheDocument();
+    });
+
     it('falls back to "Volume N" when volume has no type', () => {
       renderControls([{ url: '/scan.nii' }], [makeSettings()]);
       expect(screen.getByText('Layer 1')).toBeInTheDocument();
@@ -67,7 +83,11 @@ describe('ImagingControls', () => {
   describe('expand / collapse', () => {
     it('expanded controls are not visible by default', () => {
       renderControls([makeVolume('MRI', '/mri.nii')], [makeSettings()]);
-      expect(screen.queryByLabelText('MRI opacity')).not.toBeInTheDocument();
+      // Controls are always rendered (for the collapse animation) but hidden via aria-hidden on the wrapper
+      expect(screen.getByLabelText('MRI opacity').closest('[aria-hidden]')).toHaveAttribute(
+        'aria-hidden',
+        'true'
+      );
     });
 
     it('clicking Expand shows the controls', async () => {
@@ -83,7 +103,11 @@ describe('ImagingControls', () => {
       renderControls([makeVolume('MRI', '/mri.nii')], [makeSettings()]);
       await userEvent.click(screen.getByRole('button', { name: 'Expand MRI controls' }));
       await userEvent.click(screen.getByRole('button', { name: 'Collapse MRI controls' }));
-      expect(screen.queryByLabelText('MRI opacity')).not.toBeInTheDocument();
+      // Controls are always rendered (for the collapse animation) but hidden via aria-hidden on the wrapper
+      expect(screen.getByLabelText('MRI opacity').closest('[aria-hidden]')).toHaveAttribute(
+        'aria-hidden',
+        'true'
+      );
     });
 
     it('expanding one card collapses another', async () => {
@@ -95,8 +119,15 @@ describe('ImagingControls', () => {
       expect(screen.getByLabelText('MRI opacity')).toBeInTheDocument();
 
       await userEvent.click(screen.getByRole('button', { name: 'Expand PET controls' }));
-      expect(screen.queryByLabelText('MRI opacity')).not.toBeInTheDocument();
-      expect(screen.getByLabelText('PET opacity')).toBeInTheDocument();
+      // Controls are always rendered (for the collapse animation) but hidden via aria-hidden on the wrapper
+      expect(screen.getByLabelText('MRI opacity').closest('[aria-hidden]')).toHaveAttribute(
+        'aria-hidden',
+        'true'
+      );
+      expect(screen.getByLabelText('PET opacity').closest('[aria-hidden]')).toHaveAttribute(
+        'aria-hidden',
+        'false'
+      );
     });
   });
 

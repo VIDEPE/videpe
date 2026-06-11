@@ -25,8 +25,23 @@ export const TYPE_COLORMAP_DEFAULTS = {
   SPECT: 'magma',
 };
 
+// Returns an array of display settings, one per layer (volume or mesh).
+// Colormap is derived from volume.type via TYPE_COLORMAP_DEFAULTS — volumes themselves
+// do not carry a colormap field.
+// startIndex is the position of volumes[0] among all loaded layers — pass the count of
+// already-loaded volumes when appending so only the very first layer overall gets full opacity.
+export const getInitialLayerSettings = (volumes, startIndex = 0) =>
+  volumes.map((volume, index) => ({
+    visible: true,
+    opacity: startIndex + index === 0 ? 1.0 : 0.6, // first loaded layer is fully opaque, others slightly transparent by default
+    colormap: TYPE_COLORMAP_DEFAULTS[volume.type] ?? 'gray',
+    invert: false,
+    showColorbar: false,
+  }));
+
 // Detects imaging modality from a filename using BIDS suffix first, then keyword fallback.
-// Returns { type } where type is 'MRI', 'PET', 'SPECT', or the filename without extension for unknowns.
+// Returns { type, subtype } where type is 'MRI', 'PET', 'SPECT', or nameWithoutExtension for unknowns.
+// subtype is the BIDS suffix for MRI (e.g. 'T1w', 'T2star'), nameWithoutExtension for PET/SPECT/keyword matches, null for unknowns.
 export const detectVolumeType = (filename) => {
   // Strip everything from the first '.' onward (handles .nii.gz, .dcm, etc.)
   const dotIndex = filename.indexOf('.');
@@ -34,27 +49,24 @@ export const detectVolumeType = (filename) => {
   const lastSegment = nameWithoutExtension.split('_').at(-1);
   const lower = filename.toLowerCase();
 
-  // Pass 1: BIDS suffix (case-sensitive)
-  if (MRI_BIDS_SUFFIXES.has(lastSegment)) return { type: 'MRI' };
-  if (lastSegment === 'pet') return { type: 'PET' };
-  if (lastSegment === 'spect') return { type: 'SPECT' };
-  
-  // Pass 2: keyword fallback (case-insensitive, for non-BIDS filenames)
-  if (/t1|t2|flair|mri|mprage|bravo/.test(lower)) return { type: 'MRI' };
-  if (/pet|fdg/.test(lower)) return { type: 'PET' };
-  if (/spect|siscom/.test(lower)) return { type: 'SPECT' };
+  // Pass 1: BIDS suffix (case-sensitive) — all use nameWithoutExtension as subtype for consistency
+  if (MRI_BIDS_SUFFIXES.has(lastSegment)) return { type: 'MRI', subtype: nameWithoutExtension };
+  if (lastSegment === 'pet') return { type: 'PET', subtype: nameWithoutExtension };
+  if (lastSegment === 'spect') return { type: 'SPECT', subtype: nameWithoutExtension };
 
-  return { type: nameWithoutExtension };
+  // Pass 2: keyword fallback (case-insensitive, for non-BIDS filenames) — use nameWithoutExtension as subtype so files are distinguishable in the UI
+  if (/t1|t2|flair|mri|mprage|bravo/.test(lower))
+    return { type: 'MRI', subtype: nameWithoutExtension };
+  if (/pet|fdg/.test(lower)) return { type: 'PET', subtype: nameWithoutExtension };
+  if (/spect|siscom/.test(lower)) return { type: 'SPECT', subtype: nameWithoutExtension };
+
+  return { type: nameWithoutExtension, subtype: null };
 };
 
-// Returns an array of display settings, one per layer (volume or mesh).
-// Colormap is derived from volume.type via TYPE_COLORMAP_DEFAULTS — volumes themselves
-// do not carry a colormap field.
-export const getInitialLayerSettings = (volumes) =>
-  volumes.map((volume, index) => ({
-    visible: true,
-    opacity: index === 0 ? 1.0 : 0.6, // first loaded layer is fully opaque, others slightly transparent by default
-    colormap: TYPE_COLORMAP_DEFAULTS[volume.type] ?? 'gray',
-    invert: false,
-    showColorbar: false,
-  }));
+export const filesToVolumes = (files) =>
+  // Convert a FileList (from input or drag-and-drop) to an array of volume objects with { url, name, type, subtype }.
+  Array.from(files).map((f) => {
+    // NiiVue calls fetch(url) internally, so a blob: URL is needed — a plain filename would resolve as a relative HTTP request
+    const { type, subtype } = detectVolumeType(f.name);
+    return { url: URL.createObjectURL(f), name: f.name, type, subtype };
+  });
