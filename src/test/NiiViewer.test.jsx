@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { getInitialLayerSettings, detectVolumeType } from '@/components/NiiViewer.utils';
-import { NiiViewer, loadVolumesAndApplySettings } from '@/components/NiiViewer';
+import { NiiViewer, syncVolumesAndApplySettings } from '@/components/NiiViewer';
 
 const SLICE_TYPE_OPTIONS = [
   { ariaLabel: 'Axial view', key: 'AXIAL' },
@@ -48,7 +48,7 @@ vi.mock('@niivue/niivue', () => ({
   },
 }));
 
-describe('loadVolumesAndApplySettings', () => {
+describe('syncVolumesAndApplySettings', () => {
   const makeVolume = (url, id) => ({ url, id });
   const makeLayerSetting = (overrides = {}) => ({
     colormap: 'gray',
@@ -75,7 +75,7 @@ describe('loadVolumesAndApplySettings', () => {
 
   it('calls loadVolumes with the provided volumes', async () => {
     const volumes = [makeVolume('/mri.nii', 'id-mri')];
-    await loadVolumesAndApplySettings(nv, volumes, [makeLayerSetting()]);
+    await syncVolumesAndApplySettings(nv, volumes, [makeLayerSetting()]);
     expect(nv.loadVolumes).toHaveBeenCalledWith(volumes);
   });
 
@@ -85,14 +85,14 @@ describe('loadVolumesAndApplySettings', () => {
       makeLayerSetting({ colormap: 'gray' }),
       makeLayerSetting({ colormap: 'viridis' }),
     ];
-    await loadVolumesAndApplySettings(nv, volumes, settings);
+    await syncVolumesAndApplySettings(nv, volumes, settings);
     expect(nv.setColormap).toHaveBeenCalledWith('id-mri', 'gray');
     expect(nv.setColormap).toHaveBeenCalledWith('id-pet', 'viridis');
   });
 
   it('sets full opacity for a visible volume', async () => {
     const volumes = [makeVolume('/mri.nii', 'id-mri')];
-    await loadVolumesAndApplySettings(nv, volumes, [
+    await syncVolumesAndApplySettings(nv, volumes, [
       makeLayerSetting({ visible: true, opacity: 0.7 }),
     ]);
     expect(nv.setOpacity).toHaveBeenCalledWith(0, 0.7);
@@ -100,7 +100,7 @@ describe('loadVolumesAndApplySettings', () => {
 
   it('sets opacity to 0 for a hidden volume regardless of its opacity value', async () => {
     const volumes = [makeVolume('/mri.nii', 'id-mri')];
-    await loadVolumesAndApplySettings(nv, volumes, [
+    await syncVolumesAndApplySettings(nv, volumes, [
       makeLayerSetting({ visible: false, opacity: 0.8 }),
     ]);
     expect(nv.setOpacity).toHaveBeenCalledWith(0, 0);
@@ -108,25 +108,25 @@ describe('loadVolumesAndApplySettings', () => {
 
   it('sets colormapInvert on the volume object when invert is true', async () => {
     const volumes = [makeVolume('/mri.nii', 'id-mri')];
-    await loadVolumesAndApplySettings(nv, volumes, [makeLayerSetting({ invert: true })]);
+    await syncVolumesAndApplySettings(nv, volumes, [makeLayerSetting({ invert: true })]);
     expect(nv.volumes[0].colormapInvert).toBe(true);
   });
 
   it('does not set colormapInvert when invert is false', async () => {
     const volumes = [makeVolume('/mri.nii', 'id-mri')];
-    await loadVolumesAndApplySettings(nv, volumes, [makeLayerSetting({ invert: false })]);
+    await syncVolumesAndApplySettings(nv, volumes, [makeLayerSetting({ invert: false })]);
     expect(nv.volumes[0].colormapInvert).toBeUndefined();
   });
 
   it('sets colorbarVisible to true on a volume with showColorbar true', async () => {
     const volumes = [makeVolume('/mri.nii', 'id-mri')];
-    await loadVolumesAndApplySettings(nv, volumes, [makeLayerSetting({ showColorbar: true })]);
+    await syncVolumesAndApplySettings(nv, volumes, [makeLayerSetting({ showColorbar: true })]);
     expect(nv.volumes[0].colorbarVisible).toBe(true);
   });
 
   it('sets colorbarVisible to false on a volume with showColorbar false', async () => {
     const volumes = [makeVolume('/mri.nii', 'id-mri')];
-    await loadVolumesAndApplySettings(nv, volumes, [makeLayerSetting({ showColorbar: false })]);
+    await syncVolumesAndApplySettings(nv, volumes, [makeLayerSetting({ showColorbar: false })]);
     expect(nv.volumes[0].colorbarVisible).toBe(false);
   });
 
@@ -136,7 +136,7 @@ describe('loadVolumesAndApplySettings', () => {
       makeLayerSetting({ showColorbar: true }),
       makeLayerSetting({ showColorbar: false }),
     ];
-    await loadVolumesAndApplySettings(nv, volumes, settings);
+    await syncVolumesAndApplySettings(nv, volumes, settings);
     expect(nv.volumes[0].colorbarVisible).toBe(true);
     expect(nv.volumes[1].colorbarVisible).toBe(false);
   });
@@ -147,20 +147,63 @@ describe('loadVolumesAndApplySettings', () => {
       makeLayerSetting({ showColorbar: false }),
       makeLayerSetting({ showColorbar: true }),
     ];
-    await loadVolumesAndApplySettings(nv, volumes, settings);
+    await syncVolumesAndApplySettings(nv, volumes, settings);
     expect(nv.opts.isColorbar).toBe(true);
   });
 
   it('sets isColorbar to false when no layer has showColorbar', async () => {
     const volumes = [makeVolume('/mri.nii', 'id-mri')];
-    await loadVolumesAndApplySettings(nv, volumes, [makeLayerSetting({ showColorbar: false })]);
+    await syncVolumesAndApplySettings(nv, volumes, [makeLayerSetting({ showColorbar: false })]);
     expect(nv.opts.isColorbar).toBe(false);
   });
 
   it('calls updateGLVolume after applying all settings', async () => {
     const volumes = [makeVolume('/mri.nii', 'id-mri')];
-    await loadVolumesAndApplySettings(nv, volumes, [makeLayerSetting()]);
+    await syncVolumesAndApplySettings(nv, volumes, [makeLayerSetting()]);
     expect(nv.updateGLVolume).toHaveBeenCalledOnce();
+  });
+
+  describe('appending volumes to an already-loaded NiiVue instance', () => {
+    beforeEach(() => {
+      // Simulate an instance that already finished its initial load
+      nv.volumes = [makeVolume('/mri.nii', 'id-mri')];
+      nv.addVolumesFromUrl = vi.fn().mockImplementation(async (vols) => {
+        nv.volumes = [...nv.volumes, ...vols];
+      });
+    });
+
+    it('calls addVolumesFromUrl with only the newly added volumes', async () => {
+      const petVolume = makeVolume('/pet.nii', 'id-pet');
+      const allVolumes = [makeVolume('/mri.nii', 'id-mri'), petVolume];
+      const allSettings = [makeLayerSetting(), makeLayerSetting({ colormap: 'viridis' })];
+
+      await syncVolumesAndApplySettings(nv, allVolumes, allSettings);
+
+      expect(nv.addVolumesFromUrl).toHaveBeenCalledWith([petVolume]);
+      expect(nv.loadVolumes).not.toHaveBeenCalled();
+    });
+
+    it('applies settings to pre-existing volumes as well as newly added ones', async () => {
+      const allVolumes = [makeVolume('/mri.nii', 'id-mri'), makeVolume('/pet.nii', 'id-pet')];
+      const allSettings = [
+        makeLayerSetting({ colormap: 'gray' }),
+        makeLayerSetting({ colormap: 'viridis' }),
+      ];
+
+      await syncVolumesAndApplySettings(nv, allVolumes, allSettings);
+
+      expect(nv.setColormap).toHaveBeenCalledWith('id-mri', 'gray');
+      expect(nv.setColormap).toHaveBeenCalledWith('id-pet', 'viridis');
+    });
+
+    it('does not call loadVolumes or addVolumesFromUrl when there are no new volumes', async () => {
+      const allVolumes = [makeVolume('/mri.nii', 'id-mri')];
+
+      await syncVolumesAndApplySettings(nv, allVolumes, [makeLayerSetting()]);
+
+      expect(nv.loadVolumes).not.toHaveBeenCalled();
+      expect(nv.addVolumesFromUrl).not.toHaveBeenCalled();
+    });
   });
 });
 
@@ -359,7 +402,7 @@ describe('NiiViewer', () => {
       await userEvent.selectOptions(screen.getByLabelText('MRI colormap'), 'magma');
 
       const nv = Niivue.mock.results[Niivue.mock.results.length - 1].value;
-      // toHaveBeenLastCalledWith isolates the handleSettingChange call from the initial loadVolumesAndApplySettings call
+      // toHaveBeenLastCalledWith isolates the handleSettingChange call from the initial syncVolumesAndApplySettings call
       expect(nv.setColormap).toHaveBeenLastCalledWith('mri-id', 'magma');
     });
   });

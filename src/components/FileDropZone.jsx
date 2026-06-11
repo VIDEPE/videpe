@@ -39,7 +39,7 @@ export const FileDropZone = ({
   return (
     <div
       className={cn(
-        'flex-1 flex flex-col items-center justify-center gap-3 m-2 rounded-lg',
+        'flex-1 flex flex-col items-center text-center justify-center gap-3 m-2 rounded-lg',
         'border-2 cursor-pointer transition-colors',
         'group', // for linking hover styles to children (=<Upload> icon)
         isDraggingOver

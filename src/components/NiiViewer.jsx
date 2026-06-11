@@ -2,21 +2,35 @@ import { useRef, useEffect, useState, useCallback } from 'react';
 import { Niivue, SHOW_RENDER, MULTIPLANAR_TYPE, SLICE_TYPE } from '@niivue/niivue';
 import { move } from '@dnd-kit/helpers';
 import toast from 'react-hot-toast';
-import { getInitialLayerSettings } from './NiiViewer.utils';
+import { getInitialLayerSettings, filesToVolumes } from './NiiViewer.utils';
 import { ImagingControls } from './ImagingControls';
 import { FileDropZone } from '../components/FileDropZone';
 
 // Loads volumes into an existing NiiVue instance and applies all layer settings.
-// Used for initial load; reordering uses setVolume instead to avoid re-fetching.
-export async function loadVolumesAndApplySettings(nv, volumes, layerSettings) {
-  await nv.loadVolumes(volumes);
+// volumes/layerSettings are the FULL desired lists (existing + new) — any volumes
+// already present in nv.volumes are left in place and only the new ones are loaded.
+// Reordering uses setVolume instead, since that doesn't need a re-fetch.
+export async function syncVolumesAndApplySettings(nv, volumes, layerSettings) {
+  const indexOffset = nv.volumes.length; // Volumes before this index are already loaded into nv.
+  const newVolumes = volumes.slice(indexOffset);
+  if (newVolumes.length > 0) {
+    if (indexOffset === 0) {
+      await nv.loadVolumes(newVolumes);
+    } else {
+      await nv.addVolumesFromUrl(newVolumes);
+    }
+  }
+
+  // nv.volumes now matches volumes 1:1, so settings can be applied by index directly.
   layerSettings.forEach((layerSetting, index) => {
-    nv.setColormap(nv.volumes[index].id, layerSetting.colormap);
+    const nvVolume = nv.volumes[index];
+    nv.setColormap(nvVolume.id, layerSetting.colormap);
     nv.setOpacity(index, layerSetting.visible ? layerSetting.opacity : 0);
-    if (layerSetting.invert) nv.volumes[index].colormapInvert = true;
-    nv.volumes[index].colorbarVisible = layerSetting.showColorbar;
+    if (layerSetting.invert) nvVolume.colormapInvert = true;
+    nvVolume.colorbarVisible = layerSetting.showColorbar;
   });
   nv.opts.isColorbar = layerSettings.some((layerSetting) => layerSetting.showColorbar);
+  // GL redraw to apply settings
   nv.updateGLVolume();
 }
 
@@ -85,6 +99,28 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
     },
     [layerSettings, orderedVolumes]
   );
+
+  // Handler for when imaging files are dropped or selected. It reads the files as ArrayBuffers and prepares them for visualization, updating state accordingly.
+  const handleNiiFiles = async (files) => {
+    if (!nvRef.current) return; // Guard clause — if NiiVue isn't initialized yet, there's nothing to append to
+
+    // show loading spinner
+    setLoading(true);
+    // Convert the FileList to an array of volume objects with { url, name, type, subtype }
+    const newVolumes = filesToVolumes(files);
+    const newLayerSettings = getInitialLayerSettings(newVolumes);
+
+    // Append the new volumes/settings to the existing state
+    const allVolumes = [...orderedVolumes, ...newVolumes];
+    const allLayerSettings = [...layerSettings, ...newLayerSettings];
+    setOrderedVolumes(allVolumes);
+    setLayerSettings(allLayerSettings);
+
+    // Load only the new volumes into the existing NiiVue instance and reapply all layer settings
+    await syncVolumesAndApplySettings(nvRef.current, allVolumes, allLayerSettings);
+    // updateGLVolume schedules a GL redraw but returns before it paints — wait one frame before clearing the spinner
+    requestAnimationFrame(() => setLoading(false));
+  };
 
   // Track the canvas container's dimensions so the layout effect can react to resizes
   // (browser window resize, split-pane drag, etc.). Disconnects on unmount to avoid leaks.
@@ -171,7 +207,7 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
         nv.setCornerOrientationText(false); // Show orientation text centered (default)
 
         nv.attachToCanvas(canvas.current);
-        await loadVolumesAndApplySettings(nv, volumes, initialLayerSettings);
+        await syncVolumesAndApplySettings(nv, volumes, initialLayerSettings);
 
         // Store the NiiVue instance in a ref so we can call methods on it later (e.g. to update settings or reorder layers)
         nvRef.current = nv;
@@ -202,12 +238,14 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
           onReorder={handleReorder}
         />
         {/* File drop zone that allows loading of additional files while the NiiViewer is active*/}
-        {/* <FileDropZone
-          onFiles={handleNiiFiles}
-          accepted_formats=".nii,.nii.gz,.mgh,.mgz,.gii,.ply,.obj"
-          label="Drop imaging files"
-          description="Volumes: NIfTI, MGH, GIFTI, PLY, OBJ, …"
-        /> */}
+        <div className="">
+          <FileDropZone
+            onFiles={handleNiiFiles}
+            accepted_formats=".nii,.nii.gz,.mgh,.mgz,.gii,.ply,.obj"
+            label="Drop imaging files"
+            description="Volumes: NIfTI, MGH, GIFTI, PLY, OBJ, …"
+          />
+        </div>
       </div>
 
       {/* The canvas + loading spinner are in a flex item that fills the remaining height, but never shrinks below 350px.
@@ -226,21 +264,23 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
           )}
           <canvas ref={canvas} className="absolute inset-0" />
         </div>
-        <div className="flex flex-col w-8 gap-0.5 pt-2 items-center">
-          {/* Viewer controls with Ax, Co, Sa, MP and 3D buttons */}
-          {sliceTypeOptions.map(({ sliceType, label, buttonLabel }) => (
-            <button
-              key={sliceType}
-              type="button"
-              className="button size-xs"
-              onClick={() => handleSliceTypeChange(sliceType)}
-              title={`${label} view`}
-              aria-label={`${label} view`}
-              aria-pressed={activeSliceType === sliceType}
-            >
-              {buttonLabel}
-            </button>
-          ))}
+        <div className="">
+          <div className="flex flex-col w-8 gap-0.5 pt-2 items-center rounded-md border-1 border-border">
+            {/* Viewer controls with Ax, Co, Sa, MP and 3D buttons */}
+            {sliceTypeOptions.map(({ sliceType, label, buttonLabel }) => (
+              <button
+                key={sliceType}
+                type="button"
+                className="button size-xs"
+                onClick={() => handleSliceTypeChange(sliceType)}
+                title={`${label} view`}
+                aria-label={`${label} view`}
+                aria-pressed={activeSliceType === sliceType}
+              >
+                {buttonLabel}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     </div>

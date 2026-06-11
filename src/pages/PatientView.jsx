@@ -10,7 +10,7 @@ import { SplitPane } from '../components/SplitPane';
 import { loadBrainVisionEEG } from '../loaders/loadBrainVisionEEG';
 import { detectAndLoadEEG, checkEegFiles } from '../loaders/eegFormats';
 import { FileDropZone } from '../components/FileDropZone';
-import { detectVolumeType } from '../components/NiiViewer.utils';
+import { detectVolumeType, filesToVolumes } from '../components/NiiViewer.utils';
 
 const DEMO_EEG = {
   header: 'demo_data/sub-synth_task-rest_eeg.vhdr',
@@ -105,13 +105,7 @@ export const PatientView = () => {
     try {
       await toast.promise(
         (async () => {
-          const result = await Promise.all(
-            Array.from(files).map((f) => {
-              // NiiVue calls fetch(url) internally, so a blob: URL is needed — a plain filename would resolve as a relative HTTP request
-              const { type, subtype } = detectVolumeType(f.name);
-              return { url: URL.createObjectURL(f), name: f.name, type, subtype };
-            })
-          );
+          const result = await Promise.all(filesToVolumes(files));
           setVolumes(result);
           await niiReady;
         })(),

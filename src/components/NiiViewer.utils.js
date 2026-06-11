@@ -25,6 +25,18 @@ export const TYPE_COLORMAP_DEFAULTS = {
   SPECT: 'magma',
 };
 
+// Returns an array of display settings, one per layer (volume or mesh).
+// Colormap is derived from volume.type via TYPE_COLORMAP_DEFAULTS — volumes themselves
+// do not carry a colormap field.
+export const getInitialLayerSettings = (volumes) =>
+  volumes.map((volume, index) => ({
+    visible: true,
+    opacity: index === 0 ? 1.0 : 0.6, // first loaded layer is fully opaque, others slightly transparent by default
+    colormap: TYPE_COLORMAP_DEFAULTS[volume.type] ?? 'gray',
+    invert: false,
+    showColorbar: false,
+  }));
+
 // Detects imaging modality from a filename using BIDS suffix first, then keyword fallback.
 // Returns { type, subtype } where type is 'MRI', 'PET', 'SPECT', or nameWithoutExtension for unknowns.
 // subtype is the BIDS suffix for MRI (e.g. 'T1w', 'T2star'), nameWithoutExtension for PET/SPECT/keyword matches, null for unknowns.
@@ -49,14 +61,10 @@ export const detectVolumeType = (filename) => {
   return { type: nameWithoutExtension, subtype: null };
 };
 
-// Returns an array of display settings, one per layer (volume or mesh).
-// Colormap is derived from volume.type via TYPE_COLORMAP_DEFAULTS — volumes themselves
-// do not carry a colormap field.
-export const getInitialLayerSettings = (volumes) =>
-  volumes.map((volume, index) => ({
-    visible: true,
-    opacity: index === 0 ? 1.0 : 0.6, // first loaded layer is fully opaque, others slightly transparent by default
-    colormap: TYPE_COLORMAP_DEFAULTS[volume.type] ?? 'gray',
-    invert: false,
-    showColorbar: false,
-  }));
+export const filesToVolumes = (files) =>
+  // Convert a FileList (from input or drag-and-drop) to an array of volume objects with { url, name, type, subtype }.
+  Array.from(files).map((f) => {
+    // NiiVue calls fetch(url) internally, so a blob: URL is needed — a plain filename would resolve as a relative HTTP request
+    const { type, subtype } = detectVolumeType(f.name);
+    return { url: URL.createObjectURL(f), name: f.name, type, subtype };
+  });
