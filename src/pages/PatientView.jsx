@@ -39,7 +39,7 @@ export const PatientView = () => {
     };
   }, []);
 
-  const [eeg, setEeg] = useState(null); // { data, channelNames }
+  const [eeg, setEeg] = useState(null); // recording provider: { channelNames, fs, tMax, getChunk }
   const [volumes, setVolumes] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isDemoloading, setIsDemoloading] = useState(false);
@@ -233,7 +233,7 @@ export const PatientView = () => {
         left={
           eeg ? (
             <EegViewer
-              data={eeg.data}
+              provider={eeg}
               channelNames={eeg.channelNames}
               onReady={() => eegReadyResolveRef.current?.()}
             />

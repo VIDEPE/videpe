@@ -49,8 +49,10 @@ function parseVhdr(text) {
 // so the returned timestamps[0] is the chunk's real start time (not 0).
 function demuxFloat32(float32, nChannels, nSamples, sampleOffset, fs) {
   const timestamps = new Float32Array(nSamples);
+  // Compute absolute timestamps for each sample in the chunk based on the sample offset and sampling frequency.
   for (let t = 0; t < nSamples; t++) timestamps[t] = (sampleOffset + t) / fs;
 
+  // Allocate separate arrays for each channel.
   const channels = Array.from({ length: nChannels }, () => new Float32Array(nSamples));
   // Inner loop over channels keeps sequential reads on float32 (cache-friendly)
   for (let t = 0; t < nSamples; t++) {
@@ -103,7 +105,11 @@ export async function loadBrainVisionEEG(header, data) {
   const nSamples = Math.floor(dataByteLength / bytesPerSampleTime);
   const tMax = nSamples / fs;
 
+  // getChunk is the core of this loader:
+  // it maps a requested time range to a byte range, reads that chunk of data, and demuxes it into separate channel arrays.
+  // The returned timestamps are absolute (not relative to the chunk) so they can be compared across chunks.
   const getChunk = async (startTime, endTime) => {
+    // Clamp requested times to recording duration, convert to sample indices, then byte offsets.
     const clampedStart = Math.max(0, Math.min(startTime, tMax));
     const clampedEnd = Math.max(0, Math.min(endTime, tMax));
     const startSample = Math.floor(clampedStart * fs);
@@ -112,11 +118,14 @@ export async function loadBrainVisionEEG(header, data) {
     const byteStart = startSample * bytesPerSampleTime;
     const byteEnd = endSample * bytesPerSampleTime;
 
+    // URL source: slice the already-fetched ArrayBuffer in memory (sync).
+    // File source: read only the requested byte range from disk via File.slice (async).
     const buffer =
       cachedBuffer !== null
         ? cachedBuffer.slice(byteStart, byteEnd)
         : await data.slice(byteStart, byteEnd).arrayBuffer();
 
+    // Demux the multiplexed float32 samples into separate channel arrays.
     const float32 = new Float32Array(buffer);
     return demuxFloat32(float32, nChannels, endSample - startSample, startSample, fs);
   };

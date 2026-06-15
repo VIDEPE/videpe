@@ -24,7 +24,9 @@ vi.mock('react-hot-toast', () => ({
 }));
 
 vi.mock('@/loaders/loadBrainVisionEEG', () => ({
-  loadBrainVisionEEG: vi.fn().mockResolvedValue({ data: [[0, 1]], channelNames: ['Ch1'] }),
+  loadBrainVisionEEG: vi
+    .fn()
+    .mockResolvedValue({ channelNames: ['Ch1'], fs: 1, tMax: 1, getChunk: vi.fn() }),
 }));
 
 vi.mock('@/loaders/eegFormats', () => ({
@@ -59,7 +61,12 @@ const getDemoResetButton = () =>
 describe('PatientView — button label', () => {
   beforeEach(() => {
     FileDropZone.mockClear();
-    detectAndLoadEEG.mockResolvedValue({ data: [[0, 1]], channelNames: ['Ch1'] });
+    detectAndLoadEEG.mockResolvedValue({
+      channelNames: ['Ch1'],
+      fs: 1,
+      tMax: 1,
+      getChunk: vi.fn(),
+    });
   });
 
   it('shows "Load Demo" before any data is loaded', () => {
@@ -116,7 +123,12 @@ describe('PatientView — reset', () => {
       missing: [],
       warning: null,
     });
-    detectAndLoadEEG.mockResolvedValue({ data: [[0, 1]], channelNames: ['Ch1'] });
+    detectAndLoadEEG.mockResolvedValue({
+      channelNames: ['Ch1'],
+      fs: 1,
+      tMax: 1,
+      getChunk: vi.fn(),
+    });
   });
 
   it('clicking Reset returns to "Load Demo" and removes EegViewer', async () => {
@@ -148,7 +160,12 @@ describe('PatientView — EEG file accumulation', () => {
         warning: null,
       })
       .mockReturnValue({ formatName: 'BrainVision', complete: true, missing: [], warning: null });
-    detectAndLoadEEG.mockResolvedValue({ data: [[0, 1]], channelNames: ['Ch1'] });
+    detectAndLoadEEG.mockResolvedValue({
+      channelNames: ['Ch1'],
+      fs: 1,
+      tMax: 1,
+      getChunk: vi.fn(),
+    });
     renderPatientView();
 
     // First drop: header only
