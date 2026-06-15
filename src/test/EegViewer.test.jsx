@@ -85,24 +85,24 @@ describe('EegViewer — controls presence', () => {
 
   it('renders the shift step input with default value of 5', () => {
     renderViewer();
-    const input = screen.getByRole('spinbutton', { name: /shift step/i });
+    const input = screen.getByRole('spinbutton', { name: /time step/i });
     expect(input).toBeInTheDocument();
     expect(input).toHaveValue(5);
   });
 
-  it('renders the Time Shift label and its four buttons', () => {
+  it('renders the Time Step label and its four buttons', () => {
     renderViewer();
-    const label = screen.getByText('Time Shift (s)');
+    const label = screen.getByText('Time Step (s)');
     expect(label).toBeInTheDocument();
     const buttons = within(containerOf(label)).getAllByRole('button');
     expect(buttons).toHaveLength(4);
   });
 
-  it('renders the Gain label and its two buttons', () => {
+  it('renders the Range label and its two buttons', () => {
     renderViewer();
-    expect(screen.getByText('Gain (µV)')).toBeInTheDocument();
-    const gainLabel = screen.getByText('Gain (µV)');
-    const buttons = within(containerOf(gainLabel)).getAllByRole('button');
+    expect(screen.getByText('Range (µV)')).toBeInTheDocument();
+    const rangeLabel = screen.getByText('Range (µV)');
+    const buttons = within(containerOf(rangeLabel)).getAllByRole('button');
     expect(buttons).toHaveLength(2);
   });
 });
@@ -191,7 +191,7 @@ describe('EegViewer — window size controls', () => {
 
     // Shift forward to startTime=10 using two > clicks (default step=5).
     // Window is then [10, 30] — right edge exactly touches tMax=30.
-    const shiftInput = screen.getByRole('spinbutton', { name: /shift step/i });
+    const shiftInput = screen.getByRole('spinbutton', { name: /time step/i });
     const shiftContainer = within(shiftInput.closest('div'));
     const forwardBtn = shiftContainer.getByRole('button', { name: 'Shift forward' });
     await user.click(forwardBtn); // > : startTime 0 → 5
@@ -312,7 +312,7 @@ describe('EegViewer — channel count controls', () => {
 
 describe('EegViewer — start/end navigation', () => {
   const shiftControls = () => {
-    const input = screen.getByRole('spinbutton', { name: /shift step/i });
+    const input = screen.getByRole('spinbutton', { name: /time step/i });
     const scope = within(containerOf(input));
     return {
       jumpToStartBtn: scope.getByRole('button', { name: 'Jump to start' }),
@@ -400,7 +400,7 @@ describe('EegViewer — shift step size effect', () => {
     const user = userEvent.setup();
     renderViewer();
 
-    const shiftInput = screen.getByRole('spinbutton', { name: /shift step/i });
+    const shiftInput = screen.getByRole('spinbutton', { name: /time step/i });
     fireEvent.change(shiftInput, { target: { value: '10' } });
 
     const forwardBtn = within(containerOf(shiftInput)).getByRole('button', {
@@ -417,7 +417,7 @@ describe('EegViewer — shift step size effect', () => {
 describe('EegViewer — shift step controls', () => {
   it('updates shift step when a value is typed into the input', () => {
     renderViewer();
-    const input = screen.getByRole('spinbutton', { name: /shift step/i });
+    const input = screen.getByRole('spinbutton', { name: /time step/i });
 
     fireEvent.change(input, { target: { value: '5' } });
 
@@ -426,7 +426,7 @@ describe('EegViewer — shift step controls', () => {
 
   it('does not allow shift step below 1', () => {
     renderViewer();
-    const input = screen.getByRole('spinbutton', { name: /shift step/i });
+    const input = screen.getByRole('spinbutton', { name: /time step/i });
 
     fireEvent.change(input, { target: { value: '0' } });
     fireEvent.blur(input);
@@ -436,7 +436,7 @@ describe('EegViewer — shift step controls', () => {
 
   it('rounds shift step to 1 decimal place on blur', () => {
     renderViewer();
-    const input = screen.getByRole('spinbutton', { name: /shift step/i });
+    const input = screen.getByRole('spinbutton', { name: /time step/i });
 
     // 3.25 × 10 = 32.5 → Math.round = 33 → / 10 = 3.3
     fireEvent.change(input, { target: { value: '3.25' } });
@@ -492,13 +492,13 @@ describe('EegViewer — plot rendering', () => {
   });
 });
 
-describe('EegViewer — gain controls', () => {
+describe('EegViewer — range controls', () => {
   it('zoom in button halves the plot y-range', async () => {
     const { default: UplotReactMock } = await import('uplot-react');
     const user = userEvent.setup();
     renderViewer();
 
-    const zoomInBtn = within(containerOf(screen.getByText('Gain (µV)'))).getByRole('button', {
+    const zoomInBtn = within(containerOf(screen.getByText('Range (µV)'))).getByRole('button', {
       name: 'Zoom in',
     });
     UplotReactMock.mockClear();
@@ -514,7 +514,7 @@ describe('EegViewer — gain controls', () => {
     const user = userEvent.setup();
     renderViewer();
 
-    const zoomOutBtn = within(containerOf(screen.getByText('Gain (µV)'))).getByRole('button', {
+    const zoomOutBtn = within(containerOf(screen.getByText('Range (µV)'))).getByRole('button', {
       name: 'Zoom out',
     });
     UplotReactMock.mockClear();
@@ -530,12 +530,12 @@ describe('EegViewer — gain controls', () => {
     const user = userEvent.setup();
     renderViewer();
 
-    // Set gain to 0.003 so halving gives 0.0015, which rounds to 0.002 at 3dp
-    fireEvent.change(screen.getByRole('spinbutton', { name: /gain/i }), {
+    // Set range to 0.003 so halving gives 0.0015, which rounds to 0.002 at 3dp
+    fireEvent.change(screen.getByRole('spinbutton', { name: /range/i }), {
       target: { value: '0.003' },
     });
 
-    const zoomInBtn = within(containerOf(screen.getByText('Gain (µV)'))).getByRole('button', {
+    const zoomInBtn = within(containerOf(screen.getByText('Range (µV)'))).getByRole('button', {
       name: 'Zoom in',
     });
     UplotReactMock.mockClear();
@@ -547,9 +547,9 @@ describe('EegViewer — gain controls', () => {
     expect(yMax).toBe(0.002 * OVERDRAW);
   });
 
-  it('clamps gain to GAIN_MIN (0.001) on blur when 0 is entered', () => {
+  it('clamps range to Y_MIN (0.001) on blur when 0 is entered', () => {
     renderViewer();
-    const input = screen.getByRole('spinbutton', { name: /gain/i });
+    const input = screen.getByRole('spinbutton', { name: /range/i });
 
     fireEvent.change(input, { target: { value: '0' } });
     fireEvent.blur(input);
@@ -557,12 +557,12 @@ describe('EegViewer — gain controls', () => {
     expect(input).toHaveValue(0.001);
   });
 
-  it('all channels share the same y-range after gain change', async () => {
+  it('all channels share the same y-range after range change', async () => {
     const { default: UplotReactMock } = await import('uplot-react');
     const user = userEvent.setup();
     renderViewer();
 
-    const zoomInBtn = within(containerOf(screen.getByText('Gain (µV)'))).getByRole('button', {
+    const zoomInBtn = within(containerOf(screen.getByText('Range (µV)'))).getByRole('button', {
       name: 'Zoom in',
     });
     UplotReactMock.mockClear();
@@ -573,34 +573,34 @@ describe('EegViewer — gain controls', () => {
     yRanges.forEach((range) => expect(range).toEqual(yRanges[0]));
   });
 
-  it('does not increase gain beyond 99999 via the ZoomOut button', async () => {
+  it('does not increase range beyond 99999 via the ZoomOut button', async () => {
     const user = userEvent.setup();
     renderViewer();
-    const gainInput = screen.getByRole('spinbutton', { name: /gain/i });
-    const zoomOutBtn = within(containerOf(screen.getByText('Gain (µV)'))).getByRole('button', {
+    const rangeInput = screen.getByRole('spinbutton', { name: /range/i });
+    const zoomOutBtn = within(containerOf(screen.getByText('Range (µV)'))).getByRole('button', {
       name: 'Zoom out',
     });
 
-    // Set gain to 99999 (the 5-digit max), then click ZoomOut — which doubles to 199998 without a cap
-    fireEvent.change(gainInput, { target: { value: '99999' } });
+    // Set range to 99999 (the 5-digit max), then click ZoomOut — which doubles to 199998 without a cap
+    fireEvent.change(rangeInput, { target: { value: '99999' } });
     await user.click(zoomOutBtn);
 
-    expect(gainInput).toHaveValue(99999);
+    expect(rangeInput).toHaveValue(99999);
   });
 
-  it('does not decrease gain below GAIN_MIN (0.001) via the Zoom in button', async () => {
+  it('does not decrease range below Y_MIN (0.001) via the Zoom in button', async () => {
     const user = userEvent.setup();
     renderViewer();
-    const gainInput = screen.getByRole('spinbutton', { name: /gain/i });
-    const zoomInBtn = within(containerOf(screen.getByText('Gain (µV)'))).getByRole('button', {
+    const rangeInput = screen.getByRole('spinbutton', { name: /range/i });
+    const zoomInBtn = within(containerOf(screen.getByText('Range (µV)'))).getByRole('button', {
       name: 'Zoom in',
     });
 
-    // Set gain to 0.001 (GAIN_MIN), then click Zoom in — which would halve to 0.0005 without a clamp
-    fireEvent.change(gainInput, { target: { value: '0.001' } });
+    // Set range to 0.001 (Y_MIN), then click Zoom in — which would halve to 0.0005 without a clamp
+    fireEvent.change(rangeInput, { target: { value: '0.001' } });
     await user.click(zoomInBtn);
 
-    expect(gainInput).toHaveValue(0.001);
+    expect(rangeInput).toHaveValue(0.001);
   });
 });
 
@@ -814,14 +814,14 @@ describe('EegViewer — timeline scrubber', () => {
 describe('EegViewer — shift step capped by window size', () => {
   it('shift step input has max attribute equal to the current window size', () => {
     renderViewer();
-    const input = screen.getByRole('spinbutton', { name: /shift step/i });
+    const input = screen.getByRole('spinbutton', { name: /time step/i });
     // default windowSize = 20
     expect(input).toHaveAttribute('max', '20');
   });
 
   it('shift step clamps to window size on blur when the typed value exceeds it', () => {
     renderViewer();
-    const input = screen.getByRole('spinbutton', { name: /shift step/i });
+    const input = screen.getByRole('spinbutton', { name: /time step/i });
 
     fireEvent.change(input, { target: { value: '25' } }); // 25 > windowSize=20
     fireEvent.blur(input);
@@ -832,7 +832,7 @@ describe('EegViewer — shift step capped by window size', () => {
   it('decreasing window size clamps an oversized shift step down to the new window size', async () => {
     const user = userEvent.setup();
     renderViewer();
-    const shiftInput = screen.getByRole('spinbutton', { name: /shift step/i });
+    const shiftInput = screen.getByRole('spinbutton', { name: /time step/i });
     const windowInput = screen.getByRole('spinbutton', { name: /window size/i });
 
     // Set shift step to 15 (valid while window = 20)
@@ -850,7 +850,7 @@ describe('EegViewer — shift step capped by window size', () => {
   it('shift step max attribute updates when window size changes', async () => {
     const user = userEvent.setup();
     renderViewer();
-    const shiftInput = screen.getByRole('spinbutton', { name: /shift step/i });
+    const shiftInput = screen.getByRole('spinbutton', { name: /time step/i });
     const windowInput = screen.getByRole('spinbutton', { name: /window size/i });
 
     const decreaseWindowBtn = within(containerOf(windowInput)).getByRole('button', {
@@ -880,7 +880,7 @@ describe('EegViewer — keyboard navigation', () => {
   it('clicking a button does not move focus to the viewer container', async () => {
     const user = userEvent.setup();
     renderViewer();
-    const zoomInBtn = within(containerOf(screen.getByText('Gain (µV)'))).getByRole('button', {
+    const zoomInBtn = within(containerOf(screen.getByText('Range (µV)'))).getByRole('button', {
       name: 'Zoom in',
     });
 
@@ -889,7 +889,7 @@ describe('EegViewer — keyboard navigation', () => {
     expect(viewer()).not.toHaveFocus();
   });
 
-  it('ArrowUp halves the gain (zoom in)', async () => {
+  it('ArrowUp halves the range (zoom in)', async () => {
     const { default: UplotReactMock } = await import('uplot-react');
     renderViewer();
 
@@ -901,7 +901,7 @@ describe('EegViewer — keyboard navigation', () => {
     expect(yMax).toBeCloseTo((INITIAL_Y_SCALE / 2) * OVERDRAW, 3);
   });
 
-  it('ArrowDown doubles the gain (zoom out)', async () => {
+  it('ArrowDown doubles the range (zoom out)', async () => {
     const { default: UplotReactMock } = await import('uplot-react');
     renderViewer();
 
@@ -987,10 +987,10 @@ describe('EegViewer — keyboard navigation', () => {
   it('does not respond to keyboard shortcuts while an input is focused', async () => {
     const { default: UplotReactMock } = await import('uplot-react');
     renderViewer();
-    const gainInput = screen.getByRole('spinbutton', { name: /gain/i });
+    const rangeInput = screen.getByRole('spinbutton', { name: /range/i });
 
     UplotReactMock.mockClear();
-    fireEvent.keyDown(gainInput, { key: 'ArrowUp' });
+    fireEvent.keyDown(rangeInput, { key: 'ArrowUp' });
 
     expect(UplotReactMock).not.toHaveBeenCalled();
   });
@@ -999,7 +999,7 @@ describe('EegViewer — keyboard navigation', () => {
 describe('EegViewer — time shift clamping', () => {
   // tMax=30, windowSize=20 → valid startTime range is [0, 10]
   const shiftControls = () => {
-    const input = screen.getByRole('spinbutton', { name: /shift step/i });
+    const input = screen.getByRole('spinbutton', { name: /time step/i });
     const scope = within(input.closest('div'));
     return {
       backwardBtn: scope.getByRole('button', { name: 'Shift backward' }),
@@ -1013,7 +1013,7 @@ describe('EegViewer — time shift clamping', () => {
     renderViewer();
 
     // Set a step large enough to overshoot in one click (25 > tMax−windowSize=10)
-    fireEvent.change(screen.getByRole('spinbutton', { name: /shift step/i }), {
+    fireEvent.change(screen.getByRole('spinbutton', { name: /time step/i }), {
       target: { value: '25' },
     });
 
@@ -1050,7 +1050,7 @@ describe('EegViewer — time shift clamping', () => {
     const { backwardBtn, forwardBtn } = shiftControls();
 
     // Set a step large enough to undershoot in one click from any position
-    fireEvent.change(screen.getByRole('spinbutton', { name: /shift step/i }), {
+    fireEvent.change(screen.getByRole('spinbutton', { name: /time step/i }), {
       target: { value: '25' },
     });
     await user.click(forwardBtn); // first move forward so < has somewhere to go
