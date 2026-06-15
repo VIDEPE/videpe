@@ -1,5 +1,6 @@
 ﻿import { useRef, useState, useEffect, useMemo } from 'react';
 import UplotReact from 'uplot-react';
+import toast from 'react-hot-toast';
 import 'uplot/dist/uPlot.min.css';
 import { useTheme } from '@/components/ThemeContext';
 import {
@@ -16,7 +17,9 @@ import {
   Keyboard,
 } from 'lucide-react';
 import { minMaxDownsample } from '@/utils/downsample';
+import { useEegBuffer } from '@/loaders/eegBuffer';
 
+const EEG_LOADING_TOAST_ID = 'eeg-buffer-loading'; // fixed id so the loading/success toasts update in place rather than stacking
 const Y_AXIS_WIDTH = 60; // px for the y-axis area (channel name + tick space) — must match x-axis strip left padding
 const PLOT_RIGHT_PAD = 20; // px right padding — must match in both channel plots and x-axis strip so ticks align
 const OVERDRAW = 2; // canvas height multiplier — peaks bleed ±50% into adjacent lanes instead of clipping
@@ -65,7 +68,7 @@ const buildChannelOptions = ({
   };
 };
 
-export const EegViewer = ({ data, channelNames, onReady }) => {
+export const EegViewer = ({ provider, channelNames, onReady }) => {
   const { isDarkMode } = useTheme();
   const syncKey = 'eeg-sync'; // shared across all channels to link their interactions
 
@@ -87,7 +90,7 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
     String(defaultVisibleChannelCount)
   );
 
-  const tMax = data[0][data[0].length - 1]; // total time span of the recording, from the time values in the first row
+  const tMax = provider.tMax; // total time span of the recording, in seconds
   // Max input lengths — prevents the boxes from accepting absurdly long strings that warp the layout.
   // Window/shift allow one decimal place so get +2 (dot + digit); range and channels are integers.
   const CHANNEL_INPUT_MAX_LENGTH = String(channelNames.length).length; // enough to display the max channel count, e.g. "128"
@@ -152,15 +155,43 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
     channelAreaHeight > 0 ? Math.floor(channelAreaHeight / visibleChannelCount) : 0;
   const axisColor = isDarkMode ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.8)';
 
+  // Buffer of EEG data around the visible window — reloads on big jumps, otherwise
+  // keeps the previous buffer's data on screen until the new one arrives (no flash).
+  const { timestamps, channels, isLoading } = useEegBuffer(provider, startTime, windowSize);
+
+  // Show a loading toast while the initial buffer loads, then update it to a success
+  // message — self-contained so EegViewer reports its own status regardless of where
+  // it's embedded. Later reloads keep showing the previous buffer's data, so no toast
+  // is needed for those (isLoading is only true before the first buffer arrives).
+  useEffect(() => {
+    if (isLoading) {
+      toast.loading('Loading EEG data…', { id: EEG_LOADING_TOAST_ID });
+    } else {
+      toast.success('EEG data loaded!', { id: EEG_LOADING_TOAST_ID });
+    }
+  }, [isLoading]);
+
+  // Dismiss the toast if the viewer unmounts mid-load (e.g. resetting the EEG panel)
+  useEffect(() => {
+    return () => toast.dismiss(EEG_LOADING_TOAST_ID);
+  }, []);
+
   // Downsample each channel for the visible window.
-  // Re-runs only when the window or plot dimensions change, not on every render.
-  const sampledData = useMemo(() => {
-    if (plotWidth === 0) return null;
+  // Re-runs only when the window, buffer, or plot dimensions change, not on every render.
+  const downSampledData = useMemo(() => {
+    // If we don't have valid dimensions or data yet, return empty arrays for each channel to avoid rendering broken plots
+    const empty = channelNames.map(() => [[], []]);
+    if (plotWidth === 0 || !timestamps || timestamps.length === 0) return empty;
+
     const endTime = startTime + windowSize;
+    // No overlap between the buffered chunk and the visible window — can happen mid-reload
+    // after a big jump (Home/End, distant scrubber drag). Show an empty plot until the new
+    // buffer (covering the new window) arrives.
+    if (timestamps[timestamps.length - 1] < startTime || timestamps[0] > endTime) return empty;
     return channelNames.map((_, i) =>
-      minMaxDownsample(data[0], data[i + 1], startTime, endTime, plotWidth)
+      minMaxDownsample(timestamps, channels[i], startTime, endTime, plotWidth)
     );
-  }, [data, startTime, windowSize, plotWidth, channelNames]);
+  }, [timestamps, channels, startTime, windowSize, plotWidth, channelNames]);
 
   useEffect(() => {
     // ResizeObserver fires whenever the container changes size and updates plotWidth/channelAreaHeight,
@@ -472,7 +503,7 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
                           startTime,
                           yScale,
                         })}
-                        data={sampledData ? sampledData[i] : [data[0], data[i + 1]]}
+                        data={downSampledData[i]}
                         onCreate={() => {}}
                         onDelete={() => {}}
                       />
@@ -496,7 +527,7 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
                   legend: { show: false },
                   padding: [0, PLOT_RIGHT_PAD, 0, Y_AXIS_WIDTH],
                 }}
-                data={[data[0]]}
+                data={[timestamps ?? []]}
                 onCreate={() => {}}
                 onDelete={() => {}}
               />
@@ -648,7 +679,7 @@ export const EegViewer = ({ data, channelNames, onReady }) => {
                 <button
                   type="button"
                   className="button button-icon"
-                  onClick={() => setStartTime(data[0][data[0].length - 1] - windowSize)}
+                  onClick={() => setStartTime(tMax - windowSize)}
                   title="Jump to end"
                 >
                   <ChevronLast size={15} />

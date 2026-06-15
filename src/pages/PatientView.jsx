@@ -39,7 +39,7 @@ export const PatientView = () => {
     };
   }, []);
 
-  const [eeg, setEeg] = useState(null); // { data, channelNames }
+  const [eeg, setEeg] = useState(null); // recording provider: { channelNames, fs, tMax, getChunk }
   const [volumes, setVolumes] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isDemoloading, setIsDemoloading] = useState(false);
@@ -66,20 +66,16 @@ export const PatientView = () => {
     const { formatName, complete, missing, warning } = checkEegFiles(deduped);
 
     if (complete) {
-      // All required files present — clear pending state and load
+      // All required files present — clear pending state and load.
+      // EegViewer shows its own loading/success toast once mounted, so this just
+      // detects the format and surfaces errors.
       setPendingEegFiles([]);
       setEegHint(null);
       setIsLoading(true);
       try {
-        const result = await toast.promise(
-          Promise.resolve().then(() => detectAndLoadEEG(deduped)),
-          {
-            loading: 'Loading EEG data…',
-            success: 'EEG data loaded!',
-            error: (err) => `Error loading EEG:\n${err.message}`,
-          }
-        );
-        setEeg(result);
+        setEeg(await detectAndLoadEEG(deduped));
+      } catch (err) {
+        toast.error(`Error loading EEG:\n${err.message}`);
       } finally {
         setIsLoading(false);
       }
@@ -233,7 +229,7 @@ export const PatientView = () => {
         left={
           eeg ? (
             <EegViewer
-              data={eeg.data}
+              provider={eeg}
               channelNames={eeg.channelNames}
               onReady={() => eegReadyResolveRef.current?.()}
             />
