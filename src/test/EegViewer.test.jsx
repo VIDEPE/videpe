@@ -16,8 +16,8 @@ vi.mock('@/components/ThemeContext', () => ({
   },
 }));
 
-// EegViewer shows a loading/success toast while the initial buffer loads — stub it out
-// so tests don't depend on react-hot-toast's internal store/portal.
+// EegViewer shows its own loading/success toast while the initial buffer loads — stub it
+// out so tests don't depend on react-hot-toast's internal store/portal.
 vi.mock('react-hot-toast', () => ({
   default: {
     loading: vi.fn(),
@@ -1096,5 +1096,60 @@ describe('EegViewer — time shift clamping', () => {
     const range = UplotReactMock.mock.calls[0][0].options.scales.x.range;
     expect(range[0]).toBe(0);
     expect(range[1]).toBe(20); // 0 + windowSize
+  });
+});
+
+describe('EegViewer — onReady callback', () => {
+  it('calls onReady once the first measurement lands', async () => {
+    const onReady = vi.fn();
+    const provider = makeProvider();
+    render(
+      <EegViewer provider={provider} channelNames={provider.channelNames} onReady={onReady} />
+    );
+
+    // ResizeObserver fires synchronously in the mock, so plotWidth > 0 right away —
+    // onReady fires immediately, independent of the (async) buffer load.
+    expect(onReady).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('EegViewer — loading toast', () => {
+  beforeEach(async () => {
+    const { default: toast } = await import('react-hot-toast');
+    toast.loading.mockClear();
+    toast.success.mockClear();
+    toast.dismiss.mockClear();
+  });
+
+  it('shows a loading toast while the initial buffer loads, then a success toast', async () => {
+    const { default: toast } = await import('react-hot-toast');
+    const provider = makeProvider();
+    render(<EegViewer provider={provider} channelNames={provider.channelNames} />);
+
+    // Initial buffer hasn't resolved yet — loading toast shown, success toast not yet.
+    expect(toast.loading).toHaveBeenCalledWith('Loading EEG data…', { id: expect.any(String) });
+    expect(toast.success).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Buffer has loaded — the same toast id is updated to a success message.
+    const loadingId = toast.loading.mock.calls[0][1].id;
+    expect(toast.success).toHaveBeenCalledWith('EEG data loaded!', { id: loadingId });
+  });
+
+  it('dismisses the loading toast on unmount', async () => {
+    const { default: toast } = await import('react-hot-toast');
+    const provider = makeProvider();
+    const { unmount } = render(
+      <EegViewer provider={provider} channelNames={provider.channelNames} />
+    );
+
+    const loadingId = toast.loading.mock.calls[0][1].id;
+    unmount();
+
+    expect(toast.dismiss).toHaveBeenCalledWith(loadingId);
   });
 });

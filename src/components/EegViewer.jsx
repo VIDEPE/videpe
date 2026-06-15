@@ -159,9 +159,10 @@ export const EegViewer = ({ provider, channelNames, onReady }) => {
   // keeps the previous buffer's data on screen until the new one arrives (no flash).
   const { timestamps, channels, isLoading } = useEegBuffer(provider, startTime, windowSize);
 
-  // Show the shared toaster while the initial buffer loads, then update it to a success
-  // message — mirrors the toast.promise loading/success pattern used in PatientView.
-  // Later reloads keep showing the previous buffer's data, so no toast is needed for those.
+  // Show a loading toast while the initial buffer loads, then update it to a success
+  // message — self-contained so EegViewer reports its own status regardless of where
+  // it's embedded. Later reloads keep showing the previous buffer's data, so no toast
+  // is needed for those (isLoading is only true before the first buffer arrives).
   useEffect(() => {
     if (isLoading) {
       toast.loading('Loading EEG data…', { id: EEG_LOADING_TOAST_ID });
