@@ -1,4 +1,5 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
+import { cn } from '../utils/utils';
 import { Niivue, SHOW_RENDER, MULTIPLANAR_TYPE, SLICE_TYPE } from '@niivue/niivue';
 import { move } from '@dnd-kit/helpers';
 import toast from 'react-hot-toast';
@@ -262,7 +263,12 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
           <canvas ref={canvas} className="absolute inset-0" />
         </div>
         <div className="">
-          <div className="flex flex-col w-8 gap-0.5 pt-2 items-center rounded-md border-1 border-border">
+          <div
+            className={cn(
+              'flex flex-col w-8 gap-0.5 pt-2 items-center',
+              'rounded-r-md border-r-1 border-t-1 border-b-1 border-border'
+            )}
+          >
             {/* Viewer controls with Ax, Co, Sa, MP and 3D buttons */}
             {sliceTypeOptions.map(({ sliceType, label, buttonLabel }) => (
               <button
