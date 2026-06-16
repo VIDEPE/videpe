@@ -203,6 +203,17 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
     [orderedVolumes, layerSettings]
   );
 
+  const handleDeleteVolume = useCallback(
+    (index) => {
+      if (!nvRef.current) return; // Guard clause — if NiiVue isn't initialized yet, we can't delete
+
+      nvRef.current.removeVolumeByIndex(index);
+      setOrderedVolumes(orderedVolumes.filter((_, i) => i !== index));
+      setLayerSettings(layerSettings.filter((_, i) => i !== index));
+    },
+    [orderedVolumes, layerSettings]
+  );
+
   useEffect(() => {
     // Guard clause — if no volumes provided, don't even try to initialize NiiVue
     if (!volumes.length) return;
@@ -254,6 +265,7 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
           layerSettings={layerSettings}
           onSettingChange={handleSettingChange}
           onReorder={handleReorder}
+          onDeleteVolume={handleDeleteVolume}
         />
         <FileDropZone
           onFiles={handleNiiFiles}

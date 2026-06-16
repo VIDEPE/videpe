@@ -14,9 +14,10 @@ const makeSettings = (overrides = {}) => ({
   ...overrides,
 });
 
-const renderControls = (volumes, settings, onSettingChange = vi.fn()) =>
+// Helper to render the component with default props and allow overrides
+const renderControls = (volumes, settings, onSettingChange = vi.fn(), onDeleteVolume = vi.fn()) =>
   render(
-    <ImagingControls volumes={volumes} layerSettings={settings} onSettingChange={onSettingChange} />
+    <ImagingControls volumes={volumes} layerSettings={settings} onSettingChange={onSettingChange} onDeleteVolume={onDeleteVolume} />
   );
 
 describe('ImagingControls', () => {
@@ -132,10 +133,11 @@ describe('ImagingControls', () => {
   });
 
   describe('expanded controls', () => {
-    const setup = async (volumeType, settings, onSettingChange = vi.fn()) => {
-      renderControls([makeVolume(volumeType, `/${volumeType}.nii`)], [settings], onSettingChange);
+    // setup does two things: renders one volume and expands it.
+    const setup = async (volumeType, settings, onSettingChange = vi.fn(), onDeleteVolume = vi.fn()) => {
+      renderControls([makeVolume(volumeType, `/${volumeType}.nii`)], [settings], onSettingChange, onDeleteVolume);
       await userEvent.click(screen.getByRole('button', { name: `Expand ${volumeType} controls` }));
-      return onSettingChange;
+      return { onSettingChange, onDeleteVolume };
     };
 
     it('opacity slider reflects current opacity as a 0–1 value', async () => {
@@ -149,19 +151,19 @@ describe('ImagingControls', () => {
     });
 
     it('opacity slider change calls onSettingChange with 0–1 float value', async () => {
-      const onSettingChange = await setup('MRI', makeSettings({ opacity: 1.0 }));
+      const { onSettingChange }  = await setup('MRI', makeSettings({ opacity: 1.0 }));
       fireEvent.change(screen.getByLabelText('MRI opacity slider'), { target: { value: '0.5' } });
       expect(onSettingChange).toHaveBeenCalledWith(0, 'opacity', 0.5);
     });
 
     it('opacity number input change calls onSettingChange with rounded 0–1 value', async () => {
-      const onSettingChange = await setup('MRI', makeSettings({ opacity: 1.0 }));
+      const { onSettingChange }  = await setup('MRI', makeSettings({ opacity: 1.0 }));
       fireEvent.change(screen.getByLabelText('MRI opacity'), { target: { value: '75' } });
       expect(onSettingChange).toHaveBeenCalledWith(0, 'opacity', 0.75);
     });
 
     it('opacity number input clamps to 0–100 on blur', async () => {
-      const onSettingChange = await setup('MRI', makeSettings({ opacity: 0.5 }));
+      const { onSettingChange }  = await setup('MRI', makeSettings({ opacity: 0.5 }));
       fireEvent.change(screen.getByLabelText('MRI opacity'), { target: { value: '150' } });
       fireEvent.blur(screen.getByLabelText('MRI opacity'));
       expect(onSettingChange).toHaveBeenLastCalledWith(0, 'opacity', 1);
@@ -179,7 +181,7 @@ describe('ImagingControls', () => {
     });
 
     it('colormap select change calls onSettingChange', async () => {
-      const onSettingChange = await setup('MRI', makeSettings({ colormap: 'gray' }));
+      const { onSettingChange }  = await setup('MRI', makeSettings({ colormap: 'gray' }));
       await userEvent.selectOptions(screen.getByLabelText('MRI colormap'), 'magma');
       expect(onSettingChange).toHaveBeenCalledWith(0, 'colormap', 'magma');
     });
@@ -193,15 +195,45 @@ describe('ImagingControls', () => {
     });
 
     it('invert toggle click calls onSettingChange with toggled value', async () => {
-      const onSettingChange = await setup('MRI', makeSettings({ invert: false }));
+      const { onSettingChange }  = await setup('MRI', makeSettings({ invert: false }));
       await userEvent.click(screen.getByRole('switch', { name: 'Invert MRI colormap' }));
       expect(onSettingChange).toHaveBeenCalledWith(0, 'invert', true);
     });
 
     it('colorbar toggle click calls onSettingChange with toggled value', async () => {
-      const onSettingChange = await setup('MRI', makeSettings({ showColorbar: false }));
+      const { onSettingChange } = await setup('MRI', makeSettings({ showColorbar: false }));
       await userEvent.click(screen.getByRole('switch', { name: 'Show MRI colorbar' }));
       expect(onSettingChange).toHaveBeenCalledWith(0, 'showColorbar', true);
+    });
+
+    it('the delete volume button is rendered', async () => {
+      await setup('MRI', makeSettings());
+      expect(screen.getByRole('button', {name: /close/i})).toBeInTheDocument();
+    });
+
+    it('delete volume button calls onDeleteVolume', async () => {
+      const { onDeleteVolume } = await setup('MRI', makeSettings());
+      await userEvent.click(screen.getByRole('button', {name: /close/i}))
+      expect(onDeleteVolume).toHaveBeenCalledWith(0);
+    });
+
+    it('delete volume button in settingsCard 1, calls onDeleteVolume with 1 and not with 0', async () => {
+      // Mock onDeleteVolume
+      const onDeleteVolume = vi.fn()
+
+      // render controls for 2 volumes
+      renderControls(
+        [makeVolume('MRI', '/mri.nii'), makeVolume('PET', '/pet.nii')],
+        [makeSettings(), makeSettings()], 
+        vi.fn(), onDeleteVolume
+      );
+      
+      // click expand on the 2nd (=> index = 1 )
+      await userEvent.click(screen.getByRole('button', { name: `Expand PET controls` }));
+      // click the delete volume button
+      await userEvent.click(screen.getByRole('button', {name: 'Close PET volume'}))
+      // expect onDeleteVolume to be called with index 1
+      expect(onDeleteVolume).toHaveBeenCalledWith(1);
     });
   });
 });
