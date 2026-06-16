@@ -9,8 +9,7 @@ const baseName = (filename) => filename.slice(0, filename.lastIndexOf('.'));
 // - description: a list of the supported file types for this format
 // - partialDetect(files): true if any of the format's files are present (used for accumulation UX)
 // - validate(files): returns { complete, missing[], warning } — complete only when all files present and names match
-// - load(files): loads the EEG data from the given files and returns a recording provider
-//   { channelNames, fs, tMax, getChunk }
+// - load(files): loads the EEG data from the given files and returns { data, channelNames }
 const EEG_FORMATS = [
   {
     name: 'BrainVision',

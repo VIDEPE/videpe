@@ -17,9 +17,9 @@ All data processing happens entirely in your browser. No files are ever uploaded
 ## Features
 
 - **EEG viewer** — high-performance multichannel viewer built on [uPlot](https://github.com/leeoniya/uplot), optimised for long recordings with many channels. All plots share a single time axis — panning or zooming one channel instantly updates all others.
-  - Adjustable range (µV scale), window size, and time step
+  - Adjustable gain (µV scale), window size, and time-shift step
   - Interactive timeline scrubber for fast navigation across the full recording
-  - Keyboard navigation — arrow keys for range/panning, Page Up/Down and Space for window jumps, Home/End to jump to the start/end
+  - Keyboard navigation — arrow keys for gain/panning, Page Up/Down and Space for window jumps, Home/End to jump to the start/end
   - Configurable number of simultaneously visible channels
   - Min-max downsampling keeps rendering fast at any zoom level
 
