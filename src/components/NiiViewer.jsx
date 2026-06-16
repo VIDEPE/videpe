@@ -1,7 +1,10 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
+import { cn } from '../utils/utils';
 import { Niivue, SHOW_RENDER, MULTIPLANAR_TYPE, SLICE_TYPE } from '@niivue/niivue';
 import { move } from '@dnd-kit/helpers';
 import toast from 'react-hot-toast';
+
+const NII_LOADING_TOAST_ID = 'nii-viewer-loading'; // fixed id so loading/success toasts update in place rather than stacking
 import { getInitialLayerSettings, filesToVolumes } from './NiiViewer.utils';
 import { ImagingControls } from './ImagingControls';
 import { FileDropZone } from '../components/FileDropZone';
@@ -39,7 +42,22 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
   const [layerSettings, setLayerSettings] = useState(() => getInitialLayerSettings(volumes));
   // orderedVolumes mirrors volumes but can be rearranged by drag-to-reorder
   const [orderedVolumes, setOrderedVolumes] = useState(volumes);
-  const [loading, setLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Show a loading toast while volumes load, then update to success — self-contained
+  // so NiiViewer reports its own status regardless of where it's embedded.
+  useEffect(() => {
+    if (isLoading) {
+      toast.loading('Loading imaging data…', { id: NII_LOADING_TOAST_ID });
+    } else {
+      toast.success('Imaging data loaded!', { id: NII_LOADING_TOAST_ID });
+    }
+  }, [isLoading]);
+
+  // Dismiss the toast if the viewer unmounts mid-load (e.g. resetting the imaging panel)
+  useEffect(() => {
+    return () => toast.dismiss(NII_LOADING_TOAST_ID);
+  }, []);
 
   const canvas = useRef();
   const nvRef = useRef();
@@ -105,7 +123,7 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
     if (!nvRef.current) return; // Guard clause — if NiiVue isn't initialized yet, there's nothing to append to
 
     // show loading spinner
-    setLoading(true);
+    setIsLoading(true);
     // Convert the FileList to an array of volume objects with { url, name, type, subtype }
     const newVolumes = filesToVolumes(files);
     const allVolumes = [...orderedVolumes, ...newVolumes];
@@ -120,7 +138,7 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
     // Load only the new volumes into the existing NiiVue instance and reapply all layer settings
     await syncVolumesAndApplySettings(nvRef.current, allVolumes, allLayerSettings);
     // updateGLVolume schedules a GL redraw but returns before it paints — wait one frame before clearing the spinner
-    requestAnimationFrame(() => setLoading(false));
+    requestAnimationFrame(() => setIsLoading(false));
   };
 
   // Track the canvas container's dimensions so the layout effect can react to resizes
@@ -176,11 +194,22 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
       // Move the already-loaded NVImage to its new position in-memory — no re-fetch needed
       const fromIndex = event.operation.source.initialIndex;
       const toIndex = event.operation.source.index;
-      setLoading(true);
+      setIsLoading(true);
       nvRef.current.setVolume(nvRef.current.volumes[fromIndex], toIndex);
       nvRef.current.updateGLVolume();
       // updateGLVolume schedules a GL redraw but returns before it paints — wait one frame before clearing the spinner
-      requestAnimationFrame(() => setLoading(false));
+      requestAnimationFrame(() => setIsLoading(false));
+    },
+    [orderedVolumes, layerSettings]
+  );
+
+  const handleDeleteVolume = useCallback(
+    (index) => {
+      if (!nvRef.current) return; // Guard clause — if NiiVue isn't initialized yet, we can't delete
+
+      nvRef.current.removeVolumeByIndex(index);
+      setOrderedVolumes(orderedVolumes.filter((_, i) => i !== index));
+      setLayerSettings(layerSettings.filter((_, i) => i !== index));
     },
     [orderedVolumes, layerSettings]
   );
@@ -192,7 +221,7 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
     const initialLayerSettings = getInitialLayerSettings(volumes);
     setLayerSettings(initialLayerSettings);
     setOrderedVolumes(volumes); // Reset order whenever the volumes prop changes
-    setLoading(true);
+    setIsLoading(true);
 
     async function setupAndLoad() {
       try {
@@ -212,11 +241,11 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
 
         // Store the NiiVue instance in a ref so we can call methods on it later (e.g. to update settings or reorder layers)
         nvRef.current = nv;
-        setLoading(false);
+        setIsLoading(false);
         onReady?.();
       } catch (loadError) {
         toast.error(`Failed to load image: ${loadError.message}`);
-        setLoading(false);
+        setIsLoading(false);
       }
     }
 
@@ -236,6 +265,7 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
           layerSettings={layerSettings}
           onSettingChange={handleSettingChange}
           onReorder={handleReorder}
+          onDeleteVolume={handleDeleteVolume}
         />
         <FileDropZone
           onFiles={handleNiiFiles}
@@ -251,7 +281,7 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
         {/* NiiVue Canvas */}
         <div ref={canvasContainerRef} className="relative flex-1 overflow-hidden">
           {/* Loading spinner overlay — absolute to cover the canvas, with a higher z-index so it appears on top */}
-          {loading && (
+          {isLoading && (
             <div
               data-testid="loading-spinner"
               className="absolute inset-0 z-10 flex items-center justify-center"
@@ -262,7 +292,12 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
           <canvas ref={canvas} className="absolute inset-0" />
         </div>
         <div className="">
-          <div className="flex flex-col w-8 gap-0.5 pt-2 items-center rounded-md border-1 border-border">
+          <div
+            className={cn(
+              'flex flex-col w-8 gap-0.5 pt-2 items-center',
+              'rounded-r-md border-r-1 border-t-1 border-b-1 border-border'
+            )}
+          >
             {/* Viewer controls with Ax, Co, Sa, MP and 3D buttons */}
             {sliceTypeOptions.map(({ sliceType, label, buttonLabel }) => (
               <button

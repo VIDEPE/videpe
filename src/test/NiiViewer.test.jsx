@@ -15,6 +15,9 @@ const SLICE_TYPE_OPTIONS = [
 vi.mock('react-hot-toast', () => ({
   default: {
     error: vi.fn(),
+    loading: vi.fn(),
+    success: vi.fn(),
+    dismiss: vi.fn(),
   },
 }));
 
@@ -28,6 +31,10 @@ vi.mock('@niivue/niivue', () => ({
       addVolumesFromUrl: vi.fn().mockImplementation(async function (vols) {
         // mirrors what real NiiVue does — appends the newly loaded volumes to the existing ones
         instance.volumes = [...instance.volumes, ...vols];
+      }),
+      removeVolumeByIndex: vi.fn().mockImplementation(async function (index) {
+        // mirrors what real NiiVue does — removes the volume with a certain index
+        instance.volumes = instance.volumes.filter((_, i) => i !== index);
       }),
       setOpacity: vi.fn(),
       setColormap: vi.fn(),
@@ -589,5 +596,45 @@ describe('NiiViewer', () => {
       await userEvent.click(screen.getByRole('button', { name: 'Expand scan controls' }));
       expect(screen.getByLabelText('scan opacity')).toHaveValue(60);
     });
+  });
+
+  describe('handleDeleteVolume', () => {
+    const setup = async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      render(<NiiViewer volumes={[{ type: 'MRI', url: '/mri.nii' }, { type: 'PET', url: '/pet.nii' }]} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+      const nv = Niivue.mock.results[Niivue.mock.results.length - 1].value;
+      // Clear calls from initial load so assertions only count post-load interactions
+      nv.setOpacity.mockClear();
+      nv.updateGLVolume.mockClear();
+      return nv;
+    };
+
+    it('removes the correct volume from the NiiVue instance when delete is clicked', async () => {
+      const nv = await setup();
+
+      // click expand settings on the first volume (=> index = 0 )
+      await userEvent.click(screen.getByRole('button', { name: `Expand MRI controls` }));
+      // click the delete volume button
+      await userEvent.click(screen.getByRole('button', {name: 'Close MRI volume'}))
+      // expect to only have 1 volume left
+      expect(nv.volumes.length).toBe(1);
+      // expect the remaining volume to have the right url
+      expect(nv.volumes[0].url).toBe('/pet.nii')
+    });
+
+    it('removes the volume settings card from the UI when delete is clicked', async () => {
+      const nv = await setup();
+
+      // click expand settings on the first volume (=> index = 0 )
+      await userEvent.click(screen.getByRole('button', { name: `Expand MRI controls` }));
+      // click the delete volume button
+      await userEvent.click(screen.getByRole('button', {name: 'Close MRI volume'}))
+      // expect the settings card to be removed
+      expect(screen.queryByText ('MRI')).not.toBeInTheDocument()
+      // expect the other settings card to still be there
+      expect(screen.queryByText ('PET')).toBeInTheDocument()
+    });
+
   });
 });

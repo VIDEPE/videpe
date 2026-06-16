@@ -39,7 +39,7 @@ export const PatientView = () => {
     };
   }, []);
 
-  const [eeg, setEeg] = useState(null); // { data, channelNames }
+  const [eeg, setEeg] = useState(null); // recording provider: { channelNames, fs, tMax, getChunk }
   const [volumes, setVolumes] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isDemoloading, setIsDemoloading] = useState(false);
@@ -66,20 +66,16 @@ export const PatientView = () => {
     const { formatName, complete, missing, warning } = checkEegFiles(deduped);
 
     if (complete) {
-      // All required files present — clear pending state and load
+      // All required files present — clear pending state and load.
+      // EegViewer shows its own loading/success toast once mounted, so this just
+      // detects the format and surfaces errors.
       setPendingEegFiles([]);
       setEegHint(null);
       setIsLoading(true);
       try {
-        const result = await toast.promise(
-          Promise.resolve().then(() => detectAndLoadEEG(deduped)),
-          {
-            loading: 'Loading EEG data…',
-            success: 'EEG data loaded!',
-            error: (err) => `Error loading EEG:\n${err.message}`,
-          }
-        );
-        setEeg(result);
+        setEeg(await detectAndLoadEEG(deduped));
+      } catch (err) {
+        toast.error(`Error loading EEG:\n${err.message}`);
       } finally {
         setIsLoading(false);
       }
@@ -96,25 +92,14 @@ export const PatientView = () => {
   };
 
   // Handler for when imaging files are dropped or selected. It reads the files as ArrayBuffers and prepares them for visualization, updating state accordingly.
+  // NiiViewer shows its own loading/success toast once mounted, so this just sets volumes and surfaces errors.
   const handleNiiFiles = async (files) => {
     setIsLoading(true);
-    // niiReady resolves once NiiViewer finishes loading the new volumes (see onReady below)
-    const niiReady = new Promise((resolve) => {
-      niiReadyResolveRef.current = resolve;
-    });
     try {
-      await toast.promise(
-        (async () => {
-          const result = await Promise.all(filesToVolumes(files));
-          setVolumes(result);
-          await niiReady;
-        })(),
-        {
-          loading: 'Loading imaging data…',
-          success: 'Imaging data loaded!',
-          error: (err) => `Error loading imaging data:\n${err.message}`,
-        }
-      );
+      const result = await Promise.all(filesToVolumes(files));
+      setVolumes(result);
+    } catch (err) {
+      toast.error(`Error loading imaging data:\n${err.message}`);
     } finally {
       setIsLoading(false);
     }
@@ -142,9 +127,9 @@ export const PatientView = () => {
           await Promise.all([eegReady, niiReady]);
         })(),
         {
-          loading: 'Loading demo EEG + Imaging data…',
+          loading: 'Loading demo data…',
           success: 'Demo data loaded!',
-          error: (err) => `Error loading demo EEG + Imaging data:\n${err.message}`,
+          error: (err) => `Error loading demo data:\n${err.message}`,
         }
       );
     } finally {
@@ -233,7 +218,7 @@ export const PatientView = () => {
         left={
           eeg ? (
             <EegViewer
-              data={eeg.data}
+              provider={eeg}
               channelNames={eeg.channelNames}
               onReady={() => eegReadyResolveRef.current?.()}
             />
