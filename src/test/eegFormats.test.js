@@ -71,12 +71,7 @@ describe('detectAndLoadEEG', () => {
 
   it('calls loadBrainVisionEEG with the correct files for a complete BrainVision set', async () => {
     const { loadBrainVisionEEG } = await import('@/loaders/loadBrainVisionEEG');
-    loadBrainVisionEEG.mockResolvedValue({
-      channelNames: ['Ch1'],
-      fs: 1,
-      tMax: 1,
-      getChunk: vi.fn(),
-    });
+    loadBrainVisionEEG.mockResolvedValue({ data: [[0, 1]], channelNames: ['Ch1'] });
 
     const vhdr = makeFile('sub01.vhdr');
     const eeg = makeFile('sub01.eeg');
