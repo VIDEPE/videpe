@@ -92,25 +92,14 @@ export const PatientView = () => {
   };
 
   // Handler for when imaging files are dropped or selected. It reads the files as ArrayBuffers and prepares them for visualization, updating state accordingly.
+  // NiiViewer shows its own loading/success toast once mounted, so this just sets volumes and surfaces errors.
   const handleNiiFiles = async (files) => {
     setIsLoading(true);
-    // niiReady resolves once NiiViewer finishes loading the new volumes (see onReady below)
-    const niiReady = new Promise((resolve) => {
-      niiReadyResolveRef.current = resolve;
-    });
     try {
-      await toast.promise(
-        (async () => {
-          const result = await Promise.all(filesToVolumes(files));
-          setVolumes(result);
-          await niiReady;
-        })(),
-        {
-          loading: 'Loading imaging data…',
-          success: 'Imaging data loaded!',
-          error: (err) => `Error loading imaging data:\n${err.message}`,
-        }
-      );
+      const result = await Promise.all(filesToVolumes(files));
+      setVolumes(result);
+    } catch (err) {
+      toast.error(`Error loading imaging data:\n${err.message}`);
     } finally {
       setIsLoading(false);
     }
@@ -138,9 +127,9 @@ export const PatientView = () => {
           await Promise.all([eegReady, niiReady]);
         })(),
         {
-          loading: 'Loading demo EEG + Imaging data…',
+          loading: 'Loading demo data…',
           success: 'Demo data loaded!',
-          error: (err) => `Error loading demo EEG + Imaging data:\n${err.message}`,
+          error: (err) => `Error loading demo data:\n${err.message}`,
         }
       );
     } finally {

@@ -15,6 +15,9 @@ const SLICE_TYPE_OPTIONS = [
 vi.mock('react-hot-toast', () => ({
   default: {
     error: vi.fn(),
+    loading: vi.fn(),
+    success: vi.fn(),
+    dismiss: vi.fn(),
   },
 }));
 
