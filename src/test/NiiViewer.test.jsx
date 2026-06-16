@@ -601,7 +601,14 @@ describe('NiiViewer', () => {
   describe('handleDeleteVolume', () => {
     const setup = async () => {
       const { Niivue } = await import('@niivue/niivue');
-      render(<NiiViewer volumes={[{ type: 'MRI', url: '/mri.nii' }, { type: 'PET', url: '/pet.nii' }]} />);
+      render(
+        <NiiViewer
+          volumes={[
+            { type: 'MRI', url: '/mri.nii' },
+            { type: 'PET', url: '/pet.nii' },
+          ]}
+        />
+      );
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
       const nv = Niivue.mock.results[Niivue.mock.results.length - 1].value;
       // Clear calls from initial load so assertions only count post-load interactions
@@ -616,11 +623,11 @@ describe('NiiViewer', () => {
       // click expand settings on the first volume (=> index = 0 )
       await userEvent.click(screen.getByRole('button', { name: `Expand MRI controls` }));
       // click the delete volume button
-      await userEvent.click(screen.getByRole('button', {name: 'Close MRI volume'}))
+      await userEvent.click(screen.getByRole('button', { name: 'Close MRI volume' }));
       // expect to only have 1 volume left
       expect(nv.volumes.length).toBe(1);
       // expect the remaining volume to have the right url
-      expect(nv.volumes[0].url).toBe('/pet.nii')
+      expect(nv.volumes[0].url).toBe('/pet.nii');
     });
 
     it('removes the volume settings card from the UI when delete is clicked', async () => {
@@ -629,12 +636,11 @@ describe('NiiViewer', () => {
       // click expand settings on the first volume (=> index = 0 )
       await userEvent.click(screen.getByRole('button', { name: `Expand MRI controls` }));
       // click the delete volume button
-      await userEvent.click(screen.getByRole('button', {name: 'Close MRI volume'}))
+      await userEvent.click(screen.getByRole('button', { name: 'Close MRI volume' }));
       // expect the settings card to be removed
-      expect(screen.queryByText ('MRI')).not.toBeInTheDocument()
+      expect(screen.queryByText('MRI')).not.toBeInTheDocument();
       // expect the other settings card to still be there
-      expect(screen.queryByText ('PET')).toBeInTheDocument()
+      expect(screen.queryByText('PET')).toBeInTheDocument();
     });
-
   });
 });

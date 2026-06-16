@@ -204,7 +204,8 @@ function SortableSettingsCard({
                 />
               </div>
               {/* Delete Volume button */}
-              <div className="flex items-center gap-2.5 ml-auto"> {/* ml-auto pushes the close button to the right edge */}
+              <div className="flex items-center gap-2.5 ml-auto">
+                {/* ml-auto pushes the close button to the right edge */}
                 <button
                   className="text-foreground hover:text-alert cursor-pointer"
                   type="button"
@@ -223,7 +224,13 @@ function SortableSettingsCard({
   );
 }
 
-export const ImagingControls = ({ volumes, layerSettings, onSettingChange, onReorder, onDeleteVolume }) => {
+export const ImagingControls = ({
+  volumes,
+  layerSettings,
+  onSettingChange,
+  onReorder,
+  onDeleteVolume,
+}) => {
   // Track the expanded card by URL so the expanded state survives reordering
   const [expandedUrl, setExpandedUrl] = useState(null); // only one card can be expanded at a time, so this is either a URL or null
 
