@@ -73,38 +73,52 @@ export function EegTopoViewer({ electrodes, matched, voltages, totalChannels, on
     <div
       className={
         isMaximized
-          ? 'fixed inset-0 z-50 flex flex-col bg-card'
-          : 'fixed z-50 flex flex-col w-96 h-80 rounded-lg border border-border shadow-xl bg-card'
+          ? 'fixed inset-0 z-50 flex flex-col bg-surface'
+          : 'fixed z-50 flex flex-col w-96 h-80 rounded-lg border border-border bg-surface'
       }
-      style={isMaximized ? {} : { left: position.x, top: position.y }}
+      style={
+        isMaximized
+          ? { boxShadow: 'none' }
+          : { left: position.x, top: position.y, boxShadow: 'var(--c-shadow)' }
+      }
     >
-      {/* Title bar — drag handle */}
+      {/* Title bar — drag handle; explicit bg-surface so NiiVue's black canvas doesn't bleed through */}
       <div
-        className="flex items-center justify-between px-2 py-1 border-b border-border cursor-grab select-none shrink-0"
+        className="flex items-center justify-between px-2 py-1 border-b border-border cursor-grab select-none shrink-0 bg-surface"
         onMouseDown={handleDragStart}
       >
-        <span className="text-sm font-medium">EEG Topography</span>
+        <span className="text-sm font-medium text-heading">EEG Topography</span>
         <div className="flex gap-1">
           <button
             type="button"
             onClick={() => setIsMaximized((v) => !v)}
+            className="text-foreground hover:text-heading cursor-pointer"
             aria-label={isMaximized ? 'Restore' : 'Maximize'}
             title={isMaximized ? 'Restore' : 'Maximize'}
           >
             {isMaximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
           </button>
-          <button type="button" onClick={onClose} aria-label="Close" title="Close">
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-foreground hover:text-alert cursor-pointer"
+            aria-label="Close"
+            title="Close"
+          >
             <X size={14} />
           </button>
         </div>
       </div>
 
-      {/* NiiVue canvas — fills remaining space between title bar and footer */}
-      <canvas ref={canvasRef} className="flex-1 w-full" />
+      {/* NiiVue positions its canvas absolutely inside whatever element it attaches to.
+          This wrapper is the containing block so the canvas stays within the middle zone. */}
+      <div className="relative flex-1 min-h-0">
+        <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
+      </div>
 
-      {/* Footer — channel count + re-referencing dropdown */}
-      <div className="flex items-center justify-between px-2 py-1 text-xs border-t border-border shrink-0">
-        <span>
+      {/* Footer — explicit bg-surface for the same reason as the title bar */}
+      <div className="flex items-center justify-between px-2 py-1 text-xs border-t border-border shrink-0 bg-surface">
+        <span className="text-foreground">
           {matched.length} / {totalChannels} channels mapped
         </span>
         <div className="flex items-center gap-3">
@@ -113,7 +127,7 @@ export function EegTopoViewer({ electrodes, matched, voltages, totalChannels, on
             value={reference}
             onChange={(e) => setReference(e.target.value)}
             aria-label="Re-referencing"
-            className="bg-surface border border-border rounded px-2 py-0.5 text-xs text-heading cursor-pointer"
+            className="bg-background border border-border rounded px-2 py-0.5 text-xs text-heading cursor-pointer"
           >
             <option value="none">None</option>
             <option value="average">Average</option>
