@@ -40,8 +40,9 @@ export function parseElc(text) {
   if (posStart < 0 || labelStart < 0) return result;
 
   const posLines = lines.slice(posStart + 1, labelStart);
-  const labelLines = lines.slice(labelStart + 1).filter((l) => l.length > 0);
+  const labelLines = lines.slice(labelStart + 1).filter((l) => l.length > 0); // the filter drops any blank lines
 
+  // Match labels with electrode positions x,y,z
   for (let i = 0; i < labelLines.length; i++) {
     const label = labelLines[i];
     const parts = posLines[i]?.split(/\s+/);
@@ -52,6 +53,7 @@ export function parseElc(text) {
     const z = parseFloat(parts[2]) * scale;
     if (isNaN(x) || isNaN(y) || isNaN(z)) continue;
 
+    // Check if the label is a fiducial point, if so, add to fiducials instead of electrodes
     const fidKey = classifyFiducial(label);
     if (fidKey) {
       result.fiducials[fidKey] = { x, y, z };
@@ -60,6 +62,7 @@ export function parseElc(text) {
     }
   }
 
+  // Check if all 3 fiducial points are present => hasFiducials === true
   result.hasFiducials = ['LPA', 'RPA', 'Nz'].every((k) => k in result.fiducials);
   return result;
 }
