@@ -82,10 +82,20 @@ describe('EegTopoViewer', () => {
     expect(onClose).toHaveBeenCalledOnce();
   });
 
-  it('renders average and median reference toggle buttons', async () => {
+  it('renders a Re-referencing label with a dropdown defaulting to average', async () => {
     await act(async () => render(<EegTopoViewer {...defaultProps} />));
-    expect(screen.getByRole('button', { name: /avg ref/i })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /med ref/i })).toBeTruthy();
+    expect(screen.getByText('Re-referencing')).toBeTruthy();
+    const select = screen.getByLabelText(/re-referencing/i);
+    expect(select.value).toBe('average');
+  });
+
+  it('re-referencing dropdown has None, Average, and Median options', async () => {
+    await act(async () => render(<EegTopoViewer {...defaultProps} />));
+    const select = screen.getByLabelText(/re-referencing/i);
+    const values = Array.from(select.options).map((o) => o.value);
+    expect(values).toContain('none');
+    expect(values).toContain('average');
+    expect(values).toContain('median');
   });
 
   it('renders a maximize button', async () => {

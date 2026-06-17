@@ -6,7 +6,7 @@ import { buildEegMesh, averageReference, medianReference } from '@/utils/eegTopo
 export function EegTopoViewer({ electrodes, matched, voltages, totalChannels, onClose }) {
   const canvasRef = useRef(null);
   const nvRef = useRef(null);
-  const [useMedian, setUseMedian] = useState(false);
+  const [reference, setReference] = useState('average'); // 'none' | 'average' | 'median'
   const [isMaximized, setIsMaximized] = useState(false);
   const [position, setPosition] = useState({ x: 80, y: 80 });
   const dragOffset = useRef(null);
@@ -23,12 +23,17 @@ export function EegTopoViewer({ electrodes, matched, voltages, totalChannels, on
   }, []);
 
   // Rebuild and reload the mesh whenever electrodes, matched channels, voltages, or
-  // reference mode change. Clears any previously loaded mesh first.
+  // re-referencing mode change. Clears any previously loaded mesh first.
   useEffect(() => {
     const nv = nvRef.current;
     if (!nv || !electrodes?.length || !voltages?.length) return;
 
-    const refVoltages = useMedian ? medianReference(voltages) : averageReference(voltages);
+    const refVoltages =
+      reference === 'median'
+        ? medianReference(voltages)
+        : reference === 'average'
+          ? averageReference(voltages)
+          : voltages; // 'none' — use raw voltages without re-referencing
 
     const { vertices, indices, scalars } = buildEegMesh(electrodes, matched, refVoltages);
     const buffer = NVMeshUtilities.createMZ3(vertices, indices, false, null, scalars);
@@ -46,7 +51,7 @@ export function EegTopoViewer({ electrodes, matched, voltages, totalChannels, on
     }).then((mesh) => {
       if (nvRef.current) nvRef.current.addMesh(mesh);
     });
-  }, [electrodes, matched, voltages, useMedian]);
+  }, [electrodes, matched, voltages, reference]);
 
   // Drag the floating window by its title bar
   const handleDragStart = useCallback(
@@ -97,28 +102,23 @@ export function EegTopoViewer({ electrodes, matched, voltages, totalChannels, on
       {/* NiiVue canvas — fills remaining space between title bar and footer */}
       <canvas ref={canvasRef} className="flex-1 w-full" />
 
-      {/* Footer — channel count + reference mode toggle */}
+      {/* Footer — channel count + re-referencing dropdown */}
       <div className="flex items-center justify-between px-2 py-1 text-xs border-t border-border shrink-0">
         <span>
           {matched.length} / {totalChannels} channels mapped
         </span>
-        <div className="flex gap-1">
-          <button
-            type="button"
-            className={`button size-xs${!useMedian ? ' active' : ''}`}
-            onClick={() => setUseMedian(false)}
-            aria-label="Avg ref"
+        <div className="flex items-center gap-3">
+          <span className="text-foreground select-none pointer-events-none">Re-referencing</span>
+          <select
+            value={reference}
+            onChange={(e) => setReference(e.target.value)}
+            aria-label="Re-referencing"
+            className="bg-surface border border-border rounded px-2 py-0.5 text-xs text-heading cursor-pointer"
           >
-            Avg ref
-          </button>
-          <button
-            type="button"
-            className={`button size-xs${useMedian ? ' active' : ''}`}
-            onClick={() => setUseMedian(true)}
-            aria-label="Med ref"
-          >
-            Med ref
-          </button>
+            <option value="none">None</option>
+            <option value="average">Average</option>
+            <option value="median">Median</option>
+          </select>
         </div>
       </div>
     </div>
