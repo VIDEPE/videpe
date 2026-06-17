@@ -43,14 +43,40 @@ export function EegTopoViewer({ electrodes, matched, voltages, totalChannels, on
 
     nv.meshes = [];
 
-    NVMesh.loadFromUrl({
-      buffer,
-      gl: nv.gl,
-      name: 'eeg-topo',
-      layers: [{ colormap: 'redblue', cal_min: -calMax, cal_max: calMax }],
-    }).then((mesh) => {
-      if (nvRef.current) nvRef.current.addMesh(mesh);
-    });
+    const loadMesh = async () => {
+      try {
+        // url must be non-empty and carry the .mz3 extension — NiiVue derives the mesh
+        // format from url when name is absent; the buffer is used for actual data so no
+        // network request is made.
+        const mesh = await NVMesh.loadFromUrl({
+          url: 'eeg-topo.mz3',
+          buffer,
+          gl: nv.gl,
+          // name intentionally omitted — NiiVue derives 'eeg-topo.mz3' from url, giving
+          // readMesh the .mz3 extension it needs for format detection. Passing a name
+          // without an extension causes readMesh to throw on ext.toUpperCase().
+        });
+        if (!nvRef.current) return;
+
+        // Override the auto-created scalar layer's colormap before the mesh is rendered
+        if (mesh.layers.length > 0) {
+          Object.assign(mesh.layers[0], {
+            colormap: 'blue2red',
+            cal_min: -calMax,
+            cal_max: calMax,
+            opacity: 1,
+          });
+          mesh.updateMesh(nv.gl); // rebuild GL color buffers with the new colormap
+        }
+
+        nvRef.current.addMesh(mesh);
+        nvRef.current.updateGLVolume();
+      } catch (err) {
+        console.error('[EegTopoViewer] mesh load failed:', err);
+      }
+    };
+
+    loadMesh();
   }, [electrodes, matched, voltages, reference]);
 
   // Drag the floating window by its title bar

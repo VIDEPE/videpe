@@ -170,7 +170,7 @@ export const EegViewer = ({ provider, channelNames, onReady }) => {
 
   // Fetch the built-in electrode position template and match it against the recording's channel names
   useEffect(() => {
-    fetch('/electrode_positions/standard_1005.elc')
+    fetch('electrode_positions/standard_1005.elc')
       .then((r) => r.text())
       .then((text) => {
         const { electrodes: els } = parseElc(text);

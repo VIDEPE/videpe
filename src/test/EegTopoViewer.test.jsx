@@ -10,6 +10,7 @@ import { EegTopoViewer } from '@/components/EegTopoViewer';
 const mockNvInstance = {
   attachToCanvas: vi.fn(),
   addMesh: vi.fn(),
+  updateGLVolume: vi.fn(),
   setSliceType: vi.fn(),
   opts: {},
   meshes: [],
@@ -20,7 +21,12 @@ vi.mock('@niivue/niivue', () => ({
     return mockNvInstance;
   }),
   NVMesh: {
-    loadFromUrl: vi.fn().mockResolvedValue({ id: 'mesh-0' }),
+    // Return a mesh with a scalar layer (mirrors real NiiVue MZ3 loading behaviour)
+    loadFromUrl: vi.fn().mockResolvedValue({
+      id: 'mesh-0',
+      layers: [{ colormap: 'gray', cal_min: 0, cal_max: 1, opacity: 1 }],
+      updateMesh: vi.fn(),
+    }),
   },
   NVMeshUtilities: {
     createMZ3: vi.fn().mockReturnValue(new ArrayBuffer(16)),
