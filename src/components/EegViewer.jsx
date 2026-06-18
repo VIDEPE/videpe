@@ -510,6 +510,11 @@ export const EegViewer = ({
               <div
                 ref={containerRef}
                 className="absolute inset-0 overflow-y-auto themed-scrollbar"
+                title={
+                  matched.length > 0 && !topoVisible
+                    ? 'Click any channel to view the EEG topography for that time point'
+                    : undefined
+                }
                 style={{ scrollbarGutter: 'stable' }}
               >
                 {/* Wait for first measurements before rendering — avoids zero-size flash */}
