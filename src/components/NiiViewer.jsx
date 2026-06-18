@@ -37,7 +37,13 @@ export async function syncVolumesAndApplySettings(nv, volumes, layerSettings) {
   nv.updateGLVolume();
 }
 
-export const NiiViewer = ({nvRef, volumes = [], onReady, onNiiNvReady, isFullscreen = false }) => {
+export const NiiViewer = ({
+  nvRef,
+  volumes = [],
+  onViewReady,
+  onNiiNvReady,
+  isFullscreen = false,
+}) => {
   // layerSettings is an array with one settings object per loaded layer (volume or mesh)
   const [layerSettings, setLayerSettings] = useState(() => getInitialLayerSettings(volumes));
   // orderedVolumes mirrors volumes but can be rearranged by drag-to-reorder
@@ -224,7 +230,7 @@ export const NiiViewer = ({nvRef, volumes = [], onReady, onNiiNvReady, isFullscr
 
     async function setupAndLoad(nvRef) {
       try {
-        const nv = nvRef.current
+        const nv = nvRef.current;
         // Always show volume render with slices
         nv.opts.multiplanarShowRender = SHOW_RENDER.ALWAYS;
         nv.setMultiplanarLayout(MULTIPLANAR_TYPE.GRID); // Set to grid layout (2x2)
@@ -233,11 +239,11 @@ export const NiiViewer = ({nvRef, volumes = [], onReady, onNiiNvReady, isFullscr
 
         // Attach to a canvas and signal PatientView it is ready for synchronising to the EegTopoViewer
         nv.attachToCanvas(canvas.current);
-        onNiiNvReady?.()
+        onNiiNvReady?.();
 
         await syncVolumesAndApplySettings(nv, volumes, initialLayerSettings);
         setIsLoading(false);
-        onReady?.();
+        onViewReady?.();
       } catch (loadError) {
         toast.error(`Failed to load image: ${loadError.message}`);
         setIsLoading(false);

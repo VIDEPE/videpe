@@ -71,7 +71,13 @@ const buildChannelOptions = ({
   };
 };
 
-export const EegViewer = ({ nvRef_eegtopo, provider, channelNames, onReady, onTopoNvReady }) => {
+export const EegViewer = ({
+  nvRef_eegtopo,
+  provider,
+  channelNames,
+  onViewReady,
+  onTopoNvReady,
+}) => {
   const { isDarkMode } = useTheme();
   const syncKey = 'eeg-sync'; // shared across all channels to link their interactions
 
@@ -254,14 +260,14 @@ export const EegViewer = ({ nvRef_eegtopo, provider, channelNames, onReady, onTo
     updateVisibleChannelCount(visibleChannelCount);
   }, [channelAreaHeight]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Signal onReady once the first measurement lands and charts have rendered
-  const onReadyCalledRef = useRef(false);
+  // Signal onViewReady once the first measurement lands and charts have rendered
+  const onViewReadyCalledRef = useRef(false);
   useEffect(() => {
-    if (plotWidth > 0 && !onReadyCalledRef.current) {
-      onReadyCalledRef.current = true;
-      onReady?.();
+    if (plotWidth > 0 && !onViewReadyCalledRef.current) {
+      onViewReadyCalledRef.current = true;
+      onViewReady?.();
     }
-  }, [plotWidth, onReady]);
+  }, [plotWidth, onViewReady]);
 
   useEffect(() => {
     const onMouseMove = (e) => {

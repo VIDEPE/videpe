@@ -1190,17 +1190,21 @@ describe('EegViewer — time shift clamping', () => {
   });
 });
 
-describe('EegViewer — onReady callback', () => {
-  it('calls onReady once the first measurement lands', async () => {
-    const onReady = vi.fn();
+describe('EegViewer — onViewReady callback', () => {
+  it('calls onViewReady once the first measurement lands', async () => {
+    const onViewReady = vi.fn();
     const provider = makeProvider();
     render(
-      <EegViewer provider={provider} channelNames={provider.channelNames} onReady={onReady} />
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        onViewReady={onViewReady}
+      />
     );
 
     // ResizeObserver fires synchronously in the mock, so plotWidth > 0 right away —
-    // onReady fires immediately, independent of the (async) buffer load.
-    expect(onReady).toHaveBeenCalledTimes(1);
+    // onViewReady fires immediately, independent of the (async) buffer load.
+    expect(onViewReady).toHaveBeenCalledTimes(1);
   });
 });
 

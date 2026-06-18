@@ -3,14 +3,22 @@ import { NVMesh, NVMeshUtilities, SLICE_TYPE } from '@niivue/niivue';
 import { X, Maximize2, Minimize2 } from 'lucide-react';
 import { buildEegMesh, averageReference, medianReference } from '@/utils/eegTopography';
 
-export function EegTopoViewer({ nvRef, electrodes, matched, voltages, totalChannels, onClose, onTopoNvReady }) {
-  const canvasRef = useRef(null);;
+export function EegTopoViewer({
+  nvRef,
+  electrodes,
+  matched,
+  voltages,
+  totalChannels,
+  onClose,
+  onTopoNvReady,
+}) {
+  const canvasRef = useRef(null);
   const [reference, setReference] = useState('average'); // 'none' | 'average' | 'median'
   const [isMaximized, setIsMaximized] = useState(false);
   const [position, setPosition] = useState({ x: 80, y: 80 });
   const dragOffset = useRef(null);
 
-   // Initialise NiiVue once on mount
+  // Initialise NiiVue once on mount
   useEffect(() => {
     const nv = nvRef.current;
     nv.setSliceType(SLICE_TYPE.RENDER); // force slicetype to render for a 3D view

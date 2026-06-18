@@ -14,7 +14,6 @@ import { detectAndLoadEEG, checkEegFiles } from '../loaders/eegFormats';
 import { FileDropZone } from '../components/FileDropZone';
 import { detectVolumeType, filesToVolumes } from '../components/NiiViewer.utils';
 
-
 const DEMO_EEG = {
   header: 'demo_data/sub-synth_task-rest_eeg.vhdr',
   data: 'demo_data/sub-synth_task-rest_eeg.eeg',
@@ -56,27 +55,25 @@ export const PatientView = () => {
   const [niiNvReady, setNiiNvReady] = useState(false); // flag when the NiiViewer canvas is initialised
   const [topoNvReady, setTopoNvReady] = useState(false); // flag when EegTopoViewer canvas is initialised
 
-
-  const nvRef_niiviewer = useRef()
+  const nvRef_niiviewer = useRef();
   // Initialise NiiVue for NiiViewer once on mount
   useEffect(() => {
-      nvRef_niiviewer.current = new Niivue({
-        isOrientCube: true,
-        dragAndDropEnabled: false,
-        show3Dcrosshair: true,
-      });
-      return () => {
-        nvRef_niiviewer.current = null;
-      }
-      
+    nvRef_niiviewer.current = new Niivue({
+      isOrientCube: true,
+      dragAndDropEnabled: false,
+      show3Dcrosshair: true,
+    });
+    return () => {
+      nvRef_niiviewer.current = null;
+    };
   }, []);
 
-  const nvRef_eegtopo = useRef()
+  const nvRef_eegtopo = useRef();
   // Initialise NiiVue for EEGTopography once on mount
   useEffect(() => {
     nvRef_eegtopo.current = new Niivue({
-          isOrientCube: true,
-        });
+      isOrientCube: true,
+    });
     return () => {
       nvRef_eegtopo.current = null;
     };
@@ -86,8 +83,7 @@ export const PatientView = () => {
     if (!niiNvReady || !topoNvReady) return;
     nvRef_niiviewer.current.broadcastTo([nvRef_eegtopo.current], { '2d': false, '3d': true });
     nvRef_eegtopo.current.broadcastTo([nvRef_niiviewer.current], { '2d': false, '3d': true });
-    }, [niiNvReady, topoNvReady]);
-
+  }, [niiNvReady, topoNvReady]);
 
   // Handler for when EEG files are dropped or selected.
   // Files accumulate across drops until all required files for a format are present.
@@ -261,8 +257,8 @@ export const PatientView = () => {
               nvRef_eegtopo={nvRef_eegtopo}
               provider={eeg}
               channelNames={eeg.channelNames}
-              onReady={() => eegReadyResolveRef.current?.()} // charts ready
-              onTopoNvReady={() => setTopoNvReady(true)}  // topo canvas ready
+              onViewReady={() => eegReadyResolveRef.current?.()} // charts ready
+              onTopoNvReady={() => setTopoNvReady(true)} // topo canvas ready
             />
           ) : (
             <div className="h-full p-2">
@@ -281,10 +277,10 @@ export const PatientView = () => {
         right={
           volumes.length > 0 ? (
             <NiiViewer
-              nvRef = {nvRef_niiviewer}
+              nvRef={nvRef_niiviewer}
               volumes={volumes}
               isFullscreen={maximizedPanel === 'right'}
-              onReady={() => niiReadyResolveRef.current?.()}
+              onViewReady={() => niiReadyResolveRef.current?.()}
               onNiiNvReady={() => setNiiNvReady(true)}
             />
           ) : (
