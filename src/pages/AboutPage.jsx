@@ -211,6 +211,22 @@ export const AboutPage = () => {
                   </li>
                   <li>Configurable number of simultaneously visible channels</li>
                   <li>Min-max downsampling keeps rendering fast at any zoom level</li>
+                  <li>
+                    EEG topography — a floating panel showing a 3D voltage map at the selected time
+                    point using{' '}
+                    <a
+                      href="https://niivue.com/"
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ color: 'var(--c-primary)' }}
+                    >
+                      NiiVue
+                    </a>{' '}
+                    mesh rendering; re-reference on the fly (none, average, or median); uses
+                    Standard 10-05 electrode positions by default with support for custom{' '}
+                    <code>.elc</code> files; 3D rotation is synchronised with the neuroimaging
+                    viewer — rotate one and the other follows
+                  </li>
                 </ul>
               </div>
             </div>
