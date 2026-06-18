@@ -1,6 +1,6 @@
 # VIDEPE
 
-![Version](https://img.shields.io/badge/version-0.5.0-blue)
+![Version](https://img.shields.io/badge/version-0.6.0-blue)
 
 **V**isualization & **I**ntegration of **D**ata for **E**pilepsy **P**resurgical **E**valuation
 
@@ -22,6 +22,11 @@ All data processing happens entirely in your browser. No files are ever uploaded
   - Keyboard navigation — arrow keys for range/panning, Page Up/Down and Space for window jumps, Home/End to jump to the start/end
   - Configurable number of simultaneously visible channels
   - Min-max downsampling keeps rendering fast at any zoom level
+  - Sliding-window buffer — only a portion of the recording is kept in memory at once, so hour-long, high-channel-count recordings stay fast without exhausting browser memory
+  - **EEG topography** — showing a 3D voltage map at the selected time point using [NiiVue](https://niivue.com/) mesh rendering
+    - Re-reference on the fly: none, average, or median reference
+    - Uses Standard 10-05 electrode positions by default; load custom positions via `.elc` file
+    - 3D rotation is synchronised with the neuroimaging viewer — rotate one and the other follows
 
 - **Neuroimaging viewer** — full multiplanar and 3D rendering powered by [NiiVue](https://niivue.com/). Load multiple volumes simultaneously and adjust each one independently.
   - Supports NIfTI (`.nii`, `.nii.gz`), MGH/MGZ, GIFTI, PLY, OBJ
@@ -80,14 +85,6 @@ npm run test:run  # single run (used in CI)
 ## Deployment
 
 The app deploys automatically to GitHub Pages on every push to `main`. Tests run on every pull request.
-
-## Credits
-
-### Third-party data
-
-| Asset                                          | Source                                                                                                | Licence      |
-| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ------------ |
-| `public/electrode_positions/standard_1005.elc` | [MNE-Python](https://mne.tools/) — doi:[10.5281/zenodo.592483](https://doi.org/10.5281/zenodo.592483) | BSD 3-Clause |
 
 ## Links
 
