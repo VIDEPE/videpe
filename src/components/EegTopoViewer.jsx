@@ -1,6 +1,6 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { NVMesh, NVMeshUtilities, SLICE_TYPE } from '@niivue/niivue';
-import { X, Maximize2, Minimize2 } from 'lucide-react';
+import { TrafficLightButtons } from './TrafficLightButtons';
 import { buildEegMesh, averageReference, medianReference } from '@/utils/eegTopography';
 
 export function EegTopoViewer({
@@ -119,26 +119,11 @@ export function EegTopoViewer({
         onMouseDown={handleDragStart}
       >
         <span className="text-sm font-medium text-heading">EEG Topography</span>
-        <div className="flex gap-1">
-          <button
-            type="button"
-            onClick={() => setIsMaximized((v) => !v)}
-            className="text-foreground hover:text-heading cursor-pointer"
-            aria-label={isMaximized ? 'Restore' : 'Maximize'}
-            title={isMaximized ? 'Restore' : 'Maximize'}
-          >
-            {isMaximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-foreground hover:text-alert cursor-pointer"
-            aria-label="Close"
-            title="Close"
-          >
-            <X size={14} />
-          </button>
-        </div>
+        <TrafficLightButtons
+          onMaximize={() => setIsMaximized((v) => !v)}
+          isMaximized={isMaximized}
+          onClose={onClose}
+        />
       </div>
 
       {/* NiiVue positions its canvas absolutely inside whatever element it attaches to.
