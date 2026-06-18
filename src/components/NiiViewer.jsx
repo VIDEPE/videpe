@@ -67,6 +67,7 @@ export const NiiViewer = ({
 
   const canvas = useRef();
   const canvasContainerRef = useRef();
+  const canvasReadyRef = useRef(false); // guards attachToCanvas so StrictMode's double-invoke doesn't reinitialise the GL context
   const opacityRafRef = useRef(null); // pending rAF id for opacity updates — cancelled on each new drag event so only the latest value redraws
   const canvasSizeTimeoutRef = useRef(null); // pending debounce timeout for canvas size updates
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
@@ -94,11 +95,11 @@ export const NiiViewer = ({
 
       if (nvRef.current) {
         const nv = nvRef.current;
-        // Find the corresponding NVVolume for this layer index — we have to do this by URL since layer order can change
-        // Note that due to object referencing changing nVVolume properties updates same properties inside nv for that specific volume
-        const nvVolume = nv.volumes.find((nvVol) => nvVol.url === orderedVolumes[layerIndex].url);
+        // Use the layer index directly — load, reorder, and delete operations update both
+        // orderedVolumes and nv.volumes together, so their positions always match.
+        const nvVolume = nv.volumes[layerIndex];
         if (!nvVolume) return;
-        const nvIndex = nv.volumes.indexOf(nvVolume);
+        const nvIndex = layerIndex;
 
         if (key === 'visible') {
           nv.setOpacity(nvIndex, value ? nextLayerSettings[layerIndex].opacity : 0);
@@ -219,38 +220,56 @@ export const NiiViewer = ({
     [orderedVolumes, layerSettings]
   );
 
+  // Attach the NiiVue instance to the canvas once when the viewer mounts.
+  // Separated from volume loading so that React StrictMode's double-invoke of effects
+  // (which runs every effect twice in development) does not call attachToCanvas twice.
+  // A second attachToCanvas call reinitialises the WebGL context, wiping all loaded
+  // volumes and colormaps — causing them to turn grey. The canvasReadyRef guard ensures
+  // the setup only runs once even when StrictMode re-invokes the effect.
   useEffect(() => {
-    // Guard clause — if no volumes provided, don't even try to initialize NiiVue
+    if (!nvRef.current || canvasReadyRef.current) return;
+    canvasReadyRef.current = true;
+    const nv = nvRef.current;
+    nv.opts.multiplanarShowRender = SHOW_RENDER.ALWAYS;
+    nv.setMultiplanarLayout(MULTIPLANAR_TYPE.GRID);
+    nv.opts.multiplanarEqualSize = false;
+    nv.setCornerOrientationText(false);
+    nv.attachToCanvas(canvas.current);
+    onNiiNvReady?.();
+  }, []);
+
+  // Load and sync volumes whenever the volumes prop changes.
+  // The cancelled flag prevents a stale load (e.g. from StrictMode's double-invoke or a
+  // rapid volumes change) from calling setIsLoading/onViewReady after the effect has been
+  // superseded.
+  useEffect(() => {
     if (!volumes.length) return;
 
     const initialLayerSettings = getInitialLayerSettings(volumes);
     setLayerSettings(initialLayerSettings);
-    setOrderedVolumes(volumes); // Reset order whenever the volumes prop changes
+    setOrderedVolumes(volumes);
     setIsLoading(true);
 
-    async function setupAndLoad(nvRef) {
+    let cancelled = false;
+
+    const loadAndSync = async () => {
       try {
-        const nv = nvRef.current;
-        // Always show volume render with slices
-        nv.opts.multiplanarShowRender = SHOW_RENDER.ALWAYS;
-        nv.setMultiplanarLayout(MULTIPLANAR_TYPE.GRID); // Set to grid layout (2x2)
-        nv.opts.multiplanarEqualSize = false; // disable equal size tiles to have crosshairs align in views
-        nv.setCornerOrientationText(false); // Show orientation text centered (default)
-
-        // Attach to a canvas and signal PatientView it is ready for synchronising to the EegTopoViewer
-        nv.attachToCanvas(canvas.current);
-        onNiiNvReady?.();
-
-        await syncVolumesAndApplySettings(nv, volumes, initialLayerSettings);
+        await syncVolumesAndApplySettings(nvRef.current, volumes, initialLayerSettings);
+        if (cancelled) return;
         setIsLoading(false);
         onViewReady?.();
       } catch (loadError) {
+        if (cancelled) return;
         toast.error(`Failed to load image: ${loadError.message}`);
         setIsLoading(false);
       }
-    }
+    };
 
-    setupAndLoad(nvRef);
+    loadAndSync();
+
+    return () => {
+      cancelled = true;
+    };
   }, [volumes]);
 
   return (
