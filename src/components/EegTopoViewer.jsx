@@ -11,9 +11,13 @@ export function EegTopoViewer({
   totalChannels,
   onClose,
   onTopoNvReady,
+  isStandardElectrodes = true,
+  onElcFile,
 }) {
   const canvasRef = useRef(null);
+  const fileInputRef = useRef(null);
   const [reference, setReference] = useState('average'); // 'none' | 'average' | 'median'
+  const [customFileName, setCustomFileName] = useState(null); // filename (no extension) of the loaded custom positions file
   const [isMaximized, setIsMaximized] = useState(false);
   const [position, setPosition] = useState({ x: 80, y: 80 });
   const dragOffset = useRef(null);
@@ -150,6 +154,36 @@ export function EegTopoViewer({
             <option value="median">Median</option>
           </select>
         </div>
+      </div>
+
+      {/* Electrode source row */}
+      <div className="flex items-center justify-between px-2 py-1 text-xs border-t border-border shrink-0 bg-surface">
+        <span className="text-foreground/60">
+          {isStandardElectrodes ? 'Default: Standard 10-05' : (customFileName ?? 'Custom')}
+        </span>
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          className="text-foreground/60 hover:text-heading cursor-pointer underline underline-offset-2"
+          aria-label="Use custom positions"
+        >
+          Use custom positions
+        </button>
+        {/* accept is .elc only for now — more parsers will extend this list later */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".elc"
+          hidden
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) {
+              setCustomFileName(file.name.replace(/\.[^.]+$/, ''));
+              onElcFile?.(file);
+            }
+            e.target.value = ''; // reset so the same file can be re-selected
+          }}
+        />
       </div>
     </div>
   );

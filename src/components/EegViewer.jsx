@@ -1,4 +1,4 @@
-﻿import { useRef, useState, useEffect, useMemo } from 'react';
+﻿import { useRef, useState, useEffect, useMemo, useCallback } from 'react';
 import UplotReact from 'uplot-react';
 import toast from 'react-hot-toast';
 import 'uplot/dist/uPlot.min.css';
@@ -173,8 +173,10 @@ export const EegViewer = ({
   const [topoTimepoint, setTopoTimepoint] = useState(null);
   const [electrodes, setElectrodes] = useState([]);
   const [matched, setMatched] = useState([]);
+  const [isStandardElectrodes, setIsStandardElectrodes] = useState(true);
 
-  // Fetch the built-in electrode position template and match it against the recording's channel names
+  // Fetch the built-in electrode position template and match it against the recording's channel names.
+  // Resets to standard whenever channelNames changes (new recording loaded).
   useEffect(() => {
     fetch('electrode_positions/standard_1005.elc')
       .then((r) => r.text())
@@ -182,9 +184,26 @@ export const EegViewer = ({
         const { electrodes: els } = parseElc(text);
         setElectrodes(els);
         setMatched(matchChannelsToPositions(channelNames, els).matched);
+        setIsStandardElectrodes(true);
       })
       .catch(() => {}); // silently ignore if file unavailable (e.g. in tests without the asset)
   }, [channelNames]);
+
+  // Parse a user-supplied electrode position file and replace the current positions.
+  const handleCustomElc = useCallback(
+    (file) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const { electrodes: els } = parseElc(e.target.result);
+        if (!els.length) return; // ignore empty or unparseable files
+        setElectrodes(els);
+        setMatched(matchChannelsToPositions(channelNames, els).matched);
+        setIsStandardElectrodes(false);
+      };
+      reader.readAsText(file);
+    },
+    [channelNames]
+  );
 
   // Extract one voltage per matched channel from the buffer at the clicked timepoint
   const topoVoltages = useMemo(() => {
@@ -798,6 +817,8 @@ export const EegViewer = ({
           totalChannels={channelNames.length}
           onClose={() => setTopoVisible(false)}
           onTopoNvReady={onTopoNvReady}
+          isStandardElectrodes={isStandardElectrodes}
+          onElcFile={handleCustomElc}
         />
       )}
     </>

@@ -206,6 +206,48 @@ describe('EegTopoViewer', () => {
     });
   });
 
+  describe('electrode source', () => {
+    it('shows "Default: Standard 10-05" label when isStandardElectrodes is true', async () => {
+      await act(async () =>
+        render(<EegTopoViewer {...defaultProps} isStandardElectrodes={true} />)
+      );
+      expect(screen.getByText(/default: standard 10-05/i)).toBeTruthy();
+    });
+
+    it('shows the filename (without extension) after a custom file is loaded', async () => {
+      const onElcFile = vi.fn();
+      const { container } = await act(async () =>
+        render(
+          <EegTopoViewer {...defaultProps} isStandardElectrodes={false} onElcFile={onElcFile} />
+        )
+      );
+      const file = new File(['# ASA electrode file'], 'my_cap.elc');
+      const input = container.querySelector('input[type="file"]');
+      await userEvent.upload(input, file);
+      expect(screen.getByText('my_cap')).toBeTruthy();
+    });
+
+    it('renders a "Use custom positions" button', async () => {
+      await act(async () =>
+        render(<EegTopoViewer {...defaultProps} isStandardElectrodes={true} />)
+      );
+      expect(screen.getByRole('button', { name: /use custom positions/i })).toBeTruthy();
+    });
+
+    it('calls onElcFile with the selected File when a positions file is chosen', async () => {
+      const onElcFile = vi.fn();
+      const { container } = await act(async () =>
+        render(
+          <EegTopoViewer {...defaultProps} isStandardElectrodes={true} onElcFile={onElcFile} />
+        )
+      );
+      const file = new File(['# ASA electrode file'], 'custom.elc');
+      const input = container.querySelector('input[type="file"]');
+      await userEvent.upload(input, file);
+      expect(onElcFile).toHaveBeenCalledWith(file);
+    });
+  });
+
   describe('maximize / restore', () => {
     it('changes the button label to Restore after clicking Maximize', async () => {
       await act(async () => render(<EegTopoViewer {...defaultProps} />));
