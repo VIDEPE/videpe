@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { Niivue } from '@niivue/niivue';
+
 import { FullWidthLayout } from '../components/FullWidthLayout';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { EegViewer } from '../components/EegViewer';
@@ -48,6 +50,37 @@ export const PatientView = () => {
   const [pendingEegFiles, setPendingEegFiles] = useState([]);
   const [eegHint, setEegHint] = useState(null);
   const [maximizedPanel, setMaximizedPanel] = useState(null); // null | 'left' | 'right'
+
+  // when both these flags are true, then the two plots can be synchronised
+  const [niiNvReady, setNiiNvReady] = useState(false); // flag when the NiiViewer canvas is initialised
+  const [topoNvReady, setTopoNvReady] = useState(false); // flag when EegTopoViewer canvas is initialised
+
+  // Lazy ref initialisation — instance is created once on first render and never replaced.
+  // A useEffect with cleanup would let React StrictMode's mount→cleanup→remount cycle null
+  // out and recreate the instance, causing NiiViewer's canvasReadyRef guard (set during the
+  // first mount) to block attachToCanvas on the second instance, leaving nvRef.current
+  // pointing at an instance with no WebGL context and making all controls unresponsive.
+  const nvRef_niiviewer = useRef(null);
+  if (nvRef_niiviewer.current === null) {
+    nvRef_niiviewer.current = new Niivue({
+      isOrientCube: true,
+      dragAndDropEnabled: false,
+      show3Dcrosshair: true,
+    });
+  }
+
+  const nvRef_eegtopo = useRef(null);
+  if (nvRef_eegtopo.current === null) {
+    nvRef_eegtopo.current = new Niivue({
+      isOrientCube: true,
+    });
+  }
+
+  useEffect(() => {
+    if (!niiNvReady || !topoNvReady) return;
+    nvRef_niiviewer.current.broadcastTo([nvRef_eegtopo.current], { '2d': false, '3d': true });
+    nvRef_eegtopo.current.broadcastTo([nvRef_niiviewer.current], { '2d': false, '3d': true });
+  }, [niiNvReady, topoNvReady]);
 
   // Handler for when EEG files are dropped or selected.
   // Files accumulate across drops until all required files for a format are present.
@@ -218,9 +251,11 @@ export const PatientView = () => {
         left={
           eeg ? (
             <EegViewer
+              nvRef_eegtopo={nvRef_eegtopo}
               provider={eeg}
               channelNames={eeg.channelNames}
-              onReady={() => eegReadyResolveRef.current?.()}
+              onViewReady={() => eegReadyResolveRef.current?.()} // charts ready
+              onTopoNvReady={() => setTopoNvReady(true)} // topo canvas ready
             />
           ) : (
             <div className="h-full p-2">
@@ -239,9 +274,11 @@ export const PatientView = () => {
         right={
           volumes.length > 0 ? (
             <NiiViewer
+              nvRef={nvRef_niiviewer}
               volumes={volumes}
               isFullscreen={maximizedPanel === 'right'}
-              onReady={() => niiReadyResolveRef.current?.()}
+              onViewReady={() => niiReadyResolveRef.current?.()}
+              onNiiNvReady={() => setNiiNvReady(true)}
             />
           ) : (
             <div className="h-full p-2">

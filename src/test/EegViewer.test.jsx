@@ -3,12 +3,44 @@ import { render, screen, within, fireEvent, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { EegViewer } from '@/components/EegViewer';
 
+// capturedClickHandler stores the 'click' listener attached to u.over inside onCreate,
+// so tests can fire a simulated click without a real uPlot instance.
+let capturedClickHandler = null;
+
 vi.mock('uplot-react', () => {
-  const UplotReactMock = vi.fn(function () {
+  const UplotReactMock = vi.fn(function ({ onCreate }) {
+    if (onCreate) {
+      // Simulate uPlot calling onCreate with a minimal fake instance
+      const fakeUplot = {
+        cursor: { left: 100 },
+        posToVal: (_px, _scale) => 5.0,
+        over: {
+          addEventListener: (_event, handler) => {
+            capturedClickHandler = handler;
+          },
+        },
+      };
+      onCreate(fakeUplot);
+    }
     return null;
   });
   return { default: UplotReactMock };
 });
+
+// Isolate EegViewer tests from NiiVue's WebGL dependency — stub EegTopoViewer with a
+// minimal element that exposes the data and close button tests need.
+vi.mock('@/components/EegTopoViewer', () => ({
+  EegTopoViewer: vi.fn(function ({ onClose, totalChannels, matched }) {
+    return (
+      <div data-testid="eeg-topo-viewer">
+        <span>
+          {matched.length} / {totalChannels} channels mapped
+        </span>
+        <button onClick={onClose}>Close topo</button>
+      </div>
+    );
+  }),
+}));
 
 vi.mock('@/components/ThemeContext', () => ({
   useTheme: function () {
@@ -26,9 +58,24 @@ vi.mock('react-hot-toast', () => ({
   },
 }));
 
+// Minimal .elc content whose labels match two of the three test channel names
+const MOCK_ELC = `ReferenceLabel avg
+UnitPosition mm
+NumberPositions= 3
+Positions
+-29.0 84.0 -7.0
+29.0 84.0 -7.0
+0.0 0.0 88.0
+Labels
+EEG1
+EEG2
+Cz
+`;
+
 // jsdom does not implement ResizeObserver; use a class so `new` works,
 // and fire the callback immediately so plotWidth/plotHeight become non-zero
 beforeEach(() => {
+  capturedClickHandler = null;
   global.ResizeObserver = class {
     constructor(callback) {
       this._cb = callback;
@@ -38,6 +85,7 @@ beforeEach(() => {
     }
     disconnect() {}
   };
+  global.fetch = vi.fn().mockResolvedValue({ text: () => Promise.resolve(MOCK_ELC) });
 });
 
 const INITIAL_Y_SCALE = 10; // must match the yScale useState default in EegViewer
@@ -487,9 +535,10 @@ describe('EegViewer — plot rendering', () => {
 
     await renderViewer();
 
-    // +1 for the fixed x-axis strip rendered below the scroll area. Rendered twice:
-    // once while the initial buffer is loading (empty data), once after it resolves.
-    expect(UplotReactMock).toHaveBeenCalledTimes(2 * (channelNames.length + 1));
+    // +1 for the fixed x-axis strip. Rendered three times:
+    // once while the initial buffer is loading, once after it resolves,
+    // and once after the electrode position file loads and updates matched channels.
+    expect(UplotReactMock).toHaveBeenCalledTimes(3 * (channelNames.length + 1));
   });
 
   it('renders a label overlay for each channel name', async () => {
@@ -524,6 +573,48 @@ describe('EegViewer — plot rendering', () => {
     yRanges.forEach((range) =>
       expect(range).toEqual([-INITIAL_Y_SCALE * OVERDRAW, INITIAL_Y_SCALE * OVERDRAW])
     );
+  });
+});
+
+// ── EEG topography wiring ─────────────────────────────────────────────────────
+
+describe('EegViewer — topography wiring', () => {
+  it('fetches the electrode position file on mount', async () => {
+    await renderViewer();
+    expect(global.fetch).toHaveBeenCalledWith('electrode_positions/standard_1005.elc');
+  });
+
+  it('does not show EegTopoViewer on initial render', async () => {
+    await renderViewer();
+    expect(screen.queryByTestId('eeg-topo-viewer')).toBeNull();
+  });
+
+  it('clicking a channel plot opens EegTopoViewer', async () => {
+    await renderViewer();
+    await act(async () => {
+      capturedClickHandler?.();
+    });
+    expect(screen.getByTestId('eeg-topo-viewer')).toBeTruthy();
+  });
+
+  it('closing EegTopoViewer hides it', async () => {
+    await renderViewer();
+    // Open
+    await act(async () => {
+      capturedClickHandler?.();
+    });
+    // Close
+    await userEvent.click(screen.getByText('Close topo'));
+    expect(screen.queryByTestId('eeg-topo-viewer')).toBeNull();
+  });
+
+  it('passes total channel count to EegTopoViewer', async () => {
+    await renderViewer();
+    await act(async () => {
+      capturedClickHandler?.();
+    });
+    // MOCK_ELC has 2 labels matching the test channel names (EEG1, EEG2); total is 3
+    expect(screen.getByText(/2\s*\/\s*3\s*channels mapped/i)).toBeTruthy();
   });
 });
 
@@ -1099,17 +1190,21 @@ describe('EegViewer — time shift clamping', () => {
   });
 });
 
-describe('EegViewer — onReady callback', () => {
-  it('calls onReady once the first measurement lands', async () => {
-    const onReady = vi.fn();
+describe('EegViewer — onViewReady callback', () => {
+  it('calls onViewReady once the first measurement lands', async () => {
+    const onViewReady = vi.fn();
     const provider = makeProvider();
     render(
-      <EegViewer provider={provider} channelNames={provider.channelNames} onReady={onReady} />
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        onViewReady={onViewReady}
+      />
     );
 
     // ResizeObserver fires synchronously in the mock, so plotWidth > 0 right away —
-    // onReady fires immediately, independent of the (async) buffer load.
-    expect(onReady).toHaveBeenCalledTimes(1);
+    // onViewReady fires immediately, independent of the (async) buffer load.
+    expect(onViewReady).toHaveBeenCalledTimes(1);
   });
 });
 

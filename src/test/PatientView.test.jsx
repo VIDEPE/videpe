@@ -228,7 +228,7 @@ describe('PatientView — demo loading', () => {
     renderPatientView();
 
     // fireEvent instead of userEvent — handleLoadDemo never fully resolves because the mocked
-    // NiiViewer and EegViewer never call onReady, so Promise.all([eegReady, niiReady]) hangs.
+    // NiiViewer and EegViewer never call onViewReady, so Promise.all([eegReady, niiReady]) hangs.
     // waitFor flushes pending microtasks between retries, letting setVolumes fire.
     fireEvent.click(screen.getByRole('button', { name: /load demo/i }));
 
@@ -289,7 +289,7 @@ describe('PatientView — imaging file-type detection', () => {
     });
   });
 
-  // Fire-and-forget — handleNiiFiles awaits NiiViewer's onReady, which the mock never calls,
+  // Fire-and-forget — handleNiiFiles awaits NiiViewer's onViewReady, which the mock never calls,
   // so the returned promise never settles. waitFor flushes pending microtasks between
   // retries, letting setVolumes fire so we can inspect the props passed to NiiViewer.
   it('passes type MRI to NiiViewer for a BIDS T1w file', async () => {
