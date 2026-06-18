@@ -55,29 +55,26 @@ export const PatientView = () => {
   const [niiNvReady, setNiiNvReady] = useState(false); // flag when the NiiViewer canvas is initialised
   const [topoNvReady, setTopoNvReady] = useState(false); // flag when EegTopoViewer canvas is initialised
 
-  const nvRef_niiviewer = useRef();
-  // Initialise NiiVue for NiiViewer once on mount
-  useEffect(() => {
+  // Lazy ref initialisation — instance is created once on first render and never replaced.
+  // A useEffect with cleanup would let React StrictMode's mount→cleanup→remount cycle null
+  // out and recreate the instance, causing NiiViewer's canvasReadyRef guard (set during the
+  // first mount) to block attachToCanvas on the second instance, leaving nvRef.current
+  // pointing at an instance with no WebGL context and making all controls unresponsive.
+  const nvRef_niiviewer = useRef(null);
+  if (nvRef_niiviewer.current === null) {
     nvRef_niiviewer.current = new Niivue({
       isOrientCube: true,
       dragAndDropEnabled: false,
       show3Dcrosshair: true,
     });
-    return () => {
-      nvRef_niiviewer.current = null;
-    };
-  }, []);
+  }
 
-  const nvRef_eegtopo = useRef();
-  // Initialise NiiVue for EEGTopography once on mount
-  useEffect(() => {
+  const nvRef_eegtopo = useRef(null);
+  if (nvRef_eegtopo.current === null) {
     nvRef_eegtopo.current = new Niivue({
       isOrientCube: true,
     });
-    return () => {
-      nvRef_eegtopo.current = null;
-    };
-  }, []);
+  }
 
   useEffect(() => {
     if (!niiNvReady || !topoNvReady) return;

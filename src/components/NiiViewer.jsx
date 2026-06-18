@@ -68,6 +68,7 @@ export const NiiViewer = ({
   const canvas = useRef();
   const canvasContainerRef = useRef();
   const canvasReadyRef = useRef(false); // guards attachToCanvas so StrictMode's double-invoke doesn't reinitialise the GL context
+  const loadingVolumesRef = useRef(null); // reference to the volumes array currently being loaded — prevents StrictMode's double-invoke from firing nv.loadVolumes twice
   const opacityRafRef = useRef(null); // pending rAF id for opacity updates — cancelled on each new drag event so only the latest value redraws
   const canvasSizeTimeoutRef = useRef(null); // pending debounce timeout for canvas size updates
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
@@ -239,37 +240,40 @@ export const NiiViewer = ({
   }, []);
 
   // Load and sync volumes whenever the volumes prop changes.
-  // The cancelled flag prevents a stale load (e.g. from StrictMode's double-invoke or a
-  // rapid volumes change) from calling setIsLoading/onViewReady after the effect has been
-  // superseded.
+  // loadingVolumesRef serves two purposes:
+  //   1. Guard at the top: same array reference means this exact load is already in flight
+  //      (StrictMode double-invoke). Bail out before touching NiiVue so nv.loadVolumes is
+  //      never called twice, which would leave nv.volumes in a corrupted empty state.
+  //   2. Guard in the async callback: if loadingVolumesRef has moved on to a different
+  //      volumes array by the time the load completes, this load has been superseded and
+  //      must not update React state (setIsLoading / onViewReady).
   useEffect(() => {
-    if (!volumes.length) return;
+    if (!volumes.length) {
+      loadingVolumesRef.current = null; // reset so the next non-empty load can proceed
+      return;
+    }
+    if (loadingVolumesRef.current === volumes) return; // StrictMode: already loading these volumes
+    loadingVolumesRef.current = volumes;
 
     const initialLayerSettings = getInitialLayerSettings(volumes);
     setLayerSettings(initialLayerSettings);
     setOrderedVolumes(volumes);
     setIsLoading(true);
 
-    let cancelled = false;
-
     const loadAndSync = async () => {
       try {
         await syncVolumesAndApplySettings(nvRef.current, volumes, initialLayerSettings);
-        if (cancelled) return;
+        if (loadingVolumesRef.current !== volumes) return; // superseded by a newer load
         setIsLoading(false);
         onViewReady?.();
       } catch (loadError) {
-        if (cancelled) return;
+        if (loadingVolumesRef.current !== volumes) return;
         toast.error(`Failed to load image: ${loadError.message}`);
         setIsLoading(false);
       }
     };
 
     loadAndSync();
-
-    return () => {
-      cancelled = true;
-    };
   }, [volumes]);
 
   return (
