@@ -343,12 +343,14 @@ describe('NiiViewer', () => {
 
   describe('component rendering', () => {
     it('renders a label for each loaded volume', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
       const volumes = [
         { type: 'MRI', url: '/mri.nii' },
         { type: 'PET', url: '/pet.nii' },
         { type: 'SPECT', url: '/spect.nii' },
       ];
-      render(<NiiViewer volumes={volumes} />);
+      render(<NiiViewer nvRef={nvRef} volumes={volumes} />);
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
       expect(screen.getByText('MRI')).toBeInTheDocument();
       expect(screen.getByText('PET')).toBeInTheDocument();
@@ -373,13 +375,16 @@ describe('NiiViewer', () => {
           volumes: [],
         };
       });
+      const nvRef = { current: new Niivue() };
 
-      render(<NiiViewer volumes={[{ type: 'MRI', url: '/mri.nii' }]} />);
+      render(<NiiViewer nvRef={nvRef} volumes={[{ type: 'MRI', url: '/mri.nii' }]} />);
       expect(screen.getByTestId('loading-spinner')).toBeInTheDocument();
     });
 
     it('hides the loading spinner once volumes have loaded', async () => {
-      render(<NiiViewer volumes={[{ type: 'MRI', url: '/mri.nii' }]} />);
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      render(<NiiViewer nvRef={nvRef} volumes={[{ type: 'MRI', url: '/mri.nii' }]} />);
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
     });
 
@@ -401,8 +406,9 @@ describe('NiiViewer', () => {
         };
       });
 
+      const nvRef = { current: new Niivue() };
       const { default: toast } = await import('react-hot-toast');
-      render(<NiiViewer volumes={[{ type: 'MRI', url: '/mri.nii' }]} />);
+      render(<NiiViewer nvRef={nvRef} volumes={[{ type: 'MRI', url: '/mri.nii' }]} />);
 
       await waitFor(() =>
         expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/failed to load image/i))
@@ -411,14 +417,17 @@ describe('NiiViewer', () => {
 
     it('calls nv.setColormap when the colormap setting changes', async () => {
       const { Niivue } = await import('@niivue/niivue');
-      render(<NiiViewer volumes={[{ type: 'MRI', url: '/mri.nii', id: 'mri-id' }]} />);
+      const nvRef = { current: new Niivue() };
+      render(
+        <NiiViewer nvRef={nvRef} volumes={[{ type: 'MRI', url: '/mri.nii', id: 'mri-id' }]} />
+      );
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
 
       // Expand the MRI card and change the colormap
       await userEvent.click(screen.getByRole('button', { name: 'Expand MRI controls' }));
       await userEvent.selectOptions(screen.getByLabelText('MRI colormap'), 'magma');
 
-      const nv = Niivue.mock.results[Niivue.mock.results.length - 1].value;
+      const nv = nvRef.current;
       // toHaveBeenLastCalledWith isolates the handleSettingChange call from the initial syncVolumesAndApplySettings call
       expect(nv.setColormap).toHaveBeenLastCalledWith('mri-id', 'magma');
     });
@@ -445,9 +454,10 @@ describe('NiiViewer', () => {
 
     const setup = async () => {
       const { Niivue } = await import('@niivue/niivue');
-      render(<NiiViewer volumes={[{ type: 'MRI', url: '/mri.nii' }]} />);
+      const nvRef = { current: new Niivue() };
+      render(<NiiViewer nvRef={nvRef} volumes={[{ type: 'MRI', url: '/mri.nii' }]} />);
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
-      const nv = Niivue.mock.results[Niivue.mock.results.length - 1].value;
+      const nv = nvRef.current;
       nv.setMultiplanarLayout.mockClear();
       return nv;
     };
@@ -498,9 +508,10 @@ describe('NiiViewer', () => {
     // Helper: render NiiViewer, wait for load, return the nv mock instance with mocks cleared
     const setup = async () => {
       const { Niivue } = await import('@niivue/niivue');
-      render(<NiiViewer volumes={[{ type: 'MRI', url: '/mri.nii' }]} />);
+      const nvRef = { current: new Niivue() };
+      render(<NiiViewer nvRef={nvRef} volumes={[{ type: 'MRI', url: '/mri.nii' }]} />);
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
-      const nv = Niivue.mock.results[Niivue.mock.results.length - 1].value;
+      const nv = nvRef.current;
       // Clear calls from initial load so assertions only count post-load interactions
       nv.setOpacity.mockClear();
       nv.updateGLVolume.mockClear();
@@ -534,9 +545,10 @@ describe('NiiViewer', () => {
     // Helper: render NiiViewer, wait for load, return the nv mock instance with mocks cleared
     const setup = async () => {
       const { Niivue, SLICE_TYPE } = await import('@niivue/niivue');
-      render(<NiiViewer volumes={[{ type: 'MRI', url: '/mri.nii' }]} />);
+      const nvRef = { current: new Niivue() };
+      render(<NiiViewer nvRef={nvRef} volumes={[{ type: 'MRI', url: '/mri.nii' }]} />);
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
-      const nv = Niivue.mock.results[Niivue.mock.results.length - 1].value;
+      const nv = nvRef.current;
       // Clear calls from initial load so assertions only count post-load interactions
       nv.setSliceType.mockClear();
       return { nv, SLICE_TYPE };
@@ -585,7 +597,9 @@ describe('NiiViewer', () => {
 
   describe('appending volumes via the file drop zone', () => {
     it('does not give a newly-appended volume full opacity when other volumes are already loaded', async () => {
-      render(<NiiViewer volumes={[{ type: 'MRI', url: '/mri.nii' }]} />);
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      render(<NiiViewer nvRef={nvRef} volumes={[{ type: 'MRI', url: '/mri.nii' }]} />);
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
 
       const input = document.querySelector('input[type="file"]');
@@ -601,8 +615,10 @@ describe('NiiViewer', () => {
   describe('handleDeleteVolume', () => {
     const setup = async () => {
       const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
       render(
         <NiiViewer
+          nvRef={nvRef}
           volumes={[
             { type: 'MRI', url: '/mri.nii' },
             { type: 'PET', url: '/pet.nii' },
@@ -610,7 +626,7 @@ describe('NiiViewer', () => {
         />
       );
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
-      const nv = Niivue.mock.results[Niivue.mock.results.length - 1].value;
+      const nv = nvRef.current;
       // Clear calls from initial load so assertions only count post-load interactions
       nv.setOpacity.mockClear();
       nv.updateGLVolume.mockClear();

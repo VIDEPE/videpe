@@ -51,6 +51,7 @@ const VOLTAGES = [10, -5];
 const TOTAL_CHANNELS = 10;
 
 const defaultProps = {
+  nvRef: { current: mockNvInstance },
   electrodes: ELECTRODES,
   matched: MATCHED,
   voltages: VOLTAGES,
@@ -110,9 +111,7 @@ describe('EegTopoViewer', () => {
   });
 
   it('attaches NiiVue to the canvas on mount', async () => {
-    const { Niivue } = await import('@niivue/niivue');
     await act(async () => render(<EegTopoViewer {...defaultProps} />));
-    expect(Niivue).toHaveBeenCalled();
     expect(mockNvInstance.attachToCanvas).toHaveBeenCalled();
   });
 
