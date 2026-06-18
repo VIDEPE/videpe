@@ -48,7 +48,7 @@ const FEATURES = [
     icon: ChartLine,
     label: 'EEG Viewer',
     description:
-      'Scroll through hundreds of channels with synchronized zoom and a scrubber that snaps to any moment.',
+      'Browse hour-long, multi-channel recordings and generate 3D topography maps for any selected timepoint.',
     anchor: '#feature-eeg',
   },
   {

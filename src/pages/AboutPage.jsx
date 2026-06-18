@@ -42,12 +42,8 @@ const PersonCard = ({ name, role, affiliation, url, urlLabel, secondaryUrl, seco
     className="flex flex-col gap-1 p-4 rounded-lg border"
     style={{ borderColor: 'var(--c-border)', background: 'var(--c-surface)' }}
   >
-    <p className="font-semibold" style={{ color: 'var(--c-heading)' }}>
-      {name}
-    </p>
-    <p className="text-sm" style={{ color: 'var(--c-foreground)' }}>
-      {role}
-    </p>
+    <p className="font-bold text-heading">{name}</p>
+    <p className="text-sm text-heading font-thin">{role}</p>
     {affiliation &&
       (Array.isArray(affiliation) ? affiliation : [affiliation]).map((a, i) => (
         <p key={i} className="text-sm" style={{ color: 'var(--c-foreground)', opacity: 0.75 }}>
@@ -169,9 +165,7 @@ export const AboutPage = () => {
                 style={{ color: 'var(--c-primary)' }}
               />
               <div>
-                <p className="font-semibold" style={{ color: 'var(--c-heading)' }}>
-                  Privacy-first: 100% local processing
-                </p>
+                <p className="font-semibold text-heading">Privacy-first: 100% local processing</p>
                 <p className="text-sm mt-1" style={{ color: 'var(--c-foreground)' }}>
                   All data processing happens entirely in your browser. No files are ever uploaded
                   to a server, sent to a third party, or stored outside your own machine. This makes
@@ -189,9 +183,7 @@ export const AboutPage = () => {
                 style={{ color: 'var(--c-primary)' }}
               />
               <div>
-                <p className="font-semibold" style={{ color: 'var(--c-heading)' }}>
-                  EEG viewer
-                </p>
+                <p className="font-semibold text-heading">EEG viewer</p>
                 <p className="text-sm mt-1" style={{ color: 'var(--c-foreground)' }}>
                   A high-performance multichannel viewer built on{' '}
                   <a
@@ -209,17 +201,32 @@ export const AboutPage = () => {
                   className="text-sm mt-2 flex flex-col gap-1 list-disc list-inside"
                   style={{ color: 'var(--c-foreground)' }}
                 >
-                  <li>Adjustable gain (µV scale), window size, and time-shift step</li>
+                  <li>Adjustable range (µV scale), window size, and time step</li>
                   <li>
                     Interactive timeline scrubber for fast navigation across the full recording
                   </li>
                   <li>
-                    Keyboard navigation — arrow keys for gain/panning, Page Up/Down and Space for
+                    Keyboard navigation — arrow keys for range/panning, Page Up/Down and Space for
                     window jumps, Home/End to jump to the start/end
                   </li>
                   <li>Configurable number of simultaneously visible channels</li>
                   <li>Min-max downsampling keeps rendering fast at any zoom level</li>
-
+                  <li>
+                    EEG topography — a floating panel showing a 3D voltage map at the selected time
+                    point using{' '}
+                    <a
+                      href="https://niivue.com/"
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ color: 'var(--c-primary)' }}
+                    >
+                      NiiVue
+                    </a>{' '}
+                    mesh rendering; re-reference on the fly (none, average, or median); uses
+                    Standard 10-05 electrode positions by default with support for custom{' '}
+                    <code>.elc</code> files; 3D rotation is synchronised with the neuroimaging
+                    viewer — rotate one and the other follows
+                  </li>
                 </ul>
               </div>
             </div>
@@ -227,9 +234,7 @@ export const AboutPage = () => {
             <div id="feature-neuroimaging" className="flex gap-3">
               <Brain size={22} className="shrink-0 mt-0.5" style={{ color: 'var(--c-primary)' }} />
               <div>
-                <p className="font-semibold" style={{ color: 'var(--c-heading)' }}>
-                  Neuroimaging viewer
-                </p>
+                <p className="font-semibold text-heading">Neuroimaging viewer</p>
                 <p className="text-sm mt-1" style={{ color: 'var(--c-foreground)' }}>
                   Full multiplanar and 3D rendering powered by{' '}
                   <a
@@ -269,9 +274,7 @@ export const AboutPage = () => {
                 style={{ color: 'var(--c-primary)' }}
               />
               <div>
-                <p className="font-semibold" style={{ color: 'var(--c-heading)' }}>
-                  Built-in demo
-                </p>
+                <p className="font-semibold text-heading">Built-in demo</p>
                 <p className="text-sm mt-1" style={{ color: 'var(--c-foreground)' }}>
                   Want to explore VIDEPE before committing your own files? Hit{' '}
                   <strong>Load Demo</strong> on the patient view to instantly load a synthetic EEG
@@ -288,9 +291,7 @@ export const AboutPage = () => {
                 style={{ color: 'var(--c-primary)' }}
               />
               <div>
-                <p className="font-semibold" style={{ color: 'var(--c-heading)' }}>
-                  Drag &amp; drop file loading
-                </p>
+                <p className="font-semibold text-heading">Drag &amp; drop file loading</p>
                 <p className="text-sm mt-1" style={{ color: 'var(--c-foreground)' }}>
                   Drop files directly onto either viewer panel. VIDEPE detects the format
                   automatically and guides you when multiple files are required.
@@ -319,9 +320,7 @@ export const AboutPage = () => {
                 style={{ color: 'var(--c-primary)' }}
               />
               <div>
-                <p className="font-semibold" style={{ color: 'var(--c-heading)' }}>
-                  Side-by-side split view
-                </p>
+                <p className="font-semibold text-heading">Side-by-side split view</p>
                 <p className="text-sm mt-1" style={{ color: 'var(--c-foreground)' }}>
                   EEG and neuroimaging panels sit side by side with a draggable divider. Each panel
                   can be independently maximised, restored, or reset, and the two panels can be
@@ -337,9 +336,7 @@ export const AboutPage = () => {
                 style={{ color: 'var(--c-primary)' }}
               />
               <div>
-                <p className="font-semibold" style={{ color: 'var(--c-heading)' }}>
-                  Cross-platform
-                </p>
+                <p className="font-semibold text-heading">Cross-platform</p>
                 <p className="text-sm mt-1" style={{ color: 'var(--c-foreground)' }}>
                   VIDEPE runs entirely in the browser — no installation, no plugins. It works on
                   modern desktop and mobile browsers alike. The interface adapts to the available
@@ -356,9 +353,7 @@ export const AboutPage = () => {
                 style={{ color: 'var(--c-primary)' }}
               />
               <div>
-                <p className="font-semibold" style={{ color: 'var(--c-heading)' }}>
-                  Open source
-                </p>
+                <p className="font-semibold text-heading">Open source</p>
                 <p className="text-sm mt-1" style={{ color: 'var(--c-foreground)' }}>
                   VIDEPE is free and open source, licensed under the{' '}
                   <a
@@ -392,7 +387,7 @@ export const AboutPage = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <PersonCard
               name="Nicolas Roehri"
-              role="Project Lead"
+              role="Principle Investigator"
               affiliation="Department of Clinical Neuroscience - University of Geneva (UNIGE)"
               url="https://neurocenter-unige.ch/research-groups/nicolas-roehri/"
               urlLabel="Research group"
@@ -401,7 +396,7 @@ export const AboutPage = () => {
             />
             <PersonCard
               name="Jeroen Buil"
-              role="Developer"
+              role="Biomedical Engineer & Software Developer"
               affiliation="Department of Clinical Neuroscience - University of Geneva (UNIGE)"
               url="https://jeroenbuil.github.io/"
               urlLabel="Website"

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Eye, EyeOff, ChevronDown, ChevronUp, GripVertical } from 'lucide-react';
 import { DragDropProvider } from '@dnd-kit/react';
 import { useSortable } from '@dnd-kit/react/sortable';
+import { X } from 'lucide-react';
 
 const COLORMAP_OPTIONS = [
   { value: 'gray', label: 'Grayscale' },
@@ -33,6 +34,7 @@ function SortableSettingsCard({
   isExpanded,
   onToggleExpand,
   onSettingChange,
+  onDeleteVolume,
 }) {
   const { ref, handleRef, isDragging } = useSortable({ id: volume.url, index });
   // Label is either "type - subtype" (e.g. "MRI - T1") or just "type" if no subtype, or "Layer {index}" as a fallback if no type
@@ -201,6 +203,19 @@ function SortableSettingsCard({
                   title={`Show ${label} colorbar`}
                 />
               </div>
+              {/* Delete Volume button */}
+              <div className="flex items-center gap-2.5 ml-auto">
+                {/* ml-auto pushes the close button to the right edge */}
+                <button
+                  className="text-foreground hover:text-alert cursor-pointer"
+                  type="button"
+                  onClick={() => onDeleteVolume(index)}
+                  aria-label={`Close ${label} volume`}
+                  title={`Close ${label} volume`}
+                >
+                  <X size={16} />
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -209,7 +224,13 @@ function SortableSettingsCard({
   );
 }
 
-export const ImagingControls = ({ volumes, layerSettings, onSettingChange, onReorder }) => {
+export const ImagingControls = ({
+  volumes,
+  layerSettings,
+  onSettingChange,
+  onReorder,
+  onDeleteVolume,
+}) => {
   // Track the expanded card by URL so the expanded state survives reordering
   const [expandedUrl, setExpandedUrl] = useState(null); // only one card can be expanded at a time, so this is either a URL or null
 
@@ -226,6 +247,7 @@ export const ImagingControls = ({ volumes, layerSettings, onSettingChange, onReo
             isExpanded={expandedUrl === volume.url}
             onToggleExpand={() => setExpandedUrl(expandedUrl === volume.url ? null : volume.url)}
             onSettingChange={onSettingChange}
+            onDeleteVolume={onDeleteVolume}
           />
         ))}
       </div>

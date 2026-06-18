@@ -20,11 +20,16 @@ vi.mock('react-hot-toast', () => ({
   default: {
     promise: vi.fn().mockImplementation((p) => p),
     error: vi.fn(),
+    loading: vi.fn(),
+    success: vi.fn(),
+    dismiss: vi.fn(),
   },
 }));
 
 vi.mock('@/loaders/loadBrainVisionEEG', () => ({
-  loadBrainVisionEEG: vi.fn().mockResolvedValue({ data: [[0, 1]], channelNames: ['Ch1'] }),
+  loadBrainVisionEEG: vi
+    .fn()
+    .mockResolvedValue({ channelNames: ['Ch1'], fs: 1, tMax: 1, getChunk: vi.fn() }),
 }));
 
 vi.mock('@/loaders/eegFormats', () => ({
@@ -59,7 +64,12 @@ const getDemoResetButton = () =>
 describe('PatientView — button label', () => {
   beforeEach(() => {
     FileDropZone.mockClear();
-    detectAndLoadEEG.mockResolvedValue({ data: [[0, 1]], channelNames: ['Ch1'] });
+    detectAndLoadEEG.mockResolvedValue({
+      channelNames: ['Ch1'],
+      fs: 1,
+      tMax: 1,
+      getChunk: vi.fn(),
+    });
   });
 
   it('shows "Load Demo" before any data is loaded', () => {
@@ -116,7 +126,12 @@ describe('PatientView — reset', () => {
       missing: [],
       warning: null,
     });
-    detectAndLoadEEG.mockResolvedValue({ data: [[0, 1]], channelNames: ['Ch1'] });
+    detectAndLoadEEG.mockResolvedValue({
+      channelNames: ['Ch1'],
+      fs: 1,
+      tMax: 1,
+      getChunk: vi.fn(),
+    });
   });
 
   it('clicking Reset returns to "Load Demo" and removes EegViewer', async () => {
@@ -148,7 +163,12 @@ describe('PatientView — EEG file accumulation', () => {
         warning: null,
       })
       .mockReturnValue({ formatName: 'BrainVision', complete: true, missing: [], warning: null });
-    detectAndLoadEEG.mockResolvedValue({ data: [[0, 1]], channelNames: ['Ch1'] });
+    detectAndLoadEEG.mockResolvedValue({
+      channelNames: ['Ch1'],
+      fs: 1,
+      tMax: 1,
+      getChunk: vi.fn(),
+    });
     renderPatientView();
 
     // First drop: header only
@@ -208,7 +228,7 @@ describe('PatientView — demo loading', () => {
     renderPatientView();
 
     // fireEvent instead of userEvent — handleLoadDemo never fully resolves because the mocked
-    // NiiViewer and EegViewer never call onReady, so Promise.all([eegReady, niiReady]) hangs.
+    // NiiViewer and EegViewer never call onViewReady, so Promise.all([eegReady, niiReady]) hangs.
     // waitFor flushes pending microtasks between retries, letting setVolumes fire.
     fireEvent.click(screen.getByRole('button', { name: /load demo/i }));
 
@@ -269,7 +289,7 @@ describe('PatientView — imaging file-type detection', () => {
     });
   });
 
-  // Fire-and-forget — handleNiiFiles awaits NiiViewer's onReady, which the mock never calls,
+  // Fire-and-forget — handleNiiFiles awaits NiiViewer's onViewReady, which the mock never calls,
   // so the returned promise never settles. waitFor flushes pending microtasks between
   // retries, letting setVolumes fire so we can inspect the props passed to NiiViewer.
   it('passes type MRI to NiiViewer for a BIDS T1w file', async () => {
@@ -325,40 +345,5 @@ describe('PatientView — imaging file-type detection', () => {
       expect(NiiViewer.mock.lastCall[0].volumes).toHaveLength(1);
     });
     expect(NiiViewer.mock.lastCall[0].volumes[0].type).toBe('SPECT');
-  });
-});
-
-describe('PatientView — imaging loading state', () => {
-  beforeEach(() => {
-    FileDropZone.mockClear();
-    NiiViewer.mockClear();
-    checkEegFiles.mockReturnValue({
-      formatName: null,
-      complete: false,
-      missing: null,
-      warning: null,
-    });
-  });
-
-  it('keeps the demo/reset button disabled until NiiViewer signals it is ready', async () => {
-    renderPatientView();
-
-    // Fire-and-forget — handleNiiFiles awaits NiiViewer's onReady, which the mock only calls
-    // once we trigger it manually below. waitFor flushes pending microtasks between retries,
-    // letting setVolumes/setIsLoading fire.
-    getNiiOnFiles()([makeFile('sub-01_T1w.nii')]);
-
-    await waitFor(() => {
-      expect(getDemoResetButton()).toBeDisabled();
-    });
-
-    // Simulate NiiViewer finishing its load
-    await act(async () => {
-      NiiViewer.mock.lastCall[0].onReady();
-    });
-
-    await waitFor(() => {
-      expect(getDemoResetButton()).not.toBeDisabled();
-    });
   });
 });

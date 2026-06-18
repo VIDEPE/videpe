@@ -1,7 +1,6 @@
 import { useRef, useState, useEffect } from 'react';
-import { Maximize2, Minimize2, ArrowLeftRight, X } from 'lucide-react';
+import { TrafficLightButtons } from './TrafficLightButtons';
 
-const ICON_SIZE = 13;
 const COLUMN_BREAKPOINT = 640; // px — matches Tailwind's 'sm' breakpoint; below this the panels stack vertically
 const MIN_PANEL_PX = 150; // minimum panel height in column mode — clamp tightens on short screens automatically
 const ROW_MIN_PCT = 25; // minimum panel width % in row mode
@@ -147,48 +146,20 @@ export const SplitPane = ({
     ? { order: swapped ? 1 : 3, flexGrow: rightGrow, flexShrink: 1, flexBasis: '0px' }
     : { order: swapped ? 1 : 3, width: `${rightGrow}%` };
 
-  // Common styles for the traffic light buttons in the panel headers
-  const trafficBtn =
-    'inline-flex items-center justify-center w-4 h-4 rounded-full border-none cursor-pointer transition-all text-foreground/50 hover:text-black/70 bg-border';
-
   // Helper to render the header for each panel, with label and control buttons
   const panelHeader = (label, side, onReset) => (
     <div className="shrink-0 flex items-center justify-between px-3 py-1 border-b border-border bg-surface">
       <h2 style={{ margin: 0 }} className="select-none pointer-events-none">
         {label}
       </h2>
-      <div className="flex items-center gap-1.5">
-        {!maximized && (
-          <button
-            type="button"
-            className={`${trafficBtn} hover:bg-[#28C840]`}
-            onClick={() => setSwapped((s) => !s)}
-            title="Swap panels"
-            aria-pressed={swapped}
-          >
-            <ArrowLeftRight size={ICON_SIZE} />
-          </button>
-        )}
-        <button
-          type="button"
-          className={`${trafficBtn} hover:bg-[#FFBD2E]`}
-          onClick={() => toggleMaximize(side)}
-          title={maximized === side ? 'Restore' : 'Maximize'}
-          aria-pressed={maximized === side}
-        >
-          {maximized === side ? <Minimize2 size={ICON_SIZE} /> : <Maximize2 size={ICON_SIZE} />}
-        </button>
-        {onReset && (
-          <button
-            type="button"
-            className={`${trafficBtn} hover:bg-[#FF5F57]`}
-            onClick={onReset}
-            title="Reset viewer"
-          >
-            <X size={ICON_SIZE} />
-          </button>
-        )}
-      </div>
+      <TrafficLightButtons
+        onSwap={!maximized ? () => setSwapped((s) => !s) : undefined}
+        isSwapped={swapped}
+        onMaximize={() => toggleMaximize(side)}
+        isMaximized={maximized === side}
+        onClose={onReset}
+        closeTitle="Reset viewer"
+      />
     </div>
   );
 

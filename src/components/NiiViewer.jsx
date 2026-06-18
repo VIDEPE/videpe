@@ -1,7 +1,10 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
-import { Niivue, SHOW_RENDER, MULTIPLANAR_TYPE, SLICE_TYPE } from '@niivue/niivue';
+import { cn } from '../utils/utils';
+import { SHOW_RENDER, MULTIPLANAR_TYPE, SLICE_TYPE } from '@niivue/niivue';
 import { move } from '@dnd-kit/helpers';
 import toast from 'react-hot-toast';
+
+const NII_LOADING_TOAST_ID = 'nii-viewer-loading'; // fixed id so loading/success toasts update in place rather than stacking
 import { getInitialLayerSettings, filesToVolumes } from './NiiViewer.utils';
 import { ImagingControls } from './ImagingControls';
 import { FileDropZone } from '../components/FileDropZone';
@@ -34,16 +37,38 @@ export async function syncVolumesAndApplySettings(nv, volumes, layerSettings) {
   nv.updateGLVolume();
 }
 
-export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
+export const NiiViewer = ({
+  nvRef,
+  volumes = [],
+  onViewReady,
+  onNiiNvReady,
+  isFullscreen = false,
+}) => {
   // layerSettings is an array with one settings object per loaded layer (volume or mesh)
   const [layerSettings, setLayerSettings] = useState(() => getInitialLayerSettings(volumes));
   // orderedVolumes mirrors volumes but can be rearranged by drag-to-reorder
   const [orderedVolumes, setOrderedVolumes] = useState(volumes);
-  const [loading, setLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Show a loading toast while volumes load, then update to success — self-contained
+  // so NiiViewer reports its own status regardless of where it's embedded.
+  useEffect(() => {
+    if (isLoading) {
+      toast.loading('Loading imaging data…', { id: NII_LOADING_TOAST_ID });
+    } else {
+      toast.success('Imaging data loaded!', { id: NII_LOADING_TOAST_ID });
+    }
+  }, [isLoading]);
+
+  // Dismiss the toast if the viewer unmounts mid-load (e.g. resetting the imaging panel)
+  useEffect(() => {
+    return () => toast.dismiss(NII_LOADING_TOAST_ID);
+  }, []);
 
   const canvas = useRef();
-  const nvRef = useRef();
   const canvasContainerRef = useRef();
+  const canvasReadyRef = useRef(false); // guards attachToCanvas so StrictMode's double-invoke doesn't reinitialise the GL context
+  const loadingVolumesRef = useRef(null); // reference to the volumes array currently being loaded — prevents StrictMode's double-invoke from firing nv.loadVolumes twice
   const opacityRafRef = useRef(null); // pending rAF id for opacity updates — cancelled on each new drag event so only the latest value redraws
   const canvasSizeTimeoutRef = useRef(null); // pending debounce timeout for canvas size updates
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
@@ -71,11 +96,11 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
 
       if (nvRef.current) {
         const nv = nvRef.current;
-        // Find the corresponding NVVolume for this layer index — we have to do this by URL since layer order can change
-        // Note that due to object referencing changing nVVolume properties updates same properties inside nv for that specific volume
-        const nvVolume = nv.volumes.find((nvVol) => nvVol.url === orderedVolumes[layerIndex].url);
+        // Use the layer index directly — load, reorder, and delete operations update both
+        // orderedVolumes and nv.volumes together, so their positions always match.
+        const nvVolume = nv.volumes[layerIndex];
         if (!nvVolume) return;
-        const nvIndex = nv.volumes.indexOf(nvVolume);
+        const nvIndex = layerIndex;
 
         if (key === 'visible') {
           nv.setOpacity(nvIndex, value ? nextLayerSettings[layerIndex].opacity : 0);
@@ -105,7 +130,7 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
     if (!nvRef.current) return; // Guard clause — if NiiVue isn't initialized yet, there's nothing to append to
 
     // show loading spinner
-    setLoading(true);
+    setIsLoading(true);
     // Convert the FileList to an array of volume objects with { url, name, type, subtype }
     const newVolumes = filesToVolumes(files);
     const allVolumes = [...orderedVolumes, ...newVolumes];
@@ -120,7 +145,7 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
     // Load only the new volumes into the existing NiiVue instance and reapply all layer settings
     await syncVolumesAndApplySettings(nvRef.current, allVolumes, allLayerSettings);
     // updateGLVolume schedules a GL redraw but returns before it paints — wait one frame before clearing the spinner
-    requestAnimationFrame(() => setLoading(false));
+    requestAnimationFrame(() => setIsLoading(false));
   };
 
   // Track the canvas container's dimensions so the layout effect can react to resizes
@@ -176,55 +201,79 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
       // Move the already-loaded NVImage to its new position in-memory — no re-fetch needed
       const fromIndex = event.operation.source.initialIndex;
       const toIndex = event.operation.source.index;
-      setLoading(true);
+      setIsLoading(true);
       nvRef.current.setVolume(nvRef.current.volumes[fromIndex], toIndex);
       nvRef.current.updateGLVolume();
       // updateGLVolume schedules a GL redraw but returns before it paints — wait one frame before clearing the spinner
-      requestAnimationFrame(() => setLoading(false));
+      requestAnimationFrame(() => setIsLoading(false));
     },
     [orderedVolumes, layerSettings]
   );
 
+  const handleDeleteVolume = useCallback(
+    (index) => {
+      if (!nvRef.current) return; // Guard clause — if NiiVue isn't initialized yet, we can't delete
+
+      nvRef.current.removeVolumeByIndex(index);
+      setOrderedVolumes(orderedVolumes.filter((_, i) => i !== index));
+      setLayerSettings(layerSettings.filter((_, i) => i !== index));
+    },
+    [orderedVolumes, layerSettings]
+  );
+
+  // Attach the NiiVue instance to the canvas once when the viewer mounts.
+  // Separated from volume loading so that React StrictMode's double-invoke of effects
+  // (which runs every effect twice in development) does not call attachToCanvas twice.
+  // A second attachToCanvas call reinitialises the WebGL context, wiping all loaded
+  // volumes and colormaps — causing them to turn grey. The canvasReadyRef guard ensures
+  // the setup only runs once even when StrictMode re-invokes the effect.
   useEffect(() => {
-    // Guard clause — if no volumes provided, don't even try to initialize NiiVue
-    if (!volumes.length) return;
+    if (!nvRef.current || canvasReadyRef.current) return;
+    canvasReadyRef.current = true;
+    const nv = nvRef.current;
+    nv.opts.multiplanarShowRender = SHOW_RENDER.ALWAYS;
+    nv.setMultiplanarLayout(MULTIPLANAR_TYPE.GRID);
+    nv.opts.multiplanarEqualSize = false;
+    nv.setCornerOrientationText(false);
+    nv.attachToCanvas(canvas.current);
+    onNiiNvReady?.();
+  }, []);
+
+  // Load and sync volumes whenever the volumes prop changes.
+  // loadingVolumesRef serves two purposes:
+  //   1. Guard at the top: same array reference means this exact load is already in flight
+  //      (StrictMode double-invoke). Bail out before touching NiiVue so nv.loadVolumes is
+  //      never called twice, which would leave nv.volumes in a corrupted empty state.
+  //   2. Guard in the async callback: if loadingVolumesRef has moved on to a different
+  //      volumes array by the time the load completes, this load has been superseded and
+  //      must not update React state (setIsLoading / onViewReady).
+  useEffect(() => {
+    if (!volumes.length) {
+      loadingVolumesRef.current = null; // reset so the next non-empty load can proceed
+      return;
+    }
+    if (loadingVolumesRef.current === volumes) return; // StrictMode: already loading these volumes
+    loadingVolumesRef.current = volumes;
 
     const initialLayerSettings = getInitialLayerSettings(volumes);
     setLayerSettings(initialLayerSettings);
-    setOrderedVolumes(volumes); // Reset order whenever the volumes prop changes
-    setLoading(true);
+    setOrderedVolumes(volumes);
+    setIsLoading(true);
 
-    async function setupAndLoad() {
+    const loadAndSync = async () => {
       try {
-        const nv = new Niivue({
-          isOrientCube: true,
-          dragAndDropEnabled: false,
-          show3Dcrosshair: true,
-        });
-        // Always show volume render with slices
-        nv.opts.multiplanarShowRender = SHOW_RENDER.ALWAYS;
-        nv.setMultiplanarLayout(MULTIPLANAR_TYPE.GRID); // Set to grid layout (2x2)
-        nv.opts.multiplanarEqualSize = false; // disable equal size tiles to have crosshairs align in views
-        nv.setCornerOrientationText(false); // Show orientation text centered (default)
-
-        nv.attachToCanvas(canvas.current);
-        await syncVolumesAndApplySettings(nv, volumes, initialLayerSettings);
-
-        // Store the NiiVue instance in a ref so we can call methods on it later (e.g. to update settings or reorder layers)
-        nvRef.current = nv;
-        setLoading(false);
-        onReady?.();
+        await syncVolumesAndApplySettings(nvRef.current, volumes, initialLayerSettings);
+        if (loadingVolumesRef.current !== volumes) return; // superseded by a newer load
+        setIsLoading(false);
+        onViewReady?.();
       } catch (loadError) {
+        if (loadingVolumesRef.current !== volumes) return;
         toast.error(`Failed to load image: ${loadError.message}`);
-        setLoading(false);
+        setIsLoading(false);
       }
-    }
-
-    setupAndLoad();
-
-    return () => {
-      nvRef.current = null;
     };
+
+    loadAndSync();
   }, [volumes]);
 
   return (
@@ -236,6 +285,7 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
           layerSettings={layerSettings}
           onSettingChange={handleSettingChange}
           onReorder={handleReorder}
+          onDeleteVolume={handleDeleteVolume}
         />
         <FileDropZone
           onFiles={handleNiiFiles}
@@ -251,7 +301,7 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
         {/* NiiVue Canvas */}
         <div ref={canvasContainerRef} className="relative flex-1 overflow-hidden">
           {/* Loading spinner overlay — absolute to cover the canvas, with a higher z-index so it appears on top */}
-          {loading && (
+          {isLoading && (
             <div
               data-testid="loading-spinner"
               className="absolute inset-0 z-10 flex items-center justify-center"
@@ -262,7 +312,12 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
           <canvas ref={canvas} className="absolute inset-0" />
         </div>
         <div className="">
-          <div className="flex flex-col w-8 gap-0.5 pt-2 items-center rounded-md border-1 border-border">
+          <div
+            className={cn(
+              'flex flex-col w-8 gap-0.5 pt-2 items-center',
+              'rounded-r-md border-r-1 border-t-1 border-b-1 border-border'
+            )}
+          >
             {/* Viewer controls with Ax, Co, Sa, MP and 3D buttons */}
             {sliceTypeOptions.map(({ sliceType, label, buttonLabel }) => (
               <button
