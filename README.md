@@ -81,6 +81,14 @@ npm run test:run  # single run (used in CI)
 
 The app deploys automatically to GitHub Pages on every push to `main`. Tests run on every pull request.
 
+## Credits
+
+### Third-party data
+
+| Asset                                          | Source                                                                                                                                                         | Licence      |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
+| `public/electrode_positions/standard_1005.elc` | [MNE-Python](https://mne.tools/) — Gramfort et al., _Frontiers in Neuroscience_ 2013, doi:[10.3389/fnins.2013.00267](https://doi.org/10.3389/fnins.2013.00267) | BSD 3-Clause |
+
 ## Links
 
 - [GitHub repository](https://github.com/VIDEPE/videpe)
