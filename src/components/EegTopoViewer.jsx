@@ -3,7 +3,7 @@ import { NVMesh, NVMeshUtilities, SLICE_TYPE } from '@niivue/niivue';
 import { X, Maximize2, Minimize2 } from 'lucide-react';
 import { buildEegMesh, averageReference, medianReference } from '@/utils/eegTopography';
 
-export function EegTopoViewer({ nvRef, electrodes, matched, voltages, totalChannels, onClose }) {
+export function EegTopoViewer({ nvRef, electrodes, matched, voltages, totalChannels, onClose, onTopoNvReady }) {
   const canvasRef = useRef(null);;
   const [reference, setReference] = useState('average'); // 'none' | 'average' | 'median'
   const [isMaximized, setIsMaximized] = useState(false);
@@ -13,8 +13,10 @@ export function EegTopoViewer({ nvRef, electrodes, matched, voltages, totalChann
    // Initialise NiiVue once on mount
   useEffect(() => {
     const nv = nvRef.current;
+    nv.setSliceType(SLICE_TYPE.RENDER); // force slicetype to render for a 3D view
+    // Attach to a canvas and signal PatientView it is ready for synchronising to the EegTopoViewer
     nv.attachToCanvas(canvasRef.current);
-    nv.setSliceType(SLICE_TYPE.RENDER);
+    onTopoNvReady?.();
   }, []);
 
   // Rebuild and reload the mesh whenever electrodes, matched channels, voltages, or

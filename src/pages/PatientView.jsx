@@ -52,6 +52,11 @@ export const PatientView = () => {
   const [eegHint, setEegHint] = useState(null);
   const [maximizedPanel, setMaximizedPanel] = useState(null); // null | 'left' | 'right'
 
+  // when both these flags are true, then the two plots can be synchronised
+  const [niiNvReady, setNiiNvReady] = useState(false); // flag when the NiiViewer canvas is initialised
+  const [topoNvReady, setTopoNvReady] = useState(false); // flag when EegTopoViewer canvas is initialised
+
+
   const nvRef_niiviewer = useRef()
   // Initialise NiiVue for NiiViewer once on mount
   useEffect(() => {
@@ -78,9 +83,10 @@ export const PatientView = () => {
   }, []);
 
   useEffect(() => {
-    nvRef_niiviewer.current.broadcastTo([nvRef_eegtopo.current], { "2d": false, "3d": true });
-    nvRef_eegtopo.current.broadcastTo([nvRef_niiviewer.current], { "2d": false, "3d": true });
-  }, [])
+    if (!niiNvReady || !topoNvReady) return;
+    nvRef_niiviewer.current.broadcastTo([nvRef_eegtopo.current], { '2d': false, '3d': true });
+    nvRef_eegtopo.current.broadcastTo([nvRef_niiviewer.current], { '2d': false, '3d': true });
+    }, [niiNvReady, topoNvReady]);
 
 
   // Handler for when EEG files are dropped or selected.
@@ -255,7 +261,8 @@ export const PatientView = () => {
               nvRef_eegtopo={nvRef_eegtopo}
               provider={eeg}
               channelNames={eeg.channelNames}
-              onReady={() => eegReadyResolveRef.current?.()}
+              onReady={() => eegReadyResolveRef.current?.()} // charts ready
+              onTopoNvReady={() => setTopoNvReady(true)}  // topo canvas ready
             />
           ) : (
             <div className="h-full p-2">
@@ -278,6 +285,7 @@ export const PatientView = () => {
               volumes={volumes}
               isFullscreen={maximizedPanel === 'right'}
               onReady={() => niiReadyResolveRef.current?.()}
+              onNiiNvReady={() => setNiiNvReady(true)}
             />
           ) : (
             <div className="h-full p-2">

@@ -37,7 +37,7 @@ export async function syncVolumesAndApplySettings(nv, volumes, layerSettings) {
   nv.updateGLVolume();
 }
 
-export const NiiViewer = ({nvRef, volumes = [], onReady, isFullscreen = false }) => {
+export const NiiViewer = ({nvRef, volumes = [], onReady, onNiiNvReady, isFullscreen = false }) => {
   // layerSettings is an array with one settings object per loaded layer (volume or mesh)
   const [layerSettings, setLayerSettings] = useState(() => getInitialLayerSettings(volumes));
   // orderedVolumes mirrors volumes but can be rearranged by drag-to-reorder
@@ -231,9 +231,11 @@ export const NiiViewer = ({nvRef, volumes = [], onReady, isFullscreen = false })
         nv.opts.multiplanarEqualSize = false; // disable equal size tiles to have crosshairs align in views
         nv.setCornerOrientationText(false); // Show orientation text centered (default)
 
+        // Attach to a canvas and signal PatientView it is ready for synchronising to the EegTopoViewer
         nv.attachToCanvas(canvas.current);
-        await syncVolumesAndApplySettings(nv, volumes, initialLayerSettings);
+        onNiiNvReady?.()
 
+        await syncVolumesAndApplySettings(nv, volumes, initialLayerSettings);
         setIsLoading(false);
         onReady?.();
       } catch (loadError) {
