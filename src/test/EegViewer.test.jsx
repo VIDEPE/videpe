@@ -581,7 +581,7 @@ describe('EegViewer — plot rendering', () => {
 describe('EegViewer — topography wiring', () => {
   it('fetches the electrode position file on mount', async () => {
     await renderViewer();
-    expect(global.fetch).toHaveBeenCalledWith('/electrode_positions/standard_1005.elc');
+    expect(global.fetch).toHaveBeenCalledWith('electrode_positions/standard_1005.elc');
   });
 
   it('does not show EegTopoViewer on initial render', async () => {

@@ -429,47 +429,49 @@ export const EegViewer = ({ provider, channelNames, onReady }) => {
         {/* Plot row: sidebar + channel plots side by side; flex-1 so controls sit below */}
         <div className="flex-1 min-h-0 flex flex-row">
           {/* Left sidebar: justify-center now centers against the channel area height only */}
-          <div className="shrink-0 flex flex-row items-center gap-1 px-1">
-            <span className="text-xs text-foreground/60 whitespace-nowrap [writing-mode:vertical-rl] rotate-180 select-none pointer-events-none">
-              Channels
-            </span>
-            <div className="flex flex-col items-center gap-1">
-              <button
-                type="button"
-                className="button button-icon"
-                onClick={() => updateVisibleChannelCount(visibleChannelCount + 1)}
-                title="Show more channels"
-              >
-                <ListChevronsUpDown size={ICON_SIZE} />
-              </button>
-              <input
-                id="eeg-visible-channels"
-                type="number"
-                value={visibleChannelCountStr}
-                min={1}
-                max={channelNames.length}
-                style={{ width: inputWidth(visibleChannelCountStr) }}
-                onChange={(e) => {
-                  if (e.target.value.length > CHANNEL_INPUT_MAX_LENGTH) return;
-                  setVisibleChannelCountStr(e.target.value);
-                  const val = Number(e.target.value);
-                  if (e.target.value !== '' && !isNaN(val))
-                    setVisibleChannelCount(clampChannelCount(Math.round(val)));
-                }}
-                onBlur={() =>
-                  updateVisibleChannelCount(Number(visibleChannelCountStr) || visibleChannelCount)
-                }
-                className="text-center border border-border rounded px-1 py-0.5 text-sm bg-background text-foreground [appearance:textfield]"
-                aria-label="Number of channels displayed"
-              />
-              <button
-                type="button"
-                className="button button-icon"
-                onClick={() => updateVisibleChannelCount(visibleChannelCount - 1)}
-                title="Show fewer channels"
-              >
-                <ListChevronsDownUp size={ICON_SIZE} />
-              </button>
+          <div className="shrink-0 flex flex-row items-center px-1">
+            <div className="flex flex-row items-center gap-1 py-1 pr-1 border-border/50 border-1 border-r-0 rounded-tl-md rounded-bl-md">
+              <span className="text-xs text-foreground/60 whitespace-nowrap [writing-mode:vertical-rl] rotate-180 select-none pointer-events-none">
+                Channels
+              </span>
+              <div className="flex flex-col items-center gap-1">
+                <button
+                  type="button"
+                  className="button button-icon"
+                  onClick={() => updateVisibleChannelCount(visibleChannelCount + 1)}
+                  title="Show more channels"
+                >
+                  <ListChevronsUpDown size={ICON_SIZE} />
+                </button>
+                <input
+                  id="eeg-visible-channels"
+                  type="number"
+                  value={visibleChannelCountStr}
+                  min={1}
+                  max={channelNames.length}
+                  style={{ width: inputWidth(visibleChannelCountStr) }}
+                  onChange={(e) => {
+                    if (e.target.value.length > CHANNEL_INPUT_MAX_LENGTH) return;
+                    setVisibleChannelCountStr(e.target.value);
+                    const val = Number(e.target.value);
+                    if (e.target.value !== '' && !isNaN(val))
+                      setVisibleChannelCount(clampChannelCount(Math.round(val)));
+                  }}
+                  onBlur={() =>
+                    updateVisibleChannelCount(Number(visibleChannelCountStr) || visibleChannelCount)
+                  }
+                  className="text-center border border-border rounded px-1 py-0.5 text-sm bg-background text-foreground [appearance:textfield]"
+                  aria-label="Number of channels displayed"
+                />
+                <button
+                  type="button"
+                  className="button button-icon"
+                  onClick={() => updateVisibleChannelCount(visibleChannelCount - 1)}
+                  title="Show fewer channels"
+                >
+                  <ListChevronsDownUp size={ICON_SIZE} />
+                </button>
+              </div>
             </div>
           </div>
 
@@ -629,8 +631,8 @@ export const EegViewer = ({ provider, channelNames, onReady }) => {
 
             {/* Range: shrink/expand the shared y-range (all channels) */}
             {/* shrink-0 pins the controls at the bottom, never squeezed by the channel area */}
-            <div className="shrink-0 flex flex-wrap justify-center gap-4 py-2">
-              <div className="flex flex-col items-center gap-0.5">
+            <div className="shrink-0 flex flex-wrap justify-center gap-4 py-1">
+              <div className="flex flex-col items-center gap-0.5 px-1 pb-1 border-border/50 border-1 border-t-0 rounded-bl-md rounded-br-md">
                 <label htmlFor="eeg-range" className="text-xs text-foreground/60 select-none">
                   Range (µV)
                 </label>
@@ -671,7 +673,7 @@ export const EegViewer = ({ provider, channelNames, onReady }) => {
               </div>
 
               {/* Time Step: move the x-range forward/backward by a user-defined step */}
-              <div className="flex flex-col items-center gap-0.5">
+              <div className="flex flex-col items-center gap-0.5 px-1 border-border/50 border-1 border-t-0 rounded-bl-md rounded-br-md">
                 <label htmlFor="eeg-time-step" className="text-xs text-foreground/60 select-none">
                   Time Step (s)
                 </label>
@@ -734,7 +736,7 @@ export const EegViewer = ({ provider, channelNames, onReady }) => {
               </div>
 
               {/* Window Size: increase/decrease the total visible x-range */}
-              <div className="flex flex-col items-center gap-0.5">
+              <div className="flex flex-col items-center gap-0.5 px-1 pb-1 border-border/50 border-1 border-t-0 rounded-bl-md rounded-br-md">
                 <label htmlFor="eeg-window-size" className="text-xs text-foreground/60 select-none">
                   Window Size (s)
                 </label>
