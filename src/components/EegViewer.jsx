@@ -430,7 +430,7 @@ export const EegViewer = ({ provider, channelNames, onReady }) => {
         <div className="flex-1 min-h-0 flex flex-row">
           {/* Left sidebar: justify-center now centers against the channel area height only */}
           <div className="shrink-0 flex flex-row items-center px-1">
-            <div className="flex flex-row items-center gap-1 py-1 pr-1 border-border/50 border-1 border-r-0 rounded-tl-md rounded-bl-md">
+            <div className="flex flex-row items-center gap-1 py-1 border-border/50 border-1 border-r-0 rounded-tl-md rounded-bl-md">
               <span className="text-xs text-foreground/60 whitespace-nowrap [writing-mode:vertical-rl] rotate-180 select-none pointer-events-none">
                 Channels
               </span>
