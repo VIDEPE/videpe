@@ -71,7 +71,7 @@ const buildChannelOptions = ({
   };
 };
 
-export const EegViewer = ({ provider, channelNames, onReady }) => {
+export const EegViewer = ({ nvRef_eegtopo, provider, channelNames, onReady }) => {
   const { isDarkMode } = useTheme();
   const syncKey = 'eeg-sync'; // shared across all channels to link their interactions
 
@@ -785,6 +785,7 @@ export const EegViewer = ({ provider, channelNames, onReady }) => {
       {/* Floating topography viewer — position:fixed so it overlays the whole page */}
       {topoVisible && (
         <EegTopoViewer
+          nvRef={nvRef_eegtopo}
           electrodes={electrodes}
           matched={matched}
           voltages={topoVoltages}

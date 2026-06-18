@@ -1,6 +1,6 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { cn } from '../utils/utils';
-import { Niivue, SHOW_RENDER, MULTIPLANAR_TYPE, SLICE_TYPE } from '@niivue/niivue';
+import { SHOW_RENDER, MULTIPLANAR_TYPE, SLICE_TYPE } from '@niivue/niivue';
 import { move } from '@dnd-kit/helpers';
 import toast from 'react-hot-toast';
 
@@ -37,7 +37,7 @@ export async function syncVolumesAndApplySettings(nv, volumes, layerSettings) {
   nv.updateGLVolume();
 }
 
-export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
+export const NiiViewer = ({nvRef, volumes = [], onReady, isFullscreen = false }) => {
   // layerSettings is an array with one settings object per loaded layer (volume or mesh)
   const [layerSettings, setLayerSettings] = useState(() => getInitialLayerSettings(volumes));
   // orderedVolumes mirrors volumes but can be rearranged by drag-to-reorder
@@ -60,7 +60,6 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
   }, []);
 
   const canvas = useRef();
-  const nvRef = useRef();
   const canvasContainerRef = useRef();
   const opacityRafRef = useRef(null); // pending rAF id for opacity updates — cancelled on each new drag event so only the latest value redraws
   const canvasSizeTimeoutRef = useRef(null); // pending debounce timeout for canvas size updates
@@ -223,13 +222,9 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
     setOrderedVolumes(volumes); // Reset order whenever the volumes prop changes
     setIsLoading(true);
 
-    async function setupAndLoad() {
+    async function setupAndLoad(nvRef) {
       try {
-        const nv = new Niivue({
-          isOrientCube: true,
-          dragAndDropEnabled: false,
-          show3Dcrosshair: true,
-        });
+        const nv = nvRef.current
         // Always show volume render with slices
         nv.opts.multiplanarShowRender = SHOW_RENDER.ALWAYS;
         nv.setMultiplanarLayout(MULTIPLANAR_TYPE.GRID); // Set to grid layout (2x2)
@@ -239,8 +234,6 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
         nv.attachToCanvas(canvas.current);
         await syncVolumesAndApplySettings(nv, volumes, initialLayerSettings);
 
-        // Store the NiiVue instance in a ref so we can call methods on it later (e.g. to update settings or reorder layers)
-        nvRef.current = nv;
         setIsLoading(false);
         onReady?.();
       } catch (loadError) {
@@ -249,11 +242,7 @@ export const NiiViewer = ({ volumes = [], onReady, isFullscreen = false }) => {
       }
     }
 
-    setupAndLoad();
-
-    return () => {
-      nvRef.current = null;
-    };
+    setupAndLoad(nvRef);
   }, [volumes]);
 
   return (

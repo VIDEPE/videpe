@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { Niivue } from '@niivue/niivue';
+
 import { FullWidthLayout } from '../components/FullWidthLayout';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { EegViewer } from '../components/EegViewer';
@@ -11,6 +13,7 @@ import { loadBrainVisionEEG } from '../loaders/loadBrainVisionEEG';
 import { detectAndLoadEEG, checkEegFiles } from '../loaders/eegFormats';
 import { FileDropZone } from '../components/FileDropZone';
 import { detectVolumeType, filesToVolumes } from '../components/NiiViewer.utils';
+
 
 const DEMO_EEG = {
   header: 'demo_data/sub-synth_task-rest_eeg.vhdr',
@@ -48,6 +51,37 @@ export const PatientView = () => {
   const [pendingEegFiles, setPendingEegFiles] = useState([]);
   const [eegHint, setEegHint] = useState(null);
   const [maximizedPanel, setMaximizedPanel] = useState(null); // null | 'left' | 'right'
+
+  const nvRef_niiviewer = useRef()
+  // Initialise NiiVue for NiiViewer once on mount
+  useEffect(() => {
+      nvRef_niiviewer.current = new Niivue({
+        isOrientCube: true,
+        dragAndDropEnabled: false,
+        show3Dcrosshair: true,
+      });
+      return () => {
+        nvRef_niiviewer.current = null;
+      }
+      
+  }, []);
+
+  const nvRef_eegtopo = useRef()
+  // Initialise NiiVue for EEGTopography once on mount
+  useEffect(() => {
+    nvRef_eegtopo.current = new Niivue({
+          isOrientCube: true,
+        });
+    return () => {
+      nvRef_eegtopo.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    nvRef_niiviewer.current.broadcastTo([nvRef_eegtopo.current], { "2d": false, "3d": true });
+    nvRef_eegtopo.current.broadcastTo([nvRef_niiviewer.current], { "2d": false, "3d": true });
+  }, [])
+
 
   // Handler for when EEG files are dropped or selected.
   // Files accumulate across drops until all required files for a format are present.
@@ -218,6 +252,7 @@ export const PatientView = () => {
         left={
           eeg ? (
             <EegViewer
+              nvRef_eegtopo={nvRef_eegtopo}
               provider={eeg}
               channelNames={eeg.channelNames}
               onReady={() => eegReadyResolveRef.current?.()}
@@ -239,6 +274,7 @@ export const PatientView = () => {
         right={
           volumes.length > 0 ? (
             <NiiViewer
+              nvRef = {nvRef_niiviewer}
               volumes={volumes}
               isFullscreen={maximizedPanel === 'right'}
               onReady={() => niiReadyResolveRef.current?.()}
