@@ -517,8 +517,8 @@ export const EegViewer = ({
               <select
                 value={montage}
                 onChange={(e) => setMontage(e.target.value)}
-                aria-label="Apply EEG refence montage"
-                title='Apply EEG reference montage'
+                aria-label="Apply EEG reference montage"
+                title="Apply EEG reference montage"
                 className="bg-background border border-border rounded px-1 py-0.5 text-xs text-heading cursor-pointer"
               >
                 <option value="none">None</option>

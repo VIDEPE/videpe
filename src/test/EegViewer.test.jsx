@@ -30,12 +30,13 @@ vi.mock('uplot-react', () => {
 // Isolate EegViewer tests from NiiVue's WebGL dependency — stub EegTopoViewer with a
 // minimal element that exposes the data and close button tests need.
 vi.mock('@/components/EegTopoViewer', () => ({
-  EegTopoViewer: vi.fn(function ({ onClose, totalChannels, matched }) {
+  EegTopoViewer: vi.fn(function ({ onClose, totalChannels, matched, voltages }) {
     return (
       <div data-testid="eeg-topo-viewer">
         <span>
           {matched.length} / {totalChannels} channels mapped
         </span>
+        <span data-testid="topo-voltages">{voltages.join(',')}</span>
         <button onClick={onClose}>Close topo</button>
       </div>
     );
@@ -1246,5 +1247,61 @@ describe('EegViewer — loading toast', () => {
     unmount();
 
     expect(toast.dismiss).toHaveBeenCalledWith(loadingId);
+  });
+});
+
+// ── Montage / re-referencing ──────────────────────────────────────────────────
+// CHANNEL_DATA per sample: EEG1=[1,2,3,4], EEG2=[4,5,6,7], EEG3=[7,8,9,10].
+// Cross-channel mean per sample is [4,5,6,7], so e.g. average-referenced
+// EEG1 = [1-4, 2-5, 3-6, 4-7] = [-3,-3,-3,-3].
+
+describe('EegViewer — montage controls', () => {
+  it('renders a Montage label with a dropdown defaulting to none', async () => {
+    await renderViewer();
+    expect(screen.getByText('Montage:')).toBeInTheDocument();
+    const select = screen.getByLabelText(/montage/i);
+    expect(select.value).toBe('none');
+  });
+
+  it('montage dropdown has None, Average, and Median options', async () => {
+    await renderViewer();
+    const select = screen.getByLabelText(/montage/i);
+    const values = Array.from(select.options).map((o) => o.value);
+    expect(values).toContain('none');
+    expect(values).toContain('average');
+    expect(values).toContain('median');
+  });
+
+  it('selecting Average re-references the channel plot data', async () => {
+    const { default: UplotReactMock } = await import('uplot-react');
+    const user = userEvent.setup();
+    await renderViewer();
+
+    UplotReactMock.mockClear();
+    await user.selectOptions(screen.getByLabelText(/montage/i), 'average');
+
+    // EEG1 raw values for the visible window are [1,2,3]; averaged → [-3,-3,-3]
+    const eeg1Data = Array.from(UplotReactMock.mock.calls[0][0].data[1]);
+    expect(eeg1Data).toEqual([-3, -3, -3]);
+  });
+});
+
+describe('EegViewer — topography uses the montaged buffer', () => {
+  it('topography voltages reflect the selected montage', async () => {
+    const user = userEvent.setup();
+    await renderViewer();
+
+    // Open the topography viewer at the mocked click timepoint
+    await act(async () => {
+      capturedClickHandler?.();
+    });
+    // matched channels are EEG1 (idx0) and EEG2 (idx1); raw values at the clicked
+    // sample are EEG1=4, EEG2=7
+    expect(screen.getByTestId('topo-voltages').textContent).toBe('4,7');
+
+    await user.selectOptions(screen.getByLabelText(/montage/i), 'average');
+
+    // cross-channel mean at that sample = (4+7+10)/3 = 7 → EEG1: 4-7=-3, EEG2: 7-7=0
+    expect(screen.getByTestId('topo-voltages').textContent).toBe('-3,0');
   });
 });
