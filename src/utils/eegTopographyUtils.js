@@ -43,22 +43,6 @@ export function matchChannelsToPositions(channelNames, electrodes) {
   return { matched, unmatchedNames };
 }
 
-// Re-reference by subtracting the channel mean. Standard default in EEG analysis.
-export function averageReference(voltages) {
-  const mean = voltages.reduce((sum, v) => sum + v, 0) / voltages.length;
-  return Array.from(voltages, (v) => v - mean);
-}
-
-// Re-reference by subtracting the channel median. More robust when one or more
-// channels carry artifacts, since outliers don't shift the median.
-export function medianReference(voltages) {
-  const sorted = [...voltages].sort((a, b) => a - b); // numeric sort, not lexicographic
-  const mid = Math.floor(sorted.length / 2);
-  // even-length: average the two middle values; odd-length: take the single middle value
-  const median = sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
-  return Array.from(voltages, (v) => v - median);
-}
-
 // Build a triangulated mesh from electrode positions using their convex hull.
 // Vertex order in the output matches the input electrodes array, so
 // electrodes[i] corresponds to vertices[i*3 .. i*3+2].
