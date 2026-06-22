@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { parseElc } from '@/loaders/parseElc';
-import { matchChannelsToPositions } from '@/utils/eegTopography';
+import { matchChannelsToPositions } from '@/utils/eegTopographyUtils';
 
 // Minimal valid .elc with 3 fiducials + 2 electrodes
 const MINIMAL_ELC = `# ASA electrode file
@@ -152,7 +152,7 @@ import {
   gaussianRBF,
   interpolateMeshVoltages,
   buildEegMesh,
-} from '@/utils/eegTopography';
+} from '@/utils/eegTopographyUtils';
 
 describe('averageReference', () => {
   it('subtracts the mean so the output sums to zero', () => {

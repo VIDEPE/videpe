@@ -1,4 +1,4 @@
-// EEG topography utilities — built up incrementally.
+// EEG topography utilities
 // Electrode position parsing lives in src/loaders/parseElc.js (and future format parsers alongside it).
 
 import convexHull from 'convex-hull';

@@ -19,7 +19,7 @@ import {
 import { minMaxDownsample } from '@/utils/downsample';
 import { useEegBuffer } from '@/loaders/eegBuffer';
 import { parseElc } from '@/loaders/parseElc';
-import { matchChannelsToPositions } from '@/utils/eegTopography';
+import { matchChannelsToPositions } from '@/utils/eegTopographyUtils';
 import { EegTopoViewer } from '@/components/EegTopoViewer';
 
 const EEG_LOADING_TOAST_ID = 'eeg-buffer-loading'; // fixed id so the loading/success toasts update in place rather than stacking

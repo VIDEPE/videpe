@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { NVMesh, NVMeshUtilities, SLICE_TYPE } from '@niivue/niivue';
 import { TrafficLightButtons } from './TrafficLightButtons';
-import { buildEegMesh, averageReference, medianReference } from '@/utils/eegTopography';
+import { buildEegMesh, averageReference, medianReference } from '@/utils/eegTopographyUtils';
 
 export function EegTopoViewer({
   nvRef,
