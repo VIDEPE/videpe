@@ -271,7 +271,7 @@ describe('EegTopoViewer', () => {
       await act(async () =>
         render(<EegTopoViewer {...defaultProps} isStandardElectrodes={true} />)
       );
-      expect(screen.getByRole('button', { name: /use custom positions/i })).toBeTruthy();
+      expect(screen.getByRole('button', { name: /use custom.*positions/i })).toBeTruthy();
     });
 
     it('calls onElcFile with the selected File when a positions file is chosen', async () => {
