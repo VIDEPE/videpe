@@ -174,6 +174,38 @@ describe('EegTopoViewer', () => {
       await act(async () => render(<EegTopoViewer {...defaultProps} voltages={[]} />));
       expect(NVMesh.loadFromUrl).not.toHaveBeenCalled();
     });
+
+    it('ignores a stale load that resolves after a newer one has started (StrictMode double-invoke guard)', async () => {
+      // Without this guard, React StrictMode's mount->cleanup->mount double-invoke (or a
+      // fast voltage change while a load is still in flight) lets the older, superseded
+      // call add its own mesh once it resolves — leaving two overlapping meshes, each
+      // contributing its own colorbar entry.
+      const { NVMesh } = await import('@niivue/niivue');
+      const resolvers = [];
+      const deferredLoad = () => new Promise((resolve) => resolvers.push(resolve));
+      NVMesh.loadFromUrl.mockImplementationOnce(deferredLoad).mockImplementationOnce(deferredLoad);
+
+      const { rerender } = await act(async () => render(<EegTopoViewer {...defaultProps} />));
+      await act(async () => {
+        rerender(<EegTopoViewer {...defaultProps} voltages={[-3, 0]} />);
+      });
+      expect(resolvers).toHaveLength(2);
+
+      const makeMesh = (id) => ({
+        id,
+        layers: [{ colormap: 'gray', cal_min: 0, cal_max: 1, opacity: 1 }],
+        updateMesh: vi.fn(),
+      });
+
+      // The stale (first) load resolves last — it must not add its mesh.
+      await act(async () => resolvers[0](makeMesh('stale-mesh')));
+      expect(mockNvInstance.addMesh).not.toHaveBeenCalled();
+
+      // The current (second) load resolving is the only one that should add a mesh.
+      await act(async () => resolvers[1](makeMesh('current-mesh')));
+      expect(mockNvInstance.addMesh).toHaveBeenCalledOnce();
+      expect(mockNvInstance.addMesh.mock.calls[0][0].id).toBe('current-mesh');
+    });
   });
 
   describe('voltages prop changes', () => {

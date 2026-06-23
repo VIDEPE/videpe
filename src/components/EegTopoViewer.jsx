@@ -31,6 +31,7 @@ export function EegTopoViewer({
   const [isMaximized, setIsMaximized] = useState(false);
   const [position, setPosition] = useState({ x: 80, y: 80 });
   const dragOffset = useRef(null);
+  const meshLoadRef = useRef(null); // tracks the in-flight load so StrictMode's double-invoke can't add two meshes (and so two colorbars)
 
   // Initialise NiiVue once on mount
   useEffect(() => {
@@ -54,6 +55,11 @@ export function EegTopoViewer({
     // Symmetric colormap range so blue/red are equal distance from zero
     const calMax = Math.max(...voltages.map(Math.abs));
 
+    // Identifies this specific load — StrictMode double-invokes this effect in dev,
+    // which would otherwise let a stale call add a second, overlapping mesh once the
+    // earlier (superseded) call's loadFromUrl resolves.
+    const loadToken = {};
+    meshLoadRef.current = loadToken;
     nv.meshes = [];
 
     const loadMesh = async () => {
@@ -69,7 +75,7 @@ export function EegTopoViewer({
           // readMesh the .mz3 extension it needs for format detection. Passing a name
           // without an extension causes readMesh to throw on ext.toUpperCase().
         });
-        if (!nvRef.current) return;
+        if (!nvRef.current || meshLoadRef.current !== loadToken) return; // superseded by a newer load
 
         // Override the auto-created scalar layer's colormap before the mesh is rendered
         if (mesh.layers.length > 0) {
@@ -82,9 +88,9 @@ export function EegTopoViewer({
           mesh.updateMesh(nv.gl); // rebuild GL color buffers with the new colormap
         }
 
-        nvRef.current.opts.isColorbar = true;
-        nvRef.current.addMesh(mesh);
-        nvRef.current.updateGLVolume();
+        nv.opts.isColorbar = true;
+        nv.addMesh(mesh);
+        nv.updateGLVolume();
       } catch (err) {
         console.error('[EegTopoViewer] mesh load failed:', err);
       }
