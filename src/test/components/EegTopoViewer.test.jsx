@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, act } from '@testing-library/react';
+import { render, screen, act, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { EegTopoViewer } from '@/components/EegTopoViewer';
 
@@ -271,7 +271,7 @@ describe('EegTopoViewer', () => {
       await act(async () =>
         render(<EegTopoViewer {...defaultProps} isStandardElectrodes={true} />)
       );
-      expect(screen.getByRole('button', { name: /use custom positions/i })).toBeTruthy();
+      expect(screen.getByRole('button', { name: /use custom.*positions/i })).toBeTruthy();
     });
 
     it('calls onElcFile with the selected File when a positions file is chosen', async () => {
@@ -285,6 +285,86 @@ describe('EegTopoViewer', () => {
       const input = container.querySelector('input[type="file"]');
       await userEvent.upload(input, file);
       expect(onElcFile).toHaveBeenCalledWith(file);
+    });
+  });
+
+  describe('resize', () => {
+    it('renders a resize handle on every edge and corner', async () => {
+      await act(async () => render(<EegTopoViewer {...defaultProps} />));
+      ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'].forEach((direction) => {
+        expect(screen.getByTestId(`topo-resize-${direction}`)).toBeTruthy();
+      });
+    });
+
+    it('does not render resize handles while maximized', async () => {
+      await act(async () => render(<EegTopoViewer {...defaultProps} />));
+      await userEvent.click(screen.getByRole('button', { name: /maximize/i }));
+      expect(screen.queryByTestId('topo-resize-se')).toBeNull();
+    });
+
+    it('grows width and height when dragging the bottom-right corner outward', async () => {
+      const { container } = await act(async () => render(<EegTopoViewer {...defaultProps} />));
+      const windowEl = container.firstChild;
+      const startWidth = parseInt(windowEl.style.width);
+      const startHeight = parseInt(windowEl.style.height);
+
+      fireEvent.mouseDown(screen.getByTestId('topo-resize-se'), { clientX: 0, clientY: 0 });
+      await act(async () => {
+        fireEvent.mouseMove(window, { clientX: 50, clientY: 30 });
+        fireEvent.mouseUp(window);
+      });
+
+      expect(parseInt(windowEl.style.width)).toBe(startWidth + 50);
+      expect(parseInt(windowEl.style.height)).toBe(startHeight + 30);
+    });
+
+    it('grows width only, leaving position unchanged, when dragging the right edge', async () => {
+      const { container } = await act(async () => render(<EegTopoViewer {...defaultProps} />));
+      const windowEl = container.firstChild;
+      const startWidth = parseInt(windowEl.style.width);
+      const startHeight = parseInt(windowEl.style.height);
+      const startLeft = windowEl.style.left;
+
+      fireEvent.mouseDown(screen.getByTestId('topo-resize-e'), { clientX: 0, clientY: 0 });
+      await act(async () => {
+        fireEvent.mouseMove(window, { clientX: 40, clientY: 0 });
+        fireEvent.mouseUp(window);
+      });
+
+      expect(parseInt(windowEl.style.width)).toBe(startWidth + 40);
+      expect(parseInt(windowEl.style.height)).toBe(startHeight);
+      expect(windowEl.style.left).toBe(startLeft);
+    });
+
+    it('grows width and shifts left when dragging the left edge outward', async () => {
+      const { container } = await act(async () => render(<EegTopoViewer {...defaultProps} />));
+      const windowEl = container.firstChild;
+      const startWidth = parseInt(windowEl.style.width);
+      const startLeft = parseInt(windowEl.style.left);
+
+      fireEvent.mouseDown(screen.getByTestId('topo-resize-w'), { clientX: 0, clientY: 0 });
+      await act(async () => {
+        fireEvent.mouseMove(window, { clientX: -40, clientY: 0 }); // drag left edge further left
+        fireEvent.mouseUp(window);
+      });
+
+      expect(parseInt(windowEl.style.width)).toBe(startWidth + 40);
+      expect(parseInt(windowEl.style.left)).toBe(startLeft - 40);
+    });
+
+    it('clamps shrinking at a minimum size instead of collapsing the window', async () => {
+      const { container } = await act(async () => render(<EegTopoViewer {...defaultProps} />));
+      const windowEl = container.firstChild;
+
+      fireEvent.mouseDown(screen.getByTestId('topo-resize-se'), { clientX: 0, clientY: 0 });
+      await act(async () => {
+        // drag far past any reasonable minimum
+        fireEvent.mouseMove(window, { clientX: -2000, clientY: -2000 });
+        fireEvent.mouseUp(window);
+      });
+
+      expect(parseInt(windowEl.style.width)).toBeGreaterThan(100);
+      expect(parseInt(windowEl.style.height)).toBeGreaterThan(100);
     });
   });
 

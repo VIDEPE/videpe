@@ -1,5 +1,6 @@
 ﻿import { useRef, useState, useEffect, useMemo, useCallback } from 'react';
 import UplotReact from 'uplot-react';
+import { cn } from '../utils/utils';
 import toast from 'react-hot-toast';
 import 'uplot/dist/uPlot.min.css';
 import { useTheme } from '@/components/ThemeContext';
@@ -440,24 +441,46 @@ export const EegViewer = ({
       <div
         ref={viewerRef}
         data-testid="eeg-viewer-container"
-        className="w-full h-full flex flex-col group relative focus:outline-solid focus:outline-2 focus:outline-secondary focus:-outline-offset-2"
+        className="w-full h-full flex flex-col group/viewer relative focus:outline-solid focus:outline-2 focus:outline-secondary focus:-outline-offset-2"
         tabIndex={0}
         onMouseDown={focusViewer}
         onKeyDown={handleKeyDown}
       >
-        {/* Keyboard shortcut hint — bottom-right corner of the viewer pane */}
-        <div
-          className="absolute bottom-2 right-2 z-20 text-foreground/40 hover:text-foreground/80 group-focus:text-secondary transition-colors"
-          title={
-            'Click the EEG viewer to enable keyboard navigation (blue outline when active):\n' +
-            '· ↑/↓\t\tRange adjustment up/down\n' +
-            '· ←/→\t     Move a time step back/forward\n' +
-            '· Space\t   Jump a time window forward\n' +
-            '· Page ↑/↓       Jump a time window back/forward\n' +
-            '· Home/End   Jump to start/end'
-          }
-        >
-          <Keyboard size={16} />
+        {/* Keyboard shortcut hint — bottom-right corner of the viewer pane.
+            Uses a custom hover tooltip instead of the native title attribute, since native
+            tooltips have a long built-in show delay — long enough that clicking the icon (to
+            focus the viewer) often fired before the tooltip ever appeared. */}
+        <div className="absolute bottom-2 right-2 z-20 group/tip">
+          <div className="text-foreground/40 hover:text-foreground/80 group-focus/viewer:text-secondary transition-colors cursor-help">
+            <Keyboard size={18} />
+          </div>
+          <div
+            role="tooltip"
+            className={cn(
+              'opacity-0 invisible transition-opacity duration-250 ease-in', // fades in/out on hover
+              'group-hover/tip:opacity-100 group-hover/tip:visible',
+              'absolute bottom-full right-0 z-30 mb-1 w-max', // positioned above the icon, right-aligned
+              'rounded-md border border-border bg-surface shadow-[var(--c-shadow)]', // card look
+              'px-2 py-2 text-xs text-foreground' // spacing & text
+            )}
+          >
+            <p className="mb-1.5 max-w-[250px]">
+              Click the EEG viewer to enable keyboard navigation (
+              <span className="text-secondary font-bold">blue </span>outline when active):
+            </p>
+            <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
+              <span className="text-foreground/60">↑ / ↓</span>
+              <span>Range adjustment up/down</span>
+              <span className="text-foreground/60">← / →</span>
+              <span>Move a time step back/forward</span>
+              <span className="text-foreground/60">Space</span>
+              <span>Jump a time window forward</span>
+              <span className="text-foreground/60">Page ↑ / ↓</span>
+              <span>Jump a time window back/forward</span>
+              <span className="text-foreground/60">Home / End</span>
+              <span>Jump to start/end</span>
+            </div>
+          </div>
         </div>
         {/* Plot row: sidebar + channel plots side by side; flex-1 so controls sit below */}
         <div className="flex-1 min-h-0 flex flex-row">
@@ -510,7 +533,9 @@ export const EegViewer = ({
                 </div>
               </div>
             </div>
-            <div className="flex flex-col items-center gap-1 pb-1">
+            <div 
+              className="flex flex-col items-center gap-1 pb-1"
+              title="Apply EEG reference montage">
               <span className="text-xs text-foreground select-none pointer-events-none">
                 Montage:
               </span>
@@ -518,7 +543,7 @@ export const EegViewer = ({
                 value={montage}
                 onChange={(e) => setMontage(e.target.value)}
                 aria-label="Apply EEG reference montage"
-                title="Apply EEG reference montage"
+                
                 className="bg-background border border-border rounded px-1 py-0.5 text-xs text-heading cursor-pointer"
               >
                 <option value="none">None</option>

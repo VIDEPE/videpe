@@ -995,7 +995,7 @@ describe('EegViewer — keyboard navigation', () => {
 
   it('renders a keyboard shortcuts hint with a tooltip', async () => {
     await renderViewer();
-    expect(screen.getByTitle(/keyboard navigation/i)).toBeInTheDocument();
+    expect(screen.getByRole('tooltip')).toHaveTextContent(/keyboard navigation/i);
   });
 
   it('clicking the viewer background focuses it', async () => {
