@@ -3,6 +3,18 @@ import { NVMesh, NVMeshUtilities, SLICE_TYPE } from '@niivue/niivue';
 import { TrafficLightButtons } from './TrafficLightButtons';
 import { buildEegMesh } from '@/utils/eegTopographyUtils';
 
+// Custom diverging colormap: blue (negative) -> white (zero) -> red (positive).
+// NiiVue's built-in 'blue2red' passes through green/yellow at the midpoint, which
+// reads as a third data feature rather than "this is near zero".
+const EEG_TOPO_COLORMAP_KEY = 'eegBlueWhiteRed';
+const EEG_TOPO_COLORMAP = {
+  R: [0, 255, 255],
+  G: [0, 255, 0],
+  B: [255, 255, 0],
+  A: [255, 255, 255],
+  I: [0, 128, 255],
+};
+
 export function EegTopoViewer({
   nvRef,
   electrodes,
@@ -25,6 +37,7 @@ export function EegTopoViewer({
   useEffect(() => {
     const nv = nvRef.current;
     nv.setSliceType(SLICE_TYPE.RENDER); // force slicetype to render for a 3D view
+    nv.addColormap(EEG_TOPO_COLORMAP_KEY, EEG_TOPO_COLORMAP);
     // Attach to a canvas and signal PatientView it is ready for synchronising to the EegTopoViewer
     nv.attachToCanvas(canvasRef.current);
     onTopoNvReady?.();
@@ -62,7 +75,7 @@ export function EegTopoViewer({
         // Override the auto-created scalar layer's colormap before the mesh is rendered
         if (mesh.layers.length > 0) {
           Object.assign(mesh.layers[0], {
-            colormap: 'blue2red',
+            colormap: EEG_TOPO_COLORMAP_KEY,
             cal_min: -calMax,
             cal_max: calMax,
             opacity: 1,

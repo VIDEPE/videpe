@@ -12,6 +12,7 @@ const mockNvInstance = {
   addMesh: vi.fn(),
   updateGLVolume: vi.fn(),
   setSliceType: vi.fn(),
+  addColormap: vi.fn(),
   opts: {},
   meshes: [],
 };
@@ -134,10 +135,23 @@ describe('EegTopoViewer', () => {
       expect(mockNvInstance.meshes).toHaveLength(0);
     });
 
-    it('sets blue2red colormap on the loaded mesh layer', async () => {
+    it('registers a custom blue-white-red colormap and applies it to the loaded mesh layer', async () => {
       await act(async () => render(<EegTopoViewer {...defaultProps} />));
+
+      expect(mockNvInstance.addColormap).toHaveBeenCalled();
+      const [key, cmap] = mockNvInstance.addColormap.mock.calls[0];
+
       const addedMesh = mockNvInstance.addMesh.mock.calls[0][0];
-      expect(addedMesh.layers[0].colormap).toBe('blue2red');
+      // The mesh layer must reference the same colormap that was registered.
+      expect(addedMesh.layers[0].colormap).toBe(key);
+
+      // Negative end is pure blue, midpoint (zero) is white, positive end is pure red —
+      // unlike the built-in 'blue2red' map, which passes through green/yellow at zero.
+      const lastIdx = cmap.I.length - 1;
+      const midIdx = cmap.I.indexOf(128);
+      expect([cmap.R[0], cmap.G[0], cmap.B[0]]).toEqual([0, 0, 255]);
+      expect([cmap.R[midIdx], cmap.G[midIdx], cmap.B[midIdx]]).toEqual([255, 255, 255]);
+      expect([cmap.R[lastIdx], cmap.G[lastIdx], cmap.B[lastIdx]]).toEqual([255, 0, 0]);
     });
 
     it('sets symmetric cal_min and cal_max on the mesh layer', async () => {
