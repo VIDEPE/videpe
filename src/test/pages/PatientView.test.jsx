@@ -289,61 +289,54 @@ describe('PatientView — imaging file-type detection', () => {
     });
   });
 
-  // Fire-and-forget — handleNiiFiles awaits NiiViewer's onViewReady, which the mock never calls,
-  // so the returned promise never settles. waitFor flushes pending microtasks between
-  // retries, letting setVolumes fire so we can inspect the props passed to NiiViewer.
   it('passes type MRI to NiiViewer for a BIDS T1w file', async () => {
     renderPatientView();
 
-    getNiiOnFiles()([makeFile('sub-01_T1w.nii')]);
-
-    await waitFor(() => {
-      expect(NiiViewer.mock.lastCall[0].volumes).toHaveLength(1);
+    await act(async () => {
+      await getNiiOnFiles()([makeFile('sub-01_T1w.nii')]);
     });
+
+    expect(NiiViewer.mock.lastCall[0].volumes).toHaveLength(1);
     expect(NiiViewer.mock.lastCall[0].volumes[0].type).toBe('MRI');
   });
 
   it('passes subtype as nameWithoutExtension to NiiViewer for a BIDS T1w file', async () => {
     renderPatientView();
 
-    getNiiOnFiles()([makeFile('sub-01_T1w.nii')]);
-
-    await waitFor(() => {
-      expect(NiiViewer.mock.lastCall[0].volumes).toHaveLength(1);
+    await act(async () => {
+      await getNiiOnFiles()([makeFile('sub-01_T1w.nii')]);
     });
+
     expect(NiiViewer.mock.lastCall[0].volumes[0].subtype).toBe('sub-01_T1w');
   });
 
   it('passes subtype as nameWithoutExtension to NiiViewer for a keyword-matched file', async () => {
     renderPatientView();
 
-    getNiiOnFiles()([makeFile('patT1.nii')]);
-
-    await waitFor(() => {
-      expect(NiiViewer.mock.lastCall[0].volumes).toHaveLength(1);
+    await act(async () => {
+      await getNiiOnFiles()([makeFile('patT1.nii')]);
     });
+
     expect(NiiViewer.mock.lastCall[0].volumes[0].subtype).toBe('patT1');
   });
 
   it('passes type PET to NiiViewer for a BIDS pet file', async () => {
     renderPatientView();
 
-    getNiiOnFiles()([makeFile('sub-01_pet.nii.gz')]);
-
-    await waitFor(() => {
-      expect(NiiViewer.mock.lastCall[0].volumes).toHaveLength(1);
+    await act(async () => {
+      await getNiiOnFiles()([makeFile('sub-01_pet.nii.gz')]);
     });
+
     expect(NiiViewer.mock.lastCall[0].volumes[0].type).toBe('PET');
   });
 
   it('passes type SPECT to NiiViewer for a siscom file', async () => {
     renderPatientView();
 
-    getNiiOnFiles()([makeFile('pat_siscom_17-13.nii')]);
-
-    await waitFor(() => {
-      expect(NiiViewer.mock.lastCall[0].volumes).toHaveLength(1);
+    await act(async () => {
+      await getNiiOnFiles()([makeFile('pat_siscom_17-13.nii')]);
     });
+
     expect(NiiViewer.mock.lastCall[0].volumes[0].type).toBe('SPECT');
   });
 });

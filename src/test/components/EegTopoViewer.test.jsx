@@ -12,6 +12,7 @@ const mockNvInstance = {
   addMesh: vi.fn(),
   updateGLVolume: vi.fn(),
   setSliceType: vi.fn(),
+  addColormap: vi.fn(),
   opts: {},
   meshes: [],
 };
@@ -63,6 +64,7 @@ const defaultProps = {
 beforeEach(() => {
   vi.clearAllMocks();
   mockNvInstance.meshes = [];
+  mockNvInstance.opts = {};
 });
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -81,6 +83,11 @@ describe('EegTopoViewer', () => {
   it('shows matched vs total channel count in the footer', async () => {
     await act(async () => render(<EegTopoViewer {...defaultProps} />));
     expect(screen.getByText(/2\s*\/\s*10\s*channels mapped/i)).toBeTruthy();
+  });
+
+  it('labels the colorbar with its unit, since NiiVue draws it without one', async () => {
+    await act(async () => render(<EegTopoViewer {...defaultProps} />));
+    expect(screen.getByText('µV')).toBeTruthy();
   });
 
   it('calls onClose when the close button is clicked', async () => {
@@ -122,6 +129,22 @@ describe('EegTopoViewer', () => {
       expect(mockNvInstance.attachToCanvas).toHaveBeenCalled();
       expect(onTopoNvReady).toHaveBeenCalledOnce();
     });
+
+    it('enables the global colorbar switch so the mesh colorbar renders', async () => {
+      await act(async () => render(<EegTopoViewer {...defaultProps} />));
+      expect(mockNvInstance.opts.isColorbar).toBe(true);
+    });
+
+    it('narrows and centers the colorbar so it clears the orientation cube', async () => {
+      await act(async () => render(<EegTopoViewer {...defaultProps} />));
+      expect(mockNvInstance.opts.colorbarWidth).toBeGreaterThan(0);
+      expect(mockNvInstance.opts.colorbarWidth).toBeLessThan(1);
+    });
+
+    it('zooms out slightly so the mesh leaves room for the colorbar at the bottom', async () => {
+      await act(async () => render(<EegTopoViewer {...defaultProps} />));
+      expect(mockNvInstance.volScaleMultiplier).toBeLessThan(1);
+    });
   });
 
   describe('mesh loading', () => {
@@ -134,10 +157,23 @@ describe('EegTopoViewer', () => {
       expect(mockNvInstance.meshes).toHaveLength(0);
     });
 
-    it('sets blue2red colormap on the loaded mesh layer', async () => {
+    it('registers a custom blue-white-red colormap and applies it to the loaded mesh layer', async () => {
       await act(async () => render(<EegTopoViewer {...defaultProps} />));
+
+      expect(mockNvInstance.addColormap).toHaveBeenCalled();
+      const [key, cmap] = mockNvInstance.addColormap.mock.calls[0];
+
       const addedMesh = mockNvInstance.addMesh.mock.calls[0][0];
-      expect(addedMesh.layers[0].colormap).toBe('blue2red');
+      // The mesh layer must reference the same colormap that was registered.
+      expect(addedMesh.layers[0].colormap).toBe(key);
+
+      // Negative end is pure blue, midpoint (zero) is white, positive end is pure red —
+      // unlike the built-in 'blue2red' map, which passes through green/yellow at zero.
+      const lastIdx = cmap.I.length - 1;
+      const midIdx = cmap.I.indexOf(128);
+      expect([cmap.R[0], cmap.G[0], cmap.B[0]]).toEqual([0, 0, 255]);
+      expect([cmap.R[midIdx], cmap.G[midIdx], cmap.B[midIdx]]).toEqual([255, 255, 255]);
+      expect([cmap.R[lastIdx], cmap.G[lastIdx], cmap.B[lastIdx]]).toEqual([255, 0, 0]);
     });
 
     it('sets symmetric cal_min and cal_max on the mesh layer', async () => {
@@ -153,6 +189,38 @@ describe('EegTopoViewer', () => {
       const { NVMesh } = await import('@niivue/niivue');
       await act(async () => render(<EegTopoViewer {...defaultProps} voltages={[]} />));
       expect(NVMesh.loadFromUrl).not.toHaveBeenCalled();
+    });
+
+    it('ignores a stale load that resolves after a newer one has started (StrictMode double-invoke guard)', async () => {
+      // Without this guard, React StrictMode's mount->cleanup->mount double-invoke (or a
+      // fast voltage change while a load is still in flight) lets the older, superseded
+      // call add its own mesh once it resolves — leaving two overlapping meshes, each
+      // contributing its own colorbar entry.
+      const { NVMesh } = await import('@niivue/niivue');
+      const resolvers = [];
+      const deferredLoad = () => new Promise((resolve) => resolvers.push(resolve));
+      NVMesh.loadFromUrl.mockImplementationOnce(deferredLoad).mockImplementationOnce(deferredLoad);
+
+      const { rerender } = await act(async () => render(<EegTopoViewer {...defaultProps} />));
+      await act(async () => {
+        rerender(<EegTopoViewer {...defaultProps} voltages={[-3, 0]} />);
+      });
+      expect(resolvers).toHaveLength(2);
+
+      const makeMesh = (id) => ({
+        id,
+        layers: [{ colormap: 'gray', cal_min: 0, cal_max: 1, opacity: 1 }],
+        updateMesh: vi.fn(),
+      });
+
+      // The stale (first) load resolves last — it must not add its mesh.
+      await act(async () => resolvers[0](makeMesh('stale-mesh')));
+      expect(mockNvInstance.addMesh).not.toHaveBeenCalled();
+
+      // The current (second) load resolving is the only one that should add a mesh.
+      await act(async () => resolvers[1](makeMesh('current-mesh')));
+      expect(mockNvInstance.addMesh).toHaveBeenCalledOnce();
+      expect(mockNvInstance.addMesh.mock.calls[0][0].id).toBe('current-mesh');
     });
   });
 

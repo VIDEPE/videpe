@@ -1206,6 +1206,14 @@ describe('EegViewer — onViewReady callback', () => {
     // ResizeObserver fires synchronously in the mock, so plotWidth > 0 right away —
     // onViewReady fires immediately, independent of the (async) buffer load.
     expect(onViewReady).toHaveBeenCalledTimes(1);
+
+    // Mounting also kicks off some background work (loading electrode positions, loading
+    // the EEG buffer) that only finishes after the check above. Wait for it here so it
+    // doesn't spill over into whichever test runs next.
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
   });
 });
 

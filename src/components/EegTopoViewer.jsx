@@ -3,6 +3,17 @@ import { NVMesh, NVMeshUtilities, SLICE_TYPE } from '@niivue/niivue';
 import { TrafficLightButtons } from './TrafficLightButtons';
 import { buildEegMesh } from '@/utils/eegTopographyUtils';
 
+// Custom diverging colormap: blue (negative) -> white (zero) -> red (positive).
+// (NiiVue's built-in 'blue2red' passes through green/yellow at the midpoint which is undesired)
+const EEG_TOPO_COLORMAP_KEY = 'eegBlueWhiteRed';
+const EEG_TOPO_COLORMAP = {
+  R: [0, 255, 255],
+  G: [0, 255, 0],
+  B: [255, 255, 0],
+  A: [255, 255, 255],
+  I: [0, 128, 255],
+};
+
 export function EegTopoViewer({
   nvRef,
   electrodes,
@@ -20,13 +31,20 @@ export function EegTopoViewer({
   const [isMaximized, setIsMaximized] = useState(false);
   const [position, setPosition] = useState({ x: 80, y: 80 });
   const dragOffset = useRef(null);
+  const meshLoadRef = useRef(null); // tracks the in-flight load so StrictMode's double-invoke can't add two meshes (and so two colorbars)
 
   // Initialise NiiVue once on mount
   useEffect(() => {
     const nv = nvRef.current;
     nv.setSliceType(SLICE_TYPE.RENDER); // force slicetype to render for a 3D view
+    nv.addColormap(EEG_TOPO_COLORMAP_KEY, EEG_TOPO_COLORMAP);
+    nv.opts.isColorbar = true; // master switch NiiVue checks before drawing any colorbar
+    // NiiVue overlays the colorbar on the viewport's bottom edge instead of reserving
+    // space for it here, so narrow the bar and shrink the mesh slightly to compensate.
+    nv.opts.colorbarWidth = 0.5;
     // Attach to a canvas and signal PatientView it is ready for synchronising to the EegTopoViewer
     nv.attachToCanvas(canvasRef.current);
+    nv.volScaleMultiplier = 0.85;
     onTopoNvReady?.();
   }, []);
 
@@ -42,6 +60,11 @@ export function EegTopoViewer({
     // Symmetric colormap range so blue/red are equal distance from zero
     const calMax = Math.max(...voltages.map(Math.abs));
 
+    // Identifies this specific load — StrictMode double-invokes this effect in dev,
+    // which would otherwise let a stale call add a second, overlapping mesh once the
+    // earlier (superseded) call's loadFromUrl resolves.
+    const loadToken = {};
+    meshLoadRef.current = loadToken;
     nv.meshes = [];
 
     const loadMesh = async () => {
@@ -57,12 +80,12 @@ export function EegTopoViewer({
           // readMesh the .mz3 extension it needs for format detection. Passing a name
           // without an extension causes readMesh to throw on ext.toUpperCase().
         });
-        if (!nvRef.current) return;
+        if (!nvRef.current || meshLoadRef.current !== loadToken) return; // superseded by a newer load
 
         // Override the auto-created scalar layer's colormap before the mesh is rendered
         if (mesh.layers.length > 0) {
           Object.assign(mesh.layers[0], {
-            colormap: 'blue2red',
+            colormap: EEG_TOPO_COLORMAP_KEY,
             cal_min: -calMax,
             cal_max: calMax,
             opacity: 1,
@@ -70,8 +93,8 @@ export function EegTopoViewer({
           mesh.updateMesh(nv.gl); // rebuild GL color buffers with the new colormap
         }
 
-        nvRef.current.addMesh(mesh);
-        nvRef.current.updateGLVolume();
+        nv.addMesh(mesh);
+        nv.updateGLVolume();
       } catch (err) {
         console.error('[EegTopoViewer] mesh load failed:', err);
       }
@@ -127,6 +150,11 @@ export function EegTopoViewer({
           This wrapper is the containing block so the canvas stays within the middle zone. */}
       <div className="relative flex-1 min-h-0">
         <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
+        {/* NiiVue's colorbar has no unit support — label it ourselves. pointer-events-none
+            so it doesn't block dragging/rotating the 3D view underneath. */}
+        <span className="absolute bottom-1 right-2 text-[10px] text-foreground/60 pointer-events-none">
+          µV
+        </span>
       </div>
 
       {/* Footer — explicit bg-surface for the same reason as the title bar */}

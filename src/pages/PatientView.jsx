@@ -55,11 +55,8 @@ export const PatientView = () => {
   const [niiNvReady, setNiiNvReady] = useState(false); // flag when the NiiViewer canvas is initialised
   const [topoNvReady, setTopoNvReady] = useState(false); // flag when EegTopoViewer canvas is initialised
 
-  // Lazy ref initialisation — instance is created once on first render and never replaced.
-  // A useEffect with cleanup would let React StrictMode's mount→cleanup→remount cycle null
-  // out and recreate the instance, causing NiiViewer's canvasReadyRef guard (set during the
-  // first mount) to block attachToCanvas on the second instance, leaving nvRef.current
-  // pointing at an instance with no WebGL context and making all controls unresponsive.
+  // Lazy ref init — created once, never replaced. A cleanup-based useEffect would let
+  // StrictMode's remount cycle recreate this and break NiiViewer's canvasReadyRef guard.
   const nvRef_niiviewer = useRef(null);
   if (nvRef_niiviewer.current === null) {
     nvRef_niiviewer.current = new Niivue({
@@ -69,6 +66,7 @@ export const PatientView = () => {
     });
   }
 
+  // Same lazy-ref pattern as nvRef_niiviewer, for the topography view's NiiVue instance.
   const nvRef_eegtopo = useRef(null);
   if (nvRef_eegtopo.current === null) {
     nvRef_eegtopo.current = new Niivue({
@@ -76,6 +74,8 @@ export const PatientView = () => {
     });
   }
 
+  // Once both viewers are ready, mirror 3D camera movement between them in both
+  // directions so rotating/zooming one view updates the other.
   useEffect(() => {
     if (!niiNvReady || !topoNvReady) return;
     nvRef_niiviewer.current.broadcastTo([nvRef_eegtopo.current], { '2d': false, '3d': true });
