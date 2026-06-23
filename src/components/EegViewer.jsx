@@ -533,7 +533,9 @@ export const EegViewer = ({
                 </div>
               </div>
             </div>
-            <div className="flex flex-col items-center gap-1 pb-1">
+            <div 
+              className="flex flex-col items-center gap-1 pb-1"
+              title="Apply EEG reference montage">
               <span className="text-xs text-foreground select-none pointer-events-none">
                 Montage:
               </span>
@@ -541,7 +543,7 @@ export const EegViewer = ({
                 value={montage}
                 onChange={(e) => setMontage(e.target.value)}
                 aria-label="Apply EEG reference montage"
-                title="Apply EEG reference montage"
+                
                 className="bg-background border border-border rounded px-1 py-0.5 text-xs text-heading cursor-pointer"
               >
                 <option value="none">None</option>
