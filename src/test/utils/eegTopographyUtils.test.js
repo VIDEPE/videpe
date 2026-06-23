@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { parseElc } from '@/loaders/parseElc';
-import { matchChannelsToPositions } from '@/utils/eegTopography';
+import { matchChannelsToPositions } from '@/utils/eegTopographyUtils';
 
 // Minimal valid .elc with 3 fiducials + 2 electrodes
 const MINIMAL_ELC = `# ASA electrode file
@@ -142,81 +142,15 @@ describe('matchChannelsToPositions', () => {
 });
 
 // ---------------------------------------------------------------------------
-// averageReference / medianReference
+// buildElectrodeMesh / gaussianRBF / interpolateMeshVoltages
 // ---------------------------------------------------------------------------
 
 import {
-  averageReference,
-  medianReference,
   buildElectrodeMesh,
   gaussianRBF,
   interpolateMeshVoltages,
   buildEegMesh,
-} from '@/utils/eegTopography';
-
-describe('averageReference', () => {
-  it('subtracts the mean so the output sums to zero', () => {
-    const out = averageReference([1, 2, 3, 4, 5]);
-    const sum = out.reduce((a, b) => a + b, 0);
-    expect(sum).toBeCloseTo(0);
-  });
-
-  it('shifts each value by the mean', () => {
-    const out = averageReference([10, 20, 30]);
-    // mean = 20; expected [-10, 0, 10]
-    expect(out[0]).toBeCloseTo(-10);
-    expect(out[1]).toBeCloseTo(0);
-    expect(out[2]).toBeCloseTo(10);
-  });
-
-  it('handles a single channel (output is zero)', () => {
-    const out = averageReference([42]);
-    expect(out[0]).toBeCloseTo(0);
-  });
-
-  it('does not mutate the input array', () => {
-    const input = [1, 2, 3];
-    averageReference(input);
-    expect(input).toEqual([1, 2, 3]);
-  });
-});
-
-describe('medianReference', () => {
-  it('subtracts the median (odd-length array)', () => {
-    // median of [1,2,3] = 2; expected [-1, 0, 1]
-    const out = medianReference([1, 2, 3]);
-    expect(out[0]).toBeCloseTo(-1);
-    expect(out[1]).toBeCloseTo(0);
-    expect(out[2]).toBeCloseTo(1);
-  });
-
-  it('subtracts the median (even-length array)', () => {
-    // median of [1,2,3,4] = 2.5; expected [-1.5, -0.5, 0.5, 1.5]
-    const out = medianReference([1, 2, 3, 4]);
-    expect(out[0]).toBeCloseTo(-1.5);
-    expect(out[3]).toBeCloseTo(1.5);
-  });
-
-  it('is robust to an outlier channel', () => {
-    // Without the outlier, median of [1,2,3] = 2.
-    // With outlier 1000, average ref would smear it; median ignores it.
-    const out = medianReference([1, 2, 3, 1000]);
-    // median of [1,2,3,1000] = (2+3)/2 = 2.5
-    expect(out[3]).toBeCloseTo(1000 - 2.5);
-    // the three normal channels stay close to zero, not pulled toward 1000
-    expect(Math.abs(out[0])).toBeLessThan(5);
-  });
-
-  it('does not mutate the input array', () => {
-    const input = [3, 1, 2];
-    medianReference(input);
-    expect(input).toEqual([3, 1, 2]);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// buildElectrodeMesh / gaussianRBF / interpolateMeshVoltages
-// ---------------------------------------------------------------------------
+} from '@/utils/eegTopographyUtils';
 
 // 8 corners of a cube — guaranteed non-coplanar, convex hull gives 12 triangles
 const CUBE_ELECTRODES = [

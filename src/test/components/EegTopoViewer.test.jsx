@@ -90,22 +90,6 @@ describe('EegTopoViewer', () => {
     expect(onClose).toHaveBeenCalledOnce();
   });
 
-  it('renders a Re-referencing label with a dropdown defaulting to average', async () => {
-    await act(async () => render(<EegTopoViewer {...defaultProps} />));
-    expect(screen.getByText('Re-referencing')).toBeTruthy();
-    const select = screen.getByLabelText(/re-referencing/i);
-    expect(select.value).toBe('average');
-  });
-
-  it('re-referencing dropdown has None, Average, and Median options', async () => {
-    await act(async () => render(<EegTopoViewer {...defaultProps} />));
-    const select = screen.getByLabelText(/re-referencing/i);
-    const values = Array.from(select.options).map((o) => o.value);
-    expect(values).toContain('none');
-    expect(values).toContain('average');
-    expect(values).toContain('median');
-  });
-
   it('renders a maximize button', async () => {
     await act(async () => render(<EegTopoViewer {...defaultProps} />));
     expect(screen.getByRole('button', { name: /maximize/i })).toBeTruthy();
@@ -158,10 +142,11 @@ describe('EegTopoViewer', () => {
 
     it('sets symmetric cal_min and cal_max on the mesh layer', async () => {
       await act(async () => render(<EegTopoViewer {...defaultProps} />));
-      // VOLTAGES=[10,-5], averageReference → [7.5,-7.5], calMax = 7.5
+      // VOLTAGES=[10,-5]; the component no longer re-references internally,
+      // so calMax = max(|10|, |-5|) = 10
       const addedMesh = mockNvInstance.addMesh.mock.calls[0][0];
-      expect(addedMesh.layers[0].cal_max).toBe(7.5);
-      expect(addedMesh.layers[0].cal_min).toBe(-7.5);
+      expect(addedMesh.layers[0].cal_max).toBe(10);
+      expect(addedMesh.layers[0].cal_min).toBe(-10);
     });
 
     it('does not load a mesh when voltages is empty', async () => {
@@ -171,38 +156,25 @@ describe('EegTopoViewer', () => {
     });
   });
 
-  describe('re-referencing', () => {
-    it('reloads the mesh when re-referencing is changed to median', async () => {
+  describe('voltages prop changes', () => {
+    // Re-referencing now happens upstream in EegViewer — EegTopoViewer just renders
+    // whatever voltages it's given, and rebuilds the mesh whenever that prop changes.
+    it('reloads the mesh when the voltages prop changes', async () => {
       const { NVMesh } = await import('@niivue/niivue');
-      await act(async () => render(<EegTopoViewer {...defaultProps} />));
+      const { rerender } = await act(async () => render(<EegTopoViewer {...defaultProps} />));
       expect(NVMesh.loadFromUrl).toHaveBeenCalledTimes(1);
 
       await act(async () => {
-        await userEvent.selectOptions(screen.getByLabelText(/re-referencing/i), 'median');
+        rerender(<EegTopoViewer {...defaultProps} voltages={[-3, 0]} />);
       });
       expect(NVMesh.loadFromUrl).toHaveBeenCalledTimes(2);
     });
 
-    it('reloads the mesh when re-referencing is changed to none', async () => {
-      const { NVMesh } = await import('@niivue/niivue');
-      await act(async () => render(<EegTopoViewer {...defaultProps} />));
-
-      await act(async () => {
-        await userEvent.selectOptions(screen.getByLabelText(/re-referencing/i), 'none');
-      });
-      expect(NVMesh.loadFromUrl).toHaveBeenCalledTimes(2);
-    });
-
-    it('uses raw voltages when re-referencing is none', async () => {
-      await act(async () => render(<EegTopoViewer {...defaultProps} />));
-
-      await act(async () => {
-        await userEvent.selectOptions(screen.getByLabelText(/re-referencing/i), 'none');
-      });
-
-      // Raw VOLTAGES=[10,-5]: calMax = max(|10|,|-5|) = 10, vs average-referenced 7.5
-      const secondMesh = mockNvInstance.addMesh.mock.calls[1][0];
-      expect(secondMesh.layers[0].cal_max).toBe(10);
+    it('uses the voltages exactly as provided, without re-referencing them itself', async () => {
+      await act(async () => render(<EegTopoViewer {...defaultProps} voltages={[-3, 0]} />));
+      // calMax = max(|-3|, |0|) = 3 — confirms no internal re-referencing is applied
+      const addedMesh = mockNvInstance.addMesh.mock.calls[0][0];
+      expect(addedMesh.layers[0].cal_max).toBe(3);
     });
   });
 

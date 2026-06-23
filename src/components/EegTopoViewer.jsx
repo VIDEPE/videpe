@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { NVMesh, NVMeshUtilities, SLICE_TYPE } from '@niivue/niivue';
 import { TrafficLightButtons } from './TrafficLightButtons';
-import { buildEegMesh, averageReference, medianReference } from '@/utils/eegTopography';
+import { buildEegMesh } from '@/utils/eegTopographyUtils';
 
 export function EegTopoViewer({
   nvRef,
@@ -16,7 +16,6 @@ export function EegTopoViewer({
 }) {
   const canvasRef = useRef(null);
   const fileInputRef = useRef(null);
-  const [reference, setReference] = useState('average'); // 'none' | 'average' | 'median'
   const [customFileName, setCustomFileName] = useState(null); // filename (no extension) of the loaded custom positions file
   const [isMaximized, setIsMaximized] = useState(false);
   const [position, setPosition] = useState({ x: 80, y: 80 });
@@ -37,18 +36,11 @@ export function EegTopoViewer({
     const nv = nvRef.current;
     if (!nv || !electrodes?.length || !voltages?.length) return;
 
-    const refVoltages =
-      reference === 'median'
-        ? medianReference(voltages)
-        : reference === 'average'
-          ? averageReference(voltages)
-          : voltages; // 'none' — use raw voltages without re-referencing
-
-    const { vertices, indices, scalars } = buildEegMesh(electrodes, matched, refVoltages);
+    const { vertices, indices, scalars } = buildEegMesh(electrodes, matched, voltages);
     const buffer = NVMeshUtilities.createMZ3(vertices, indices, false, null, scalars);
 
     // Symmetric colormap range so blue/red are equal distance from zero
-    const calMax = Math.max(...refVoltages.map(Math.abs));
+    const calMax = Math.max(...voltages.map(Math.abs));
 
     nv.meshes = [];
 
@@ -85,8 +77,9 @@ export function EegTopoViewer({
       }
     };
 
+    // Generate mesh for current electrode layout and load into NiiVue canvas
     loadMesh();
-  }, [electrodes, matched, voltages, reference]);
+  }, [electrodes, matched, voltages]);
 
   // Drag the floating window by its title bar
   const handleDragStart = useCallback(
@@ -141,19 +134,6 @@ export function EegTopoViewer({
         <span className="text-foreground">
           {matched.length} / {totalChannels} channels mapped
         </span>
-        <div className="flex items-center gap-3">
-          <span className="text-foreground select-none pointer-events-none">Re-referencing</span>
-          <select
-            value={reference}
-            onChange={(e) => setReference(e.target.value)}
-            aria-label="Re-referencing"
-            className="bg-background border border-border rounded px-2 py-0.5 text-xs text-heading cursor-pointer"
-          >
-            <option value="none">None</option>
-            <option value="average">Average</option>
-            <option value="median">Median</option>
-          </select>
-        </div>
       </div>
 
       {/* Electrode source row */}

@@ -1,7 +1,7 @@
 ﻿import '@testing-library/jest-dom';
 import { vi } from 'vitest';
 
-// jsdom doesn't implement ResizeObserver — required by @dnd-kit/dom
+// Stubs ResizeObserver as a no-op class, since jsdom doesn't implement it and it's required by @dnd-kit/dom
 global.ResizeObserver = class ResizeObserver {
   observe() {}
   unobserve() {}

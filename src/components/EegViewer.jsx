@@ -18,8 +18,10 @@ import {
 } from 'lucide-react';
 import { minMaxDownsample } from '@/utils/downsample';
 import { useEegBuffer } from '@/loaders/eegBuffer';
+import { applyMontage } from '@/utils/eegViewerUtils';
+
 import { parseElc } from '@/loaders/parseElc';
-import { matchChannelsToPositions } from '@/utils/eegTopography';
+import { matchChannelsToPositions } from '@/utils/eegTopographyUtils';
 import { EegTopoViewer } from '@/components/EegTopoViewer';
 
 const EEG_LOADING_TOAST_ID = 'eeg-buffer-loading'; // fixed id so the loading/success toasts update in place rather than stacking
@@ -164,6 +166,9 @@ export const EegViewer = ({
     channelAreaHeight > 0 ? Math.floor(channelAreaHeight / visibleChannelCount) : 0;
   const axisColor = isDarkMode ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.8)';
 
+  // Montage for the
+  const [montage, setMontage] = useState('none'); // 'none' | 'average' | 'median'
+
   // Buffer of EEG data around the visible window — reloads on big jumps, otherwise
   // keeps the previous buffer's data on screen until the new one arrives (no flash).
   const { timestamps, channels, isLoading } = useEegBuffer(provider, startTime, windowSize);
@@ -205,15 +210,22 @@ export const EegViewer = ({
     [channelNames]
   );
 
+  // Apply the selected montage once, shared by the channel plots and the topography snapshot
+  const montagedChannels = useMemo(() => {
+    if (!channels) return null;
+    return applyMontage(channels, montage);
+  }, [channels, montage]);
+
   // Extract one voltage per matched channel from the buffer at the clicked timepoint
   const topoVoltages = useMemo(() => {
-    if (topoTimepoint === null || !timestamps?.length || !channels || !matched.length) return [];
+    if (topoTimepoint === null || !timestamps?.length || !montagedChannels || !matched.length)
+      return [];
     const idx = Math.max(
       0,
       Math.min(timestamps.length - 1, Math.round((topoTimepoint - timestamps[0]) * provider.fs))
     );
-    return matched.map((m) => channels[m.channelIdx]?.[idx] ?? 0);
-  }, [topoTimepoint, timestamps, channels, matched, provider.fs]);
+    return matched.map((m) => montagedChannels[m.channelIdx]?.[idx] ?? 0);
+  }, [topoTimepoint, timestamps, montagedChannels, matched, provider.fs]);
 
   // Show a loading toast while the initial buffer loads, then update it to a success
   // message — self-contained so EegViewer reports its own status regardless of where
@@ -232,22 +244,18 @@ export const EegViewer = ({
     return () => toast.dismiss(EEG_LOADING_TOAST_ID);
   }, []);
 
-  // Downsample each channel for the visible window.
-  // Re-runs only when the window, buffer, or plot dimensions change, not on every render.
-  const downSampledData = useMemo(() => {
+  // Downsample the montaged buffer for the visible window
+  const displayedData = useMemo(() => {
     // If we don't have valid dimensions or data yet, return empty arrays for each channel to avoid rendering broken plots
     const empty = channelNames.map(() => [[], []]);
-    if (plotWidth === 0 || !timestamps || timestamps.length === 0) return empty;
+    if (plotWidth === 0 || !timestamps || timestamps.length === 0 || !montagedChannels)
+      return empty;
 
     const endTime = startTime + windowSize;
-    // No overlap between the buffered chunk and the visible window — can happen mid-reload
-    // after a big jump (Home/End, distant scrubber drag). Show an empty plot until the new
-    // buffer (covering the new window) arrives.
-    if (timestamps[timestamps.length - 1] < startTime || timestamps[0] > endTime) return empty;
     return channelNames.map((_, i) =>
-      minMaxDownsample(timestamps, channels[i], startTime, endTime, plotWidth)
+      minMaxDownsample(timestamps, montagedChannels[i], startTime, endTime, plotWidth)
     );
-  }, [timestamps, channels, startTime, windowSize, plotWidth, channelNames]);
+  }, [timestamps, montagedChannels, channelNames, startTime, windowSize, plotWidth]);
 
   useEffect(() => {
     // ResizeObserver fires whenever the container changes size and updates plotWidth/channelAreaHeight,
@@ -453,50 +461,70 @@ export const EegViewer = ({
         </div>
         {/* Plot row: sidebar + channel plots side by side; flex-1 so controls sit below */}
         <div className="flex-1 min-h-0 flex flex-row">
-          {/* Left sidebar: justify-center now centers against the channel area height only */}
-          <div className="shrink-0 flex flex-row items-center px-1">
-            <div className="flex flex-row items-center gap-1 py-1 border-border/50 border-1 border-r-0 rounded-tl-md rounded-bl-md">
-              <span className="text-xs text-foreground/60 whitespace-nowrap [writing-mode:vertical-rl] rotate-180 select-none pointer-events-none">
-                Channels
-              </span>
-              <div className="flex flex-col items-center gap-1">
-                <button
-                  type="button"
-                  className="button button-icon"
-                  onClick={() => updateVisibleChannelCount(visibleChannelCount + 1)}
-                  title="Show more channels"
-                >
-                  <ListChevronsUpDown size={ICON_SIZE} />
-                </button>
-                <input
-                  id="eeg-visible-channels"
-                  type="number"
-                  value={visibleChannelCountStr}
-                  min={1}
-                  max={channelNames.length}
-                  style={{ width: inputWidth(visibleChannelCountStr) }}
-                  onChange={(e) => {
-                    if (e.target.value.length > CHANNEL_INPUT_MAX_LENGTH) return;
-                    setVisibleChannelCountStr(e.target.value);
-                    const val = Number(e.target.value);
-                    if (e.target.value !== '' && !isNaN(val))
-                      setVisibleChannelCount(clampChannelCount(Math.round(val)));
-                  }}
-                  onBlur={() =>
-                    updateVisibleChannelCount(Number(visibleChannelCountStr) || visibleChannelCount)
-                  }
-                  className="text-center border border-border rounded px-1 py-0.5 text-sm bg-background text-foreground [appearance:textfield]"
-                  aria-label="Number of channels displayed"
-                />
-                <button
-                  type="button"
-                  className="button button-icon"
-                  onClick={() => updateVisibleChannelCount(visibleChannelCount - 1)}
-                  title="Show fewer channels"
-                >
-                  <ListChevronsDownUp size={ICON_SIZE} />
-                </button>
+          {/* Left sidebar: Channels controls centered in the available height, Montage pinned to the bottom-left corner */}
+          <div className="shrink-0 flex flex-col px-1">
+            <div className="flex-1 flex flex-row items-center">
+              <div className="flex flex-row items-center gap-1 py-1 border-border/50 border-1 border-r-0 rounded-tl-md rounded-bl-md">
+                <span className="text-xs text-foreground/60 whitespace-nowrap [writing-mode:vertical-rl] rotate-180 select-none pointer-events-none">
+                  Channels
+                </span>
+                <div className="flex flex-col items-center gap-1">
+                  <button
+                    type="button"
+                    className="button button-icon"
+                    onClick={() => updateVisibleChannelCount(visibleChannelCount + 1)}
+                    title="Show more channels"
+                  >
+                    <ListChevronsUpDown size={ICON_SIZE} />
+                  </button>
+                  <input
+                    id="eeg-visible-channels"
+                    type="number"
+                    value={visibleChannelCountStr}
+                    min={1}
+                    max={channelNames.length}
+                    style={{ width: inputWidth(visibleChannelCountStr) }}
+                    onChange={(e) => {
+                      if (e.target.value.length > CHANNEL_INPUT_MAX_LENGTH) return;
+                      setVisibleChannelCountStr(e.target.value);
+                      const val = Number(e.target.value);
+                      if (e.target.value !== '' && !isNaN(val))
+                        setVisibleChannelCount(clampChannelCount(Math.round(val)));
+                    }}
+                    onBlur={() =>
+                      updateVisibleChannelCount(
+                        Number(visibleChannelCountStr) || visibleChannelCount
+                      )
+                    }
+                    className="text-center border border-border rounded px-1 py-0.5 text-sm bg-background text-foreground [appearance:textfield]"
+                    aria-label="Number of channels displayed"
+                  />
+                  <button
+                    type="button"
+                    className="button button-icon"
+                    onClick={() => updateVisibleChannelCount(visibleChannelCount - 1)}
+                    title="Show fewer channels"
+                  >
+                    <ListChevronsDownUp size={ICON_SIZE} />
+                  </button>
+                </div>
               </div>
+            </div>
+            <div className="flex flex-col items-center gap-1 pb-1">
+              <span className="text-xs text-foreground select-none pointer-events-none">
+                Montage:
+              </span>
+              <select
+                value={montage}
+                onChange={(e) => setMontage(e.target.value)}
+                aria-label="Apply EEG reference montage"
+                title="Apply EEG reference montage"
+                className="bg-background border border-border rounded px-1 py-0.5 text-xs text-heading cursor-pointer"
+              >
+                <option value="none">None</option>
+                <option value="average">Average</option>
+                <option value="median">Median</option>
+              </select>
             </div>
           </div>
 
@@ -569,7 +597,7 @@ export const EegViewer = ({
                             startTime,
                             yScale,
                           })}
-                          data={downSampledData[i]}
+                          data={displayedData[i]}
                           onCreate={(u) => {
                             u.over.addEventListener('click', () => {
                               const t = u.posToVal(u.cursor.left, 'x');
@@ -824,6 +852,7 @@ export const EegViewer = ({
           onTopoNvReady={onTopoNvReady}
           isStandardElectrodes={isStandardElectrodes}
           onElcFile={handleCustomElc}
+          montage={montage}
         />
       )}
     </>
