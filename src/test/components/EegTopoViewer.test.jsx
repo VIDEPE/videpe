@@ -64,6 +64,7 @@ const defaultProps = {
 beforeEach(() => {
   vi.clearAllMocks();
   mockNvInstance.meshes = [];
+  mockNvInstance.opts = {};
 });
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -133,6 +134,11 @@ describe('EegTopoViewer', () => {
       // Component sets nv.meshes = [] synchronously before awaiting loadFromUrl;
       // addMesh is a no-op mock so meshes stays empty after the load.
       expect(mockNvInstance.meshes).toHaveLength(0);
+    });
+
+    it('enables the global colorbar switch so the mesh colorbar renders', async () => {
+      await act(async () => render(<EegTopoViewer {...defaultProps} />));
+      expect(mockNvInstance.opts.isColorbar).toBe(true);
     });
 
     it('registers a custom blue-white-red colormap and applies it to the loaded mesh layer', async () => {

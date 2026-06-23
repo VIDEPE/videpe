@@ -82,6 +82,7 @@ export function EegTopoViewer({
           mesh.updateMesh(nv.gl); // rebuild GL color buffers with the new colormap
         }
 
+        nvRef.current.opts.isColorbar = true;
         nvRef.current.addMesh(mesh);
         nvRef.current.updateGLVolume();
       } catch (err) {
