@@ -61,16 +61,20 @@ describe('medianReference', () => {
     const channels = [
       [1, 10],
       [2, 20],
+      [2, 20],
       [3, 30],
+      [4, 40],
     ];
     const out = medianReference(channels);
     expect(out[0]).toEqual([-1, -10]);
     expect(out[1]).toEqual([0, 0]);
-    expect(out[2]).toEqual([1, 10]);
+    expect(out[2]).toEqual([0, 0]);
+    expect(out[3]).toEqual([1, 10]);
+    expect(out[4]).toEqual([2, 20]);
   });
 
-  it('subtracts the per-sample cross-channel median (even channel count)', () => {
-    // 4 channels, 1 sample. Median of [1,2,3,4] = 2.5.
+  it('subtracts the per-sample cross-channel median (even channel count => takes the average between the middle two samples)', () => {
+    // 4 channels, 1 sample. Median of [1,2,2,4] = 2.5.
     const channels = [[1], [2], [3], [4]];
     const out = medianReference(channels);
     expect(out[0][0]).toBeCloseTo(-1.5);
