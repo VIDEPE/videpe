@@ -4,8 +4,7 @@ import { TrafficLightButtons } from './TrafficLightButtons';
 import { buildEegMesh } from '@/utils/eegTopographyUtils';
 
 // Custom diverging colormap: blue (negative) -> white (zero) -> red (positive).
-// NiiVue's built-in 'blue2red' passes through green/yellow at the midpoint, which
-// reads as a third data feature rather than "this is near zero".
+// (NiiVue's built-in 'blue2red' passes through green/yellow at the midpoint which is undesired)
 const EEG_TOPO_COLORMAP_KEY = 'eegBlueWhiteRed';
 const EEG_TOPO_COLORMAP = {
   R: [0, 255, 255],
