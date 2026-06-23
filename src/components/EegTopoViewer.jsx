@@ -38,8 +38,13 @@ export function EegTopoViewer({
     const nv = nvRef.current;
     nv.setSliceType(SLICE_TYPE.RENDER); // force slicetype to render for a 3D view
     nv.addColormap(EEG_TOPO_COLORMAP_KEY, EEG_TOPO_COLORMAP);
+    nv.opts.isColorbar = true; // master switch NiiVue checks before drawing any colorbar
+    // NiiVue overlays the colorbar on the viewport's bottom edge instead of reserving
+    // space for it here, so narrow the bar and shrink the mesh slightly to compensate.
+    nv.opts.colorbarWidth = 0.5;
     // Attach to a canvas and signal PatientView it is ready for synchronising to the EegTopoViewer
     nv.attachToCanvas(canvasRef.current);
+    nv.volScaleMultiplier = 0.85;
     onTopoNvReady?.();
   }, []);
 
@@ -88,7 +93,6 @@ export function EegTopoViewer({
           mesh.updateMesh(nv.gl); // rebuild GL color buffers with the new colormap
         }
 
-        nv.opts.isColorbar = true;
         nv.addMesh(mesh);
         nv.updateGLVolume();
       } catch (err) {
@@ -146,6 +150,11 @@ export function EegTopoViewer({
           This wrapper is the containing block so the canvas stays within the middle zone. */}
       <div className="relative flex-1 min-h-0">
         <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
+        {/* NiiVue's colorbar has no unit support — label it ourselves. pointer-events-none
+            so it doesn't block dragging/rotating the 3D view underneath. */}
+        <span className="absolute bottom-1 right-2 text-[10px] text-foreground/60 pointer-events-none">
+          µV
+        </span>
       </div>
 
       {/* Footer — explicit bg-surface for the same reason as the title bar */}

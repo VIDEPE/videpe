@@ -85,6 +85,11 @@ describe('EegTopoViewer', () => {
     expect(screen.getByText(/2\s*\/\s*10\s*channels mapped/i)).toBeTruthy();
   });
 
+  it('labels the colorbar with its unit, since NiiVue draws it without one', async () => {
+    await act(async () => render(<EegTopoViewer {...defaultProps} />));
+    expect(screen.getByText('µV')).toBeTruthy();
+  });
+
   it('calls onClose when the close button is clicked', async () => {
     const onClose = vi.fn();
     await act(async () => render(<EegTopoViewer {...defaultProps} onClose={onClose} />));
@@ -124,6 +129,22 @@ describe('EegTopoViewer', () => {
       expect(mockNvInstance.attachToCanvas).toHaveBeenCalled();
       expect(onTopoNvReady).toHaveBeenCalledOnce();
     });
+
+    it('enables the global colorbar switch so the mesh colorbar renders', async () => {
+      await act(async () => render(<EegTopoViewer {...defaultProps} />));
+      expect(mockNvInstance.opts.isColorbar).toBe(true);
+    });
+
+    it('narrows and centers the colorbar so it clears the orientation cube', async () => {
+      await act(async () => render(<EegTopoViewer {...defaultProps} />));
+      expect(mockNvInstance.opts.colorbarWidth).toBeGreaterThan(0);
+      expect(mockNvInstance.opts.colorbarWidth).toBeLessThan(1);
+    });
+
+    it('zooms out slightly so the mesh leaves room for the colorbar at the bottom', async () => {
+      await act(async () => render(<EegTopoViewer {...defaultProps} />));
+      expect(mockNvInstance.volScaleMultiplier).toBeLessThan(1);
+    });
   });
 
   describe('mesh loading', () => {
@@ -134,11 +155,6 @@ describe('EegTopoViewer', () => {
       // Component sets nv.meshes = [] synchronously before awaiting loadFromUrl;
       // addMesh is a no-op mock so meshes stays empty after the load.
       expect(mockNvInstance.meshes).toHaveLength(0);
-    });
-
-    it('enables the global colorbar switch so the mesh colorbar renders', async () => {
-      await act(async () => render(<EegTopoViewer {...defaultProps} />));
-      expect(mockNvInstance.opts.isColorbar).toBe(true);
     });
 
     it('registers a custom blue-white-red colormap and applies it to the loaded mesh layer', async () => {
