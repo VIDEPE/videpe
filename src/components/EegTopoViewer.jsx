@@ -14,6 +14,12 @@ const EEG_TOPO_COLORMAP = {
   I: [0, 128, 255],
 };
 
+// Default/minimum window size in px — default matches the previous fixed w-96 h-80 (24rem x 20rem)
+const DEFAULT_TOPO_SIZE = { width: 375, height: 360 };
+const MIN_TOPO_WIDTH = 220;
+const MIN_TOPO_HEIGHT = 220;
+const RESIZE_DIRECTIONS = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
+
 export function EegTopoViewer({
   nvRef,
   electrodes,
@@ -30,6 +36,7 @@ export function EegTopoViewer({
   const [customFileName, setCustomFileName] = useState(null); // filename (no extension) of the loaded custom positions file
   const [isMaximized, setIsMaximized] = useState(false);
   const [position, setPosition] = useState({ x: 80, y: 80 });
+  const [size, setSize] = useState(DEFAULT_TOPO_SIZE);
   const dragOffset = useRef(null);
   const meshLoadRef = useRef(null); // tracks the in-flight load so StrictMode's double-invoke can't add two meshes (and so two colorbars)
 
@@ -120,17 +127,90 @@ export function EegTopoViewer({
     [position]
   );
 
+  // Resize the floating window by dragging an edge or corner. direction is a combination of
+  // 'n'/'s'/'e'/'w' identifying which edges move; dragging n/w also shifts position so the
+  // opposite edge stays anchored in place, matching how OS window resizing behaves.
+  const handleResizeStart = useCallback(
+    (e, direction) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const startWidth = size.width;
+      const startHeight = size.height;
+      const startPosition = position;
+
+      const onMove = (e) => {
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        const nextSize = { width: startWidth, height: startHeight };
+        const nextPosition = { ...startPosition };
+
+        if (direction.includes('e')) nextSize.width = Math.max(MIN_TOPO_WIDTH, startWidth + dx);
+        if (direction.includes('s')) nextSize.height = Math.max(MIN_TOPO_HEIGHT, startHeight + dy);
+        if (direction.includes('w')) {
+          nextSize.width = Math.max(MIN_TOPO_WIDTH, startWidth - dx);
+          nextPosition.x = startPosition.x + (startWidth - nextSize.width);
+        }
+        if (direction.includes('n')) {
+          nextSize.height = Math.max(MIN_TOPO_HEIGHT, startHeight - dy);
+          nextPosition.y = startPosition.y + (startHeight - nextSize.height);
+        }
+
+        setSize(nextSize);
+        setPosition(nextPosition);
+      };
+      const onUp = () => {
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+      };
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+    },
+    [size, position]
+  );
+
+  const resizeCursor = {
+    n: 'cursor-ns-resize',
+    s: 'cursor-ns-resize',
+    e: 'cursor-ew-resize',
+    w: 'cursor-ew-resize',
+    ne: 'cursor-nesw-resize',
+    sw: 'cursor-nesw-resize',
+    nw: 'cursor-nwse-resize',
+    se: 'cursor-nwse-resize',
+  };
+
+  // Edge handles run the full length of their side; corner handles are small squares
+  // layered on top so diagonal resizing takes priority right at the corners.
+  const resizePosition = {
+    n: 'inset-x-0 top-0 h-1.5',
+    s: 'inset-x-0 bottom-0 h-1.5',
+    e: 'inset-y-0 right-0 w-1.5',
+    w: 'inset-y-0 left-0 w-1.5',
+    ne: 'top-0 right-0 w-2.5 h-2.5',
+    nw: 'top-0 left-0 w-2.5 h-2.5',
+    se: 'bottom-0 right-0 w-2.5 h-2.5',
+    sw: 'bottom-0 left-0 w-2.5 h-2.5',
+  };
+
   return (
     <div
       className={
         isMaximized
           ? 'fixed inset-0 z-50 flex flex-col bg-surface'
-          : 'fixed z-50 flex flex-col w-96 h-80 rounded-lg border border-border bg-surface'
+          : 'fixed z-50 flex flex-col rounded-lg border border-border bg-surface'
       }
       style={
         isMaximized
           ? { boxShadow: 'none' }
-          : { left: position.x, top: position.y, boxShadow: 'var(--c-shadow)' }
+          : {
+              left: position.x,
+              top: position.y,
+              width: size.width,
+              height: size.height,
+              boxShadow: 'var(--c-shadow)',
+            }
       }
     >
       {/* Title bar — drag handle; explicit bg-surface so NiiVue's black canvas doesn't bleed through */}
@@ -193,6 +273,18 @@ export function EegTopoViewer({
           }}
         />
       </div>
+
+      {/* Resize handles — hidden while maximized since the window already fills the screen.
+          Rendered last so they paint above the title/footer content and stay grabbable at the edges. */}
+      {!isMaximized &&
+        RESIZE_DIRECTIONS.map((direction) => (
+          <div
+            key={direction}
+            data-testid={`topo-resize-${direction}`}
+            className={`absolute ${resizePosition[direction]} ${resizeCursor[direction]}`}
+            onMouseDown={(e) => handleResizeStart(e, direction)}
+          />
+        ))}
     </div>
   );
 }
