@@ -447,7 +447,7 @@ export const EegViewer = ({
       >
         {/* Keyboard shortcut hint — bottom-right corner of the viewer pane */}
         <div
-          className="absolute bottom-2 right-2 z-20 text-foreground/40 hover:text-foreground/80 group-focus:text-secondary transition-colors"
+          className="absolute bottom-2 right-2 z-20 text-foreground/40 hover:text-foreground/80 group-focus:text-secondary transition-colors cursor-help"
           title={
             'Click the EEG viewer to enable keyboard navigation (blue outline when active):\n' +
             '· ↑/↓\t\tRange adjustment up/down\n' +

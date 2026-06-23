@@ -232,14 +232,20 @@ export function EegTopoViewer({
         <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
         {/* NiiVue's colorbar has no unit support — label it ourselves. pointer-events-none
             so it doesn't block dragging/rotating the 3D view underneath. */}
-        <span className="absolute bottom-1 right-2 text-[10px] text-foreground/60 pointer-events-none">
+        <span
+          className="absolute bottom-1 right-2 text-[10px] text-foreground/60 cursor-help"
+          title="Colorbar indicates EEG voltages in µV"
+        >
           µV
         </span>
       </div>
 
       {/* Footer — explicit bg-surface for the same reason as the title bar */}
       <div className="flex items-center justify-between px-2 py-1 text-xs border-t border-border shrink-0 bg-surface">
-        <span className="text-foreground">
+        <span
+          className="text-foreground cursor-help"
+          title={`${matched.length} out of ${totalChannels} could be identified with the electrode position template below.\nUse custom electrode position file or adapt EEG channel naming to the template to increase the amount.`}
+        >
           {matched.length} / {totalChannels} channels mapped
         </span>
       </div>
@@ -253,7 +259,8 @@ export function EegTopoViewer({
           type="button"
           onClick={() => fileInputRef.current?.click()}
           className="text-foreground/60 hover:text-heading cursor-pointer underline underline-offset-2"
-          aria-label="Use custom positions"
+          aria-label="Click to browse file to use custom defined electrode positions"
+          title="Click to browse file to use custom defined electrode positions"
         >
           Use custom positions
         </button>
