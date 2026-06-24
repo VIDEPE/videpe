@@ -35,7 +35,7 @@ export function parseTsvElectrodePositions(text) {
   const zIndex = header.findIndex((element) => element === 'z');
 
   for (let i = 0; i < elecLines.length; i++) {
-    const elec = elecLines[i].split('\t')
+    const elec = elecLines[i].split('\t');
 
     const label = elec[nameIndex];
 
@@ -54,7 +54,6 @@ export function parseTsvElectrodePositions(text) {
     } else {
       result.electrodes.push({ label, x, y, z });
     }
-
   }
 
   // Check if all 3 fiducial points are present => hasFiducials === true
