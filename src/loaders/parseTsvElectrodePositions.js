@@ -26,18 +26,18 @@ export function parseTsvElectrodePositions(text) {
 
   const lines = text.split('\n').map((l) => l.trim());
 
-  const header = lines[0].split('\t')
-  const elecLines = lines.splice(1)
+  const header = lines[0].split('\t');
+  const elecLines = lines.splice(1);
 
-  nameIndex = header.findIndex((element) => element === 'name')
-  xIndex = header.findIndex((element) => element === 'x')
-  yIndex = header.findIndex((element) => element === 'y')
-  zIndex = header.findIndex((element) => element === 'z')
+  const nameIndex = header.findIndex((element) => element === 'name');
+  const xIndex = header.findIndex((element) => element === 'x');
+  const yIndex = header.findIndex((element) => element === 'y');
+  const zIndex = header.findIndex((element) => element === 'z');
 
   for (let i = 0; i < elecLines.length; i++) {
-    const elec = elecLines.split('\t')
+    const elec = elecLines[i].split('\t')
 
-    const label = parseFloat(elec[nameIndex]);
+    const label = elec[nameIndex];
 
     // units should be in [mm]
     const x = parseFloat(elec[xIndex]);
