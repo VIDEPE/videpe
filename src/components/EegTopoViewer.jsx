@@ -154,7 +154,7 @@ export function EegTopoViewer({
     nv.attachToCanvas(canvasRef.current);
     nv.volScaleMultiplier = 0.85;
     onTopoNvReady?.();
-  }, []);
+  }, [nvRef, onTopoNvReady]);
 
   // The convex-hull triangulation only depends on the electrode template, not on the
   // per-timepoint voltages — caching it here avoids re-triangulating on every topo
@@ -218,7 +218,7 @@ export function EegTopoViewer({
 
     // Generate mesh for current electrode layout and load into NiiVue canvas
     loadMesh();
-  }, [electrodeMesh, electrodes, matched, voltages, colourBlindMode]);
+  }, [nvRef, electrodeMesh, electrodes, matched, voltages, colourBlindMode]);
 
   // Drag the floating window by its title bar
   const handleDragStart = useCallback(

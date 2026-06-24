@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -54,6 +54,10 @@ export const PatientView = () => {
   // when both these flags are true, then the two plots can be synchronised
   const [niiNvReady, setNiiNvReady] = useState(false); // flag when the NiiViewer canvas is initialised
   const [topoNvReady, setTopoNvReady] = useState(false); // flag when EegTopoViewer canvas is initialised
+  // useCallback returns the same function every render, instead of a new one each time —
+  // EegTopoViewer's setup effect can then list it as a dependency without re-running on
+  // every PatientView re-render.
+  const handleTopoNvReady = useCallback(() => setTopoNvReady(true), []);
 
   // Lazy ref init — created once, never replaced. A cleanup-based useEffect would let
   // StrictMode's remount cycle recreate this and break NiiViewer's canvasReadyRef guard.
@@ -255,7 +259,7 @@ export const PatientView = () => {
               provider={eeg}
               channelNames={eeg.channelNames}
               onViewReady={() => eegReadyResolveRef.current?.()} // charts ready
-              onTopoNvReady={() => setTopoNvReady(true)} // topo canvas ready
+              onTopoNvReady={handleTopoNvReady} // topo canvas ready
             />
           ) : (
             <div className="h-full p-2">
