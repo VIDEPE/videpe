@@ -5,6 +5,7 @@ import { move } from '@dnd-kit/helpers';
 import toast from 'react-hot-toast';
 
 const NII_LOADING_TOAST_ID = 'nii-viewer-loading'; // fixed id so loading/success toasts update in place rather than stacking
+const MIN_CANVAS_HEIGHT = 350; // px — matches the canvas row's original fixed floor
 import { getInitialLayerSettings, filesToVolumes } from './NiiViewer.utils';
 import { ImagingControls } from './ImagingControls';
 import { FileDropZone } from '../components/FileDropZone';
@@ -67,6 +68,7 @@ export const NiiViewer = ({
 
   const canvas = useRef();
   const canvasContainerRef = useRef();
+  const canvasRowRef = useRef(); // the canvas + slice-type sidebar row — its min-height is dragged by the resize handle below it
   const canvasReadyRef = useRef(false); // guards attachToCanvas so StrictMode's double-invoke doesn't reinitialise the GL context
   const loadingVolumesRef = useRef(null); // reference to the volumes array currently being loaded — prevents StrictMode's double-invoke from firing nv.loadVolumes twice
   const opacityRafRef = useRef(null); // pending rAF id for opacity updates — cancelled on each new drag event so only the latest value redraws
@@ -221,6 +223,32 @@ export const NiiViewer = ({
     [orderedVolumes, layerSettings]
   );
 
+  // Drag the handle below the canvas to raise its min-height past whatever the flex layout
+  // would otherwise give it — pushing the rest of the panel into scroll instead of letting a
+  // long volume list keep squeezing the canvas down to MIN_CANVAS_HEIGHT. Dragging back up
+  // lowers that floor; once it drops below what the flex layout already provides, the row
+  // simply renders at its natural (auto) size and stops shrinking any further.
+  // Writes directly to the DOM (like SplitPane's divider) instead of React state, since this
+  // component already re-renders the canvas/controls tree on every drag-frame would be wasteful.
+  const handleCanvasResizeStart = useCallback((e) => {
+    e.preventDefault();
+    const row = canvasRowRef.current;
+    if (!row) return;
+    const startY = e.clientY;
+    const startHeight = row.getBoundingClientRect().height;
+
+    const onMove = (moveEvent) => {
+      const nextHeight = Math.max(MIN_CANVAS_HEIGHT, startHeight + (moveEvent.clientY - startY));
+      row.style.minHeight = `${nextHeight}px`;
+    };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, []);
+
   // Attach the NiiVue instance to the canvas once when the viewer mounts.
   // Separated from volume loading so that React StrictMode's double-invoke of effects
   // (which runs every effect twice in development) does not call attachToCanvas twice.
@@ -295,9 +323,17 @@ export const NiiViewer = ({
         />
       </div>
 
-      {/* The canvas + loading spinner are in a flex item that fills the remaining height, but never shrinks below 350px.
-          If the controls panel above expands past the point where 350px remains, the parent scrolls. */}
-      <div className="flex flex-row flex-1 min-h-[350px]">
+      {/* The canvas + loading spinner are in a flex item that fills the remaining height, but never shrinks
+          below MIN_CANVAS_HEIGHT. If the controls panel above expands past the point where that much height
+          remains, the parent scrolls. Dragging the resize handle below raises that floor past whatever the
+          flex layout would naturally give it, locking the canvas at a taller size instead of letting a long
+          volume list keep squeezing it down — see handleCanvasResizeStart. */}
+      <div
+        ref={canvasRowRef}
+        data-testid="nii-canvas-row"
+        className="flex flex-row flex-1"
+        style={{ minHeight: MIN_CANVAS_HEIGHT }}
+      >
         {/* NiiVue Canvas */}
         <div ref={canvasContainerRef} className="relative flex-1 overflow-hidden">
           {/* Loading spinner overlay — absolute to cover the canvas, with a higher z-index so it appears on top */}
@@ -335,6 +371,17 @@ export const NiiViewer = ({
           </div>
         </div>
       </div>
+
+      {/* Drag down to grow the canvas row past its natural size (forces the parent pane to scroll);
+          drag up to shrink it back — once it reaches the row's natural flex size, further upward
+          dragging has no effect, since min-height never shrinks a flex item below what it'd render
+          at anyway. See handleCanvasResizeStart. */}
+      <div
+        data-testid="nii-canvas-resize-handle"
+        className="h-1.5 w-full shrink-0 cursor-row-resize rounded-sm select-none bg-border hover:bg-secondary active:bg-primary"
+        title="Drag to resize the canvas"
+        onMouseDown={handleCanvasResizeStart}
+      />
     </div>
   );
 };
