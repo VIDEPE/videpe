@@ -233,7 +233,7 @@ export function EegTopoViewer({
         {/* NiiVue's colorbar has no unit support — label it ourselves. pointer-events-none
             so it doesn't block dragging/rotating the 3D view underneath. */}
         <span
-          className="absolute bottom-1 right-2 text-[10px] text-foreground/60 cursor-help"
+          className="absolute bottom-1 right-2 text-[10px] text-white/60 cursor-help"
           title="Colorbar indicates EEG voltages in µV"
         >
           µV
