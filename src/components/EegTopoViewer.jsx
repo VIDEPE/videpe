@@ -1,7 +1,11 @@
 import { useRef, useEffect, useMemo, useState, useCallback } from 'react';
 import { NVMesh, NVMeshUtilities, SLICE_TYPE } from '@niivue/niivue';
 import { TrafficLightButtons } from './TrafficLightButtons';
-import { buildElectrodeMesh, interpolateMeshVoltages } from '@/utils/eegTopographyUtils';
+import {
+  buildElectrodeMesh,
+  interpolateMeshVoltages,
+  buildElectrodeMarkers,
+} from '@/utils/eegTopographyUtils';
 import { EyeDashed } from 'lucide-react';
 
 // Custom diverging colormap: blue (negative) -> white (zero) -> red (positive).
@@ -14,14 +18,98 @@ const EEG_TOPO_COLORMAP = {
   A: [255, 255, 255],
   I: [0, 128, 255],
 };
-const EEG_TOPO_COLORMAP_COLOURBLIND_KEY = 'eegColourblind';
+const EEG_TOPO_COLORMAP_COLOURBLIND_KEY = 'eegColourblind'; // cividis min and max values
 const EEG_TOPO_COLORMAP_COLOURBLIND = {
-  R: [12, 255, 255],
-  G: [123, 255, 194],
-  B: [220, 255, 10],
+  R: [0, 255, 255],
+  G: [32, 255, 233],
+  B: [76, 255, 69],
   A: [255, 255, 255],
   I: [0, 128, 255],
 };
+
+// Electrode marker colormaps. NiiVue's connectome nodes pick one of two colormaps by the
+// sign of colorValue (no single diverging option like mesh layers have), so each is one
+// half — white at zero out to the saturated colour — of the mesh colormap above.
+const EEG_NODE_POS_KEY = 'eegNodePos';
+const EEG_NODE_POS = { R: [255, 255], G: [255, 0], B: [255, 0], A: [255, 255], I: [0, 255] };
+const EEG_NODE_NEG_KEY = 'eegNodeNeg';
+const EEG_NODE_NEG = { R: [255, 0], G: [255, 0], B: [255, 255], A: [255, 255], I: [0, 255] };
+const EEG_NODE_POS_COLOURBLIND_KEY = 'eegNodePosColourblind';
+// White to Cividis yellow for positive voltage markers
+const EEG_NODE_POS_COLOURBLIND = {
+  R: [255, 255],
+  G: [255, 233],
+  B: [255, 69],
+  A: [255, 255],
+  I: [0, 255],
+};
+// White to Cividis blue for negative voltage markers
+const EEG_NODE_NEG_COLOURBLIND_KEY = 'eegNodeNegColourblind';
+const EEG_NODE_NEG_COLOURBLIND = {
+  R: [255, 0],
+  G: [255, 32],
+  B: [255, 76],
+  A: [255, 255],
+  I: [0, 255],
+};
+// Flat neutral grey for template electrodes with no recorded data at this site.
+const EEG_NODE_UNMAPPED_KEY = 'eegNodeUnmapped';
+const EEG_NODE_UNMAPPED = {
+  R: [50, 50],
+  G: [50, 50],
+  B: [50, 50],
+  A: [255, 255],
+  I: [0, 255],
+};
+
+// Marker sizes in mm radius (sizeValue × nodeScale) — unmapped electrodes are small dots
+// that trace out the template grid; matched electrodes are larger and colour-coded by voltage.
+const UNMAPPED_NODE_SCALE = 1.5;
+const MATCHED_NODE_SCALE = 4;
+
+// Builds the two marker "layers" (unmapped template dots + matched, voltage-coloured dots)
+// as NiiVue connectome meshes and adds them on top of whatever meshes are already loaded.
+// Connectome nodes render as solid spheres positioned in the same mm space as the mesh.
+function addElectrodeMarkers(nv, markers, calMax, colourBlindMode) {
+  const unmappedNodes = markers
+    .filter((m) => !m.isMatched)
+    .map((m) => ({ name: m.label, x: m.x, y: m.y, z: m.z, colorValue: 0, sizeValue: 1 }));
+  const matchedNodes = markers
+    .filter((m) => m.isMatched)
+    .map((m) => ({ name: m.label, x: m.x, y: m.y, z: m.z, colorValue: m.value, sizeValue: 1 }));
+
+  if (unmappedNodes.length > 0) {
+    nv.addMesh(
+      nv.loadConnectomeAsMesh({
+        name: 'eeg-electrodes-unmapped',
+        nodeColormap: EEG_NODE_UNMAPPED_KEY,
+        nodeColormapNegative: EEG_NODE_UNMAPPED_KEY,
+        nodeMinColor: 0,
+        nodeMaxColor: 0, // forces every node to the same flat colour, regardless of colorValue
+        nodeScale: UNMAPPED_NODE_SCALE,
+        showLegend: false,
+        nodes: unmappedNodes,
+        // No `edges` key — NiiVue adds an edge colormap colorbar entry for any connectome
+        // that has one, even an empty array, which would draw an extra, meaningless bar.
+      })
+    );
+  }
+  if (matchedNodes.length > 0) {
+    nv.addMesh(
+      nv.loadConnectomeAsMesh({
+        name: 'eeg-electrodes-matched',
+        nodeColormap: colourBlindMode ? EEG_NODE_POS_COLOURBLIND_KEY : EEG_NODE_POS_KEY,
+        nodeColormapNegative: colourBlindMode ? EEG_NODE_NEG_COLOURBLIND_KEY : EEG_NODE_NEG_KEY,
+        nodeMinColor: 0,
+        nodeMaxColor: calMax,
+        nodeScale: MATCHED_NODE_SCALE,
+        showLegend: false,
+        nodes: matchedNodes,
+        // No `edges` key — see comment on the unmapped layer above.
+      })
+    );
+  }
+}
 
 // Default/minimum window size in px — default matches the previous fixed w-96 h-80 (24rem x 20rem)
 const DEFAULT_TOPO_SIZE = { width: 375, height: 360 };
@@ -56,6 +144,11 @@ export function EegTopoViewer({
     nv.setSliceType(SLICE_TYPE.RENDER); // force slicetype to render for a 3D view
     nv.addColormap(EEG_TOPO_COLORMAP_KEY, EEG_TOPO_COLORMAP);
     nv.addColormap(EEG_TOPO_COLORMAP_COLOURBLIND_KEY, EEG_TOPO_COLORMAP_COLOURBLIND);
+    nv.addColormap(EEG_NODE_POS_KEY, EEG_NODE_POS);
+    nv.addColormap(EEG_NODE_NEG_KEY, EEG_NODE_NEG);
+    nv.addColormap(EEG_NODE_POS_COLOURBLIND_KEY, EEG_NODE_POS_COLOURBLIND);
+    nv.addColormap(EEG_NODE_NEG_COLOURBLIND_KEY, EEG_NODE_NEG_COLOURBLIND);
+    nv.addColormap(EEG_NODE_UNMAPPED_KEY, EEG_NODE_UNMAPPED);
     nv.opts.isColorbar = true; // master switch NiiVue checks before drawing any colorbar
     // NiiVue overlays the colorbar on the viewport's bottom edge instead of reserving
     // space for it here, so narrow the bar and shrink the mesh slightly to compensate.
@@ -64,7 +157,7 @@ export function EegTopoViewer({
     nv.attachToCanvas(canvasRef.current);
     nv.volScaleMultiplier = 0.85;
     onTopoNvReady?.();
-  }, []);
+  }, [nvRef, onTopoNvReady]);
 
   // The convex-hull triangulation only depends on the electrode template, not on the
   // per-timepoint voltages — caching it here avoids re-triangulating on every topo
@@ -80,6 +173,7 @@ export function EegTopoViewer({
     const { vertices, indices } = electrodeMesh;
     const scalars = interpolateMeshVoltages(electrodes, matched, voltages);
     const buffer = NVMeshUtilities.createMZ3(vertices, indices, false, null, scalars);
+    const markers = buildElectrodeMarkers(electrodes, matched, voltages);
 
     // Symmetric colormap range so blue/red are equal distance from zero
     const calMax = Math.max(...voltages.map(Math.abs));
@@ -118,6 +212,7 @@ export function EegTopoViewer({
         }
 
         nv.addMesh(mesh);
+        addElectrodeMarkers(nv, markers, calMax, colourBlindMode);
         nv.updateGLVolume();
       } catch (err) {
         console.error('[EegTopoViewer] mesh load failed:', err);
@@ -126,7 +221,7 @@ export function EegTopoViewer({
 
     // Generate mesh for current electrode layout and load into NiiVue canvas
     loadMesh();
-  }, [electrodeMesh, electrodes, matched, voltages, colourBlindMode]);
+  }, [nvRef, electrodeMesh, electrodes, matched, voltages, colourBlindMode]);
 
   // Drag the floating window by its title bar
   const handleDragStart = useCallback(
