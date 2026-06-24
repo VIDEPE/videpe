@@ -349,6 +349,53 @@ describe('interpolateMeshVoltages', () => {
 // buildEegMesh
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// buildElectrodeMarkers
+// ---------------------------------------------------------------------------
+
+import { buildElectrodeMarkers } from '@/utils/eegTopographyUtils';
+
+describe('buildElectrodeMarkers', () => {
+  it('returns one marker per template electrode', () => {
+    const matched = [{ pos: ELECTRODES[0] }];
+    const markers = buildElectrodeMarkers(ELECTRODES, matched, [5]);
+    expect(markers).toHaveLength(ELECTRODES.length);
+  });
+
+  it('carries the label and position through from the template', () => {
+    const markers = buildElectrodeMarkers(ELECTRODES, [], []);
+    expect(markers[0]).toMatchObject({ label: 'Fp1', x: -29, y: 84, z: -7 });
+  });
+
+  it('flags matched electrodes as isMatched with their real voltage', () => {
+    const matched = [{ pos: ELECTRODES[1] }]; // Fp2
+    const markers = buildElectrodeMarkers(ELECTRODES, matched, [7.5]);
+    const fp2 = markers.find((m) => m.label === 'Fp2');
+    expect(fp2.isMatched).toBe(true);
+    expect(fp2.value).toBeCloseTo(7.5);
+  });
+
+  it('flags unmatched electrodes as isMatched: false with value 0', () => {
+    const matched = [{ pos: ELECTRODES[1] }]; // Fp2 only
+    const markers = buildElectrodeMarkers(ELECTRODES, matched, [7.5]);
+    const fp1 = markers.find((m) => m.label === 'Fp1');
+    expect(fp1.isMatched).toBe(false);
+    expect(fp1.value).toBe(0);
+  });
+
+  it('returns all unmatched when no channels are matched', () => {
+    const markers = buildElectrodeMarkers(ELECTRODES, [], []);
+    expect(markers.every((m) => m.isMatched === false)).toBe(true);
+  });
+
+  it('preserves voltage sign for matched electrodes', () => {
+    const matched = [{ pos: ELECTRODES[2] }]; // Cz
+    const markers = buildElectrodeMarkers(ELECTRODES, matched, [-12.3]);
+    const cz = markers.find((m) => m.label === 'Cz');
+    expect(cz.value).toBeCloseTo(-12.3);
+  });
+});
+
 describe('buildEegMesh', () => {
   const matched = CUBE_ELECTRODES.slice(0, 3).map((el) => ({ pos: el }));
   const voltages = [10, -5, 3];

@@ -125,6 +125,32 @@ export function interpolateMeshVoltages(electrodes, matched, voltages, sigma = 3
   return scalars;
 }
 
+// Build one marker per template electrode for rendering individual electrode
+// positions alongside the interpolated mesh surface. Matched electrodes carry
+// their real, signed voltage so they can be highlighted distinctly from the
+// rest of the template grid, which has no recorded data to show.
+//
+// @param {{ label, x, y, z }[]} electrodes  - full electrode list from the template
+// @param {{ pos: { label, x, y, z } }[]} matched - matched channels from matchChannelsToPositions
+// @param {number[]} voltages                 - voltage per matched entry (same order as matched)
+// @returns {{ label, x, y, z, isMatched, value }[]}
+export function buildElectrodeMarkers(electrodes, matched, voltages) {
+  const voltageByLabel = new Map();
+  matched.forEach((m, i) => voltageByLabel.set(m.pos.label, voltages[i] ?? 0));
+
+  return electrodes.map((e) => {
+    const isMatched = voltageByLabel.has(e.label);
+    return {
+      label: e.label,
+      x: e.x,
+      y: e.y,
+      z: e.z,
+      isMatched,
+      value: isMatched ? voltageByLabel.get(e.label) : 0,
+    };
+  });
+}
+
 // Assemble the full mesh data for a single EEG timepoint.
 // Returns raw arrays rather than an ArrayBuffer so this function stays
 // framework-free and testable — the caller (EegTopoWindow) passes the result

@@ -13,6 +13,11 @@ const mockNvInstance = {
   updateGLVolume: vi.fn(),
   setSliceType: vi.fn(),
   addColormap: vi.fn(),
+  // Electrode marker layers are built via nv.loadConnectomeAsMesh(json) + nv.addMesh(mesh);
+  // the mock just needs to hand back something identifiable, not a real connectome mesh.
+  loadConnectomeAsMesh: vi
+    .fn()
+    .mockImplementation((json) => ({ id: json.name, nodes: json.nodes })),
   opts: {},
   meshes: [],
 };
@@ -217,9 +222,10 @@ describe('EegTopoViewer', () => {
       await act(async () => resolvers[0](makeMesh('stale-mesh')));
       expect(mockNvInstance.addMesh).not.toHaveBeenCalled();
 
-      // The current (second) load resolving is the only one that should add a mesh.
+      // The current (second) load resolving is the only one that should add meshes —
+      // the cortex mesh plus its unmapped/matched electrode marker layers.
       await act(async () => resolvers[1](makeMesh('current-mesh')));
-      expect(mockNvInstance.addMesh).toHaveBeenCalledOnce();
+      expect(mockNvInstance.addMesh).toHaveBeenCalledTimes(3);
       expect(mockNvInstance.addMesh.mock.calls[0][0].id).toBe('current-mesh');
     });
   });
@@ -420,7 +426,9 @@ describe('EegTopoViewer', () => {
 
     it('registers both the default and colourblind colormaps on mount', async () => {
       await act(async () => render(<EegTopoViewer {...defaultProps} />));
-      expect(mockNvInstance.addColormap).toHaveBeenCalledTimes(2);
+      // 2 mesh colormaps (default + colourblind) + 5 electrode-marker colormaps
+      // (matched pos/neg × 2 palettes, plus 1 flat unmapped colour).
+      expect(mockNvInstance.addColormap).toHaveBeenCalledTimes(7);
     });
 
     it('applies the default colormap key to the mesh layer while colourblind mode is off', async () => {
@@ -440,8 +448,10 @@ describe('EegTopoViewer', () => {
         'aria-pressed',
         'true'
       );
-      const addedMesh = mockNvInstance.addMesh.mock.calls.at(-1)[0];
-      expect(addedMesh.layers[0].colormap).toBe(colourBlindKey);
+      // The cortex mesh is the only added mesh with a `layers` array — electrode marker
+      // layers (added alongside it) are plain connectome mocks without one.
+      const cortexCalls = mockNvInstance.addMesh.mock.calls.filter(([m]) => m.layers);
+      expect(cortexCalls.at(-1)[0].layers[0].colormap).toBe(colourBlindKey);
     });
 
     it('switches back to the default colormap key when toggled off again', async () => {
@@ -453,8 +463,8 @@ describe('EegTopoViewer', () => {
       await userEvent.click(toggle); // off again
 
       expect(toggle).toHaveAttribute('aria-pressed', 'false');
-      const addedMesh = mockNvInstance.addMesh.mock.calls.at(-1)[0];
-      expect(addedMesh.layers[0].colormap).toBe(defaultKey);
+      const cortexCalls = mockNvInstance.addMesh.mock.calls.filter(([m]) => m.layers);
+      expect(cortexCalls.at(-1)[0].layers[0].colormap).toBe(defaultKey);
     });
 
     it('reloads the mesh when colourblind mode is toggled', async () => {
