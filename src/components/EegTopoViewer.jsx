@@ -20,33 +20,35 @@ const EEG_TOPO_COLORMAP = {
 };
 const EEG_TOPO_COLORMAP_COLOURBLIND_KEY = 'eegColourblind'; // cividis min and max values
 const EEG_TOPO_COLORMAP_COLOURBLIND = {
-  R: [12, 255, 255],
-  G: [123, 255, 194],
-  B: [220, 255, 10],
+  R: [0, 255, 255],
+  G: [32, 255, 233],
+  B: [76, 255, 69],
   A: [255, 255, 255],
   I: [0, 128, 255],
 };
 
-// Electrode marker colormaps — each is one half of the mesh colormap above (white at zero
-// out to the saturated colour at the matched electrode's actual voltage), so a marker's
-// colour always agrees with the surface colour the mesh colorbar describes.
+// Electrode marker colormaps. NiiVue's connectome nodes pick one of two colormaps by the
+// sign of colorValue (no single diverging option like mesh layers have), so each is one
+// half — white at zero out to the saturated colour — of the mesh colormap above.
 const EEG_NODE_POS_KEY = 'eegNodePos';
 const EEG_NODE_POS = { R: [255, 255], G: [255, 0], B: [255, 0], A: [255, 255], I: [0, 255] };
 const EEG_NODE_NEG_KEY = 'eegNodeNeg';
 const EEG_NODE_NEG = { R: [255, 0], G: [255, 0], B: [255, 255], A: [255, 255], I: [0, 255] };
 const EEG_NODE_POS_COLOURBLIND_KEY = 'eegNodePosColourblind';
+// White to Cividis yellow for positive voltage markers
 const EEG_NODE_POS_COLOURBLIND = {
   R: [255, 255],
-  G: [255, 194],
-  B: [255, 10],
+  G: [255, 233],
+  B: [255, 69],
   A: [255, 255],
   I: [0, 255],
 };
+// White to Cividis blue for negative voltage markers
 const EEG_NODE_NEG_COLOURBLIND_KEY = 'eegNodeNegColourblind';
 const EEG_NODE_NEG_COLOURBLIND = {
-  R: [255, 12],
-  G: [255, 123],
-  B: [255, 220],
+  R: [255, 0],
+  G: [255, 32],
+  B: [255, 76],
   A: [255, 255],
   I: [0, 255],
 };
@@ -62,8 +64,8 @@ const EEG_NODE_UNMAPPED = {
 
 // Marker sizes in mm radius (sizeValue × nodeScale) — unmapped electrodes are small dots
 // that trace out the template grid; matched electrodes are larger and colour-coded by voltage.
-const UNMAPPED_NODE_SCALE = 1.2;
-const MATCHED_NODE_SCALE = 3;
+const UNMAPPED_NODE_SCALE = 1.5;
+const MATCHED_NODE_SCALE = 4;
 
 // Builds the two marker "layers" (unmapped template dots + matched, voltage-coloured dots)
 // as NiiVue connectome meshes and adds them on top of whatever meshes are already loaded.
