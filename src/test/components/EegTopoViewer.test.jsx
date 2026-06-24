@@ -244,6 +244,34 @@ describe('EegTopoViewer', () => {
       const addedMesh = mockNvInstance.addMesh.mock.calls[0][0];
       expect(addedMesh.layers[0].cal_max).toBe(3);
     });
+
+    it('reuses the same convex-hull vertices/indices across voltage-only updates, instead of re-triangulating', async () => {
+      const { NVMeshUtilities } = await import('@niivue/niivue');
+      const { rerender } = await act(async () => render(<EegTopoViewer {...defaultProps} />));
+      const [firstVertices, firstIndices] = NVMeshUtilities.createMZ3.mock.calls[0];
+
+      await act(async () => {
+        rerender(<EegTopoViewer {...defaultProps} voltages={[-3, 0]} />);
+      });
+      const [secondVertices, secondIndices] = NVMeshUtilities.createMZ3.mock.calls[1];
+
+      expect(secondVertices).toBe(firstVertices);
+      expect(secondIndices).toBe(firstIndices);
+    });
+
+    it('recomputes the convex hull when the electrodes prop itself changes', async () => {
+      const { NVMeshUtilities } = await import('@niivue/niivue');
+      const { rerender } = await act(async () => render(<EegTopoViewer {...defaultProps} />));
+      const [firstVertices] = NVMeshUtilities.createMZ3.mock.calls[0];
+
+      const newElectrodes = ELECTRODES.map((e) => ({ ...e }));
+      await act(async () => {
+        rerender(<EegTopoViewer {...defaultProps} electrodes={newElectrodes} />);
+      });
+      const [secondVertices] = NVMeshUtilities.createMZ3.mock.calls[1];
+
+      expect(secondVertices).not.toBe(firstVertices);
+    });
   });
 
   describe('electrode source', () => {

@@ -1,7 +1,7 @@
-import { useRef, useEffect, useState, useCallback } from 'react';
+import { useRef, useEffect, useMemo, useState, useCallback } from 'react';
 import { NVMesh, NVMeshUtilities, SLICE_TYPE } from '@niivue/niivue';
 import { TrafficLightButtons } from './TrafficLightButtons';
-import { buildEegMesh } from '@/utils/eegTopographyUtils';
+import { buildElectrodeMesh, interpolateMeshVoltages } from '@/utils/eegTopographyUtils';
 import { EyeDashed } from 'lucide-react';
 
 // Custom diverging colormap: blue (negative) -> white (zero) -> red (positive).
@@ -66,13 +66,19 @@ export function EegTopoViewer({
     onTopoNvReady?.();
   }, []);
 
+  // The convex-hull triangulation only depends on the electrode template, not on the
+  // per-timepoint voltages — caching it here avoids re-triangulating on every topo
+  // timepoint click, when only the voltage interpolation below actually needs to change.
+  const electrodeMesh = useMemo(() => buildElectrodeMesh(electrodes), [electrodes]);
+
   // Rebuild and reload the mesh whenever electrodes, matched channels, voltages, or
   // re-referencing mode change. Clears any previously loaded mesh first.
   useEffect(() => {
     const nv = nvRef.current;
     if (!nv || !electrodes?.length || !voltages?.length) return;
 
-    const { vertices, indices, scalars } = buildEegMesh(electrodes, matched, voltages);
+    const { vertices, indices } = electrodeMesh;
+    const scalars = interpolateMeshVoltages(electrodes, matched, voltages);
     const buffer = NVMeshUtilities.createMZ3(vertices, indices, false, null, scalars);
 
     // Symmetric colormap range so blue/red are equal distance from zero
@@ -120,7 +126,7 @@ export function EegTopoViewer({
 
     // Generate mesh for current electrode layout and load into NiiVue canvas
     loadMesh();
-  }, [electrodes, matched, voltages, colourBlindMode]);
+  }, [electrodeMesh, electrodes, matched, voltages, colourBlindMode]);
 
   // Drag the floating window by its title bar
   const handleDragStart = useCallback(
