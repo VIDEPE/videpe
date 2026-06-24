@@ -21,7 +21,8 @@ import { minMaxDownsample } from '@/utils/downsample';
 import { useEegBuffer } from '@/loaders/eegBuffer';
 import { applyMontage } from '@/utils/eegViewerUtils';
 
-import { parseElc } from '@/loaders/parseElc';
+import { parseElcElectrodePositions } from '@/loaders/parseElcElectrodePositions';
+import { parseTsvElectrodePositions } from '@/loaders/parseTsvElectrodePositions';
 import { matchChannelsToPositions } from '@/utils/eegTopographyUtils';
 import { EegTopoViewer } from '@/components/EegTopoViewer';
 
@@ -187,25 +188,38 @@ export const EegViewer = ({
     fetch('electrode_positions/standard_1005.elc')
       .then((r) => r.text())
       .then((text) => {
-        const { electrodes: els } = parseElc(text);
-        setElectrodes(els);
-        setMatched(matchChannelsToPositions(channelNames, els).matched);
+        const { electrodes: parsedElectrodes } = parseElcElectrodePositions(text);
+        setElectrodes(parsedElectrodes);
+        setMatched(matchChannelsToPositions(channelNames, parsedElectrodes).matched);
         setIsStandardElectrodes(true);
       })
       .catch(() => {}); // silently ignore if file unavailable (e.g. in tests without the asset)
   }, [channelNames]);
 
   // Parse a user-supplied electrode position file and replace the current positions.
-  const handleCustomElc = useCallback(
+  const handleCustomElecPos = useCallback(
     (file) => {
       const reader = new FileReader();
+      const fileExtension = file.name.split('.').pop().toLowerCase();
+      // Registers the callback to run later; does not execute it now.
       reader.onload = (e) => {
-        const { electrodes: els } = parseElc(e.target.result);
-        if (!els.length) return; // ignore empty or unparseable files
-        setElectrodes(els);
-        setMatched(matchChannelsToPositions(channelNames, els).matched);
+        // Runs asynchronously once readAsText finishes, with the file content in e.target.result.
+        let parsedElectrodes;
+        if (fileExtension === 'elc') {
+          parsedElectrodes = parseElcElectrodePositions(e.target.result).electrodes;
+        } else if (fileExtension === 'tsv') {
+          parsedElectrodes = parseTsvElectrodePositions(e.target.result).electrodes;
+        } else {
+          toast.error(`Unsupported electrode position file type: .${fileExtension}`);
+          return;
+        }
+
+        if (!parsedElectrodes.length) return; // ignore empty or unparseable files
+        setElectrodes(parsedElectrodes);
+        setMatched(matchChannelsToPositions(channelNames, parsedElectrodes).matched);
         setIsStandardElectrodes(false);
       };
+      // Starts the async read; handleCustomElecPos returns before this completes.
       reader.readAsText(file);
     },
     [channelNames]
@@ -879,7 +893,7 @@ export const EegViewer = ({
           onClose={() => setTopoVisible(false)}
           onTopoNvReady={onTopoNvReady}
           isStandardElectrodes={isStandardElectrodes}
-          onElcFile={handleCustomElc}
+          onElecPosFile={handleCustomElecPos}
           montage={montage}
         />
       )}
