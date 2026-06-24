@@ -7,8 +7,12 @@ import { X } from 'lucide-react';
 const COLORMAP_OPTIONS = [
   { value: 'gray', label: 'Grayscale' },
   { value: 'viridis', label: 'Viridis' },
+  { value: 'cividis', label: 'Cividis' },
+  { value: 'inferno', label: 'Inferno' },
   { value: 'magma', label: 'Magma' },
   { value: 'mako', label: 'Mako' },
+  { value: 'rocket', label: 'Rocket' },
+  { value: 'turbo', label: 'Turbo' },
 ];
 
 const ToggleSwitch = ({ checked, onChange, 'aria-label': ariaLabel, title }) => (

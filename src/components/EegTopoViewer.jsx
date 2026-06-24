@@ -1,7 +1,8 @@
-import { useRef, useEffect, useState, useCallback } from 'react';
+import { useRef, useEffect, useMemo, useState, useCallback } from 'react';
 import { NVMesh, NVMeshUtilities, SLICE_TYPE } from '@niivue/niivue';
 import { TrafficLightButtons } from './TrafficLightButtons';
-import { buildEegMesh } from '@/utils/eegTopographyUtils';
+import { buildElectrodeMesh, interpolateMeshVoltages } from '@/utils/eegTopographyUtils';
+import { EyeDashed } from 'lucide-react';
 
 // Custom diverging colormap: blue (negative) -> white (zero) -> red (positive).
 // (NiiVue's built-in 'blue2red' passes through green/yellow at the midpoint which is undesired)
@@ -10,6 +11,14 @@ const EEG_TOPO_COLORMAP = {
   R: [0, 255, 255],
   G: [0, 255, 0],
   B: [255, 255, 0],
+  A: [255, 255, 255],
+  I: [0, 128, 255],
+};
+const EEG_TOPO_COLORMAP_COLOURBLIND_KEY = 'eegColourblind';
+const EEG_TOPO_COLORMAP_COLOURBLIND = {
+  R: [12, 255, 255],
+  G: [123, 255, 194],
+  B: [220, 255, 10],
   A: [255, 255, 255],
   I: [0, 128, 255],
 };
@@ -37,6 +46,7 @@ export function EegTopoViewer({
   const [isMaximized, setIsMaximized] = useState(false);
   const [position, setPosition] = useState({ x: 80, y: 80 });
   const [size, setSize] = useState(DEFAULT_TOPO_SIZE);
+  const [colourBlindMode, setColourBlindMode] = useState(false);
   const dragOffset = useRef(null);
   const meshLoadRef = useRef(null); // tracks the in-flight load so StrictMode's double-invoke can't add two meshes (and so two colorbars)
 
@@ -45,6 +55,7 @@ export function EegTopoViewer({
     const nv = nvRef.current;
     nv.setSliceType(SLICE_TYPE.RENDER); // force slicetype to render for a 3D view
     nv.addColormap(EEG_TOPO_COLORMAP_KEY, EEG_TOPO_COLORMAP);
+    nv.addColormap(EEG_TOPO_COLORMAP_COLOURBLIND_KEY, EEG_TOPO_COLORMAP_COLOURBLIND);
     nv.opts.isColorbar = true; // master switch NiiVue checks before drawing any colorbar
     // NiiVue overlays the colorbar on the viewport's bottom edge instead of reserving
     // space for it here, so narrow the bar and shrink the mesh slightly to compensate.
@@ -55,13 +66,19 @@ export function EegTopoViewer({
     onTopoNvReady?.();
   }, []);
 
+  // The convex-hull triangulation only depends on the electrode template, not on the
+  // per-timepoint voltages — caching it here avoids re-triangulating on every topo
+  // timepoint click, when only the voltage interpolation below actually needs to change.
+  const electrodeMesh = useMemo(() => buildElectrodeMesh(electrodes), [electrodes]);
+
   // Rebuild and reload the mesh whenever electrodes, matched channels, voltages, or
   // re-referencing mode change. Clears any previously loaded mesh first.
   useEffect(() => {
     const nv = nvRef.current;
     if (!nv || !electrodes?.length || !voltages?.length) return;
 
-    const { vertices, indices, scalars } = buildEegMesh(electrodes, matched, voltages);
+    const { vertices, indices } = electrodeMesh;
+    const scalars = interpolateMeshVoltages(electrodes, matched, voltages);
     const buffer = NVMeshUtilities.createMZ3(vertices, indices, false, null, scalars);
 
     // Symmetric colormap range so blue/red are equal distance from zero
@@ -92,7 +109,7 @@ export function EegTopoViewer({
         // Override the auto-created scalar layer's colormap before the mesh is rendered
         if (mesh.layers.length > 0) {
           Object.assign(mesh.layers[0], {
-            colormap: EEG_TOPO_COLORMAP_KEY,
+            colormap: colourBlindMode ? EEG_TOPO_COLORMAP_COLOURBLIND_KEY : EEG_TOPO_COLORMAP_KEY,
             cal_min: -calMax,
             cal_max: calMax,
             opacity: 1,
@@ -109,7 +126,7 @@ export function EegTopoViewer({
 
     // Generate mesh for current electrode layout and load into NiiVue canvas
     loadMesh();
-  }, [electrodes, matched, voltages]);
+  }, [electrodeMesh, electrodes, matched, voltages, colourBlindMode]);
 
   // Drag the floating window by its title bar
   const handleDragStart = useCallback(
@@ -233,11 +250,22 @@ export function EegTopoViewer({
         {/* NiiVue's colorbar has no unit support — label it ourselves. pointer-events-none
             so it doesn't block dragging/rotating the 3D view underneath. */}
         <span
-          className="absolute bottom-1 right-2 text-[10px] text-foreground/60 cursor-help"
+          className="absolute bottom-1 right-2 text-[10px] text-white/60 cursor-help"
           title="Colorbar indicates EEG voltages in µV"
         >
           µV
         </span>
+        {/* ColourBlind Mode colour map for the EEGtopography */}
+        <button
+          className="absolute top-1.5 right-1.5 button button-icon shrink-0"
+          type="button"
+          onClick={() => setColourBlindMode(!colourBlindMode)}
+          title="Toggle colourblind colormap for the EEG topography"
+          aria-label="Toggle colourblind colormap for the EEG topography"
+          aria-pressed={colourBlindMode}
+        >
+          <EyeDashed size={20}></EyeDashed>
+        </button>
       </div>
 
       {/* Footer — explicit bg-surface for the same reason as the title bar */}

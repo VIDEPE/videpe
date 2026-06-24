@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, act } from '@testing-library/react';
+import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { getInitialLayerSettings, detectVolumeType } from '@/components/NiiViewer.utils';
 import { NiiViewer, syncVolumesAndApplySettings } from '@/components/NiiViewer';
@@ -657,6 +657,61 @@ describe('NiiViewer', () => {
       expect(screen.queryByText('MRI')).not.toBeInTheDocument();
       // expect the other settings card to still be there
       expect(screen.queryByText('PET')).toBeInTheDocument();
+    });
+  });
+
+  describe('canvas resize handle', () => {
+    const MIN_CANVAS_HEIGHT = 350;
+
+    const setup = async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      render(<NiiViewer nvRef={nvRef} volumes={[]} />);
+      const row = screen.getByTestId('nii-canvas-row');
+      vi.spyOn(row, 'getBoundingClientRect').mockReturnValue({ height: 400 });
+      return row;
+    };
+
+    it('renders a resize handle below the canvas', async () => {
+      await setup();
+      expect(screen.getByTestId('nii-canvas-resize-handle')).toBeInTheDocument();
+    });
+
+    it('raises the canvas row min-height when the handle is dragged down', async () => {
+      const row = await setup();
+      fireEvent.mouseDown(screen.getByTestId('nii-canvas-resize-handle'), { clientY: 0 });
+      fireEvent.mouseMove(window, { clientY: 150 });
+      fireEvent.mouseUp(window);
+
+      expect(row.style.minHeight).toBe('550px'); // 400 (starting height) + 150 (drag delta)
+    });
+
+    it('lowers the canvas row min-height when the handle is dragged up', async () => {
+      const row = await setup();
+      fireEvent.mouseDown(screen.getByTestId('nii-canvas-resize-handle'), { clientY: 0 });
+      fireEvent.mouseMove(window, { clientY: -50 });
+      fireEvent.mouseUp(window);
+
+      expect(row.style.minHeight).toBe('350px'); // 400 (starting height) - 50 (drag delta)
+    });
+
+    it('clamps at the 350px floor instead of shrinking further', async () => {
+      const row = await setup();
+      fireEvent.mouseDown(screen.getByTestId('nii-canvas-resize-handle'), { clientY: 0 });
+      fireEvent.mouseMove(window, { clientY: -2000 }); // drag far past any reasonable minimum
+      fireEvent.mouseUp(window);
+
+      expect(row.style.minHeight).toBe(`${MIN_CANVAS_HEIGHT}px`);
+    });
+
+    it('stops responding to mouse movement once the drag ends', async () => {
+      const row = await setup();
+      fireEvent.mouseDown(screen.getByTestId('nii-canvas-resize-handle'), { clientY: 0 });
+      fireEvent.mouseMove(window, { clientY: 100 });
+      fireEvent.mouseUp(window);
+      fireEvent.mouseMove(window, { clientY: 500 }); // should be ignored — drag already ended
+
+      expect(row.style.minHeight).toBe('500px');
     });
   });
 });

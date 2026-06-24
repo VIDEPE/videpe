@@ -533,9 +533,10 @@ export const EegViewer = ({
                 </div>
               </div>
             </div>
-            <div 
+            <div
               className="flex flex-col items-center gap-1 pb-1"
-              title="Apply EEG reference montage">
+              title="Apply EEG reference montage"
+            >
               <span className="text-xs text-foreground select-none pointer-events-none">
                 Montage:
               </span>
@@ -543,7 +544,6 @@ export const EegViewer = ({
                 value={montage}
                 onChange={(e) => setMontage(e.target.value)}
                 aria-label="Apply EEG reference montage"
-                
                 className="bg-background border border-border rounded px-1 py-0.5 text-xs text-heading cursor-pointer"
               >
                 <option value="none">None</option>
@@ -713,8 +713,11 @@ export const EegViewer = ({
             )}
 
             {/* Range: shrink/expand the shared y-range (all channels) */}
-            {/* shrink-0 pins the controls at the bottom, never squeezed by the channel area */}
-            <div className="shrink-0 flex flex-wrap justify-center gap-4 py-1">
+            {/* shrink-0 pins the controls at the bottom, never squeezed by the channel area.
+                px-8 reserves room matching the keyboard hint icon (absolute bottom-right, see
+                above) on both sides — flex-wrap can't otherwise see that icon, so without this
+                the row stays unwrapped right up until its last button sits behind the icon. */}
+            <div className="shrink-0 flex flex-wrap justify-center gap-4 py-1 px-8">
               <div className="flex flex-col items-center gap-0.5 px-1 pb-1 border-border/50 border-1 border-t-0 rounded-bl-md rounded-br-md">
                 <label htmlFor="eeg-range" className="text-xs text-foreground/60 select-none">
                   Range (µV)
