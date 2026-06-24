@@ -18,7 +18,7 @@ const EEG_TOPO_COLORMAP = {
   A: [255, 255, 255],
   I: [0, 128, 255],
 };
-const EEG_TOPO_COLORMAP_COLOURBLIND_KEY = 'eegColourblind';
+const EEG_TOPO_COLORMAP_COLOURBLIND_KEY = 'eegColourblind'; // cividis min and max values
 const EEG_TOPO_COLORMAP_COLOURBLIND = {
   R: [12, 255, 255],
   G: [123, 255, 194],
@@ -87,7 +87,8 @@ function addElectrodeMarkers(nv, markers, calMax, colourBlindMode) {
         nodeScale: UNMAPPED_NODE_SCALE,
         showLegend: false,
         nodes: unmappedNodes,
-        edges: [],
+        // No `edges` key — NiiVue adds an edge colormap colorbar entry for any connectome
+        // that has one, even an empty array, which would draw an extra, meaningless bar.
       })
     );
   }
@@ -102,7 +103,7 @@ function addElectrodeMarkers(nv, markers, calMax, colourBlindMode) {
         nodeScale: MATCHED_NODE_SCALE,
         showLegend: false,
         nodes: matchedNodes,
-        edges: [],
+        // No `edges` key — see comment on the unmapped layer above.
       })
     );
   }
