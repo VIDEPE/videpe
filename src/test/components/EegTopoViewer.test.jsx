@@ -368,6 +368,69 @@ describe('EegTopoViewer', () => {
     });
   });
 
+  describe('colourblind mode', () => {
+    it('renders a colourblind toggle button over the topography canvas', async () => {
+      await act(async () => render(<EegTopoViewer {...defaultProps} />));
+      expect(screen.getByRole('button', { name: /toggle colourblind colormap/i })).toBeTruthy();
+    });
+
+    it('is not pressed by default', async () => {
+      await act(async () => render(<EegTopoViewer {...defaultProps} />));
+      expect(screen.getByRole('button', { name: /toggle colourblind colormap/i })).toHaveAttribute(
+        'aria-pressed',
+        'false'
+      );
+    });
+
+    it('registers both the default and colourblind colormaps on mount', async () => {
+      await act(async () => render(<EegTopoViewer {...defaultProps} />));
+      expect(mockNvInstance.addColormap).toHaveBeenCalledTimes(2);
+    });
+
+    it('applies the default colormap key to the mesh layer while colourblind mode is off', async () => {
+      await act(async () => render(<EegTopoViewer {...defaultProps} />));
+      const [defaultKey] = mockNvInstance.addColormap.mock.calls[0];
+      const addedMesh = mockNvInstance.addMesh.mock.calls[0][0];
+      expect(addedMesh.layers[0].colormap).toBe(defaultKey);
+    });
+
+    it('switches to the colourblind colormap key and re-presses the button when toggled on', async () => {
+      await act(async () => render(<EegTopoViewer {...defaultProps} />));
+      const [, colourBlindKey] = mockNvInstance.addColormap.mock.calls.map(([key]) => key);
+
+      await userEvent.click(screen.getByRole('button', { name: /toggle colourblind colormap/i }));
+
+      expect(screen.getByRole('button', { name: /toggle colourblind colormap/i })).toHaveAttribute(
+        'aria-pressed',
+        'true'
+      );
+      const addedMesh = mockNvInstance.addMesh.mock.calls.at(-1)[0];
+      expect(addedMesh.layers[0].colormap).toBe(colourBlindKey);
+    });
+
+    it('switches back to the default colormap key when toggled off again', async () => {
+      await act(async () => render(<EegTopoViewer {...defaultProps} />));
+      const [defaultKey] = mockNvInstance.addColormap.mock.calls.map(([key]) => key);
+      const toggle = screen.getByRole('button', { name: /toggle colourblind colormap/i });
+
+      await userEvent.click(toggle); // on
+      await userEvent.click(toggle); // off again
+
+      expect(toggle).toHaveAttribute('aria-pressed', 'false');
+      const addedMesh = mockNvInstance.addMesh.mock.calls.at(-1)[0];
+      expect(addedMesh.layers[0].colormap).toBe(defaultKey);
+    });
+
+    it('reloads the mesh when colourblind mode is toggled', async () => {
+      const { NVMesh } = await import('@niivue/niivue');
+      await act(async () => render(<EegTopoViewer {...defaultProps} />));
+      expect(NVMesh.loadFromUrl).toHaveBeenCalledTimes(1);
+
+      await userEvent.click(screen.getByRole('button', { name: /toggle colourblind colormap/i }));
+      expect(NVMesh.loadFromUrl).toHaveBeenCalledTimes(2);
+    });
+  });
+
   describe('maximize / restore', () => {
     it('changes the button label to Restore after clicking Maximize', async () => {
       await act(async () => render(<EegTopoViewer {...defaultProps} />));
