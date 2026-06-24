@@ -1,5 +1,5 @@
 // EEG topography utilities
-// Electrode position parsing lives in src/loaders/parseElc.js (and future format parsers alongside it).
+// Electrode position parsing lives in src/loaders/parseElcElectrodePositions.js (and future format parsers alongside it).
 
 import convexHull from 'convex-hull';
 
@@ -17,7 +17,7 @@ function normalizeChannelName(name) {
  * Match raw EEG channel names against a parsed electrode position list.
  *
  * @param {string[]} channelNames  - channel labels from the EEG recording
- * @param {{ label: string, x: number, y: number, z: number }[]} electrodes - from parseElc
+ * @param {{ label: string, x: number, y: number, z: number }[]} electrodes - from parseElcElectrodePositions
  * @returns {{ matched: { channelIdx: number, name: string, pos: object }[], unmatchedNames: string[] }}
  */
 export function matchChannelsToPositions(channelNames, electrodes) {
@@ -130,7 +130,7 @@ export function interpolateMeshVoltages(electrodes, matched, voltages, sigma = 3
 // framework-free and testable — the caller (EegTopoWindow) passes the result
 // to NVMeshUtilities.createMZ3() to get the buffer NiiVue loads.
 //
-// @param {{ label, x, y, z }[]} electrodes  - full electrode list from parseElc
+// @param {{ label, x, y, z }[]} electrodes  - full electrode list from parseElcElectrodePositions
 // @param {{ pos: { x, y, z } }[]} matched   - matched channels from matchChannelsToPositions
 // @param {number[]} voltages                 - re-referenced voltage per matched channel
 // @param {number} sigma                      - Gaussian falloff in mm (default 30)

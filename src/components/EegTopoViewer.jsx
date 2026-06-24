@@ -38,7 +38,7 @@ export function EegTopoViewer({
   onClose,
   onTopoNvReady,
   isStandardElectrodes = true,
-  onElcFile,
+  onElecPosFile,
 }) {
   const canvasRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -296,13 +296,13 @@ export function EegTopoViewer({
         <input
           ref={fileInputRef}
           type="file"
-          accept=".elc"
+          accept=".elc,.tsv"
           hidden
           onChange={(e) => {
             const file = e.target.files?.[0];
             if (file) {
               setCustomFileName(file.name.replace(/\.[^.]+$/, ''));
-              onElcFile?.(file);
+              onElecPosFile?.(file);
             }
             e.target.value = ''; // reset so the same file can be re-selected
           }}
