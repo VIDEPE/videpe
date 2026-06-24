@@ -283,10 +283,14 @@ describe('EegTopoViewer', () => {
     });
 
     it('shows the filename (without extension) after a custom file is loaded', async () => {
-      const onElcFile = vi.fn();
+      const onElecPosFile = vi.fn();
       const { container } = await act(async () =>
         render(
-          <EegTopoViewer {...defaultProps} isStandardElectrodes={false} onElcFile={onElcFile} />
+          <EegTopoViewer
+            {...defaultProps}
+            isStandardElectrodes={false}
+            onElecPosFile={onElecPosFile}
+          />
         )
       );
       const file = new File(['# ASA electrode file'], 'my_cap.elc');
@@ -302,17 +306,21 @@ describe('EegTopoViewer', () => {
       expect(screen.getByRole('button', { name: /use custom.*positions/i })).toBeTruthy();
     });
 
-    it('calls onElcFile with the selected File when a positions file is chosen', async () => {
-      const onElcFile = vi.fn();
+    it('calls onElecPosFile with the selected File when a positions file is chosen', async () => {
+      const onElecPosFile = vi.fn();
       const { container } = await act(async () =>
         render(
-          <EegTopoViewer {...defaultProps} isStandardElectrodes={true} onElcFile={onElcFile} />
+          <EegTopoViewer
+            {...defaultProps}
+            isStandardElectrodes={true}
+            onElecPosFile={onElecPosFile}
+          />
         )
       );
       const file = new File(['# ASA electrode file'], 'custom.elc');
       const input = container.querySelector('input[type="file"]');
       await userEvent.upload(input, file);
-      expect(onElcFile).toHaveBeenCalledWith(file);
+      expect(onElecPosFile).toHaveBeenCalledWith(file);
     });
   });
 
