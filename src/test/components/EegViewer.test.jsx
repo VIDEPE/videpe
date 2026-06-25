@@ -1355,19 +1355,23 @@ describe('EegViewer — recording type detection', () => {
     toast.mockClear();
   });
 
-  it('renders a Recording type select defaulting to EEG for scalp-shaped channel names', async () => {
+  it('renders an EEG/iEEG switch defaulting to unchecked (EEG) for scalp-shaped channel names', async () => {
     await renderViewer();
-    const select = screen.getByLabelText(/override automatic intracranial detection/i);
-    expect(select.value).toBe('eeg');
+    expect(screen.getByRole('switch', { name: 'Recording type' })).toHaveAttribute(
+      'aria-checked',
+      'false'
+    );
   });
 
   it('shows a toast naming the detected recording type once detection resolves', async () => {
     const { default: toast } = await import('react-hot-toast');
     await renderViewer();
-    expect(toast).toHaveBeenCalledWith('EEG recording detected', { id: expect.any(String) });
+    expect(toast).toHaveBeenCalledWith('EEG electrode configuration detected', {
+      id: expect.any(String),
+    });
   });
 
-  it('defaults to iEEG and toasts accordingly for intracranial-shaped channel names', async () => {
+  it('defaults to iEEG (pressed) and toasts accordingly for intracranial-shaped channel names', async () => {
     const { default: toast } = await import('react-hot-toast');
     const provider = makeIntracranialProvider();
     render(<EegViewer provider={provider} channelNames={provider.channelNames} />);
@@ -1376,9 +1380,13 @@ describe('EegViewer — recording type detection', () => {
       await Promise.resolve();
     });
 
-    const select = screen.getByLabelText(/override automatic intracranial detection/i);
-    expect(select.value).toBe('ieeg');
-    expect(toast).toHaveBeenCalledWith('iEEG recording detected', { id: expect.any(String) });
+    expect(screen.getByRole('switch', { name: 'Recording type' })).toHaveAttribute(
+      'aria-checked',
+      'true'
+    );
+    expect(toast).toHaveBeenCalledWith('iEEG electrode configuration detected', {
+      id: expect.any(String),
+    });
   });
 
   it('keeps matched empty for intracranial recordings with no custom positions, even though standard_1005 was fetched', async () => {
@@ -1397,14 +1405,16 @@ describe('EegViewer — recording type detection', () => {
     expect(screen.getByTestId('topo-is-intracranial')).toHaveTextContent('true');
   });
 
-  it('selecting the other option overrides the detected recording type directly', async () => {
+  it('clicking the switch (anywhere on it) overrides the detected recording type directly', async () => {
     const user = userEvent.setup();
     await renderViewer(); // scalp-shaped fixture, defaults to 'eeg'
-    const select = screen.getByLabelText(/override automatic intracranial detection/i);
+    const switchEl = screen.getByRole('switch', { name: 'Recording type' });
 
-    await user.selectOptions(select, 'ieeg');
+    await user.click(switchEl);
+    expect(switchEl).toHaveAttribute('aria-checked', 'true');
 
-    expect(select.value).toBe('ieeg');
+    await user.click(switchEl); // flips back regardless of where on the control it's clicked
+    expect(switchEl).toHaveAttribute('aria-checked', 'false');
   });
 });
 

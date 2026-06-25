@@ -205,9 +205,14 @@ export const EegViewer = ({
         setStandard1005Matched(matchChannelsToPositions(channelNames, parsedElectrodes).matched);
         const detected = detectIsIntracranial(channelNames, parsedElectrodes) ? 'ieeg' : 'eeg';
         setRecordingType(detected);
-        toast(detected === 'ieeg' ? 'iEEG recording detected' : 'EEG recording detected', {
-          id: RECORDING_TYPE_TOAST_ID,
-        });
+        toast(
+          detected === 'ieeg'
+            ? 'iEEG electrode configuration detected'
+            : 'EEG electrode configuration detected',
+          {
+            id: RECORDING_TYPE_TOAST_ID,
+          }
+        );
       })
       .catch(() => {}); // silently ignore if file unavailable (e.g. in tests without the asset)
   }, [channelNames]);
@@ -483,6 +488,48 @@ export const EegViewer = ({
         onMouseDown={focusViewer}
         onKeyDown={handleKeyDown}
       >
+        {/* Recording type toggle — top-left corner of the viewer pane. Auto-detected on load
+            (see the standard_1005 fetch effect above). A single switch, not two separate
+            buttons — clicking anywhere on it flips between EEG/iEEG, regardless of which
+            label half was clicked. The highlighted "thumb" slides under whichever is active. */}
+        <button
+          type="button"
+          role="switch"
+          aria-checked={isIntracranial}
+          aria-label="Recording type"
+          onClick={() => setRecordingType(isIntracranial ? 'eeg' : 'ieeg')}
+          className="absolute top-2 left-2 z-20 w-20 h-6 rounded-full border border-border bg-background cursor-pointer"
+          title="Automatically detected from channel naming — click to flip"
+        >
+          {/* absolute + inset-0.5 (not relative) is what actually insets this box within the
+              track above — it's also the positioning ancestor the thumb's left-0/w-1/2 and the
+              two flex-1 labels all measure against, so the thumb lines up exactly under whichever is active. */}
+          <span className="absolute inset-0.5 flex">
+            <span
+              className={cn(
+                'absolute inset-y-0 left-0 w-1/2 rounded-full bg-primary transition-transform duration-150 ease-out',
+                recordingType === 'ieeg' && 'translate-x-full'
+              )}
+            />
+            <span
+              className={cn(
+                'relative z-10 flex-1 flex items-center justify-center leading-none text-[12px] font-bold transition-colors',
+                recordingType === 'eeg' ? 'text-background' : 'text-foreground/70'
+              )}
+            >
+              EEG
+            </span>
+            <span
+              className={cn(
+                'relative z-10 flex-1 flex items-center justify-center leading-none text-[12px] font-bold transition-colors',
+                recordingType === 'ieeg' ? 'text-background' : 'text-foreground/70'
+              )}
+            >
+              iEEG
+            </span>
+          </span>
+        </button>
+
         {/* Keyboard shortcut hint — bottom-right corner of the viewer pane.
             Uses a custom hover tooltip instead of the native title attribute, since native
             tooltips have a long built-in show delay — long enough that clicking the icon (to
@@ -588,23 +635,6 @@ export const EegViewer = ({
                 <option value="median">Median</option>
               </select>
             </div>
-            <div
-              className="flex flex-col items-center gap-1 pb-1"
-              title="Automatically detected from channel naming — override here if it's wrong"
-            >
-              <span className="text-xs text-foreground select-none pointer-events-none">
-                Recording type:
-              </span>
-              <select
-                value={recordingType}
-                onChange={(e) => setRecordingType(e.target.value)}
-                aria-label="Override automatic intracranial detection"
-                className="bg-background border border-border rounded px-1 py-0.5 text-xs text-heading cursor-pointer"
-              >
-                <option value="eeg">EEG</option>
-                <option value="ieeg">iEEG</option>
-              </select>
-            </div>
           </div>
 
           {/* flex-col so the scroll area and fixed x-axis strip stack vertically */}
@@ -678,6 +708,9 @@ export const EegViewer = ({
                           })}
                           data={displayedData[i]}
                           onCreate={(u) => {
+                            {
+                              /* click listener that converts the click's x-position into a timestamp, sets topoTimepoint, and sets topoVisible = true */
+                            }
                             u.over.addEventListener('click', () => {
                               const t = u.posToVal(u.cursor.left, 'x');
                               if (!isNaN(t)) {

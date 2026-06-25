@@ -138,15 +138,18 @@ export const PatientView = () => {
     const eegFiles = allFiles.filter((f) => !elecPosFiles.includes(f));
     if (eegFiles.length === 0) return; // pure electrode-position drop — nothing else to do
 
-    // Merge pending with new files, then keep only the last file per extension so a new drop always replaces the previous file of the same type
+    // Merge pending with new files
     const merged = [...pendingEegFiles, ...eegFiles];
-    // Create a map of extension to file, keeping only the last file for each extension.
+    // Then keep only the last file for each extension by createing a map of extension to file.
     // This way, if a user drops a new .vhdr file, it will replace the previous .vhdr in the pending state, while still keeping any .eeg file that was dropped before.
     const byExtension = new Map();
     for (const file of merged) {
       const ext = file.name.toLowerCase().match(/(\.[^.]+)$/)?.[1];
+      // for each file with a recognized extension, store it in the Map keyed by that extension.
+      // If a .vhdr was already in the map and another .vhdr comes along, .set() overwrites the old entry
       if (ext) byExtension.set(ext, file);
     }
+    // Pull File objects back out of the map
     const deduped = [...byExtension.values()];
     // Check the accumulated files against known EEG formats to determine if we can load or if we need to wait for more files.
     const { formatName, complete, missing, warning } = checkEegFiles(deduped);
