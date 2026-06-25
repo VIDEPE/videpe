@@ -340,7 +340,7 @@ export function EegTopoViewer({
         <button
           className={cn(
             'absolute button button-icon shrink-0',
-            isIntracranial ? 'top-2 right-5' : 'top-1.5 right-1.5'
+            isIntracranial ? 'top-7 right-5' : 'top-1.5 right-1.5'
           )}
           type="button"
           onClick={() => setColourBlindMode(!colourBlindMode)}
