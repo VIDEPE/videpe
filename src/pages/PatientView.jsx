@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -11,15 +11,17 @@ import { NiiViewer } from '../components/NiiViewer';
 import { SplitPane } from '../components/SplitPane';
 import { loadBrainVisionEEG } from '../loaders/loadBrainVisionEEG';
 import { detectAndLoadEEG, checkEegFiles } from '../loaders/eegFormats';
+import { parseElectrodePositionFile } from '../loaders/parseElectrodePositionFile';
 import { FileDropZone } from '../components/FileDropZone';
-import { detectVolumeType, filesToVolumes } from '../components/NiiViewer.utils';
+import { detectVolumeType, filesToLayers } from '../components/NiiViewer.utils';
+import { buildConnectomeVolume } from '../utils/eegTopographyUtils';
 
 const DEMO_EEG = {
   header: 'demo_data/sub-synth_task-rest_eeg.vhdr',
   data: 'demo_data/sub-synth_task-rest_eeg.eeg',
 };
 
-const DEMO_VOLUMES = [
+const DEMO_LAYERS = [
   { url: 'demo_data/patT1.nii', ...detectVolumeType('patT1.nii') },
   { url: 'demo_data/pat_PET_aligned.nii', ...detectVolumeType('pat_PET_aligned.nii') },
   {
@@ -28,6 +30,10 @@ const DEMO_VOLUMES = [
     urlImgType: 'nii',
   },
 ];
+
+// Electrode position files are routed to handleElecPosFile instead of the EEG-format
+// accumulation logic below, regardless of which dropzone/button they came in through.
+const ELEC_POS_EXTENSIONS = ['.elc', '.tsv'];
 
 export const PatientView = () => {
   // Prevent default browser drag-and-drop behavior (e.g., opening files in a new tab)
@@ -42,7 +48,7 @@ export const PatientView = () => {
   }, []);
 
   const [eeg, setEeg] = useState(null); // recording provider: { channelNames, fs, tMax, getChunk }
-  const [volumes, setVolumes] = useState([]);
+  const [layers, setLayers] = useState([]); // image volumes/meshes loaded from files
   const [isLoading, setIsLoading] = useState(false);
   const [isDemoloading, setIsDemoloading] = useState(false);
   const eegReadyResolveRef = useRef(null); // set before demo load; EegViewer calls it when charts are ready
@@ -50,6 +56,36 @@ export const PatientView = () => {
   const [pendingEegFiles, setPendingEegFiles] = useState([]);
   const [eegHint, setEegHint] = useState(null);
   const [maximizedPanel, setMaximizedPanel] = useState(null); // null | 'left' | 'right'
+
+  // Custom electrode positions — owned here rather than in EegViewer, since they can be
+  // dropped at the initial EEG dropzone before EegViewer even exists, and need to stay in
+  // sync across the several places that can supply/replace them (this dropzone,
+  // EegViewer's own persistent dropzone, and the topography popup's "use custom
+  // positions" button) — all three call the same onElecPosFile callback below.
+  const [customElectrodes, setCustomElectrodes] = useState([]); // [{label,x,y,z}]
+  const [customElecPosFileName, setCustomElecPosFileName] = useState(null);
+  // Live EEG/electrode state lifted out of EegViewer — drives the intracranial connectome
+  // layer in the Neuroimaging pane. { isIntracranial, matched, voltages } | null.
+  const [intracranialElectrodes, setIntracranialElectrodes] = useState(null);
+
+  const handleElecPosFile = useCallback(async (file) => {
+    try {
+      const { electrodes } = await parseElectrodePositionFile(file);
+      if (!electrodes.length) return; // ignore empty or unparseable files
+      setCustomElectrodes(electrodes);
+      setCustomElecPosFileName(file.name.replace(/\.[^.]+$/, ''));
+    } catch (err) {
+      toast.error(err.message);
+    }
+  }, []);
+
+  // Derives the Neuroimaging pane's connectome layer from the EEG state lifted out of
+  // EegViewer — null until there's an intracranial recording with at least one
+  // position-matched channel. `?? {}` guards the initial (pre-EegViewer-effect) null state.
+  const connectomeLayer = useMemo(
+    () => buildConnectomeVolume(intracranialElectrodes ?? {}),
+    [intracranialElectrodes]
+  );
 
   // when both these flags are true, then the two plots can be synchronised
   const [niiNvReady, setNiiNvReady] = useState(false); // flag when the NiiViewer canvas is initialised
@@ -88,9 +124,22 @@ export const PatientView = () => {
 
   // Handler for when EEG files are dropped or selected.
   // Files accumulate across drops until all required files for a format are present.
+  // Electrode position files (.elc/.tsv) are split out first and routed separately —
+  // they're orthogonal to EEG format detection and can arrive alone or alongside EEG files.
   const handleEegFiles = async (newFiles) => {
+    const allFiles = Array.from(newFiles);
+    const elecPosFiles = allFiles.filter((f) =>
+      ELEC_POS_EXTENSIONS.some((ext) => f.name.toLowerCase().endsWith(ext))
+    );
+    if (elecPosFiles.length > 0) {
+      await handleElecPosFile(elecPosFiles[elecPosFiles.length - 1]); // keep only the last if multiple were dropped at once
+    }
+
+    const eegFiles = allFiles.filter((f) => !elecPosFiles.includes(f));
+    if (eegFiles.length === 0) return; // pure electrode-position drop — nothing else to do
+
     // Merge pending with new files, then keep only the last file per extension so a new drop always replaces the previous file of the same type
-    const merged = [...pendingEegFiles, ...Array.from(newFiles)];
+    const merged = [...pendingEegFiles, ...eegFiles];
     // Create a map of extension to file, keeping only the last file for each extension.
     // This way, if a user drops a new .vhdr file, it will replace the previous .vhdr in the pending state, while still keeping any .eeg file that was dropped before.
     const byExtension = new Map();
@@ -129,12 +178,12 @@ export const PatientView = () => {
   };
 
   // Handler for when imaging files are dropped or selected. It reads the files as ArrayBuffers and prepares them for visualization, updating state accordingly.
-  // NiiViewer shows its own loading/success toast once mounted, so this just sets volumes and surfaces errors.
+  // NiiViewer shows its own loading/success toast once mounted, so this just sets layers and surfaces errors.
   const handleNiiFiles = async (files) => {
     setIsLoading(true);
     try {
-      const result = await Promise.all(filesToVolumes(files));
-      setVolumes(result);
+      const result = await Promise.all(filesToLayers(files));
+      setLayers(result);
     } catch (err) {
       toast.error(`Error loading imaging data:\n${err.message}`);
     } finally {
@@ -159,8 +208,8 @@ export const PatientView = () => {
           // Load and set EEG
           const result = await loadBrainVisionEEG(base + DEMO_EEG.header, base + DEMO_EEG.data);
           setEeg(result);
-          // Load and set volumes
-          setVolumes(DEMO_VOLUMES);
+          // Load and set layers
+          setLayers(DEMO_LAYERS);
           await Promise.all([eegReady, niiReady]);
         })(),
         {
@@ -178,19 +227,25 @@ export const PatientView = () => {
   // Resets both viewers, returning to the empty drop zone state.
   const handleReset = () => {
     setEeg(null);
-    setVolumes([]);
+    setLayers([]);
     setPendingEegFiles([]);
     setEegHint(null);
+    setCustomElectrodes([]);
+    setCustomElecPosFileName(null);
+    setIntracranialElectrodes(null);
   };
 
   const handleEegReset = () => {
     setEeg(null);
     setPendingEegFiles([]);
     setEegHint(null);
+    setCustomElectrodes([]);
+    setCustomElecPosFileName(null);
+    setIntracranialElectrodes(null);
   };
 
   const handleNiiReset = () => {
-    setVolumes([]);
+    setLayers([]);
   };
 
   return (
@@ -206,20 +261,20 @@ export const PatientView = () => {
             type="button"
             className="button px-3 py-1"
             onClick={
-              eeg || volumes.length > 0 || pendingEegFiles.length > 0 ? handleReset : handleLoadDemo
+              eeg || layers.length > 0 || pendingEegFiles.length > 0 ? handleReset : handleLoadDemo
             }
             disabled={isLoading}
             title={
               isDemoloading
                 ? 'Loading demo data…'
-                : eeg || volumes.length > 0 || pendingEegFiles.length > 0
+                : eeg || layers.length > 0 || pendingEegFiles.length > 0
                   ? 'Reset both viewers'
                   : 'Load demo data to test VIDEPE without needing your own files'
             }
           >
             {isDemoloading
               ? 'Loading…'
-              : eeg || volumes.length > 0 || pendingEegFiles.length > 0
+              : eeg || layers.length > 0 || pendingEegFiles.length > 0
                 ? 'Reset'
                 : 'Load Demo'}
           </button>
@@ -250,7 +305,7 @@ export const PatientView = () => {
         leftLabel="EEG"
         rightLabel="Neuroimaging"
         onLeftReset={eeg || pendingEegFiles.length > 0 ? handleEegReset : undefined}
-        onRightReset={volumes.length > 0 ? handleNiiReset : undefined}
+        onRightReset={layers.length > 0 || connectomeLayer ? handleNiiReset : undefined}
         onMaximizeChange={setMaximizedPanel}
         left={
           eeg ? (
@@ -260,14 +315,18 @@ export const PatientView = () => {
               channelNames={eeg.channelNames}
               onViewReady={() => eegReadyResolveRef.current?.()} // charts ready
               onTopoNvReady={handleTopoNvReady} // topo canvas ready
+              customElectrodes={customElectrodes}
+              customElecPosFileName={customElecPosFileName}
+              onElecPosFile={handleElecPosFile}
+              onIntracranialElectrodesChange={setIntracranialElectrodes}
             />
           ) : (
             <div className="h-full p-2">
               <FileDropZone
                 onFiles={handleEegFiles}
-                accepted_formats=".vhdr,.eeg"
+                accepted_formats=".vhdr,.eeg,.elc,.tsv"
                 label="Drop EEG files"
-                description="BrainVision: .vhdr + .eeg"
+                description="BrainVision: .vhdr + .eeg (+ optional .elc/.tsv electrode positions)"
                 pendingFiles={pendingEegFiles}
                 hint={eegHint}
                 className="h-full min-h-48"
@@ -276,10 +335,11 @@ export const PatientView = () => {
           )
         }
         right={
-          volumes.length > 0 ? (
+          layers.length > 0 || connectomeLayer ? (
             <NiiViewer
               nvRef={nvRef_niiviewer}
-              volumes={volumes}
+              layers={layers}
+              connectomeLayer={connectomeLayer}
               isFullscreen={maximizedPanel === 'right'}
               onViewReady={() => niiReadyResolveRef.current?.()}
               onNiiNvReady={() => setNiiNvReady(true)}
