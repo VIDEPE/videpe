@@ -4,6 +4,7 @@ import { ArrowLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Niivue } from '@niivue/niivue';
 
+import { cn } from '../utils/utils';
 import { FullWidthLayout } from '../components/FullWidthLayout';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { EegViewer } from '../components/EegViewer';
@@ -19,6 +20,53 @@ import { buildConnectomeVolume } from '../utils/eegTopographyUtils';
 const DEMO_EEG = {
   header: 'demo_data/sub-synth_task-rest_eeg.vhdr',
   data: 'demo_data/sub-synth_task-rest_eeg.eeg',
+};
+
+// Shared title styling — keeps "Neuroimaging" and the toggle's labels visually
+// consistent, and both header bars the same height (TrafficLightButtons are 16px tall).
+const PANEL_TITLE_CLASS = 'h-7 flex items-center text-xl font-medium leading-none text-white';
+
+// Sits in the SplitPane's left title once EEG is loaded, replacing the static "EEG"
+// label. One switch, not two buttons — clicking anywhere flips the value regardless of
+// which label half was clicked. pointer-events-auto overrides panelHeader's <h2>.
+const RecordingTypeToggle = ({ recordingType, onChange }) => {
+  const isIntracranial = recordingType === 'ieeg';
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={isIntracranial}
+      aria-label="Recording type"
+      onClick={() => onChange(isIntracranial ? 'eeg' : 'ieeg')}
+      className="relative w-28 h-7 rounded-full border border-border bg-background cursor-pointer pointer-events-auto"
+      title="Automatically detected from channel naming — click to overwrite"
+    >
+      <span className="absolute inset-0.5 flex">
+        <span
+          className={cn(
+            'absolute inset-y-0 left-0 w-1/2 rounded-full bg-primary transition-transform duration-150 ease-out',
+            isIntracranial && 'translate-x-full'
+          )}
+        />
+        <span
+          className={cn(
+            'relative z-10 flex-1 flex items-center justify-center text-xl font-medium leading-none transition-colors',
+            !isIntracranial ? 'text-white' : 'text-foreground/50'
+          )}
+        >
+          EEG
+        </span>
+        <span
+          className={cn(
+            'relative z-10 flex-1 flex items-center justify-center text-xl font-medium leading-none transition-colors',
+            isIntracranial ? 'text-white' : 'text-foreground/50'
+          )}
+        >
+          iEEG
+        </span>
+      </span>
+    </button>
+  );
 };
 
 const DEMO_LAYERS = [
@@ -67,6 +115,10 @@ export const PatientView = () => {
   // Live EEG/electrode state lifted out of EegViewer — drives the intracranial connectome
   // layer in the Neuroimaging pane. { isIntracranial, matched, voltages } | null.
   const [intracranialElectrodes, setIntracranialElectrodes] = useState(null);
+  // 'eeg' | 'ieeg' — owned here (not EegViewer) so the SplitPane title can show/drive the
+  // toggle. EegViewer reports its auto-detection result up via the same setter that the
+  // title's click handler uses, then reads the resulting value back down as a prop.
+  const [recordingType, setRecordingType] = useState('eeg');
 
   const handleElecPosFile = useCallback(async (file) => {
     try {
@@ -236,6 +288,7 @@ export const PatientView = () => {
     setCustomElectrodes([]);
     setCustomElecPosFileName(null);
     setIntracranialElectrodes(null);
+    setRecordingType('eeg');
   };
 
   const handleEegReset = () => {
@@ -244,6 +297,7 @@ export const PatientView = () => {
     setEegHint(null);
     setCustomElectrodes([]);
     setCustomElecPosFileName(null);
+    setRecordingType('eeg');
     setIntracranialElectrodes(null);
   };
 
@@ -305,8 +359,14 @@ export const PatientView = () => {
       </div>
 
       <SplitPane
-        leftLabel="EEG"
-        rightLabel="Neuroimaging"
+        leftLabel={
+          eeg ? (
+            <RecordingTypeToggle recordingType={recordingType} onChange={setRecordingType} />
+          ) : (
+            <span className={PANEL_TITLE_CLASS}>EEG</span>
+          )
+        }
+        rightLabel={<span className={PANEL_TITLE_CLASS}>Neuroimaging</span>}
         onLeftReset={eeg || pendingEegFiles.length > 0 ? handleEegReset : undefined}
         onRightReset={layers.length > 0 || connectomeLayer ? handleNiiReset : undefined}
         onMaximizeChange={setMaximizedPanel}
@@ -320,6 +380,8 @@ export const PatientView = () => {
               onTopoNvReady={handleTopoNvReady} // topo canvas ready
               customElectrodes={customElectrodes}
               customElecPosFileName={customElecPosFileName}
+              recordingType={recordingType}
+              onRecordingTypeChange={setRecordingType}
               onElecPosFile={handleElecPosFile}
               onIntracranialElectrodesChange={setIntracranialElectrodes}
             />

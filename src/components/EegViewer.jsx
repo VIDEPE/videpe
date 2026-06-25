@@ -87,6 +87,8 @@ export const EegViewer = ({
   customElecPosFileName = null,
   onElecPosFile,
   onIntracranialElectrodesChange,
+  recordingType = 'eeg', // 'eeg' | 'ieeg' — controlled by PatientView, which shows/drives the toggle in the panel title
+  onRecordingTypeChange,
 }) => {
   const { isDarkMode } = useTheme();
   const syncKey = 'eeg-sync'; // shared across all channels to link their interactions
@@ -189,13 +191,12 @@ export const EegViewer = ({
   // render the topography itself (that's customElectrodes' job — see below).
   const [standard1005Electrodes, setStandard1005Electrodes] = useState([]);
   const [standard1005Matched, setStandard1005Matched] = useState([]);
-  // 'eeg' | 'ieeg' — holds either the last auto-detection result or the user's
-  // direct override; there's no separate "auto" mode to track.
-  const [recordingType, setRecordingType] = useState('eeg');
 
   // Fetch the built-in electrode position template, match it against the recording's
   // channel names (for detection purposes only), then (re-)detect the recording type
-  // and surface it via a toast. Re-runs whenever channelNames changes (new recording loaded).
+  // and report it upward — PatientView owns recordingType and shows/drives the
+  // EEG/iEEG toggle in the panel title, since this component no longer renders it
+  // itself. Re-runs whenever channelNames changes (new recording loaded).
   useEffect(() => {
     fetch('electrode_positions/standard_1005.elc')
       .then((r) => r.text())
@@ -204,7 +205,7 @@ export const EegViewer = ({
         setStandard1005Electrodes(parsedElectrodes);
         setStandard1005Matched(matchChannelsToPositions(channelNames, parsedElectrodes).matched);
         const detected = detectIsIntracranial(channelNames, parsedElectrodes) ? 'ieeg' : 'eeg';
-        setRecordingType(detected);
+        onRecordingTypeChange?.(detected);
         toast(
           detected === 'ieeg'
             ? 'iEEG electrode configuration detected'
@@ -215,7 +216,7 @@ export const EegViewer = ({
         );
       })
       .catch(() => {}); // silently ignore if file unavailable (e.g. in tests without the asset)
-  }, [channelNames]);
+  }, [channelNames, onRecordingTypeChange]);
 
   const isIntracranial = recordingType === 'ieeg';
 
@@ -488,48 +489,6 @@ export const EegViewer = ({
         onMouseDown={focusViewer}
         onKeyDown={handleKeyDown}
       >
-        {/* Recording type toggle — top-left corner of the viewer pane. Auto-detected on load
-            (see the standard_1005 fetch effect above). A single switch, not two separate
-            buttons — clicking anywhere on it flips between EEG/iEEG, regardless of which
-            label half was clicked. The highlighted "thumb" slides under whichever is active. */}
-        <button
-          type="button"
-          role="switch"
-          aria-checked={isIntracranial}
-          aria-label="Recording type"
-          onClick={() => setRecordingType(isIntracranial ? 'eeg' : 'ieeg')}
-          className="absolute top-2 left-2 z-20 w-20 h-6 rounded-full border border-border bg-background cursor-pointer"
-          title="Automatically detected from channel naming — click to flip"
-        >
-          {/* absolute + inset-0.5 (not relative) is what actually insets this box within the
-              track above — it's also the positioning ancestor the thumb's left-0/w-1/2 and the
-              two flex-1 labels all measure against, so the thumb lines up exactly under whichever is active. */}
-          <span className="absolute inset-0.5 flex">
-            <span
-              className={cn(
-                'absolute inset-y-0 left-0 w-1/2 rounded-full bg-primary transition-transform duration-150 ease-out',
-                recordingType === 'ieeg' && 'translate-x-full'
-              )}
-            />
-            <span
-              className={cn(
-                'relative z-10 flex-1 flex items-center justify-center leading-none text-[12px] font-bold transition-colors',
-                recordingType === 'eeg' ? 'text-background' : 'text-foreground/70'
-              )}
-            >
-              EEG
-            </span>
-            <span
-              className={cn(
-                'relative z-10 flex-1 flex items-center justify-center leading-none text-[12px] font-bold transition-colors',
-                recordingType === 'ieeg' ? 'text-background' : 'text-foreground/70'
-              )}
-            >
-              iEEG
-            </span>
-          </span>
-        </button>
-
         {/* Keyboard shortcut hint — bottom-right corner of the viewer pane.
             Uses a custom hover tooltip instead of the native title attribute, since native
             tooltips have a long built-in show delay — long enough that clicking the icon (to

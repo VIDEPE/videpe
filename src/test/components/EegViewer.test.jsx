@@ -1350,17 +1350,32 @@ const makeIntracranialProvider = () => ({
 });
 
 describe('EegViewer — recording type detection', () => {
+  // recordingType is now a controlled prop (PatientView owns the state and shows/drives the
+  // EEG/iEEG toggle in the SplitPane title) — EegViewer only reports detection results upward
+  // via onRecordingTypeChange and reads the effective value back down via the recordingType
+  // prop. These tests exercise both halves of that contract directly, instead of a UI toggle
+  // that no longer lives in this component.
   beforeEach(async () => {
     const { default: toast } = await import('react-hot-toast');
     toast.mockClear();
   });
 
-  it('renders an EEG/iEEG switch defaulting to unchecked (EEG) for scalp-shaped channel names', async () => {
-    await renderViewer();
-    expect(screen.getByRole('switch', { name: 'Recording type' })).toHaveAttribute(
-      'aria-checked',
-      'false'
+  it('reports the detected recording type via onRecordingTypeChange for scalp-shaped channel names', async () => {
+    const onRecordingTypeChange = vi.fn();
+    const provider = makeProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        onRecordingTypeChange={onRecordingTypeChange}
+      />
     );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(onRecordingTypeChange).toHaveBeenCalledWith('eeg');
   });
 
   it('shows a toast naming the detected recording type once detection resolves', async () => {
@@ -1371,27 +1386,36 @@ describe('EegViewer — recording type detection', () => {
     });
   });
 
-  it('defaults to iEEG (pressed) and toasts accordingly for intracranial-shaped channel names', async () => {
+  it('reports iEEG via onRecordingTypeChange and toasts accordingly for intracranial-shaped channel names', async () => {
     const { default: toast } = await import('react-hot-toast');
+    const onRecordingTypeChange = vi.fn();
     const provider = makeIntracranialProvider();
-    render(<EegViewer provider={provider} channelNames={provider.channelNames} />);
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        onRecordingTypeChange={onRecordingTypeChange}
+      />
+    );
     await act(async () => {
       await Promise.resolve();
       await Promise.resolve();
     });
 
-    expect(screen.getByRole('switch', { name: 'Recording type' })).toHaveAttribute(
-      'aria-checked',
-      'true'
-    );
+    expect(onRecordingTypeChange).toHaveBeenCalledWith('ieeg');
     expect(toast).toHaveBeenCalledWith('iEEG electrode configuration detected', {
       id: expect.any(String),
     });
   });
 
-  it('keeps matched empty for intracranial recordings with no custom positions, even though standard_1005 was fetched', async () => {
+  it('keeps matched empty for an intracranial recordingType with no custom positions, even though standard_1005 was fetched', async () => {
     const provider = makeIntracranialProvider();
-    render(<EegViewer provider={provider} channelNames={provider.channelNames} />);
+    // recordingType is normally fed back down as a prop by the parent in response to the
+    // onRecordingTypeChange callback above (see PatientView) — passed directly here to
+    // exercise the same isIntracranial-driven behavior without reimplementing that parent.
+    render(
+      <EegViewer provider={provider} channelNames={provider.channelNames} recordingType="ieeg" />
+    );
     await act(async () => {
       await Promise.resolve();
       await Promise.resolve();
@@ -1405,16 +1429,24 @@ describe('EegViewer — recording type detection', () => {
     expect(screen.getByTestId('topo-is-intracranial')).toHaveTextContent('true');
   });
 
-  it('clicking the switch (anywhere on it) overrides the detected recording type directly', async () => {
-    const user = userEvent.setup();
-    await renderViewer(); // scalp-shaped fixture, defaults to 'eeg'
-    const switchEl = screen.getByRole('switch', { name: 'Recording type' });
+  it('switches intracranial-mode behavior when the recordingType prop changes (simulating a manual override)', async () => {
+    const provider = makeProvider(); // scalp-shaped fixture
+    const { rerender } = render(
+      <EegViewer provider={provider} channelNames={provider.channelNames} recordingType="eeg" />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      capturedClickHandler?.();
+    });
+    expect(screen.getByTestId('topo-is-intracranial')).toHaveTextContent('false');
 
-    await user.click(switchEl);
-    expect(switchEl).toHaveAttribute('aria-checked', 'true');
-
-    await user.click(switchEl); // flips back regardless of where on the control it's clicked
-    expect(switchEl).toHaveAttribute('aria-checked', 'false');
+    rerender(
+      <EegViewer provider={provider} channelNames={provider.channelNames} recordingType="ieeg" />
+    );
+    expect(screen.getByTestId('topo-is-intracranial')).toHaveTextContent('true');
   });
 });
 

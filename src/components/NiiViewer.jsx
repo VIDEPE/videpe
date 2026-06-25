@@ -411,24 +411,26 @@ export const NiiViewer = ({
   // data changes. Rebuilt wholesale on every change rather than mutated in place — mirrors
   // how EegTopoViewer rebuilds its own mesh on every topoTimepoint click.
   useEffect(() => {
-    const nv = nvRef.current;
+    const nv = nvRef.current; // guard clause — nothing to do before NiiVue has attached to a canvas
     if (!nv) return;
 
     if (!connectomeLayer) {
+      // No connectome to show anymore (e.g. positions/EEG cleared) — tear down the existing mesh, if any.
       if (connectomeMeshRef.current) {
-        nv.removeMesh(connectomeMeshRef.current);
-        connectomeMeshRef.current = null;
-        lastConnectomeLayerRef.current = null;
-        nv.updateGLVolume();
+        nv.removeMesh(connectomeMeshRef.current); // drop it from the 3D scene
+        connectomeMeshRef.current = null; // nothing left to track
+        lastConnectomeLayerRef.current = null; // so a future re-add isn't mistaken for "unchanged"
+        nv.updateGLVolume(); // redraw without it
       }
       return;
     }
 
     if (connectomeLayer === lastConnectomeLayerRef.current) return; // unrelated re-render (e.g. another layer's settings changed)
-    lastConnectomeLayerRef.current = connectomeLayer;
+    lastConnectomeLayerRef.current = connectomeLayer; // remember what this rebuild is based on
 
-    if (connectomeMeshRef.current) nv.removeMesh(connectomeMeshRef.current);
+    if (connectomeMeshRef.current) nv.removeMesh(connectomeMeshRef.current); // drop the stale mesh before building its replacement
 
+    // Build the new connectome mesh in memory — not yet added to the scene.
     const mesh = nv.loadConnectomeAsMesh({
       name: connectomeLayer.name,
       nodeColormap: EEG_NODE_POS_KEY,
@@ -451,15 +453,15 @@ export const NiiViewer = ({
     // data refreshes by the sync effect above); fall back to the same default that effect
     // would compute if it hasn't run yet this render pass (e.g. the connectome's first
     // appearance, before orderedLayers/layerSettings have caught up).
-    const existingIndex = orderedLayers.findIndex((l) => l.url === INTRACRANIAL_CONNECTOME_URL);
+    const existingIndex = orderedLayers.findIndex((l) => l.url === INTRACRANIAL_CONNECTOME_URL); // its current position in the card list, if it has one yet
     const settings =
-      layerSettings[existingIndex] ??
-      getInitialLayerSettings([connectomeLayer], orderedLayers.length)[0];
-    mesh.opacity = settings.visible ? settings.opacity : 0;
+      layerSettings[existingIndex] ?? // its existing settings, preserved across this rebuild
+      getInitialLayerSettings([connectomeLayer], orderedLayers.length)[0]; // or computed fresh on first appearance
+    mesh.opacity = settings.visible ? settings.opacity : 0; // 0 opacity is how a hidden mesh is represented, same convention as image volumes
 
-    nv.addMesh(mesh);
-    connectomeMeshRef.current = mesh;
-    nv.updateGLVolume();
+    nv.addMesh(mesh); // actually add it to the 3D scene
+    connectomeMeshRef.current = mesh; // track it so the next change/removal can find it
+    nv.updateGLVolume(); // redraw with the new mesh visible
   }, [connectomeLayer, orderedLayers, layerSettings, nvRef]);
 
   return (
