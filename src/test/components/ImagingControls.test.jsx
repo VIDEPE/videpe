@@ -15,13 +15,13 @@ const makeSettings = (overrides = {}) => ({
 });
 
 // Helper to render the component with default props and allow overrides
-const renderControls = (volumes, settings, onSettingChange = vi.fn(), onDeleteVolume = vi.fn()) =>
+const renderControls = (layers, settings, onSettingChange = vi.fn(), onDeleteLayer = vi.fn()) =>
   render(
     <ImagingControls
-      volumes={volumes}
+      layers={layers}
       layerSettings={settings}
       onSettingChange={onSettingChange}
-      onDeleteVolume={onDeleteVolume}
+      onDeleteLayer={onDeleteLayer}
     />
   );
 
@@ -250,6 +250,62 @@ describe('ImagingControls', () => {
       await userEvent.click(screen.getByRole('button', { name: 'Close PET volume' }));
       // expect onDeleteVolume to be called with index 1
       expect(onDeleteVolume).toHaveBeenCalledWith(1);
+    });
+  });
+
+  describe('connectome layer', () => {
+    const makeConnectomeVolume = () => ({
+      kind: 'connectome',
+      type: 'Intracranial',
+      subtype: 'Electrodes',
+      url: '__intracranial-electrodes__',
+    });
+
+    it('does not render Colormap, Invert, or Colorbar controls for a connectome-kind layer', async () => {
+      renderControls([makeConnectomeVolume()], [makeSettings()]);
+      await userEvent.click(
+        screen.getByRole('button', { name: 'Expand Intracranial - Electrodes controls' })
+      );
+
+      expect(screen.queryByLabelText('Intracranial - Electrodes colormap')).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole('switch', { name: 'Invert Intracranial - Electrodes colormap' })
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole('switch', { name: 'Show Intracranial - Electrodes colorbar' })
+      ).not.toBeInTheDocument();
+    });
+
+    it('still renders the Opacity slider and Delete button for a connectome-kind layer', async () => {
+      renderControls([makeConnectomeVolume()], [makeSettings()]);
+      await userEvent.click(
+        screen.getByRole('button', { name: 'Expand Intracranial - Electrodes controls' })
+      );
+
+      expect(screen.getByLabelText('Intracranial - Electrodes opacity slider')).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: 'Close Intracranial - Electrodes volume' })
+      ).toBeInTheDocument();
+    });
+
+    it('still renders the visibility toggle and drag handle in the header for a connectome-kind layer', () => {
+      renderControls([makeConnectomeVolume()], [makeSettings()]);
+
+      expect(
+        screen.getByRole('button', { name: 'Hide Intracranial - Electrodes' })
+      ).toBeInTheDocument();
+      expect(
+        screen.getByLabelText('Drag to reorder Intracranial - Electrodes')
+      ).toBeInTheDocument();
+    });
+
+    it('renders Colormap/Invert/Colorbar controls normally for non-connectome layers (regression)', async () => {
+      renderControls([makeVolume('MRI', '/mri.nii')], [makeSettings()]);
+      await userEvent.click(screen.getByRole('button', { name: 'Expand MRI controls' }));
+
+      expect(screen.getByLabelText('MRI colormap')).toBeInTheDocument();
+      expect(screen.getByRole('switch', { name: 'Invert MRI colormap' })).toBeInTheDocument();
+      expect(screen.getByRole('switch', { name: 'Show MRI colorbar' })).toBeInTheDocument();
     });
   });
 });

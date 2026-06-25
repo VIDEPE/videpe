@@ -7,8 +7,12 @@ import { X } from 'lucide-react';
 const COLORMAP_OPTIONS = [
   { value: 'gray', label: 'Grayscale' },
   { value: 'viridis', label: 'Viridis' },
+  { value: 'cividis', label: 'Cividis' },
+  { value: 'inferno', label: 'Inferno' },
   { value: 'magma', label: 'Magma' },
   { value: 'mako', label: 'Mako' },
+  { value: 'rocket', label: 'Rocket' },
+  { value: 'turbo', label: 'Turbo' },
 ];
 
 const ToggleSwitch = ({ checked, onChange, 'aria-label': ariaLabel, title }) => (
@@ -28,19 +32,23 @@ const ToggleSwitch = ({ checked, onChange, 'aria-label': ariaLabel, title }) => 
 );
 
 function SortableSettingsCard({
-  volume,
+  layer,
   index,
   settings,
   isExpanded,
   onToggleExpand,
   onSettingChange,
-  onDeleteVolume,
+  onDeleteLayer,
 }) {
-  const { ref, handleRef, isDragging } = useSortable({ id: volume.url, index });
+  const { ref, handleRef, isDragging } = useSortable({ id: layer.url, index });
   // Label is either "type - subtype" (e.g. "MRI - T1") or just "type" if no subtype, or "Layer {index}" as a fallback if no type
-  const label = volume.type
-    ? volume.type + (volume.subtype ? ` - ${volume.subtype}` : '')
+  const label = layer.type
+    ? layer.type + (layer.subtype ? ` - ${layer.subtype}` : '')
     : `Layer ${index + 1}`;
+  // Connectome layers (e.g. intracranial electrodes) are colored by their own baked-in
+  // node/edge colormap, not a NiiVue volume colormap — the intensity colormap dropdown,
+  // invert toggle, and colorbar toggle don't apply to them.
+  const isConnectome = layer.kind === 'connectome';
 
   // Local string state — allows typing a partial value (e.g. empty string) without breaking the numeric opacity
   const [opacityStr, setOpacityStr] = useState(() => String(Math.round(settings.opacity * 100)));
@@ -75,9 +83,9 @@ function SortableSettingsCard({
         </span>
 
         <span className="flex-1 text-sm font-medium text-heading truncate">
-          {volume.type ?? `Layer ${index + 1}`}
-          {volume.subtype && (
-            <span className="text-xs font-normal text-foreground/60 ml-1">- {volume.subtype}</span>
+          {layer.type ?? `Layer ${index + 1}`}
+          {layer.subtype && (
+            <span className="text-xs font-normal text-foreground/60 ml-1">- {layer.subtype}</span>
           )}
         </span>
 
@@ -162,54 +170,62 @@ function SortableSettingsCard({
               </div>
             </div>
 
-            {/* Colormap */}
-            <div className="flex items-center gap-3">
-              <span className="w-20 shrink-0 text-foreground select-none pointer-events-none">
-                Colormap
-              </span>
-              <select
-                value={settings.colormap}
-                onChange={(e) => onSettingChange(index, 'colormap', e.target.value)}
-                className="flex-1 min-w-0 bg-surface border border-border rounded px-2 py-0.5 text-xs text-heading cursor-pointer"
-                aria-label={`${label} colormap`}
-              >
-                {COLORMAP_OPTIONS.map(({ value, label: optionLabel }) => (
-                  <option key={value} value={value}>
-                    {optionLabel}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {/* Colormap — not applicable to connectome layers, which colour themselves
+                via baked-in node/edge colormaps rather than a NiiVue volume colormap */}
+            {!isConnectome && (
+              <div className="flex items-center gap-3">
+                <span className="w-20 shrink-0 text-foreground select-none pointer-events-none">
+                  Colormap
+                </span>
+                <select
+                  value={settings.colormap}
+                  onChange={(e) => onSettingChange(index, 'colormap', e.target.value)}
+                  className="flex-1 min-w-0 bg-surface border border-border rounded px-2 py-0.5 text-xs text-heading cursor-pointer"
+                  aria-label={`${label} colormap`}
+                >
+                  {COLORMAP_OPTIONS.map(({ value, label: optionLabel }) => (
+                    <option key={value} value={value}>
+                      {optionLabel}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <div className="flex flex-row">
-              {/* Invert */}
-              <div className="w-1/2 flex items-center gap-2.5">
-                <span className="text-foreground select-none pointer-events-none">Invert</span>
-                <ToggleSwitch
-                  checked={settings.invert}
-                  onChange={(value) => onSettingChange(index, 'invert', value)}
-                  aria-label={`Invert ${label} colormap`}
-                  title={`Invert ${label} colormap`}
-                />
-              </div>
+              {/* Invert / Show colorbar — also not applicable to connectome layers */}
+              {!isConnectome && (
+                <>
+                  <div className="w-1/2 flex items-center gap-2.5">
+                    <span className="text-foreground select-none pointer-events-none">Invert</span>
+                    <ToggleSwitch
+                      checked={settings.invert}
+                      onChange={(value) => onSettingChange(index, 'invert', value)}
+                      aria-label={`Invert ${label} colormap`}
+                      title={`Invert ${label} colormap`}
+                    />
+                  </div>
 
-              {/* Show colorbar */}
-              <div className="w-1/2 flex items-center gap-2.5">
-                <span className="text-foreground select-none pointer-events-none">Colorbar</span>
-                <ToggleSwitch
-                  checked={settings.showColorbar}
-                  onChange={(value) => onSettingChange(index, 'showColorbar', value)}
-                  aria-label={`Show ${label} colorbar`}
-                  title={`Show ${label} colorbar`}
-                />
-              </div>
-              {/* Delete Volume button */}
+                  <div className="w-1/2 flex items-center gap-2.5">
+                    <span className="text-foreground select-none pointer-events-none">
+                      Colorbar
+                    </span>
+                    <ToggleSwitch
+                      checked={settings.showColorbar}
+                      onChange={(value) => onSettingChange(index, 'showColorbar', value)}
+                      aria-label={`Show ${label} colorbar`}
+                      title={`Show ${label} colorbar`}
+                    />
+                  </div>
+                </>
+              )}
+              {/* Delete layer button */}
               <div className="flex items-center gap-2.5 ml-auto">
                 {/* ml-auto pushes the close button to the right edge */}
                 <button
                   className="text-foreground hover:text-alert cursor-pointer"
                   type="button"
-                  onClick={() => onDeleteVolume(index)}
+                  onClick={() => onDeleteLayer(index)}
                   aria-label={`Close ${label} volume`}
                   title={`Close ${label} volume`}
                 >
@@ -225,11 +241,11 @@ function SortableSettingsCard({
 }
 
 export const ImagingControls = ({
-  volumes,
+  layers,
   layerSettings,
   onSettingChange,
   onReorder,
-  onDeleteVolume,
+  onDeleteLayer,
 }) => {
   // Track the expanded card by URL so the expanded state survives reordering
   const [expandedUrl, setExpandedUrl] = useState(null); // only one card can be expanded at a time, so this is either a URL or null
@@ -238,16 +254,16 @@ export const ImagingControls = ({
     // onDragEnd fires when the user releases a drag; we forward it to onReorder (a callback prop from NiiViewer) so the parent can update layer order state and reload NiiVue
     <DragDropProvider onDragEnd={onReorder}>
       <div className="flex flex-col gap-1 py-1 px-1">
-        {volumes.map((volume, index) => (
+        {layers.map((layer, index) => (
           <SortableSettingsCard
-            key={volume.url}
-            volume={volume}
+            key={layer.url}
+            layer={layer}
             index={index}
             settings={layerSettings[index]}
-            isExpanded={expandedUrl === volume.url}
-            onToggleExpand={() => setExpandedUrl(expandedUrl === volume.url ? null : volume.url)}
+            isExpanded={expandedUrl === layer.url}
+            onToggleExpand={() => setExpandedUrl(expandedUrl === layer.url ? null : layer.url)}
             onSettingChange={onSettingChange}
-            onDeleteVolume={onDeleteVolume}
+            onDeleteLayer={onDeleteLayer}
           />
         ))}
       </div>

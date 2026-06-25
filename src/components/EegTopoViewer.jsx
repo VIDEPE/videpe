@@ -1,7 +1,85 @@
-import { useRef, useEffect, useState, useCallback } from 'react';
+import { useRef, useEffect, useMemo, useState, useCallback } from 'react';
 import { NVMesh, NVMeshUtilities, SLICE_TYPE } from '@niivue/niivue';
 import { TrafficLightButtons } from './TrafficLightButtons';
-import { buildEegMesh, averageReference, medianReference } from '@/utils/eegTopography';
+import {
+  buildElectrodeMesh,
+  interpolateMeshVoltages,
+  buildElectrodeMarkers,
+} from '@/utils/eegTopographyUtils';
+import {
+  EEG_TOPO_COLORMAP_KEY,
+  EEG_TOPO_COLORMAP,
+  EEG_TOPO_COLORMAP_COLOURBLIND_KEY,
+  EEG_TOPO_COLORMAP_COLOURBLIND,
+  EEG_NODE_POS_KEY,
+  EEG_NODE_POS,
+  EEG_NODE_NEG_KEY,
+  EEG_NODE_NEG,
+  EEG_NODE_POS_COLOURBLIND_KEY,
+  EEG_NODE_POS_COLOURBLIND,
+  EEG_NODE_NEG_COLOURBLIND_KEY,
+  EEG_NODE_NEG_COLOURBLIND,
+  EEG_NODE_UNMAPPED_KEY,
+  EEG_NODE_UNMAPPED,
+} from '@/utils/eegColormaps';
+import { EyeDashed } from 'lucide-react';
+import { EegMatrixViewer } from './EegMatrixViewer';
+import { cn } from '@/utils/utils';
+
+// Marker sizes in mm radius (sizeValue × nodeScale) — unmapped electrodes are small dots
+// that trace out the template grid; matched electrodes are larger and colour-coded by voltage.
+const UNMAPPED_NODE_SCALE = 1.5;
+const MATCHED_NODE_SCALE = 4;
+
+// Builds the two marker "layers" (unmapped template dots + matched, voltage-coloured dots)
+// as NiiVue connectome meshes and adds them on top of whatever meshes are already loaded.
+// Connectome nodes render as solid spheres positioned in the same mm space as the mesh.
+function addElectrodeMarkers(nv, markers, calMax, colourBlindMode) {
+  const unmappedNodes = markers
+    .filter((m) => !m.isMatched)
+    .map((m) => ({ name: m.label, x: m.x, y: m.y, z: m.z, colorValue: 0, sizeValue: 1 }));
+  const matchedNodes = markers
+    .filter((m) => m.isMatched)
+    .map((m) => ({ name: m.label, x: m.x, y: m.y, z: m.z, colorValue: m.value, sizeValue: 1 }));
+
+  if (unmappedNodes.length > 0) {
+    nv.addMesh(
+      nv.loadConnectomeAsMesh({
+        name: 'eeg-electrodes-unmapped',
+        nodeColormap: EEG_NODE_UNMAPPED_KEY,
+        nodeColormapNegative: EEG_NODE_UNMAPPED_KEY,
+        nodeMinColor: 0,
+        nodeMaxColor: 0, // forces every node to the same flat colour, regardless of colorValue
+        nodeScale: UNMAPPED_NODE_SCALE,
+        showLegend: false,
+        nodes: unmappedNodes,
+        // No `edges` key — NiiVue adds an edge colormap colorbar entry for any connectome
+        // that has one, even an empty array, which would draw an extra, meaningless bar.
+      })
+    );
+  }
+  if (matchedNodes.length > 0) {
+    nv.addMesh(
+      nv.loadConnectomeAsMesh({
+        name: 'eeg-electrodes-matched',
+        nodeColormap: colourBlindMode ? EEG_NODE_POS_COLOURBLIND_KEY : EEG_NODE_POS_KEY,
+        nodeColormapNegative: colourBlindMode ? EEG_NODE_NEG_COLOURBLIND_KEY : EEG_NODE_NEG_KEY,
+        nodeMinColor: 0,
+        nodeMaxColor: calMax,
+        nodeScale: MATCHED_NODE_SCALE,
+        showLegend: false,
+        nodes: matchedNodes,
+        // No `edges` key — see comment on the unmapped layer above.
+      })
+    );
+  }
+}
+
+// Default/minimum window size in px — default matches the previous fixed w-96 h-80 (24rem x 20rem)
+const DEFAULT_TOPO_SIZE = { width: 375, height: 360 };
+const MIN_TOPO_WIDTH = 220;
+const MIN_TOPO_HEIGHT = 220;
+const RESIZE_DIRECTIONS = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
 
 export function EegTopoViewer({
   nvRef,
@@ -12,44 +90,72 @@ export function EegTopoViewer({
   onClose,
   onTopoNvReady,
   isStandardElectrodes = true,
-  onElcFile,
+  onElecPosFile,
+  isIntracranial = false,
+  channelNames,
+  voltagesByChannel,
+  customFileName = null, // filename (no extension) of the loaded custom positions file — owned by PatientView, passed down
 }) {
   const canvasRef = useRef(null);
   const fileInputRef = useRef(null);
-  const [reference, setReference] = useState('average'); // 'none' | 'average' | 'median'
-  const [customFileName, setCustomFileName] = useState(null); // filename (no extension) of the loaded custom positions file
   const [isMaximized, setIsMaximized] = useState(false);
   const [position, setPosition] = useState({ x: 80, y: 80 });
+  const [size, setSize] = useState(DEFAULT_TOPO_SIZE);
+  const [colourBlindMode, setColourBlindMode] = useState(false);
   const dragOffset = useRef(null);
+  const meshLoadRef = useRef(null); // tracks the in-flight load so StrictMode's double-invoke can't add two meshes (and so two colorbars)
 
-  // Initialise NiiVue once on mount
+  // Initialise NiiVue once on mount — skipped entirely in intracranial mode, which
+  // renders a plain HTML matrix instead of a 3D canvas, so there's nothing to attach to.
   useEffect(() => {
+    if (isIntracranial) return;
     const nv = nvRef.current;
     nv.setSliceType(SLICE_TYPE.RENDER); // force slicetype to render for a 3D view
+    nv.addColormap(EEG_TOPO_COLORMAP_KEY, EEG_TOPO_COLORMAP);
+    nv.addColormap(EEG_TOPO_COLORMAP_COLOURBLIND_KEY, EEG_TOPO_COLORMAP_COLOURBLIND);
+    nv.addColormap(EEG_NODE_POS_KEY, EEG_NODE_POS);
+    nv.addColormap(EEG_NODE_NEG_KEY, EEG_NODE_NEG);
+    nv.addColormap(EEG_NODE_POS_COLOURBLIND_KEY, EEG_NODE_POS_COLOURBLIND);
+    nv.addColormap(EEG_NODE_NEG_COLOURBLIND_KEY, EEG_NODE_NEG_COLOURBLIND);
+    nv.addColormap(EEG_NODE_UNMAPPED_KEY, EEG_NODE_UNMAPPED);
+    nv.opts.isColorbar = true; // master switch NiiVue checks before drawing any colorbar
+    // NiiVue overlays the colorbar on the viewport's bottom edge instead of reserving
+    // space for it here, so narrow the bar and shrink the mesh slightly to compensate.
+    nv.opts.colorbarWidth = 0.5;
     // Attach to a canvas and signal PatientView it is ready for synchronising to the EegTopoViewer
     nv.attachToCanvas(canvasRef.current);
+    nv.volScaleMultiplier = 0.85;
     onTopoNvReady?.();
-  }, []);
+  }, [nvRef, onTopoNvReady, isIntracranial]);
+
+  // The convex-hull triangulation only depends on the electrode template, not on the
+  // per-timepoint voltages — caching it here avoids re-triangulating on every topo
+  // timepoint click, when only the voltage interpolation below actually needs to change.
+  // Skipped in intracranial mode, where there's no mesh to triangulate.
+  const electrodeMesh = useMemo(
+    () => (isIntracranial ? null : buildElectrodeMesh(electrodes)),
+    [electrodes, isIntracranial]
+  );
 
   // Rebuild and reload the mesh whenever electrodes, matched channels, voltages, or
   // re-referencing mode change. Clears any previously loaded mesh first.
   useEffect(() => {
     const nv = nvRef.current;
-    if (!nv || !electrodes?.length || !voltages?.length) return;
+    if (isIntracranial || !nv || !electrodes?.length || !voltages?.length) return;
 
-    const refVoltages =
-      reference === 'median'
-        ? medianReference(voltages)
-        : reference === 'average'
-          ? averageReference(voltages)
-          : voltages; // 'none' — use raw voltages without re-referencing
-
-    const { vertices, indices, scalars } = buildEegMesh(electrodes, matched, refVoltages);
+    const { vertices, indices } = electrodeMesh;
+    const scalars = interpolateMeshVoltages(electrodes, matched, voltages);
     const buffer = NVMeshUtilities.createMZ3(vertices, indices, false, null, scalars);
+    const markers = buildElectrodeMarkers(electrodes, matched, voltages);
 
     // Symmetric colormap range so blue/red are equal distance from zero
-    const calMax = Math.max(...refVoltages.map(Math.abs));
+    const calMax = Math.max(...voltages.map(Math.abs));
 
+    // Identifies this specific load — StrictMode double-invokes this effect in dev,
+    // which would otherwise let a stale call add a second, overlapping mesh once the
+    // earlier (superseded) call's loadFromUrl resolves.
+    const loadToken = {};
+    meshLoadRef.current = loadToken;
     nv.meshes = [];
 
     const loadMesh = async () => {
@@ -65,12 +171,12 @@ export function EegTopoViewer({
           // readMesh the .mz3 extension it needs for format detection. Passing a name
           // without an extension causes readMesh to throw on ext.toUpperCase().
         });
-        if (!nvRef.current) return;
+        if (!nvRef.current || meshLoadRef.current !== loadToken) return; // superseded by a newer load
 
         // Override the auto-created scalar layer's colormap before the mesh is rendered
         if (mesh.layers.length > 0) {
           Object.assign(mesh.layers[0], {
-            colormap: 'blue2red',
+            colormap: colourBlindMode ? EEG_TOPO_COLORMAP_COLOURBLIND_KEY : EEG_TOPO_COLORMAP_KEY,
             cal_min: -calMax,
             cal_max: calMax,
             opacity: 1,
@@ -78,15 +184,17 @@ export function EegTopoViewer({
           mesh.updateMesh(nv.gl); // rebuild GL color buffers with the new colormap
         }
 
-        nvRef.current.addMesh(mesh);
-        nvRef.current.updateGLVolume();
+        nv.addMesh(mesh);
+        addElectrodeMarkers(nv, markers, calMax, colourBlindMode);
+        nv.updateGLVolume();
       } catch (err) {
         console.error('[EegTopoViewer] mesh load failed:', err);
       }
     };
 
+    // Generate mesh for current electrode layout and load into NiiVue canvas
     loadMesh();
-  }, [electrodes, matched, voltages, reference]);
+  }, [nvRef, electrodeMesh, electrodes, matched, voltages, colourBlindMode, isIntracranial]);
 
   // Drag the floating window by its title bar
   const handleDragStart = useCallback(
@@ -104,17 +212,90 @@ export function EegTopoViewer({
     [position]
   );
 
+  // Resize the floating window by dragging an edge or corner. direction is a combination of
+  // 'n'/'s'/'e'/'w' identifying which edges move; dragging n/w also shifts position so the
+  // opposite edge stays anchored in place, matching how OS window resizing behaves.
+  const handleResizeStart = useCallback(
+    (e, direction) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const startWidth = size.width;
+      const startHeight = size.height;
+      const startPosition = position;
+
+      const onMove = (e) => {
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        const nextSize = { width: startWidth, height: startHeight };
+        const nextPosition = { ...startPosition };
+
+        if (direction.includes('e')) nextSize.width = Math.max(MIN_TOPO_WIDTH, startWidth + dx);
+        if (direction.includes('s')) nextSize.height = Math.max(MIN_TOPO_HEIGHT, startHeight + dy);
+        if (direction.includes('w')) {
+          nextSize.width = Math.max(MIN_TOPO_WIDTH, startWidth - dx);
+          nextPosition.x = startPosition.x + (startWidth - nextSize.width);
+        }
+        if (direction.includes('n')) {
+          nextSize.height = Math.max(MIN_TOPO_HEIGHT, startHeight - dy);
+          nextPosition.y = startPosition.y + (startHeight - nextSize.height);
+        }
+
+        setSize(nextSize);
+        setPosition(nextPosition);
+      };
+      const onUp = () => {
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+      };
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+    },
+    [size, position]
+  );
+
+  const resizeCursor = {
+    n: 'cursor-ns-resize',
+    s: 'cursor-ns-resize',
+    e: 'cursor-ew-resize',
+    w: 'cursor-ew-resize',
+    ne: 'cursor-nesw-resize',
+    sw: 'cursor-nesw-resize',
+    nw: 'cursor-nwse-resize',
+    se: 'cursor-nwse-resize',
+  };
+
+  // Edge handles run the full length of their side; corner handles are small squares
+  // layered on top so diagonal resizing takes priority right at the corners.
+  const resizePosition = {
+    n: 'inset-x-0 top-0 h-1.5',
+    s: 'inset-x-0 bottom-0 h-1.5',
+    e: 'inset-y-0 right-0 w-1.5',
+    w: 'inset-y-0 left-0 w-1.5',
+    ne: 'top-0 right-0 w-2.5 h-2.5',
+    nw: 'top-0 left-0 w-2.5 h-2.5',
+    se: 'bottom-0 right-0 w-2.5 h-2.5',
+    sw: 'bottom-0 left-0 w-2.5 h-2.5',
+  };
+
   return (
     <div
       className={
         isMaximized
           ? 'fixed inset-0 z-50 flex flex-col bg-surface'
-          : 'fixed z-50 flex flex-col w-96 h-80 rounded-lg border border-border bg-surface'
+          : 'fixed z-50 flex flex-col rounded-lg border border-border bg-surface'
       }
       style={
         isMaximized
           ? { boxShadow: 'none' }
-          : { left: position.x, top: position.y, boxShadow: 'var(--c-shadow)' }
+          : {
+              left: position.x,
+              top: position.y,
+              width: size.width,
+              height: size.height,
+              boxShadow: 'var(--c-shadow)',
+            }
       }
     >
       {/* Title bar — drag handle; explicit bg-surface so NiiVue's black canvas doesn't bleed through */}
@@ -122,7 +303,9 @@ export function EegTopoViewer({
         className="flex items-center justify-between px-2 py-1 border-b border-border cursor-grab select-none shrink-0 bg-surface"
         onMouseDown={handleDragStart}
       >
-        <span className="text-sm font-medium text-heading">EEG Topography</span>
+        <span className="text-sm font-medium text-heading">
+          {isIntracranial ? 'iEEG Electrode Matrix' : 'EEG Topography'}
+        </span>
         <TrafficLightButtons
           onMaximize={() => setIsMaximized((v) => !v)}
           isMaximized={isMaximized}
@@ -131,29 +314,52 @@ export function EegTopoViewer({
       </div>
 
       {/* NiiVue positions its canvas absolutely inside whatever element it attaches to.
-          This wrapper is the containing block so the canvas stays within the middle zone. */}
+          This wrapper is the containing block so the canvas stays within the middle zone.
+          In intracranial mode there's no NiiVue canvas at all — EegMatrixViewer fills it instead. */}
       <div className="relative flex-1 min-h-0">
-        <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
+        {isIntracranial ? (
+          <EegMatrixViewer
+            channelNames={channelNames}
+            voltages={voltagesByChannel}
+            colourBlindMode={colourBlindMode}
+          />
+        ) : (
+          <>
+            <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
+            {/* NiiVue's colorbar has no unit support — label it ourselves. pointer-events-none
+                so it doesn't block dragging/rotating the 3D view underneath. */}
+            <span
+              className="absolute bottom-1 right-2 text-[10px] text-white/60 cursor-help"
+              title="Colorbar indicates EEG voltages in µV"
+            >
+              µV
+            </span>
+          </>
+        )}
+        {/* ColourBlind Mode colour map — shared by the mesh and the intracranial matrix */}
+        <button
+          className={cn(
+            'absolute button button-icon shrink-0',
+            isIntracranial ? 'top-7 right-5' : 'top-1.5 right-1.5'
+          )}
+          type="button"
+          onClick={() => setColourBlindMode(!colourBlindMode)}
+          title="Toggle colourblind colormap for the EEG topography"
+          aria-label="Toggle colourblind colormap for the EEG topography"
+          aria-pressed={colourBlindMode}
+        >
+          <EyeDashed size={20}></EyeDashed>
+        </button>
       </div>
 
       {/* Footer — explicit bg-surface for the same reason as the title bar */}
       <div className="flex items-center justify-between px-2 py-1 text-xs border-t border-border shrink-0 bg-surface">
-        <span className="text-foreground">
+        <span
+          className="text-foreground cursor-help"
+          title={`${matched.length} out of ${totalChannels} could be identified with the electrode position template below.\nUse custom electrode position file or adapt EEG channel naming to the template to increase the amount.`}
+        >
           {matched.length} / {totalChannels} channels mapped
         </span>
-        <div className="flex items-center gap-3">
-          <span className="text-foreground select-none pointer-events-none">Re-referencing</span>
-          <select
-            value={reference}
-            onChange={(e) => setReference(e.target.value)}
-            aria-label="Re-referencing"
-            className="bg-background border border-border rounded px-2 py-0.5 text-xs text-heading cursor-pointer"
-          >
-            <option value="none">None</option>
-            <option value="average">Average</option>
-            <option value="median">Median</option>
-          </select>
-        </div>
       </div>
 
       {/* Electrode source row */}
@@ -165,7 +371,8 @@ export function EegTopoViewer({
           type="button"
           onClick={() => fileInputRef.current?.click()}
           className="text-foreground/60 hover:text-heading cursor-pointer underline underline-offset-2"
-          aria-label="Use custom positions"
+          aria-label="Click to browse file to use custom defined electrode positions"
+          title="Click to browse file to use custom defined electrode positions"
         >
           Use custom positions
         </button>
@@ -173,18 +380,29 @@ export function EegTopoViewer({
         <input
           ref={fileInputRef}
           type="file"
-          accept=".elc"
+          accept=".elc,.tsv"
           hidden
           onChange={(e) => {
             const file = e.target.files?.[0];
             if (file) {
-              setCustomFileName(file.name.replace(/\.[^.]+$/, ''));
-              onElcFile?.(file);
+              onElecPosFile?.(file); // customFileName display is owned by PatientView, derived from this callback
             }
             e.target.value = ''; // reset so the same file can be re-selected
           }}
         />
       </div>
+
+      {/* Resize handles — hidden while maximized since the window already fills the screen.
+          Rendered last so they paint above the title/footer content and stay grabbable at the edges. */}
+      {!isMaximized &&
+        RESIZE_DIRECTIONS.map((direction) => (
+          <div
+            key={direction}
+            data-testid={`topo-resize-${direction}`}
+            className={`absolute ${resizePosition[direction]} ${resizeCursor[direction]}`}
+            onMouseDown={(e) => handleResizeStart(e, direction)}
+          />
+        ))}
     </div>
   );
 }

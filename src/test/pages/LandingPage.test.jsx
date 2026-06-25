@@ -56,16 +56,16 @@ describe('LandingPage — feature cards', () => {
   // so (hover: hover) → false, which simulates a touch/mobile device and
   // enables the tap-to-expand behaviour in these tests
 
-  it('renders 8 feature cards', () => {
+  it('renders 9 feature cards', () => {
     renderPage();
     // Each label appears twice in the DOM: once in the static card, once in the overlay
-    expect(document.querySelectorAll('.group')).toHaveLength(8);
+    expect(document.querySelectorAll('.group')).toHaveLength(9);
   });
 
   it('each card has a "Learn more →" link pointing to a feature anchor on the about page', () => {
     renderPage();
     const links = screen.getAllByText('Learn more →');
-    expect(links).toHaveLength(8);
+    expect(links).toHaveLength(9);
     links.forEach((link) => {
       expect(link.closest('a').getAttribute('href')).toMatch(/\/about#feature-/);
     });

@@ -1,5 +1,6 @@
-﻿import { useRef, useState, useEffect, useMemo, useCallback } from 'react';
+﻿import { useRef, useState, useEffect, useMemo } from 'react';
 import UplotReact from 'uplot-react';
+import { cn } from '../utils/utils';
 import toast from 'react-hot-toast';
 import 'uplot/dist/uPlot.min.css';
 import { useTheme } from '@/components/ThemeContext';
@@ -18,11 +19,16 @@ import {
 } from 'lucide-react';
 import { minMaxDownsample } from '@/utils/downsample';
 import { useEegBuffer } from '@/loaders/eegBuffer';
-import { parseElc } from '@/loaders/parseElc';
-import { matchChannelsToPositions } from '@/utils/eegTopography';
+import { applyMontage } from '@/utils/eegViewerUtils';
+
+import { parseElcElectrodePositions } from '@/loaders/parseElcElectrodePositions';
+import { matchChannelsToPositions } from '@/utils/eegTopographyUtils';
+import { detectIsIntracranial } from '@/utils/intracranialDetection';
 import { EegTopoViewer } from '@/components/EegTopoViewer';
+import { FileDropZone } from '@/components/FileDropZone';
 
 const EEG_LOADING_TOAST_ID = 'eeg-buffer-loading'; // fixed id so the loading/success toasts update in place rather than stacking
+const RECORDING_TYPE_TOAST_ID = 'eeg-recording-type-detected'; // fixed id so re-detection updates the toast in place instead of stacking
 const Y_AXIS_WIDTH = 60; // px for the y-axis area (channel name + tick space) — must match x-axis strip left padding
 const PLOT_RIGHT_PAD = 20; // px right padding — must match in both channel plots and x-axis strip so ticks align
 const OVERDRAW = 2; // canvas height multiplier — peaks bleed ±50% into adjacent lanes instead of clipping
@@ -77,6 +83,12 @@ export const EegViewer = ({
   channelNames,
   onViewReady,
   onTopoNvReady,
+  customElectrodes = [], // [{label,x,y,z}] — owned by PatientView, loaded from a user-supplied .elc/.tsv file
+  customElecPosFileName = null,
+  onElecPosFile,
+  onIntracranialElectrodesChange,
+  recordingType = 'eeg', // 'eeg' | 'ieeg' — controlled by PatientView, which shows/drives the toggle in the panel title
+  onRecordingTypeChange,
 }) => {
   const { isDarkMode } = useTheme();
   const syncKey = 'eeg-sync'; // shared across all channels to link their interactions
@@ -164,56 +176,100 @@ export const EegViewer = ({
     channelAreaHeight > 0 ? Math.floor(channelAreaHeight / visibleChannelCount) : 0;
   const axisColor = isDarkMode ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.8)';
 
+  // Montage for the
+  const [montage, setMontage] = useState('none'); // 'none' | 'average' | 'median'
+
   // Buffer of EEG data around the visible window — reloads on big jumps, otherwise
   // keeps the previous buffer's data on screen until the new one arrives (no flash).
   const { timestamps, channels, isLoading } = useEegBuffer(provider, startTime, windowSize);
 
-  // ── Topography state ────────────────────────────────────────────────────────
+  // ── Topography / recording-type state ───────────────────────────────────────
   const [topoVisible, setTopoVisible] = useState(false);
   const [topoTimepoint, setTopoTimepoint] = useState(null);
-  const [electrodes, setElectrodes] = useState([]);
-  const [matched, setMatched] = useState([]);
-  const [isStandardElectrodes, setIsStandardElectrodes] = useState(true);
+  // Detection-only — always holds the standard_1005 template + its match against
+  // channelNames, used purely as input to detectIsIntracranial. Never used to
+  // render the topography itself (that's customElectrodes' job — see below).
+  const [standard1005Electrodes, setStandard1005Electrodes] = useState([]);
+  const [standard1005Matched, setStandard1005Matched] = useState([]);
 
-  // Fetch the built-in electrode position template and match it against the recording's channel names.
-  // Resets to standard whenever channelNames changes (new recording loaded).
+  // Fetch the built-in electrode position template, match it against the recording's
+  // channel names (for detection purposes only), then (re-)detect the recording type
+  // and report it upward — PatientView owns recordingType and shows/drives the
+  // EEG/iEEG toggle in the panel title, since this component no longer renders it
+  // itself. Re-runs whenever channelNames changes (new recording loaded).
   useEffect(() => {
     fetch('electrode_positions/standard_1005.elc')
       .then((r) => r.text())
       .then((text) => {
-        const { electrodes: els } = parseElc(text);
-        setElectrodes(els);
-        setMatched(matchChannelsToPositions(channelNames, els).matched);
-        setIsStandardElectrodes(true);
+        const { electrodes: parsedElectrodes } = parseElcElectrodePositions(text);
+        setStandard1005Electrodes(parsedElectrodes);
+        setStandard1005Matched(matchChannelsToPositions(channelNames, parsedElectrodes).matched);
+        const detected = detectIsIntracranial(channelNames, parsedElectrodes) ? 'ieeg' : 'eeg';
+        onRecordingTypeChange?.(detected);
+        toast(
+          detected === 'ieeg'
+            ? 'iEEG electrode configuration detected'
+            : 'EEG electrode configuration detected',
+          {
+            id: RECORDING_TYPE_TOAST_ID,
+          }
+        );
       })
       .catch(() => {}); // silently ignore if file unavailable (e.g. in tests without the asset)
-  }, [channelNames]);
+  }, [channelNames, onRecordingTypeChange]);
 
-  // Parse a user-supplied electrode position file and replace the current positions.
-  const handleCustomElc = useCallback(
-    (file) => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const { electrodes: els } = parseElc(e.target.result);
-        if (!els.length) return; // ignore empty or unparseable files
-        setElectrodes(els);
-        setMatched(matchChannelsToPositions(channelNames, els).matched);
-        setIsStandardElectrodes(false);
-      };
-      reader.readAsText(file);
-    },
-    [channelNames]
+  const isIntracranial = recordingType === 'ieeg';
+
+  // Channels matched against the custom electrode positions (if any) — independent
+  // of mode, since intracranial recordings need this for the 3D connectome too.
+  const customMatched = useMemo(
+    () => matchChannelsToPositions(channelNames, customElectrodes).matched,
+    [channelNames, customElectrodes]
   );
 
-  // Extract one voltage per matched channel from the buffer at the clicked timepoint
-  const topoVoltages = useMemo(() => {
-    if (topoTimepoint === null || !timestamps?.length || !channels || !matched.length) return [];
-    const idx = Math.max(
+  // Render-facing electrodes/matched. Scalp mode falls back to the standard_1005
+  // template when no custom file is loaded (today's behavior); intracranial mode
+  // never falls back to it — standard_1005 simply doesn't apply to depth probes.
+  const usingCustom = isIntracranial || customElectrodes.length > 0;
+  const electrodes = usingCustom ? customElectrodes : standard1005Electrodes;
+  const matched = usingCustom ? customMatched : standard1005Matched;
+  const isStandardElectrodes = !isIntracranial && customElectrodes.length === 0;
+
+  // Apply the selected montage once, shared by the channel plots and the topography snapshot
+  const montagedChannels = useMemo(() => {
+    if (!channels) return null;
+    return applyMontage(channels, montage);
+  }, [channels, montage]);
+
+  // Sample index shared by both voltage snapshots below.
+  const topoSampleIndex = useMemo(() => {
+    if (topoTimepoint === null || !timestamps?.length) return null;
+    return Math.max(
       0,
       Math.min(timestamps.length - 1, Math.round((topoTimepoint - timestamps[0]) * provider.fs))
     );
-    return matched.map((m) => channels[m.channelIdx]?.[idx] ?? 0);
-  }, [topoTimepoint, timestamps, channels, matched, provider.fs]);
+  }, [topoTimepoint, timestamps, provider.fs]);
+
+  // Extract one voltage per matched channel at the clicked timepoint — drives the
+  // scalp mesh and the intracranial 3D connectome (both need real x/y/z positions).
+  const topoVoltages = useMemo(() => {
+    if (topoSampleIndex === null || !montagedChannels || !matched.length) return [];
+    return matched.map((m) => montagedChannels[m.channelIdx]?.[topoSampleIndex] ?? 0);
+  }, [topoSampleIndex, montagedChannels, matched]);
+
+  // Extract one voltage per channel (not just position-matched ones) at the same
+  // timepoint — drives the intracranial matrix, which has no position-file gate.
+  const topoVoltagesByChannel = useMemo(() => {
+    if (topoSampleIndex === null || !montagedChannels) return [];
+    return montagedChannels.map((ch) => ch?.[topoSampleIndex] ?? 0);
+  }, [topoSampleIndex, montagedChannels]);
+
+  // Lift the live electrode/voltage state up so PatientView can build the
+  // intracranial connectome layer for the Neuroimaging pane — fires regardless of
+  // whether the topography window itself is open, since the connectome auto-shows.
+  useEffect(() => {
+    onIntracranialElectrodesChange?.({ isIntracranial, matched, voltages: topoVoltages });
+  }, [isIntracranial, matched, topoVoltages, onIntracranialElectrodesChange]);
 
   // Show a loading toast while the initial buffer loads, then update it to a success
   // message — self-contained so EegViewer reports its own status regardless of where
@@ -232,22 +288,18 @@ export const EegViewer = ({
     return () => toast.dismiss(EEG_LOADING_TOAST_ID);
   }, []);
 
-  // Downsample each channel for the visible window.
-  // Re-runs only when the window, buffer, or plot dimensions change, not on every render.
-  const downSampledData = useMemo(() => {
+  // Downsample the montaged buffer for the visible window
+  const displayedData = useMemo(() => {
     // If we don't have valid dimensions or data yet, return empty arrays for each channel to avoid rendering broken plots
     const empty = channelNames.map(() => [[], []]);
-    if (plotWidth === 0 || !timestamps || timestamps.length === 0) return empty;
+    if (plotWidth === 0 || !timestamps || timestamps.length === 0 || !montagedChannels)
+      return empty;
 
     const endTime = startTime + windowSize;
-    // No overlap between the buffered chunk and the visible window — can happen mid-reload
-    // after a big jump (Home/End, distant scrubber drag). Show an empty plot until the new
-    // buffer (covering the new window) arrives.
-    if (timestamps[timestamps.length - 1] < startTime || timestamps[0] > endTime) return empty;
     return channelNames.map((_, i) =>
-      minMaxDownsample(timestamps, channels[i], startTime, endTime, plotWidth)
+      minMaxDownsample(timestamps, montagedChannels[i], startTime, endTime, plotWidth)
     );
-  }, [timestamps, channels, startTime, windowSize, plotWidth, channelNames]);
+  }, [timestamps, montagedChannels, channelNames, startTime, windowSize, plotWidth]);
 
   useEffect(() => {
     // ResizeObserver fires whenever the container changes size and updates plotWidth/channelAreaHeight,
@@ -432,71 +484,115 @@ export const EegViewer = ({
       <div
         ref={viewerRef}
         data-testid="eeg-viewer-container"
-        className="w-full h-full flex flex-col group relative focus:outline-solid focus:outline-2 focus:outline-secondary focus:-outline-offset-2"
+        className="w-full h-full flex flex-col group/viewer relative focus:outline-solid focus:outline-2 focus:outline-secondary focus:-outline-offset-2"
         tabIndex={0}
         onMouseDown={focusViewer}
         onKeyDown={handleKeyDown}
       >
-        {/* Keyboard shortcut hint — bottom-right corner of the viewer pane */}
-        <div
-          className="absolute bottom-2 right-2 z-20 text-foreground/40 hover:text-foreground/80 group-focus:text-secondary transition-colors"
-          title={
-            'Click the EEG viewer to enable keyboard navigation (blue outline when active):\n' +
-            '· ↑/↓\t\tRange adjustment up/down\n' +
-            '· ←/→\t     Move a time step back/forward\n' +
-            '· Space\t   Jump a time window forward\n' +
-            '· Page ↑/↓       Jump a time window back/forward\n' +
-            '· Home/End   Jump to start/end'
-          }
-        >
-          <Keyboard size={16} />
+        {/* Keyboard shortcut hint — bottom-right corner of the viewer pane.
+            Uses a custom hover tooltip instead of the native title attribute, since native
+            tooltips have a long built-in show delay — long enough that clicking the icon (to
+            focus the viewer) often fired before the tooltip ever appeared. */}
+        <div className="absolute bottom-10 right-2 z-20 group/tip">
+          <div className="text-foreground/40 hover:text-foreground/80 group-focus/viewer:text-secondary transition-colors cursor-help">
+            <Keyboard size={18} />
+          </div>
+          <div
+            role="tooltip"
+            className={cn(
+              'opacity-0 invisible transition-opacity duration-250 ease-in', // fades in/out on hover
+              'group-hover/tip:opacity-100 group-hover/tip:visible',
+              'absolute bottom-full right-0 z-30 mb-1 w-max', // positioned above the icon, right-aligned
+              'rounded-md border border-border bg-surface shadow-[var(--c-shadow)]', // card look
+              'px-2 py-2 text-xs text-foreground' // spacing & text
+            )}
+          >
+            <p className="mb-1.5 max-w-[250px]">
+              Click the EEG viewer to enable keyboard navigation (
+              <span className="text-secondary font-bold">blue </span>outline when active):
+            </p>
+            <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
+              <span className="text-foreground/60">↑ / ↓</span>
+              <span>Range adjustment up/down</span>
+              <span className="text-foreground/60">← / →</span>
+              <span>Move a time step back/forward</span>
+              <span className="text-foreground/60">Space</span>
+              <span>Jump a time window forward</span>
+              <span className="text-foreground/60">Page ↑ / ↓</span>
+              <span>Jump a time window back/forward</span>
+              <span className="text-foreground/60">Home / End</span>
+              <span>Jump to start/end</span>
+            </div>
+          </div>
         </div>
         {/* Plot row: sidebar + channel plots side by side; flex-1 so controls sit below */}
         <div className="flex-1 min-h-0 flex flex-row">
-          {/* Left sidebar: justify-center now centers against the channel area height only */}
-          <div className="shrink-0 flex flex-row items-center px-1">
-            <div className="flex flex-row items-center gap-1 py-1 border-border/50 border-1 border-r-0 rounded-tl-md rounded-bl-md">
-              <span className="text-xs text-foreground/60 whitespace-nowrap [writing-mode:vertical-rl] rotate-180 select-none pointer-events-none">
-                Channels
-              </span>
-              <div className="flex flex-col items-center gap-1">
-                <button
-                  type="button"
-                  className="button button-icon"
-                  onClick={() => updateVisibleChannelCount(visibleChannelCount + 1)}
-                  title="Show more channels"
-                >
-                  <ListChevronsUpDown size={ICON_SIZE} />
-                </button>
-                <input
-                  id="eeg-visible-channels"
-                  type="number"
-                  value={visibleChannelCountStr}
-                  min={1}
-                  max={channelNames.length}
-                  style={{ width: inputWidth(visibleChannelCountStr) }}
-                  onChange={(e) => {
-                    if (e.target.value.length > CHANNEL_INPUT_MAX_LENGTH) return;
-                    setVisibleChannelCountStr(e.target.value);
-                    const val = Number(e.target.value);
-                    if (e.target.value !== '' && !isNaN(val))
-                      setVisibleChannelCount(clampChannelCount(Math.round(val)));
-                  }}
-                  onBlur={() =>
-                    updateVisibleChannelCount(Number(visibleChannelCountStr) || visibleChannelCount)
-                  }
-                  className="text-center border border-border rounded px-1 py-0.5 text-sm bg-background text-foreground [appearance:textfield]"
-                  aria-label="Number of channels displayed"
-                />
-                <button
-                  type="button"
-                  className="button button-icon"
-                  onClick={() => updateVisibleChannelCount(visibleChannelCount - 1)}
-                  title="Show fewer channels"
-                >
-                  <ListChevronsDownUp size={ICON_SIZE} />
-                </button>
+          {/* Left sidebar: Channels controls centered in the available height, Montage pinned to the bottom-left corner */}
+          <div className="shrink-0 flex flex-col px-1">
+            <div className="flex-1 flex flex-row items-center">
+              <div className="flex flex-row items-center gap-1 py-1 border-border/50 border-1 border-r-0 rounded-tl-md rounded-bl-md">
+                <span className="text-xs text-foreground/60 whitespace-nowrap [writing-mode:vertical-rl] rotate-180 select-none pointer-events-none">
+                  Channels
+                </span>
+                <div className="flex flex-col items-center gap-1">
+                  <button
+                    type="button"
+                    className="button button-icon"
+                    onClick={() => updateVisibleChannelCount(visibleChannelCount + 1)}
+                    title="Show more channels"
+                  >
+                    <ListChevronsUpDown size={ICON_SIZE} />
+                  </button>
+                  <input
+                    id="eeg-visible-channels"
+                    type="number"
+                    value={visibleChannelCountStr}
+                    min={1}
+                    max={channelNames.length}
+                    style={{ width: inputWidth(visibleChannelCountStr) }}
+                    onChange={(e) => {
+                      if (e.target.value.length > CHANNEL_INPUT_MAX_LENGTH) return;
+                      setVisibleChannelCountStr(e.target.value);
+                      const val = Number(e.target.value);
+                      if (e.target.value !== '' && !isNaN(val))
+                        setVisibleChannelCount(clampChannelCount(Math.round(val)));
+                    }}
+                    onBlur={() =>
+                      updateVisibleChannelCount(
+                        Number(visibleChannelCountStr) || visibleChannelCount
+                      )
+                    }
+                    className="text-center border border-border rounded px-1 py-0.5 text-sm bg-background text-foreground [appearance:textfield]"
+                    aria-label="Number of channels displayed"
+                  />
+                  <button
+                    type="button"
+                    className="button button-icon"
+                    onClick={() => updateVisibleChannelCount(visibleChannelCount - 1)}
+                    title="Show fewer channels"
+                  >
+                    <ListChevronsDownUp size={ICON_SIZE} />
+                  </button>
+                </div>
               </div>
+            </div>
+            <div
+              className="flex flex-col items-center gap-1 pb-1"
+              title="Apply EEG reference montage"
+            >
+              <span className="text-xs text-foreground select-none pointer-events-none">
+                Montage:
+              </span>
+              <select
+                value={montage}
+                onChange={(e) => setMontage(e.target.value)}
+                aria-label="Apply EEG reference montage"
+                className="bg-background border border-border rounded px-1 py-0.5 text-xs text-heading cursor-pointer"
+              >
+                <option value="none">None</option>
+                <option value="average">Average</option>
+                <option value="median">Median</option>
+              </select>
             </div>
           </div>
 
@@ -569,8 +665,11 @@ export const EegViewer = ({
                             startTime,
                             yScale,
                           })}
-                          data={downSampledData[i]}
+                          data={displayedData[i]}
                           onCreate={(u) => {
+                            {
+                              /* click listener that converts the click's x-position into a timestamp, sets topoTimepoint, and sets topoVisible = true */
+                            }
                             u.over.addEventListener('click', () => {
                               const t = u.posToVal(u.cursor.left, 'x');
                               if (!isNaN(t)) {
@@ -660,8 +759,11 @@ export const EegViewer = ({
             )}
 
             {/* Range: shrink/expand the shared y-range (all channels) */}
-            {/* shrink-0 pins the controls at the bottom, never squeezed by the channel area */}
-            <div className="shrink-0 flex flex-wrap justify-center gap-4 py-1">
+            {/* shrink-0 pins the controls at the bottom, never squeezed by the channel area.
+                px-8 reserves room matching the keyboard hint icon (absolute bottom-right, see
+                above) on both sides — flex-wrap can't otherwise see that icon, so without this
+                the row stays unwrapped right up until its last button sits behind the icon. */}
+            <div className="shrink-0 flex flex-wrap justify-center gap-4 py-1 px-8">
               <div className="flex flex-col items-center gap-0.5 px-1 pb-1 border-border/50 border-1 border-t-0 rounded-bl-md rounded-br-md">
                 <label htmlFor="eeg-range" className="text-xs text-foreground/60 select-none">
                   Range (µV)
@@ -810,6 +912,18 @@ export const EegViewer = ({
             </div>
           </div>
         </div>
+
+        {/* Persistent electrode-position dropzone — always available once EEG is loaded,
+            not just buried in the topography popup. Overwrites whatever positions are
+            currently active (standard_1005, or a file loaded via any of the other entry
+            points) — onElecPosFile has no "only if empty" guard. */}
+        <FileDropZone
+          onFiles={(files) => onElecPosFile?.(files[0])}
+          accepted_formats=".elc,.tsv"
+          label="Drop electrode positions"
+          compact
+          className="shrink-0"
+        />
       </div>
 
       {/* Floating topography viewer — position:fixed so it overlays the whole page */}
@@ -819,11 +933,16 @@ export const EegViewer = ({
           electrodes={electrodes}
           matched={matched}
           voltages={topoVoltages}
+          channelNames={channelNames}
+          voltagesByChannel={topoVoltagesByChannel}
           totalChannels={channelNames.length}
           onClose={() => setTopoVisible(false)}
           onTopoNvReady={onTopoNvReady}
           isStandardElectrodes={isStandardElectrodes}
-          onElcFile={handleCustomElc}
+          onElecPosFile={onElecPosFile}
+          customFileName={customElecPosFileName}
+          montage={montage}
+          isIntracranial={isIntracranial}
         />
       )}
     </>

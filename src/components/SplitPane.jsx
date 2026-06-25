@@ -188,6 +188,7 @@ export const SplitPane = ({
               ? `h-1.5 w-full shrink-0 cursor-row-resize my-1 transition-colors select-none ${isDragging ? 'bg-primary' : 'bg-border hover:bg-secondary'}`
               : `w-1.5 shrink-0 cursor-col-resize mx-1 transition-colors select-none ${isDragging ? 'bg-primary' : 'bg-border hover:bg-secondary'}`
           }
+          title="Drag to resize the split view"
           onMouseDown={(e) => {
             e.preventDefault();
             isDraggingRef.current = true;
