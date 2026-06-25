@@ -24,7 +24,7 @@ const DEMO_EEG = {
 
 // Shared title styling — keeps "Neuroimaging" and the toggle's labels visually
 // consistent, and both header bars the same height (TrafficLightButtons are 16px tall).
-const PANEL_TITLE_CLASS = 'h-7 flex items-center text-xl font-medium leading-none text-white';
+const PANEL_TITLE_CLASS = 'h-7 flex items-center text-xl font-medium leading-none text-header';
 
 // Sits in the SplitPane's left title once EEG is loaded, replacing the static "EEG"
 // label. One switch, not two buttons — clicking anywhere flips the value regardless of
@@ -51,7 +51,7 @@ const RecordingTypeToggle = ({ recordingType, onChange }) => {
         <span
           className={cn(
             'relative z-10 flex-1 flex items-center justify-center text-xl font-medium leading-none transition-colors',
-            !isIntracranial ? 'text-white' : 'text-foreground/50'
+            !isIntracranial ? 'text-header' : 'text-foreground/50'
           )}
         >
           EEG
@@ -59,7 +59,7 @@ const RecordingTypeToggle = ({ recordingType, onChange }) => {
         <span
           className={cn(
             'relative z-10 flex-1 flex items-center justify-center text-xl font-medium leading-none transition-colors',
-            isIntracranial ? 'text-white' : 'text-foreground/50'
+            isIntracranial ? 'text-header' : 'text-foreground/50'
           )}
         >
           iEEG
