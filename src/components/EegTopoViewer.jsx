@@ -6,61 +6,25 @@ import {
   interpolateMeshVoltages,
   buildElectrodeMarkers,
 } from '@/utils/eegTopographyUtils';
+import {
+  EEG_TOPO_COLORMAP_KEY,
+  EEG_TOPO_COLORMAP,
+  EEG_TOPO_COLORMAP_COLOURBLIND_KEY,
+  EEG_TOPO_COLORMAP_COLOURBLIND,
+  EEG_NODE_POS_KEY,
+  EEG_NODE_POS,
+  EEG_NODE_NEG_KEY,
+  EEG_NODE_NEG,
+  EEG_NODE_POS_COLOURBLIND_KEY,
+  EEG_NODE_POS_COLOURBLIND,
+  EEG_NODE_NEG_COLOURBLIND_KEY,
+  EEG_NODE_NEG_COLOURBLIND,
+  EEG_NODE_UNMAPPED_KEY,
+  EEG_NODE_UNMAPPED,
+} from '@/utils/eegColormaps';
 import { EyeDashed } from 'lucide-react';
-
-// Custom diverging colormap: blue (negative) -> white (zero) -> red (positive).
-// (NiiVue's built-in 'blue2red' passes through green/yellow at the midpoint which is undesired)
-const EEG_TOPO_COLORMAP_KEY = 'eegBlueWhiteRed';
-const EEG_TOPO_COLORMAP = {
-  R: [0, 255, 255],
-  G: [0, 255, 0],
-  B: [255, 255, 0],
-  A: [255, 255, 255],
-  I: [0, 128, 255],
-};
-const EEG_TOPO_COLORMAP_COLOURBLIND_KEY = 'eegColourblind'; // cividis min and max values
-const EEG_TOPO_COLORMAP_COLOURBLIND = {
-  R: [0, 255, 255],
-  G: [32, 255, 233],
-  B: [76, 255, 69],
-  A: [255, 255, 255],
-  I: [0, 128, 255],
-};
-
-// Electrode marker colormaps. NiiVue's connectome nodes pick one of two colormaps by the
-// sign of colorValue (no single diverging option like mesh layers have), so each is one
-// half — white at zero out to the saturated colour — of the mesh colormap above.
-const EEG_NODE_POS_KEY = 'eegNodePos';
-const EEG_NODE_POS = { R: [255, 255], G: [255, 0], B: [255, 0], A: [255, 255], I: [0, 255] };
-const EEG_NODE_NEG_KEY = 'eegNodeNeg';
-const EEG_NODE_NEG = { R: [255, 0], G: [255, 0], B: [255, 255], A: [255, 255], I: [0, 255] };
-const EEG_NODE_POS_COLOURBLIND_KEY = 'eegNodePosColourblind';
-// White to Cividis yellow for positive voltage markers
-const EEG_NODE_POS_COLOURBLIND = {
-  R: [255, 255],
-  G: [255, 233],
-  B: [255, 69],
-  A: [255, 255],
-  I: [0, 255],
-};
-// White to Cividis blue for negative voltage markers
-const EEG_NODE_NEG_COLOURBLIND_KEY = 'eegNodeNegColourblind';
-const EEG_NODE_NEG_COLOURBLIND = {
-  R: [255, 0],
-  G: [255, 32],
-  B: [255, 76],
-  A: [255, 255],
-  I: [0, 255],
-};
-// Flat neutral grey for template electrodes with no recorded data at this site.
-const EEG_NODE_UNMAPPED_KEY = 'eegNodeUnmapped';
-const EEG_NODE_UNMAPPED = {
-  R: [50, 50],
-  G: [50, 50],
-  B: [50, 50],
-  A: [255, 255],
-  I: [0, 255],
-};
+import { EegMatrixViewer } from './EegMatrixViewer';
+import { cn } from '@/utils/utils';
 
 // Marker sizes in mm radius (sizeValue × nodeScale) — unmapped electrodes are small dots
 // that trace out the template grid; matched electrodes are larger and colour-coded by voltage.
@@ -127,10 +91,13 @@ export function EegTopoViewer({
   onTopoNvReady,
   isStandardElectrodes = true,
   onElecPosFile,
+  isIntracranial = false,
+  channelNames,
+  voltagesByChannel,
+  customFileName = null, // filename (no extension) of the loaded custom positions file — owned by PatientView, passed down
 }) {
   const canvasRef = useRef(null);
   const fileInputRef = useRef(null);
-  const [customFileName, setCustomFileName] = useState(null); // filename (no extension) of the loaded custom positions file
   const [isMaximized, setIsMaximized] = useState(false);
   const [position, setPosition] = useState({ x: 80, y: 80 });
   const [size, setSize] = useState(DEFAULT_TOPO_SIZE);
@@ -138,8 +105,10 @@ export function EegTopoViewer({
   const dragOffset = useRef(null);
   const meshLoadRef = useRef(null); // tracks the in-flight load so StrictMode's double-invoke can't add two meshes (and so two colorbars)
 
-  // Initialise NiiVue once on mount
+  // Initialise NiiVue once on mount — skipped entirely in intracranial mode, which
+  // renders a plain HTML matrix instead of a 3D canvas, so there's nothing to attach to.
   useEffect(() => {
+    if (isIntracranial) return;
     const nv = nvRef.current;
     nv.setSliceType(SLICE_TYPE.RENDER); // force slicetype to render for a 3D view
     nv.addColormap(EEG_TOPO_COLORMAP_KEY, EEG_TOPO_COLORMAP);
@@ -157,18 +126,22 @@ export function EegTopoViewer({
     nv.attachToCanvas(canvasRef.current);
     nv.volScaleMultiplier = 0.85;
     onTopoNvReady?.();
-  }, [nvRef, onTopoNvReady]);
+  }, [nvRef, onTopoNvReady, isIntracranial]);
 
   // The convex-hull triangulation only depends on the electrode template, not on the
   // per-timepoint voltages — caching it here avoids re-triangulating on every topo
   // timepoint click, when only the voltage interpolation below actually needs to change.
-  const electrodeMesh = useMemo(() => buildElectrodeMesh(electrodes), [electrodes]);
+  // Skipped in intracranial mode, where there's no mesh to triangulate.
+  const electrodeMesh = useMemo(
+    () => (isIntracranial ? null : buildElectrodeMesh(electrodes)),
+    [electrodes, isIntracranial]
+  );
 
   // Rebuild and reload the mesh whenever electrodes, matched channels, voltages, or
   // re-referencing mode change. Clears any previously loaded mesh first.
   useEffect(() => {
     const nv = nvRef.current;
-    if (!nv || !electrodes?.length || !voltages?.length) return;
+    if (isIntracranial || !nv || !electrodes?.length || !voltages?.length) return;
 
     const { vertices, indices } = electrodeMesh;
     const scalars = interpolateMeshVoltages(electrodes, matched, voltages);
@@ -221,7 +194,7 @@ export function EegTopoViewer({
 
     // Generate mesh for current electrode layout and load into NiiVue canvas
     loadMesh();
-  }, [nvRef, electrodeMesh, electrodes, matched, voltages, colourBlindMode]);
+  }, [nvRef, electrodeMesh, electrodes, matched, voltages, colourBlindMode, isIntracranial]);
 
   // Drag the floating window by its title bar
   const handleDragStart = useCallback(
@@ -330,7 +303,9 @@ export function EegTopoViewer({
         className="flex items-center justify-between px-2 py-1 border-b border-border cursor-grab select-none shrink-0 bg-surface"
         onMouseDown={handleDragStart}
       >
-        <span className="text-sm font-medium text-heading">EEG Topography</span>
+        <span className="text-sm font-medium text-heading">
+          {isIntracranial ? 'iEEG Electrode Matrix' : 'EEG Topography'}
+        </span>
         <TrafficLightButtons
           onMaximize={() => setIsMaximized((v) => !v)}
           isMaximized={isMaximized}
@@ -339,20 +314,34 @@ export function EegTopoViewer({
       </div>
 
       {/* NiiVue positions its canvas absolutely inside whatever element it attaches to.
-          This wrapper is the containing block so the canvas stays within the middle zone. */}
+          This wrapper is the containing block so the canvas stays within the middle zone.
+          In intracranial mode there's no NiiVue canvas at all — EegMatrixViewer fills it instead. */}
       <div className="relative flex-1 min-h-0">
-        <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
-        {/* NiiVue's colorbar has no unit support — label it ourselves. pointer-events-none
-            so it doesn't block dragging/rotating the 3D view underneath. */}
-        <span
-          className="absolute bottom-1 right-2 text-[10px] text-white/60 cursor-help"
-          title="Colorbar indicates EEG voltages in µV"
-        >
-          µV
-        </span>
-        {/* ColourBlind Mode colour map for the EEGtopography */}
+        {isIntracranial ? (
+          <EegMatrixViewer
+            channelNames={channelNames}
+            voltages={voltagesByChannel}
+            colourBlindMode={colourBlindMode}
+          />
+        ) : (
+          <>
+            <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
+            {/* NiiVue's colorbar has no unit support — label it ourselves. pointer-events-none
+                so it doesn't block dragging/rotating the 3D view underneath. */}
+            <span
+              className="absolute bottom-1 right-2 text-[10px] text-white/60 cursor-help"
+              title="Colorbar indicates EEG voltages in µV"
+            >
+              µV
+            </span>
+          </>
+        )}
+        {/* ColourBlind Mode colour map — shared by the mesh and the intracranial matrix */}
         <button
-          className="absolute top-1.5 right-1.5 button button-icon shrink-0"
+          className={cn(
+            'absolute button button-icon shrink-0',
+            isIntracranial ? 'top-7 right-5' : 'top-1.5 right-1.5'
+          )}
           type="button"
           onClick={() => setColourBlindMode(!colourBlindMode)}
           title="Toggle colourblind colormap for the EEG topography"
@@ -396,8 +385,7 @@ export function EegTopoViewer({
           onChange={(e) => {
             const file = e.target.files?.[0];
             if (file) {
-              setCustomFileName(file.name.replace(/\.[^.]+$/, ''));
-              onElecPosFile?.(file);
+              onElecPosFile?.(file); // customFileName display is owned by PatientView, derived from this callback
             }
             e.target.value = ''; // reset so the same file can be re-selected
           }}

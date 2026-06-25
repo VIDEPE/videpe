@@ -288,20 +288,14 @@ describe('EegTopoViewer', () => {
       expect(screen.getByText(/default: standard 10-05/i)).toBeTruthy();
     });
 
-    it('shows the filename (without extension) after a custom file is loaded', async () => {
-      const onElecPosFile = vi.fn();
-      const { container } = await act(async () =>
+    it('shows the customFileName prop when isStandardElectrodes is false', async () => {
+      // customFileName is owned by PatientView and passed down, not local state —
+      // EegTopoViewer just displays whatever it's given.
+      await act(async () =>
         render(
-          <EegTopoViewer
-            {...defaultProps}
-            isStandardElectrodes={false}
-            onElecPosFile={onElecPosFile}
-          />
+          <EegTopoViewer {...defaultProps} isStandardElectrodes={false} customFileName="my_cap" />
         )
       );
-      const file = new File(['# ASA electrode file'], 'my_cap.elc');
-      const input = container.querySelector('input[type="file"]');
-      await userEvent.upload(input, file);
       expect(screen.getByText('my_cap')).toBeTruthy();
     });
 
@@ -489,6 +483,79 @@ describe('EegTopoViewer', () => {
       await userEvent.click(screen.getByRole('button', { name: /maximize/i }));
       await userEvent.click(screen.getByRole('button', { name: /restore/i }));
       expect(screen.getByRole('button', { name: /maximize/i })).toBeTruthy();
+    });
+  });
+
+  describe('intracranial mode', () => {
+    const intracranialProps = {
+      ...defaultProps,
+      isIntracranial: true,
+      channelNames: ['B1', 'B2', 'ECG'],
+      voltagesByChannel: [5, -3, 0],
+    };
+
+    it('does not render a canvas element', async () => {
+      const { container } = await act(async () => render(<EegTopoViewer {...intracranialProps} />));
+      expect(container.querySelector('canvas')).toBeNull();
+    });
+
+    it('does not attach NiiVue to a canvas or register colormaps', async () => {
+      await act(async () => render(<EegTopoViewer {...intracranialProps} />));
+      expect(mockNvInstance.attachToCanvas).not.toHaveBeenCalled();
+      expect(mockNvInstance.addColormap).not.toHaveBeenCalled();
+    });
+
+    it('does not call onTopoNvReady', async () => {
+      const onTopoNvReady = vi.fn();
+      await act(async () =>
+        render(<EegTopoViewer {...intracranialProps} onTopoNvReady={onTopoNvReady} />)
+      );
+      expect(onTopoNvReady).not.toHaveBeenCalled();
+    });
+
+    it('does not attempt to load a mesh', async () => {
+      const { NVMesh } = await import('@niivue/niivue');
+      await act(async () => render(<EegTopoViewer {...intracranialProps} />));
+      expect(NVMesh.loadFromUrl).not.toHaveBeenCalled();
+    });
+
+    it('renders the intracranial matrix instead of a canvas', async () => {
+      await act(async () => render(<EegTopoViewer {...intracranialProps} />));
+      expect(screen.getByTestId('eeg-matrix-viewer')).toBeTruthy();
+    });
+
+    it('shows the "iEEG Electrode Matrix" title instead of "EEG Topography"', async () => {
+      await act(async () => render(<EegTopoViewer {...intracranialProps} />));
+      expect(screen.getByText('iEEG Electrode Matrix')).toBeTruthy();
+      expect(screen.queryByText('EEG Topography')).toBeNull();
+    });
+
+    it('still shows the channels-mapped footer', async () => {
+      await act(async () => render(<EegTopoViewer {...intracranialProps} />));
+      expect(screen.getByText(/2\s*\/\s*10\s*channels mapped/i)).toBeTruthy();
+    });
+
+    it('still renders the "Use custom positions" button', async () => {
+      await act(async () => render(<EegTopoViewer {...intracranialProps} />));
+      expect(screen.getByRole('button', { name: /use custom.*positions/i })).toBeTruthy();
+    });
+
+    it('still renders the colourblind toggle button', async () => {
+      await act(async () => render(<EegTopoViewer {...intracranialProps} />));
+      expect(screen.getByRole('button', { name: /toggle colourblind colormap/i })).toBeTruthy();
+    });
+
+    it('switching from scalp to intracranial via rerender does not crash and stops further mesh loads', async () => {
+      const { NVMesh } = await import('@niivue/niivue');
+      const { rerender } = await act(async () => render(<EegTopoViewer {...defaultProps} />));
+      const callsBefore = NVMesh.loadFromUrl.mock.calls.length;
+
+      await act(async () => {
+        rerender(<EegTopoViewer {...intracranialProps} />);
+      });
+
+      expect(NVMesh.loadFromUrl.mock.calls.length).toBe(callsBefore);
+      expect(screen.getByTestId('eeg-matrix-viewer')).toBeTruthy();
     });
   });
 });

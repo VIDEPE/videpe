@@ -1,3 +1,4 @@
+import { StrictMode } from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -11,6 +12,18 @@ const SLICE_TYPE_OPTIONS = [
   { ariaLabel: 'Multiplanar view', key: 'MULTIPLANAR' },
   { ariaLabel: '3D view', key: 'RENDER' },
 ];
+
+const makeConnectomeVolume = (overrides = {}) => ({
+  url: '__intracranial-electrodes__',
+  name: 'Intracranial Electrodes',
+  type: 'Intracranial',
+  subtype: 'Electrodes',
+  kind: 'connectome',
+  nodes: [{ name: 'B1', x: 0, y: 0, z: 0, colorValue: 1, sizeValue: 1 }],
+  edges: [],
+  calMax: 1,
+  ...overrides,
+});
 
 vi.mock('react-hot-toast', () => ({
   default: {
@@ -38,6 +51,21 @@ vi.mock('@niivue/niivue', () => ({
       }),
       setOpacity: vi.fn(),
       setColormap: vi.fn(),
+      addColormap: vi.fn(),
+      // loadConnectomeAsMesh is synchronous in real NiiVue (returns but doesn't add the mesh) —
+      // mirror that by handing back a plain object carrying the json's properties plus the
+      // opacity/visible defaults the real NVConnectome constructor would apply.
+      loadConnectomeAsMesh: vi
+        .fn()
+        .mockImplementation((json) => ({ ...json, opacity: 1, visible: true })),
+      addMesh: vi.fn().mockImplementation(function (mesh) {
+        // mirrors what real NiiVue does — appends the mesh to the existing ones
+        instance.meshes = [...instance.meshes, mesh];
+      }),
+      removeMesh: vi.fn().mockImplementation(function (mesh) {
+        // mirrors what real NiiVue does — drops the mesh from the existing ones
+        instance.meshes = instance.meshes.filter((m) => m !== mesh);
+      }),
       updateGLVolume: vi.fn(),
       setSliceType: vi.fn(),
       setMultiplanarLayout: vi.fn(),
@@ -45,6 +73,7 @@ vi.mock('@niivue/niivue', () => ({
       opts: { isColorbar: false, multiplanarShowRender: null, multiplanarEqualSize: true },
       sliceTypeMultiplanar: 1,
       volumes: [],
+      meshes: [],
     };
     return instance;
   }),
@@ -350,7 +379,7 @@ describe('NiiViewer', () => {
         { type: 'PET', url: '/pet.nii' },
         { type: 'SPECT', url: '/spect.nii' },
       ];
-      render(<NiiViewer nvRef={nvRef} volumes={volumes} />);
+      render(<NiiViewer nvRef={nvRef} layers={volumes} />);
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
       expect(screen.getByText('MRI')).toBeInTheDocument();
       expect(screen.getByText('PET')).toBeInTheDocument();
@@ -366,6 +395,7 @@ describe('NiiViewer', () => {
           loadVolumes: vi.fn().mockReturnValue(new Promise(() => {})),
           setOpacity: vi.fn(),
           setColormap: vi.fn(),
+          addColormap: vi.fn(),
           updateGLVolume: vi.fn(),
           setSliceType: vi.fn(),
           setMultiplanarLayout: vi.fn(),
@@ -377,14 +407,14 @@ describe('NiiViewer', () => {
       });
       const nvRef = { current: new Niivue() };
 
-      render(<NiiViewer nvRef={nvRef} volumes={[{ type: 'MRI', url: '/mri.nii' }]} />);
+      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'MRI', url: '/mri.nii' }]} />);
       expect(screen.getByTestId('loading-spinner')).toBeInTheDocument();
     });
 
     it('hides the loading spinner once volumes have loaded', async () => {
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
-      render(<NiiViewer nvRef={nvRef} volumes={[{ type: 'MRI', url: '/mri.nii' }]} />);
+      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'MRI', url: '/mri.nii' }]} />);
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
     });
 
@@ -396,6 +426,7 @@ describe('NiiViewer', () => {
           loadVolumes: vi.fn().mockRejectedValue(new Error('Network error')),
           setOpacity: vi.fn(),
           setColormap: vi.fn(),
+          addColormap: vi.fn(),
           updateGLVolume: vi.fn(),
           setSliceType: vi.fn(),
           setMultiplanarLayout: vi.fn(),
@@ -408,7 +439,7 @@ describe('NiiViewer', () => {
 
       const nvRef = { current: new Niivue() };
       const { default: toast } = await import('react-hot-toast');
-      render(<NiiViewer nvRef={nvRef} volumes={[{ type: 'MRI', url: '/mri.nii' }]} />);
+      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'MRI', url: '/mri.nii' }]} />);
 
       await waitFor(() =>
         expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/failed to load image/i))
@@ -418,9 +449,7 @@ describe('NiiViewer', () => {
     it('calls nv.setColormap when the colormap setting changes', async () => {
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
-      render(
-        <NiiViewer nvRef={nvRef} volumes={[{ type: 'MRI', url: '/mri.nii', id: 'mri-id' }]} />
-      );
+      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'MRI', url: '/mri.nii', id: 'mri-id' }]} />);
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
 
       // Expand the MRI card and change the colormap
@@ -455,7 +484,7 @@ describe('NiiViewer', () => {
     const setup = async () => {
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
-      render(<NiiViewer nvRef={nvRef} volumes={[{ type: 'MRI', url: '/mri.nii' }]} />);
+      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'MRI', url: '/mri.nii' }]} />);
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
       const nv = nvRef.current;
       nv.setMultiplanarLayout.mockClear();
@@ -509,7 +538,7 @@ describe('NiiViewer', () => {
     const setup = async () => {
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
-      render(<NiiViewer nvRef={nvRef} volumes={[{ type: 'MRI', url: '/mri.nii' }]} />);
+      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'MRI', url: '/mri.nii' }]} />);
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
       const nv = nvRef.current;
       // Clear calls from initial load so assertions only count post-load interactions
@@ -546,7 +575,7 @@ describe('NiiViewer', () => {
     const setup = async () => {
       const { Niivue, SLICE_TYPE } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
-      render(<NiiViewer nvRef={nvRef} volumes={[{ type: 'MRI', url: '/mri.nii' }]} />);
+      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'MRI', url: '/mri.nii' }]} />);
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
       const nv = nvRef.current;
       // Clear calls from initial load so assertions only count post-load interactions
@@ -595,11 +624,104 @@ describe('NiiViewer', () => {
     );
   });
 
+  describe('slice type buttons without an image volume', () => {
+    it('disables the 2D slice buttons but keeps 3D enabled', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      render(<NiiViewer nvRef={nvRef} layers={[]} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      expect(screen.getByRole('button', { name: 'Axial view' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Coronal view' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Sagittal view' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Multiplanar view' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: '3D view' })).not.toBeDisabled();
+    });
+
+    it('forces the 3D view as active when there is no image volume', async () => {
+      const { Niivue, SLICE_TYPE } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      render(<NiiViewer nvRef={nvRef} layers={[]} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      expect(screen.getByRole('button', { name: '3D view' })).toHaveAttribute(
+        'aria-pressed',
+        'true'
+      );
+      expect(nvRef.current.setSliceType).toHaveBeenCalledWith(SLICE_TYPE.RENDER);
+    });
+
+    it('re-enables the 2D buttons once an image volume is loaded', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const { rerender } = render(<NiiViewer nvRef={nvRef} layers={[]} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      rerender(<NiiViewer nvRef={nvRef} layers={[{ type: 'MRI', url: '/mri.nii' }]} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      expect(screen.getByRole('button', { name: 'Axial view' })).not.toBeDisabled();
+    });
+
+    it('forces back to 3D when the last image volume is removed (e.g. an imaging-only reset)', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const { rerender } = render(
+        <NiiViewer nvRef={nvRef} layers={[{ type: 'MRI', url: '/mri.nii' }]} />
+      );
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      await userEvent.click(screen.getByRole('button', { name: 'Axial view' }));
+      expect(screen.getByRole('button', { name: 'Axial view' })).toHaveAttribute(
+        'aria-pressed',
+        'true'
+      );
+
+      rerender(<NiiViewer nvRef={nvRef} layers={[]} />);
+
+      expect(screen.getByRole('button', { name: '3D view' })).toHaveAttribute(
+        'aria-pressed',
+        'true'
+      );
+      expect(screen.getByRole('button', { name: 'Axial view' })).toBeDisabled();
+    });
+
+    it('re-enables the buttons once a volume is added via the internal drop zone, not just via the layers prop', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      // layers prop never changes here — the connectome is what keeps the component
+      // mounted, and the new volume below arrives only through the component's own
+      // "Drop additional files" zone, bypassing `layers` entirely.
+      render(<NiiViewer nvRef={nvRef} layers={[]} connectomeLayer={makeConnectomeVolume()} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+      expect(screen.getByRole('button', { name: 'Axial view' })).toBeDisabled();
+
+      const input = document.querySelector('input[type="file"]');
+      await userEvent.upload(input, new File(['data'], 'scan.nii'));
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      expect(screen.getByRole('button', { name: 'Axial view' })).not.toBeDisabled();
+    });
+
+    it('explicitly syncs nv to the current slice type once an image volume is present, instead of leaving nv at whatever it was last set to', async () => {
+      const { Niivue, SLICE_TYPE } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'MRI', url: '/mri.nii' }]} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      // Without this explicit sync, a fresh mount with a volume already present would
+      // never call setSliceType at all, silently inheriting nv's last value (e.g. RENDER,
+      // forced during an earlier connectome-only phase on this same long-lived instance)
+      // while the buttons show React's own (different) default of MULTIPLANAR.
+      expect(nvRef.current.setSliceType).toHaveBeenCalledWith(SLICE_TYPE.MULTIPLANAR);
+    });
+  });
+
   describe('appending volumes via the file drop zone', () => {
     it('does not give a newly-appended volume full opacity when other volumes are already loaded', async () => {
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
-      render(<NiiViewer nvRef={nvRef} volumes={[{ type: 'MRI', url: '/mri.nii' }]} />);
+      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'MRI', url: '/mri.nii' }]} />);
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
 
       const input = document.querySelector('input[type="file"]');
@@ -610,6 +732,30 @@ describe('NiiViewer', () => {
       await userEvent.click(screen.getByRole('button', { name: 'Expand scan controls' }));
       expect(screen.getByLabelText('scan opacity')).toHaveValue(60);
     });
+
+    it('does not pass the connectome to nv.loadVolumes and clears the spinner when adding a file while a connectome is loaded', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      render(<NiiViewer nvRef={nvRef} layers={[]} connectomeLayer={makeConnectomeVolume()} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      const nv = nvRef.current;
+      const input = document.querySelector('input[type="file"]');
+      await userEvent.upload(input, new File(['data'], 'scan.nii'));
+
+      // Previously this never resolved: syncVolumesAndApplySettings tried to nv.loadVolumes()
+      // the connectome's sentinel url as if it were a real image file, and with no try/catch
+      // the spinner stayed stuck forever.
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      expect(nv.loadVolumes).toHaveBeenCalledTimes(1);
+      const loadedUrls = nv.loadVolumes.mock.calls[0][0].map((l) => l.url);
+      expect(loadedUrls).not.toContain('__intracranial-electrodes__');
+
+      // Both cards are present — the new volume alongside the untouched connectome.
+      expect(screen.getByRole('button', { name: 'Expand scan controls' })).toBeInTheDocument();
+      expect(screen.getByText('Intracranial')).toBeInTheDocument();
+    });
   });
 
   describe('handleDeleteVolume', () => {
@@ -619,7 +765,7 @@ describe('NiiViewer', () => {
       render(
         <NiiViewer
           nvRef={nvRef}
-          volumes={[
+          layers={[
             { type: 'MRI', url: '/mri.nii' },
             { type: 'PET', url: '/pet.nii' },
           ]}
@@ -666,7 +812,7 @@ describe('NiiViewer', () => {
     const setup = async () => {
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
-      render(<NiiViewer nvRef={nvRef} volumes={[]} />);
+      render(<NiiViewer nvRef={nvRef} layers={[]} />);
       const row = screen.getByTestId('nii-canvas-row');
       vi.spyOn(row, 'getBoundingClientRect').mockReturnValue({ height: 400 });
       return row;
@@ -712,6 +858,247 @@ describe('NiiViewer', () => {
       fireEvent.mouseMove(window, { clientY: 500 }); // should be ignored — drag already ended
 
       expect(row.style.minHeight).toBe('500px');
+    });
+  });
+
+  describe('connectome layer (intracranial electrodes)', () => {
+    it('builds and adds a connectome mesh via loadConnectomeAsMesh + addMesh when connectomeLayer is provided', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      render(<NiiViewer nvRef={nvRef} layers={[]} connectomeLayer={makeConnectomeVolume()} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      const nv = nvRef.current;
+      expect(nv.loadConnectomeAsMesh).toHaveBeenCalled();
+      expect(nv.addMesh).toHaveBeenCalled();
+    });
+
+    it('renders a card for the connectome layer in ImagingControls alongside image volumes', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      render(
+        <NiiViewer
+          nvRef={nvRef}
+          layers={[{ type: 'MRI', url: '/mri.nii' }]}
+          connectomeLayer={makeConnectomeVolume()}
+        />
+      );
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      // type and subtype render as separate text nodes (see "renders subtype with a dash
+      // prefix" in ImagingControls.test.jsx for the same pattern), so query them separately.
+      expect(screen.getByText('MRI')).toBeInTheDocument();
+      expect(screen.getByText('Intracranial')).toBeInTheDocument();
+      expect(screen.getByText('- Electrodes')).toBeInTheDocument();
+    });
+
+    it('never passes the connectome through nv.loadVolumes', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const mriLayer = { type: 'MRI', url: '/mri.nii' };
+      render(
+        <NiiViewer nvRef={nvRef} layers={[mriLayer]} connectomeLayer={makeConnectomeVolume()} />
+      );
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      // Compares against the same object reference passed in — syncVolumesAndApplySettings
+      // mutates layer objects in place (e.g. colorbarVisible), so a fresh literal here would
+      // diverge from the (by-then-mutated) recorded call argument despite being the same data.
+      expect(nvRef.current.loadVolumes).toHaveBeenCalledWith([mriLayer]);
+    });
+
+    it('rebuilds the mesh when connectomeLayer data changes, without resetting other layers settings or reloading images', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      // Held in a variable and reused across the rerender below — mirrors how PatientView's
+      // own image-volumes state keeps the same array reference across EEG voltage updates;
+      // only the separately-tracked connectomeLayer prop changes.
+      const mriLayers = [{ type: 'MRI', url: '/mri.nii' }];
+      const { rerender } = render(
+        <NiiViewer nvRef={nvRef} layers={mriLayers} connectomeLayer={makeConnectomeVolume()} />
+      );
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      // Customize the MRI volume's visibility before the connectome refreshes
+      await userEvent.click(screen.getByRole('button', { name: 'Hide MRI' }));
+
+      const nv = nvRef.current;
+      nv.loadVolumes.mockClear();
+      nv.addMesh.mockClear();
+      nv.removeMesh.mockClear();
+
+      // Simulate an EEG voltage update producing a fresh connectome object
+      rerender(
+        <NiiViewer
+          nvRef={nvRef}
+          layers={mriLayers}
+          connectomeLayer={makeConnectomeVolume({
+            nodes: [{ name: 'B1', x: 0, y: 0, z: 0, colorValue: -5, sizeValue: 1 }],
+          })}
+        />
+      );
+      await waitFor(() => expect(nv.removeMesh).toHaveBeenCalled());
+
+      expect(nv.addMesh).toHaveBeenCalled(); // rebuilt with the new data
+      expect(nv.loadVolumes).not.toHaveBeenCalled(); // images untouched, not re-loaded
+      // MRI's visibility change survived the connectome refresh
+      expect(screen.getByRole('button', { name: 'Show MRI' })).toBeInTheDocument();
+    });
+
+    it('toggling the connectome card visibility sets mesh.opacity directly, not nv.setOpacity', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      render(
+        <NiiViewer
+          nvRef={nvRef}
+          layers={[{ type: 'MRI', url: '/mri.nii' }]}
+          connectomeLayer={makeConnectomeVolume()}
+        />
+      );
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      const nv = nvRef.current;
+      const mesh = nv.addMesh.mock.calls.at(-1)[0];
+      nv.setOpacity.mockClear();
+
+      await userEvent.click(screen.getByRole('button', { name: 'Hide Intracranial - Electrodes' }));
+
+      expect(mesh.opacity).toBe(0);
+      expect(nv.setOpacity).not.toHaveBeenCalled();
+    });
+
+    it('removes the mesh and its card when connectomeLayer becomes null', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const { rerender } = render(
+        <NiiViewer nvRef={nvRef} layers={[]} connectomeLayer={makeConnectomeVolume()} />
+      );
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      const nv = nvRef.current;
+      const mesh = nv.addMesh.mock.calls.at(-1)[0];
+
+      rerender(<NiiViewer nvRef={nvRef} layers={[]} connectomeLayer={null} />);
+
+      expect(nv.removeMesh).toHaveBeenCalledWith(mesh);
+      expect(screen.queryByText('Intracranial - Electrodes')).not.toBeInTheDocument();
+    });
+
+    it('deleting the connectome card calls nv.removeMesh, not nv.removeVolumeByIndex', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      render(
+        <NiiViewer
+          nvRef={nvRef}
+          layers={[{ type: 'MRI', url: '/mri.nii' }]}
+          connectomeLayer={makeConnectomeVolume()}
+        />
+      );
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      const nv = nvRef.current;
+      const mesh = nv.addMesh.mock.calls.at(-1)[0];
+      nv.removeVolumeByIndex.mockClear();
+
+      await userEvent.click(
+        screen.getByRole('button', { name: 'Expand Intracranial - Electrodes controls' })
+      );
+      await userEvent.click(
+        screen.getByRole('button', { name: 'Close Intracranial - Electrodes volume' })
+      );
+
+      expect(nv.removeMesh).toHaveBeenCalledWith(mesh);
+      expect(nv.removeVolumeByIndex).not.toHaveBeenCalled();
+    });
+
+    it('clears volumes and meshes from the shared nv instance when the component unmounts', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const { unmount } = render(
+        <NiiViewer
+          nvRef={nvRef}
+          layers={[{ type: 'MRI', url: '/mri.nii' }]}
+          connectomeLayer={makeConnectomeVolume()}
+        />
+      );
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      const nv = nvRef.current;
+      expect(nv.volumes.length).toBe(1);
+      expect(nv.meshes.length).toBe(1);
+
+      unmount();
+
+      expect(nv.volumes.length).toBe(0);
+      expect(nv.meshes.length).toBe(0);
+    });
+
+    it('clears stale volumes from nv when layers drops to empty while a connectome keeps the component mounted', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const { rerender } = render(
+        <NiiViewer
+          nvRef={nvRef}
+          layers={[{ type: 'MRI', url: '/mri.nii' }]}
+          connectomeLayer={makeConnectomeVolume()}
+        />
+      );
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      const nv = nvRef.current;
+      expect(nv.volumes.length).toBe(1);
+
+      // Imaging-only reset: layers clears but the connectome stays, so the component
+      // never unmounts — the early-return branch must clear nv directly instead.
+      rerender(<NiiViewer nvRef={nvRef} layers={[]} connectomeLayer={makeConnectomeVolume()} />);
+
+      expect(nv.volumes.length).toBe(0);
+      expect(nv.meshes.length).toBe(1); // connectome mesh is untouched by this reset
+    });
+
+    it('drops the stale MRI card from ImagingControls on an imaging-only reset, keeping the connectome card', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const { rerender } = render(
+        <NiiViewer
+          nvRef={nvRef}
+          layers={[{ type: 'MRI', url: '/mri.nii' }]}
+          connectomeLayer={makeConnectomeVolume()}
+        />
+      );
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+      expect(screen.getByText('MRI')).toBeInTheDocument();
+
+      // Same imaging-only reset as above — this time checking the rendered card list,
+      // which previously kept showing the MRI card even after its volume was removed.
+      rerender(<NiiViewer nvRef={nvRef} layers={[]} connectomeLayer={makeConnectomeVolume()} />);
+
+      expect(screen.queryByText('MRI')).not.toBeInTheDocument();
+      expect(screen.getByText('Intracranial')).toBeInTheDocument();
+    });
+
+    it('does not crash when adding an image volume right after mounting with a connectome already present, under StrictMode', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      // StrictMode double-invokes updater functions passed to setState (for purity
+      // checking) — this used to duplicate the connectome's settings entry the first time
+      // it was merged in (see the comment on the connectomeLayer merge effect), silently
+      // misaligning orderedLayers/layerSettings by one. That misalignment only surfaced
+      // later, as a crash here when adding an image volume via the internal drop zone —
+      // exactly the repro reported: EEG + electrode positions loaded first, then an MRI.
+      render(
+        <StrictMode>
+          <NiiViewer nvRef={nvRef} layers={[]} connectomeLayer={makeConnectomeVolume()} />
+        </StrictMode>
+      );
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      const input = document.querySelector('input[type="file"]');
+      await userEvent.upload(input, new File(['data'], 'scan.nii'));
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      expect(screen.getByRole('button', { name: 'Expand scan controls' })).toBeInTheDocument();
+      expect(screen.getByText('Intracranial')).toBeInTheDocument();
     });
   });
 });

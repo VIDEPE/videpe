@@ -2,10 +2,12 @@
 // Electrode position parsing lives in src/loaders/parseElcElectrodePositions.js (and future format parsers alongside it).
 
 import convexHull from 'convex-hull';
+import { parseElectrodeContactName } from './intracranialDetection';
+import { INTRACRANIAL_CONNECTOME_URL } from '@/components/NiiViewer.utils';
 
 // Strips recording-type prefixes ("EEG ", "MEG ") and reference suffixes ("-Ref", "-A1", " Ref", etc.)
 // so that "EEG Fp1-Ref" normalises to "fp1" for lookup.
-function normalizeChannelName(name) {
+export function normalizeChannelName(name) {
   return name
     .replace(/^(eeg|meg)\s+/i, '') // remove leading "EEG " / "MEG " prefix
     .replace(/-.*$/, '') // remove dash suffix (e.g. -Ref, -A1)
@@ -165,4 +167,117 @@ export function buildEegMesh(electrodes, matched, voltages, sigma = 30) {
   const { vertices, indices } = buildElectrodeMesh(electrodes);
   const scalars = interpolateMeshVoltages(electrodes, matched, voltages, sigma);
   return { vertices, indices, scalars };
+}
+
+// Groups intracranial channel names by parsed electrode group and contact number,
+// sorted ascending within each group — the row/column structure the intracranial
+// topography matrix renders. Needs only channel names + a voltage per channel
+// index, no electrode positions, since this view has no position-file gate.
+// Channels that don't fit the group+contact shape (e.g. "ECG") aren't dropped —
+// they're returned separately in `unparsed` so the caller can still surface them,
+// just not as a matrix row/column.
+//
+// @param {string[]} channelNames
+// @param {number[]} voltages  - one per channelNames index
+// @returns {{
+//   groups: { group: string, contacts: { contact: number, channelIdx: number, voltage: number }[] }[],
+//   unparsed: { channelIdx: number, name: string }[]
+// }}
+export function buildIntracranialMatrix(channelNames, voltages) {
+  const groupMap = new Map(); // electrode group -> its contacts, accumulated in channel order
+  const unparsed = [];
+
+  channelNames.forEach((name, channelIdx) => {
+    const parsed = parseElectrodeContactName(name);
+    if (!parsed) {
+      unparsed.push({ channelIdx, name }); // doesn't fit the group+contact shape — not a row
+      return;
+    }
+    const { group, contact } = parsed;
+    if (!groupMap.has(group)) groupMap.set(group, []);
+    groupMap.get(group).push({ contact, channelIdx, voltage: voltages[channelIdx] ?? 0 });
+  });
+
+  const groups = Array.from(groupMap.entries())
+    .sort(([a], [b]) => a.localeCompare(b)) // alphabetical row order, e.g. "b" before "b'"
+    .map(([group, contacts]) => ({
+      group,
+      contacts: contacts.slice().sort((a, b) => a.contact - b.contact), // ascending column order
+    }));
+
+  return { groups, unparsed };
+}
+
+// Builds connectome nodes (one per matched intracranial electrode contact, colored
+// by voltage) and edges connecting consecutive *existing* contacts within the same
+// electrode group — one polyline per physical probe shaft. Contacts are connected
+// in sorted-contact-number order among the matched set, so a missing contact (e.g.
+// no channel for B3) is skipped rather than breaking the shaft into two pieces.
+//
+// @param {{ channelIdx, name, pos: { x, y, z } }[]} matched - from matchChannelsToPositions
+// @param {number[]} voltages  - one per matched entry (same order as matched)
+// @returns {{
+//   nodes: { name, x, y, z, colorValue, sizeValue }[],
+//   edges: { first: number, second: number, colorValue: number }[]
+// }}
+export function buildIntracranialConnectome(matched, voltages) {
+  // One node per matched contact — node index i corresponds to matched[i]/voltages[i].
+  const nodes = matched.map((m, i) => ({
+    name: m.name,
+    x: m.pos.x,
+    y: m.pos.y,
+    z: m.pos.z,
+    colorValue: voltages[i] ?? 0,
+    sizeValue: 1,
+  }));
+
+  const groupMap = new Map(); // electrode group -> { contact, nodeIndex, voltage }[]
+  matched.forEach((m, nodeIndex) => {
+    const parsed = parseElectrodeContactName(m.name);
+    if (!parsed) return; // not on a probe shaft — no edge to draw for this contact
+    if (!groupMap.has(parsed.group)) groupMap.set(parsed.group, []);
+    groupMap
+      .get(parsed.group)
+      .push({ contact: parsed.contact, nodeIndex, voltage: voltages[nodeIndex] ?? 0 });
+  });
+
+  const edges = [];
+  for (const contacts of groupMap.values()) {
+    const sorted = contacts.slice().sort((a, b) => a.contact - b.contact); // shaft order, gaps just absent
+    for (let i = 0; i < sorted.length - 1; i++) {
+      edges.push({
+        first: sorted[i].nodeIndex,
+        second: sorted[i + 1].nodeIndex,
+        colorValue: (sorted[i].voltage + sorted[i + 1].voltage) / 2, // edges carry no real data — just shade by their endpoints
+      });
+    }
+  }
+
+  return { nodes, edges };
+}
+
+// Pure derivation of the Neuroimaging pane's "connectome volume" layer entry from
+// the EEG state lifted out of EegViewer. Returns null when there's nothing to show
+// yet (not an intracranial recording, or no position-matched channels), so
+// PatientView.jsx can stay a thin orchestrator with no electrode-specific logic
+// of its own.
+//
+// @param {{ isIntracranial: boolean, matched: object[], voltages: number[] }} args
+// @returns {object | null}
+export function buildConnectomeVolume({ isIntracranial, matched, voltages }) {
+  if (!isIntracranial || !matched?.length) return null; // nothing to render yet
+
+  const { nodes, edges } = buildIntracranialConnectome(matched, voltages);
+  const calMax = Math.max(1e-6, ...voltages.map((v) => Math.abs(v))); // symmetric colour range; floor avoids div-by-zero downstream
+
+  return {
+    url: INTRACRANIAL_CONNECTOME_URL,
+    name: 'Intracranial Electrodes',
+    type: 'Intracranial',
+    subtype: 'Electrodes',
+    kind: 'connectome',
+    nodes,
+    edges,
+    calMax,
+  };
 }

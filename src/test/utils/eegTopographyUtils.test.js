@@ -424,3 +424,136 @@ describe('buildEegMesh', () => {
     expect(indices.length % 3).toBe(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// buildIntracranialMatrix / buildIntracranialConnectome / buildConnectomeVolume
+// ---------------------------------------------------------------------------
+
+import {
+  buildIntracranialMatrix,
+  buildIntracranialConnectome,
+  buildConnectomeVolume,
+} from '@/utils/eegTopographyUtils';
+import { INTRACRANIAL_CONNECTOME_URL } from '@/components/NiiViewer.utils';
+
+describe('buildIntracranialMatrix', () => {
+  it('groups channels by electrode group, sorted by contact number ascending', () => {
+    const channelNames = ['B2', 'B1', "B'1", 'T1'];
+    const { groups } = buildIntracranialMatrix(channelNames, [0, 0, 0, 0]);
+    const b = groups.find((g) => g.group === 'b');
+    expect(b.contacts.map((c) => c.contact)).toEqual([1, 2]);
+  });
+
+  it('separates groups, including primed groups, from their base letter', () => {
+    const channelNames = ['B1', "B'1", 'T1'];
+    const { groups } = buildIntracranialMatrix(channelNames, [0, 0, 0]);
+    expect(groups.map((g) => g.group).sort()).toEqual(['b', "b'", 't']);
+  });
+
+  it('attaches the voltage and channelIdx for each contact', () => {
+    const channelNames = ['B1', 'B2'];
+    const { groups } = buildIntracranialMatrix(channelNames, [5, -3]);
+    const b = groups.find((g) => g.group === 'b');
+    expect(b.contacts).toEqual([
+      { contact: 1, channelIdx: 0, voltage: 5 },
+      { contact: 2, channelIdx: 1, voltage: -3 },
+    ]);
+  });
+
+  it('puts channels that do not fit the group+contact pattern into unparsed, not a row', () => {
+    const channelNames = ['B1', 'ECG', 'Status'];
+    const { groups, unparsed } = buildIntracranialMatrix(channelNames, [0, 0, 0]);
+    expect(groups).toHaveLength(1);
+    expect(unparsed).toEqual([
+      { channelIdx: 1, name: 'ECG' },
+      { channelIdx: 2, name: 'Status' },
+    ]);
+  });
+
+  it('returns no groups and no unparsed entries for an empty channel list', () => {
+    const { groups, unparsed } = buildIntracranialMatrix([], []);
+    expect(groups).toHaveLength(0);
+    expect(unparsed).toHaveLength(0);
+  });
+});
+
+describe('buildIntracranialConnectome', () => {
+  const POS = (i) => ({ label: `c${i}`, x: i, y: i, z: i });
+  const matchedFor = (names) =>
+    names.map((name, channelIdx) => ({ channelIdx, name, pos: POS(channelIdx) }));
+
+  it('returns one node per matched contact, carrying position and voltage', () => {
+    const matched = matchedFor(['B1', 'B2']);
+    const { nodes } = buildIntracranialConnectome(matched, [5, -3]);
+    expect(nodes).toHaveLength(2);
+    expect(nodes[0]).toMatchObject({ name: 'B1', x: 0, y: 0, z: 0, colorValue: 5 });
+    expect(nodes[1]).toMatchObject({ name: 'B2', x: 1, y: 1, z: 1, colorValue: -3 });
+  });
+
+  it('connects consecutive contacts within the same group', () => {
+    const matched = matchedFor(['B1', 'B2', 'B3']);
+    const { edges } = buildIntracranialConnectome(matched, [0, 0, 0]);
+    expect(edges).toEqual([
+      { first: 0, second: 1, colorValue: 0 },
+      { first: 1, second: 2, colorValue: 0 },
+    ]);
+  });
+
+  it('skips gaps instead of connecting across a missing contact number', () => {
+    const matched = matchedFor(['B1', 'B2', 'B4']); // B3 missing
+    const { edges } = buildIntracranialConnectome(matched, [0, 0, 0]);
+    expect(edges).toHaveLength(2);
+    expect(edges.map((e) => [e.first, e.second])).toEqual([
+      [0, 1], // B1-B2
+      [1, 2], // B2-B4 (the surviving next contact after the gap)
+    ]);
+  });
+
+  it('never connects contacts from different groups', () => {
+    const matched = matchedFor(['B1', 'T1']);
+    const { edges } = buildIntracranialConnectome(matched, [0, 0]);
+    expect(edges).toHaveLength(0);
+  });
+
+  it('produces no edges for a single-contact group', () => {
+    const matched = matchedFor(['B1']);
+    const { edges } = buildIntracranialConnectome(matched, [0]);
+    expect(edges).toHaveLength(0);
+  });
+
+  it('sets edge colorValue to the average of its two endpoint voltages', () => {
+    const matched = matchedFor(['B1', 'B2']);
+    const { edges } = buildIntracranialConnectome(matched, [10, -4]);
+    expect(edges[0].colorValue).toBeCloseTo(3); // (10 + -4) / 2
+  });
+});
+
+describe('buildConnectomeVolume', () => {
+  const matched = [
+    { channelIdx: 0, name: 'B1', pos: { label: 'B1', x: 0, y: 0, z: 0 } },
+    { channelIdx: 1, name: 'B2', pos: { label: 'B2', x: 1, y: 1, z: 1 } },
+  ];
+
+  it('returns null when not intracranial', () => {
+    expect(buildConnectomeVolume({ isIntracranial: false, matched, voltages: [1, 2] })).toBeNull();
+  });
+
+  it('returns null when there are no matched (positioned) channels yet', () => {
+    expect(buildConnectomeVolume({ isIntracranial: true, matched: [], voltages: [] })).toBeNull();
+  });
+
+  it('returns a well-formed connectome volume entry otherwise', () => {
+    const volume = buildConnectomeVolume({ isIntracranial: true, matched, voltages: [10, -4] });
+    expect(volume).toMatchObject({
+      url: INTRACRANIAL_CONNECTOME_URL,
+      kind: 'connectome',
+    });
+    expect(volume.nodes).toHaveLength(2);
+    expect(volume.edges).toHaveLength(1);
+  });
+
+  it('sets calMax to the maximum absolute voltage', () => {
+    const volume = buildConnectomeVolume({ isIntracranial: true, matched, voltages: [10, -25] });
+    expect(volume.calMax).toBe(25);
+  });
+});
