@@ -24,6 +24,7 @@ import {
 } from '@/utils/eegColormaps';
 import { EyeDashed } from 'lucide-react';
 import { EegMatrixViewer } from './EegMatrixViewer';
+import { cn } from '@/utils/utils';
 
 // Marker sizes in mm radius (sizeValue × nodeScale) — unmapped electrodes are small dots
 // that trace out the template grid; matched electrodes are larger and colour-coded by voltage.
@@ -337,7 +338,10 @@ export function EegTopoViewer({
         )}
         {/* ColourBlind Mode colour map — shared by the mesh and the intracranial matrix */}
         <button
-          className="absolute top-1.5 right-1.5 button button-icon shrink-0"
+          className={cn(
+            'absolute button button-icon shrink-0',
+            isIntracranial ? 'top-2 right-5' : 'top-1.5 right-1.5'
+          )}
           type="button"
           onClick={() => setColourBlindMode(!colourBlindMode)}
           title="Toggle colourblind colormap for the EEG topography"
