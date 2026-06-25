@@ -98,8 +98,10 @@ export const NiiViewer = ({
   const [activeSliceType, setActiveSliceType] = useState(SLICE_TYPE.MULTIPLANAR);
   // 2D slice views have no volume data to cut through without an actual image volume —
   // a connectome-only scene (e.g. intracranial electrodes with no MRI loaded) always
-  // renders as 3D regardless of opts.sliceType, per NiiVue's drawSceneCore.
-  const hasImageVolumes = layers.length > 0;
+  // renders as 3D regardless of opts.sliceType, per NiiVue's drawSceneCore. Derived from
+  // orderedLayers (not the `layers` prop) since a volume can also arrive via this
+  // component's own "Drop additional files" zone, which never touches `layers`.
+  const hasImageVolumes = orderedLayers.some((l) => l.kind !== 'connectome');
   const sliceTypeOptions = [
     { sliceType: SLICE_TYPE.AXIAL, label: 'Axial', buttonLabel: 'Ax' },
     { sliceType: SLICE_TYPE.CORONAL, label: 'Coronal', buttonLabel: 'Co' },
@@ -114,7 +116,13 @@ export const NiiViewer = ({
   };
 
   // Keep the UI in sync with what NiiVue actually draws — force the 3D view (and grey
-  // out the others below) whenever there's no image volume to show 2D slices of.
+  // out the others below) whenever there's no image volume to show 2D slices of. Only
+  // acts on the "no volumes" side deliberately: it must not also fire a redundant
+  // nv.setSliceType() the moment a volume (re)appears — that call previously landed
+  // concurrently with an in-flight nv.loadVolumes()/addVolumesFromUrl() triggered by this
+  // component's own "Drop additional files" handler, which could leave the load hanging.
+  // The mount effect above already syncs nv's starting slice type once; ongoing
+  // user-driven changes go through handleSliceTypeChange directly.
   useEffect(() => {
     if (hasImageVolumes) return;
     setActiveSliceType(SLICE_TYPE.RENDER);
@@ -201,10 +209,24 @@ export const NiiViewer = ({
     setOrderedLayers(allLayers);
     setLayerSettings(allLayerSettings);
 
-    // Load only the new layers into the existing NiiVue instance and reapply all layer settings
-    await syncVolumesAndApplySettings(nvRef.current, allLayers, allLayerSettings);
-    // updateGLVolume schedules a GL redraw but returns before it paints — wait one frame before clearing the spinner
-    requestAnimationFrame(() => setIsLoading(false));
+    // syncVolumesAndApplySettings only knows about image volumes (nv.volumes) — strip out
+    // the connectome layer, if present, before handing the list off. Otherwise it tries to
+    // nv.loadVolumes() the connectome's sentinel url as if it were a real image file, which
+    // never resolves, and (with no try/catch) leaves the spinner stuck forever.
+    const imageLayers = allLayers.filter((l) => l.kind !== 'connectome');
+    const imageLayerSettings = allLayerSettings.filter(
+      (_, i) => allLayers[i].kind !== 'connectome'
+    );
+
+    try {
+      // Load only the new layers into the existing NiiVue instance and reapply all layer settings
+      await syncVolumesAndApplySettings(nvRef.current, imageLayers, imageLayerSettings);
+    } catch (loadError) {
+      toast.error(`Failed to load image: ${loadError.message}`);
+    } finally {
+      // updateGLVolume schedules a GL redraw but returns before it paints — wait one frame before clearing the spinner
+      requestAnimationFrame(() => setIsLoading(false));
+    }
   };
 
   // Track the canvas container's dimensions so the layout effect can react to resizes
@@ -346,7 +368,15 @@ export const NiiViewer = ({
     nv.addColormap(EEG_NODE_POS_KEY, EEG_NODE_POS);
     nv.addColormap(EEG_NODE_NEG_KEY, EEG_NODE_NEG);
     nv.attachToCanvas(canvas.current);
+    // Sync nv's slice type to this fresh mount's starting state, rather than leaving it
+    // at whatever it was last set to on this long-lived instance (e.g. RENDER, forced
+    // during an earlier connectome-only phase) — which would otherwise silently diverge
+    // from React's own (different) default of MULTIPLANAR. Read once, at mount, only —
+    // later additions are handled by the hasImageVolumes effect below (false side only),
+    // so this never fires again concurrently with an in-flight volume load.
+    nv.setSliceType(hasImageVolumes ? activeSliceType : SLICE_TYPE.RENDER);
     onNiiNvReady?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // nv is a single long-lived instance owned by the parent, reused across this component's
@@ -387,6 +417,14 @@ export const NiiViewer = ({
         while (nv.volumes.length > 0) nv.removeVolumeByIndex(0);
         nv.updateGLVolume();
       }
+      // Drop the now-stale image-kind cards from ImagingControls too — otherwise they
+      // keep showing even though the volumes behind them were just removed above. The
+      // connectome's own card (if any) is left alone. Each filter is self-contained (a
+      // layer's own kind, a settings entry's own url) rather than cross-referencing the
+      // other array by position — that stays correct regardless of what order this effect
+      // and the connectomeLayer sync effect happen to run in within the same commit.
+      setOrderedLayers((prev) => prev.filter((l) => l.kind === 'connectome'));
+      setLayerSettings((prev) => prev.filter((s) => s.url === INTRACRANIAL_CONNECTOME_URL));
       setIsLoading(false);
       return;
     }
@@ -419,25 +457,36 @@ export const NiiViewer = ({
   // image volumes without ever touching their settings when only the connectome's own data
   // (nodes/edges/calMax) refreshes (which produces a new connectomeLayer object on every
   // EEG voltage update).
+  // Two independent, self-contained updater-function calls — deliberately not one nested
+  // inside the other. setLayerSettings used to be called from inside setOrderedLayers's
+  // updater; StrictMode's purity-check double-invocation then fired that nested call twice,
+  // silently appending the connectome's settings entry twice while orderedLayers only got it
+  // once, permanently misaligning the two arrays (which later crashed handleNiiFiles when
+  // adding an image volume). Each updater here instead locates the connectome independently
+  // within its own prev array (layerSettings via the url tag getInitialLayerSettings now
+  // attaches to every entry) and is idempotent on its own: re-running it against its own
+  // already-updated result (exactly what happens on a double-invoke, or when another effect's
+  // update is processed first in the same commit) finds the entry already in place and
+  // returns prev unchanged, rather than appending again.
   useEffect(() => {
     setOrderedLayers((prevLayers) => {
       const idx = prevLayers.findIndex((l) => l.url === INTRACRANIAL_CONNECTOME_URL);
       if (!connectomeLayer) {
         if (idx === -1) return prevLayers;
-        setLayerSettings((prevSettings) => prevSettings.filter((_, i) => i !== idx));
         return prevLayers.filter((_, i) => i !== idx);
       }
-      if (idx === -1) {
-        setLayerSettings((prevSettings) => [
-          ...prevSettings,
-          ...getInitialLayerSettings([connectomeLayer], prevSettings.length),
-        ]);
-        return [...prevLayers, connectomeLayer];
-      }
+      if (idx === -1) return [...prevLayers, connectomeLayer];
       if (prevLayers[idx] === connectomeLayer) return prevLayers; // no change
       const next = prevLayers.slice();
       next[idx] = connectomeLayer;
       return next;
+    });
+    setLayerSettings((prevSettings) => {
+      const idx = prevSettings.findIndex((s) => s.url === INTRACRANIAL_CONNECTOME_URL);
+      if (!connectomeLayer)
+        return idx === -1 ? prevSettings : prevSettings.filter((_, i) => i !== idx);
+      if (idx !== -1) return prevSettings; // already has an entry — a data-only refresh never touches settings
+      return [...prevSettings, ...getInitialLayerSettings([connectomeLayer], prevSettings.length)];
     });
   }, [connectomeLayer]);
 

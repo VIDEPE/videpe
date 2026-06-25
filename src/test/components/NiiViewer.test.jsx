@@ -1,3 +1,4 @@
+import { StrictMode } from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -11,6 +12,18 @@ const SLICE_TYPE_OPTIONS = [
   { ariaLabel: 'Multiplanar view', key: 'MULTIPLANAR' },
   { ariaLabel: '3D view', key: 'RENDER' },
 ];
+
+const makeConnectomeVolume = (overrides = {}) => ({
+  url: '__intracranial-electrodes__',
+  name: 'Intracranial Electrodes',
+  type: 'Intracranial',
+  subtype: 'Electrodes',
+  kind: 'connectome',
+  nodes: [{ name: 'B1', x: 0, y: 0, z: 0, colorValue: 1, sizeValue: 1 }],
+  edges: [],
+  calMax: 1,
+  ...overrides,
+});
 
 vi.mock('react-hot-toast', () => ({
   default: {
@@ -672,6 +685,36 @@ describe('NiiViewer', () => {
       );
       expect(screen.getByRole('button', { name: 'Axial view' })).toBeDisabled();
     });
+
+    it('re-enables the buttons once a volume is added via the internal drop zone, not just via the layers prop', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      // layers prop never changes here — the connectome is what keeps the component
+      // mounted, and the new volume below arrives only through the component's own
+      // "Drop additional files" zone, bypassing `layers` entirely.
+      render(<NiiViewer nvRef={nvRef} layers={[]} connectomeLayer={makeConnectomeVolume()} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+      expect(screen.getByRole('button', { name: 'Axial view' })).toBeDisabled();
+
+      const input = document.querySelector('input[type="file"]');
+      await userEvent.upload(input, new File(['data'], 'scan.nii'));
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      expect(screen.getByRole('button', { name: 'Axial view' })).not.toBeDisabled();
+    });
+
+    it('explicitly syncs nv to the current slice type once an image volume is present, instead of leaving nv at whatever it was last set to', async () => {
+      const { Niivue, SLICE_TYPE } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'MRI', url: '/mri.nii' }]} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      // Without this explicit sync, a fresh mount with a volume already present would
+      // never call setSliceType at all, silently inheriting nv's last value (e.g. RENDER,
+      // forced during an earlier connectome-only phase on this same long-lived instance)
+      // while the buttons show React's own (different) default of MULTIPLANAR.
+      expect(nvRef.current.setSliceType).toHaveBeenCalledWith(SLICE_TYPE.MULTIPLANAR);
+    });
   });
 
   describe('appending volumes via the file drop zone', () => {
@@ -688,6 +731,30 @@ describe('NiiViewer', () => {
 
       await userEvent.click(screen.getByRole('button', { name: 'Expand scan controls' }));
       expect(screen.getByLabelText('scan opacity')).toHaveValue(60);
+    });
+
+    it('does not pass the connectome to nv.loadVolumes and clears the spinner when adding a file while a connectome is loaded', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      render(<NiiViewer nvRef={nvRef} layers={[]} connectomeLayer={makeConnectomeVolume()} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      const nv = nvRef.current;
+      const input = document.querySelector('input[type="file"]');
+      await userEvent.upload(input, new File(['data'], 'scan.nii'));
+
+      // Previously this never resolved: syncVolumesAndApplySettings tried to nv.loadVolumes()
+      // the connectome's sentinel url as if it were a real image file, and with no try/catch
+      // the spinner stayed stuck forever.
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      expect(nv.loadVolumes).toHaveBeenCalledTimes(1);
+      const loadedUrls = nv.loadVolumes.mock.calls[0][0].map((l) => l.url);
+      expect(loadedUrls).not.toContain('__intracranial-electrodes__');
+
+      // Both cards are present — the new volume alongside the untouched connectome.
+      expect(screen.getByRole('button', { name: 'Expand scan controls' })).toBeInTheDocument();
+      expect(screen.getByText('Intracranial')).toBeInTheDocument();
     });
   });
 
@@ -795,18 +862,6 @@ describe('NiiViewer', () => {
   });
 
   describe('connectome layer (intracranial electrodes)', () => {
-    const makeConnectomeVolume = (overrides = {}) => ({
-      url: '__intracranial-electrodes__',
-      name: 'Intracranial Electrodes',
-      type: 'Intracranial',
-      subtype: 'Electrodes',
-      kind: 'connectome',
-      nodes: [{ name: 'B1', x: 0, y: 0, z: 0, colorValue: 1, sizeValue: 1 }],
-      edges: [],
-      calMax: 1,
-      ...overrides,
-    });
-
     it('builds and adds a connectome mesh via loadConnectomeAsMesh + addMesh when connectomeLayer is provided', async () => {
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
@@ -999,6 +1054,51 @@ describe('NiiViewer', () => {
 
       expect(nv.volumes.length).toBe(0);
       expect(nv.meshes.length).toBe(1); // connectome mesh is untouched by this reset
+    });
+
+    it('drops the stale MRI card from ImagingControls on an imaging-only reset, keeping the connectome card', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const { rerender } = render(
+        <NiiViewer
+          nvRef={nvRef}
+          layers={[{ type: 'MRI', url: '/mri.nii' }]}
+          connectomeLayer={makeConnectomeVolume()}
+        />
+      );
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+      expect(screen.getByText('MRI')).toBeInTheDocument();
+
+      // Same imaging-only reset as above — this time checking the rendered card list,
+      // which previously kept showing the MRI card even after its volume was removed.
+      rerender(<NiiViewer nvRef={nvRef} layers={[]} connectomeLayer={makeConnectomeVolume()} />);
+
+      expect(screen.queryByText('MRI')).not.toBeInTheDocument();
+      expect(screen.getByText('Intracranial')).toBeInTheDocument();
+    });
+
+    it('does not crash when adding an image volume right after mounting with a connectome already present, under StrictMode', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      // StrictMode double-invokes updater functions passed to setState (for purity
+      // checking) — this used to duplicate the connectome's settings entry the first time
+      // it was merged in (see the comment on the connectomeLayer merge effect), silently
+      // misaligning orderedLayers/layerSettings by one. That misalignment only surfaced
+      // later, as a crash here when adding an image volume via the internal drop zone —
+      // exactly the repro reported: EEG + electrode positions loaded first, then an MRI.
+      render(
+        <StrictMode>
+          <NiiViewer nvRef={nvRef} layers={[]} connectomeLayer={makeConnectomeVolume()} />
+        </StrictMode>
+      );
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      const input = document.querySelector('input[type="file"]');
+      await userEvent.upload(input, new File(['data'], 'scan.nii'));
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      expect(screen.getByRole('button', { name: 'Expand scan controls' })).toBeInTheDocument();
+      expect(screen.getByText('Intracranial')).toBeInTheDocument();
     });
   });
 });

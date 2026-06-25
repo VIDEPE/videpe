@@ -34,10 +34,15 @@ export const INTRACRANIAL_CONNECTOME_URL = '__intracranial-electrodes__';
 // Returns an array of display settings, one per layer (image volume, connectome, or
 // other mesh). Colormap is derived from layer.type via TYPE_COLORMAP_DEFAULTS — layers
 // themselves do not carry a colormap field.
+// url mirrors the owning layer's url so settings entries carry their own identity —
+// letting effects filter/locate a specific layer's settings (e.g. the connectome's) by
+// url instead of by array position, which is fragile when orderedLayers/layerSettings
+// are updated independently by more than one effect.
 // startIndex is the position of layers[0] among all loaded layers — pass the count of
 // already-loaded layers when appending so only the very first layer overall gets full opacity.
 export const getInitialLayerSettings = (layers, startIndex = 0) =>
   layers.map((layer, index) => ({
+    url: layer.url,
     visible: true,
     opacity: startIndex + index === 0 ? 1.0 : 0.6, // first loaded layer is fully opaque, others slightly transparent by default
     colormap: TYPE_COLORMAP_DEFAULTS[layer.type] ?? 'gray',
