@@ -5,7 +5,7 @@ import convexHull from 'convex-hull';
 
 // Strips recording-type prefixes ("EEG ", "MEG ") and reference suffixes ("-Ref", "-A1", " Ref", etc.)
 // so that "EEG Fp1-Ref" normalises to "fp1" for lookup.
-function normalizeChannelName(name) {
+export function normalizeChannelName(name) {
   return name
     .replace(/^(eeg|meg)\s+/i, '') // remove leading "EEG " / "MEG " prefix
     .replace(/-.*$/, '') // remove dash suffix (e.g. -Ref, -A1)

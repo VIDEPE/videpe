@@ -6,61 +6,23 @@ import {
   interpolateMeshVoltages,
   buildElectrodeMarkers,
 } from '@/utils/eegTopographyUtils';
+import {
+  EEG_TOPO_COLORMAP_KEY,
+  EEG_TOPO_COLORMAP,
+  EEG_TOPO_COLORMAP_COLOURBLIND_KEY,
+  EEG_TOPO_COLORMAP_COLOURBLIND,
+  EEG_NODE_POS_KEY,
+  EEG_NODE_POS,
+  EEG_NODE_NEG_KEY,
+  EEG_NODE_NEG,
+  EEG_NODE_POS_COLOURBLIND_KEY,
+  EEG_NODE_POS_COLOURBLIND,
+  EEG_NODE_NEG_COLOURBLIND_KEY,
+  EEG_NODE_NEG_COLOURBLIND,
+  EEG_NODE_UNMAPPED_KEY,
+  EEG_NODE_UNMAPPED,
+} from '@/utils/eegColormaps';
 import { EyeDashed } from 'lucide-react';
-
-// Custom diverging colormap: blue (negative) -> white (zero) -> red (positive).
-// (NiiVue's built-in 'blue2red' passes through green/yellow at the midpoint which is undesired)
-const EEG_TOPO_COLORMAP_KEY = 'eegBlueWhiteRed';
-const EEG_TOPO_COLORMAP = {
-  R: [0, 255, 255],
-  G: [0, 255, 0],
-  B: [255, 255, 0],
-  A: [255, 255, 255],
-  I: [0, 128, 255],
-};
-const EEG_TOPO_COLORMAP_COLOURBLIND_KEY = 'eegColourblind'; // cividis min and max values
-const EEG_TOPO_COLORMAP_COLOURBLIND = {
-  R: [0, 255, 255],
-  G: [32, 255, 233],
-  B: [76, 255, 69],
-  A: [255, 255, 255],
-  I: [0, 128, 255],
-};
-
-// Electrode marker colormaps. NiiVue's connectome nodes pick one of two colormaps by the
-// sign of colorValue (no single diverging option like mesh layers have), so each is one
-// half — white at zero out to the saturated colour — of the mesh colormap above.
-const EEG_NODE_POS_KEY = 'eegNodePos';
-const EEG_NODE_POS = { R: [255, 255], G: [255, 0], B: [255, 0], A: [255, 255], I: [0, 255] };
-const EEG_NODE_NEG_KEY = 'eegNodeNeg';
-const EEG_NODE_NEG = { R: [255, 0], G: [255, 0], B: [255, 255], A: [255, 255], I: [0, 255] };
-const EEG_NODE_POS_COLOURBLIND_KEY = 'eegNodePosColourblind';
-// White to Cividis yellow for positive voltage markers
-const EEG_NODE_POS_COLOURBLIND = {
-  R: [255, 255],
-  G: [255, 233],
-  B: [255, 69],
-  A: [255, 255],
-  I: [0, 255],
-};
-// White to Cividis blue for negative voltage markers
-const EEG_NODE_NEG_COLOURBLIND_KEY = 'eegNodeNegColourblind';
-const EEG_NODE_NEG_COLOURBLIND = {
-  R: [255, 0],
-  G: [255, 32],
-  B: [255, 76],
-  A: [255, 255],
-  I: [0, 255],
-};
-// Flat neutral grey for template electrodes with no recorded data at this site.
-const EEG_NODE_UNMAPPED_KEY = 'eegNodeUnmapped';
-const EEG_NODE_UNMAPPED = {
-  R: [50, 50],
-  G: [50, 50],
-  B: [50, 50],
-  A: [255, 255],
-  I: [0, 255],
-};
 
 // Marker sizes in mm radius (sizeValue × nodeScale) — unmapped electrodes are small dots
 // that trace out the template grid; matched electrodes are larger and colour-coded by voltage.
