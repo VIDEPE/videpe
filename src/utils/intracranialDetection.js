@@ -11,7 +11,10 @@ const CONTACT_NAME_PATTERN = /^([a-z]+'?)(\d+)$/;
 
 // Parses a channel name into its electrode group and contact number, if it has that
 // shape. Reuses normalizeChannelName's prefix/suffix stripping so "EEG B1-Ref" parses
-// the same as "B1". Returns null for names that don't fit (e.g. "ECG", "Status", "12").
+// the same as "B1" — but unlike normalizeChannelName, which only returns a cleaned-up
+// string for exact-match lookups, this splits that string into its group ('B') and contact
+// number ('1'), since the matrix view and connectome edges need those as separate values.
+// Returns null for names that don't fit (e.g. "ECG", "Status", "12").
 export function parseElectrodeContactName(name) {
   const match = normalizeChannelName(name).match(CONTACT_NAME_PATTERN);
   if (!match) return null;
