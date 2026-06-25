@@ -45,8 +45,14 @@ vi.mock('@niivue/niivue', () => ({
       loadConnectomeAsMesh: vi
         .fn()
         .mockImplementation((json) => ({ ...json, opacity: 1, visible: true })),
-      addMesh: vi.fn(),
-      removeMesh: vi.fn(),
+      addMesh: vi.fn().mockImplementation(function (mesh) {
+        // mirrors what real NiiVue does — appends the mesh to the existing ones
+        instance.meshes = [...instance.meshes, mesh];
+      }),
+      removeMesh: vi.fn().mockImplementation(function (mesh) {
+        // mirrors what real NiiVue does — drops the mesh from the existing ones
+        instance.meshes = instance.meshes.filter((m) => m !== mesh);
+      }),
       updateGLVolume: vi.fn(),
       setSliceType: vi.fn(),
       setMultiplanarLayout: vi.fn(),
@@ -885,6 +891,51 @@ describe('NiiViewer', () => {
 
       expect(nv.removeMesh).toHaveBeenCalledWith(mesh);
       expect(nv.removeVolumeByIndex).not.toHaveBeenCalled();
+    });
+
+    it('clears volumes and meshes from the shared nv instance when the component unmounts', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const { unmount } = render(
+        <NiiViewer
+          nvRef={nvRef}
+          layers={[{ type: 'MRI', url: '/mri.nii' }]}
+          connectomeLayer={makeConnectomeVolume()}
+        />
+      );
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      const nv = nvRef.current;
+      expect(nv.volumes.length).toBe(1);
+      expect(nv.meshes.length).toBe(1);
+
+      unmount();
+
+      expect(nv.volumes.length).toBe(0);
+      expect(nv.meshes.length).toBe(0);
+    });
+
+    it('clears stale volumes from nv when layers drops to empty while a connectome keeps the component mounted', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const { rerender } = render(
+        <NiiViewer
+          nvRef={nvRef}
+          layers={[{ type: 'MRI', url: '/mri.nii' }]}
+          connectomeLayer={makeConnectomeVolume()}
+        />
+      );
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      const nv = nvRef.current;
+      expect(nv.volumes.length).toBe(1);
+
+      // Imaging-only reset: layers clears but the connectome stays, so the component
+      // never unmounts — the early-return branch must clear nv directly instead.
+      rerender(<NiiViewer nvRef={nvRef} layers={[]} connectomeLayer={makeConnectomeVolume()} />);
+
+      expect(nv.volumes.length).toBe(0);
+      expect(nv.meshes.length).toBe(1); // connectome mesh is untouched by this reset
     });
   });
 });

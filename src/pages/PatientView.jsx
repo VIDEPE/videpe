@@ -38,7 +38,7 @@ const RecordingTypeToggle = ({ recordingType, onChange }) => {
       aria-checked={isIntracranial}
       aria-label="Recording type"
       onClick={() => onChange(isIntracranial ? 'eeg' : 'ieeg')}
-      className="relative w-28 h-7 rounded-full border border-border bg-background cursor-pointer pointer-events-auto"
+      className="relative w-28 h-6.5 rounded-full border border-border bg-background cursor-pointer pointer-events-auto"
       title="Automatically detected from channel naming — click to overwrite"
     >
       <span className="absolute inset-0.5 flex">

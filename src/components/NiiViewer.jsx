@@ -337,6 +337,21 @@ export const NiiViewer = ({
     onNiiNvReady?.();
   }, []);
 
+  // nv is a single long-lived instance owned by the parent, reused across this component's
+  // mount/unmount cycles (e.g. the Neuroimaging pane unmounts to a drop-zone placeholder
+  // when there's nothing to show, then remounts later). Without this, volumes/meshes loaded
+  // before an unmount stay in nv and silently reappear fully rendered on the next mount
+  // (attachToCanvas re-uploads whatever's still in nv.volumes/nv.meshes) — with no matching
+  // card in ImagingControls, since this component's own state resets on every fresh mount.
+  useEffect(() => {
+    return () => {
+      const nv = nvRef.current;
+      if (!nv) return;
+      while (nv.volumes.length > 0) nv.removeVolumeByIndex(0);
+      (nv.meshes ?? []).slice().forEach((mesh) => nv.removeMesh(mesh));
+    };
+  }, [nvRef]);
+
   // Load and sync volumes whenever the layers prop changes.
   // loadingLayersRef serves two purposes:
   //   1. Guard at the top: same array reference means this exact load is already in flight
@@ -352,7 +367,14 @@ export const NiiViewer = ({
     if (!layers.length) {
       loadingLayersRef.current = null; // reset so the next non-empty load can proceed
       // Nothing to load on the image side (e.g. a connectome-only scene with no NIfTI
-      // files) — without this, isLoading would stay stuck at its initial `true` forever.
+      // files, or an imaging-only reset while a connectome keeps this component mounted)
+      // — clear any volumes left over from before so stale imaging never lingers behind
+      // the electrodes, then stop the spinner (else it'd stay stuck `true` forever).
+      const nv = nvRef.current;
+      if (nv?.volumes.length) {
+        while (nv.volumes.length > 0) nv.removeVolumeByIndex(0);
+        nv.updateGLVolume();
+      }
       setIsLoading(false);
       return;
     }
