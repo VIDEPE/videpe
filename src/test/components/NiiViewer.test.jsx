@@ -611,6 +611,69 @@ describe('NiiViewer', () => {
     );
   });
 
+  describe('slice type buttons without an image volume', () => {
+    it('disables the 2D slice buttons but keeps 3D enabled', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      render(<NiiViewer nvRef={nvRef} layers={[]} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      expect(screen.getByRole('button', { name: 'Axial view' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Coronal view' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Sagittal view' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Multiplanar view' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: '3D view' })).not.toBeDisabled();
+    });
+
+    it('forces the 3D view as active when there is no image volume', async () => {
+      const { Niivue, SLICE_TYPE } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      render(<NiiViewer nvRef={nvRef} layers={[]} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      expect(screen.getByRole('button', { name: '3D view' })).toHaveAttribute(
+        'aria-pressed',
+        'true'
+      );
+      expect(nvRef.current.setSliceType).toHaveBeenCalledWith(SLICE_TYPE.RENDER);
+    });
+
+    it('re-enables the 2D buttons once an image volume is loaded', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const { rerender } = render(<NiiViewer nvRef={nvRef} layers={[]} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      rerender(<NiiViewer nvRef={nvRef} layers={[{ type: 'MRI', url: '/mri.nii' }]} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      expect(screen.getByRole('button', { name: 'Axial view' })).not.toBeDisabled();
+    });
+
+    it('forces back to 3D when the last image volume is removed (e.g. an imaging-only reset)', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const { rerender } = render(
+        <NiiViewer nvRef={nvRef} layers={[{ type: 'MRI', url: '/mri.nii' }]} />
+      );
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      await userEvent.click(screen.getByRole('button', { name: 'Axial view' }));
+      expect(screen.getByRole('button', { name: 'Axial view' })).toHaveAttribute(
+        'aria-pressed',
+        'true'
+      );
+
+      rerender(<NiiViewer nvRef={nvRef} layers={[]} />);
+
+      expect(screen.getByRole('button', { name: '3D view' })).toHaveAttribute(
+        'aria-pressed',
+        'true'
+      );
+      expect(screen.getByRole('button', { name: 'Axial view' })).toBeDisabled();
+    });
+  });
+
   describe('appending volumes via the file drop zone', () => {
     it('does not give a newly-appended volume full opacity when other volumes are already loaded', async () => {
       const { Niivue } = await import('@niivue/niivue');

@@ -96,6 +96,10 @@ export const NiiViewer = ({
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
 
   const [activeSliceType, setActiveSliceType] = useState(SLICE_TYPE.MULTIPLANAR);
+  // 2D slice views have no volume data to cut through without an actual image volume —
+  // a connectome-only scene (e.g. intracranial electrodes with no MRI loaded) always
+  // renders as 3D regardless of opts.sliceType, per NiiVue's drawSceneCore.
+  const hasImageVolumes = layers.length > 0;
   const sliceTypeOptions = [
     { sliceType: SLICE_TYPE.AXIAL, label: 'Axial', buttonLabel: 'Ax' },
     { sliceType: SLICE_TYPE.CORONAL, label: 'Coronal', buttonLabel: 'Co' },
@@ -108,6 +112,14 @@ export const NiiViewer = ({
     setActiveSliceType(sliceType);
     nvRef.current?.setSliceType(sliceType);
   };
+
+  // Keep the UI in sync with what NiiVue actually draws — force the 3D view (and grey
+  // out the others below) whenever there's no image volume to show 2D slices of.
+  useEffect(() => {
+    if (hasImageVolumes) return;
+    setActiveSliceType(SLICE_TYPE.RENDER);
+    nvRef.current?.setSliceType(SLICE_TYPE.RENDER);
+  }, [hasImageVolumes, nvRef]);
 
   const handleSettingChange = useCallback(
     (layerIndex, key, value) => {
@@ -536,20 +548,30 @@ export const NiiViewer = ({
               'rounded-r-md border-r-1 border-t-1 border-b-1 border-border'
             )}
           >
-            {/* Viewer controls with Ax, Co, Sa, MP and 3D buttons */}
-            {sliceTypeOptions.map(({ sliceType, label, buttonLabel }) => (
-              <button
-                key={sliceType}
-                type="button"
-                className="button size-xs"
-                onClick={() => handleSliceTypeChange(sliceType)}
-                title={`${label} view`}
-                aria-label={`${label} view`}
-                aria-pressed={activeSliceType === sliceType}
-              >
-                {buttonLabel}
-              </button>
-            ))}
+            {/* Viewer controls with Ax, Co, Sa, MP and 3D buttons — the 2D ones are greyed
+                out and inert without an image volume loaded (3D/connectome-only scenes
+                have no slices to show), per the hasImageVolumes effect above. */}
+            {sliceTypeOptions.map(({ sliceType, label, buttonLabel }) => {
+              const disabled = sliceType !== SLICE_TYPE.RENDER && !hasImageVolumes;
+              return (
+                <button
+                  key={sliceType}
+                  type="button"
+                  className="button size-xs disabled:opacity-40 disabled:pointer-events-none"
+                  onClick={() => handleSliceTypeChange(sliceType)}
+                  disabled={disabled}
+                  title={
+                    disabled
+                      ? 'No image volume loaded — only the 3D view is available'
+                      : `${label} view`
+                  }
+                  aria-label={`${label} view`}
+                  aria-pressed={activeSliceType === sliceType}
+                >
+                  {buttonLabel}
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
