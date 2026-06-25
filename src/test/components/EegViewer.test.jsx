@@ -30,13 +30,22 @@ vi.mock('uplot-react', () => {
 // Isolate EegViewer tests from NiiVue's WebGL dependency — stub EegTopoViewer with a
 // minimal element that exposes the data and close button tests need.
 vi.mock('@/components/EegTopoViewer', () => ({
-  EegTopoViewer: vi.fn(function ({ onClose, totalChannels, matched, voltages }) {
+  EegTopoViewer: vi.fn(function ({
+    onClose,
+    totalChannels,
+    matched,
+    voltages,
+    isIntracranial,
+    customFileName,
+  }) {
     return (
       <div data-testid="eeg-topo-viewer">
         <span>
           {matched.length} / {totalChannels} channels mapped
         </span>
         <span data-testid="topo-voltages">{voltages.join(',')}</span>
+        <span data-testid="topo-is-intracranial">{String(isIntracranial)}</span>
+        <span data-testid="topo-custom-filename">{customFileName ?? ''}</span>
         <button onClick={onClose}>Close topo</button>
       </div>
     );
@@ -49,15 +58,19 @@ vi.mock('@/components/ThemeContext', () => ({
   },
 }));
 
-// EegViewer shows its own loading/success toast while the initial buffer loads — stub it
-// out so tests don't depend on react-hot-toast's internal store/portal.
-vi.mock('react-hot-toast', () => ({
-  default: {
-    loading: vi.fn(),
-    success: vi.fn(),
-    dismiss: vi.fn(),
-  },
-}));
+// EegViewer shows its own loading/success toast while the initial buffer loads, and a
+// plain toast() call when the recording type is (re-)detected — stub it out so tests
+// don't depend on react-hot-toast's internal store/portal. The real default export is
+// itself a callable function with .loading/.success/.dismiss/etc. attached, so the mock
+// must be too (a plain object here would make any toast(...) call throw silently inside
+// the catch-wrapped promise chain that calls it).
+vi.mock('react-hot-toast', () => {
+  const toastFn = vi.fn();
+  toastFn.loading = vi.fn();
+  toastFn.success = vi.fn();
+  toastFn.dismiss = vi.fn();
+  return { default: toastFn };
+});
 
 // Minimal .elc content whose labels match two of the three test channel names
 const MOCK_ELC = `ReferenceLabel avg
@@ -1311,5 +1324,193 @@ describe('EegViewer — topography uses the montaged buffer', () => {
 
     // cross-channel mean at that sample = (4+7+10)/3 = 7 → EEG1: 4-7=-3, EEG2: 7-7=0
     expect(screen.getByTestId('topo-voltages').textContent).toBe('-3,0');
+  });
+});
+
+// ── Recording type detection (EEG vs iEEG) ───────────────────────────────────
+// channelNames = ['EEG1','EEG2','EEG3'] against MOCK_ELC (labels EEG1, EEG2, Cz):
+// electrodeContactShapeRatio = 3/3 = 1.0, but standard1005MatchRatio = 2/3 ≈ 0.67
+// (not < 0.3), so this fixture is detected as scalp EEG, not intracranial.
+
+const INTRACRANIAL_CHANNEL_NAMES = ['B1', 'B2', "B'1"]; // primed group — always detected as iEEG
+
+const makeIntracranialProvider = () => ({
+  channelNames: INTRACRANIAL_CHANNEL_NAMES,
+  fs: 1,
+  tMax: TMAX,
+  getChunk: vi.fn(async (start, end) => {
+    const indices = TIMESTAMPS.map((_, i) => i).filter(
+      (i) => TIMESTAMPS[i] >= start && TIMESTAMPS[i] <= end
+    );
+    return {
+      timestamps: Float32Array.from(indices.map((i) => TIMESTAMPS[i])),
+      channels: CHANNEL_DATA.map((values) => Float32Array.from(indices.map((i) => values[i]))),
+    };
+  }),
+});
+
+describe('EegViewer — recording type detection', () => {
+  beforeEach(async () => {
+    const { default: toast } = await import('react-hot-toast');
+    toast.mockClear();
+  });
+
+  it('renders a Recording type select defaulting to EEG for scalp-shaped channel names', async () => {
+    await renderViewer();
+    const select = screen.getByLabelText(/override automatic intracranial detection/i);
+    expect(select.value).toBe('eeg');
+  });
+
+  it('shows a toast naming the detected recording type once detection resolves', async () => {
+    const { default: toast } = await import('react-hot-toast');
+    await renderViewer();
+    expect(toast).toHaveBeenCalledWith('EEG recording detected', { id: expect.any(String) });
+  });
+
+  it('defaults to iEEG and toasts accordingly for intracranial-shaped channel names', async () => {
+    const { default: toast } = await import('react-hot-toast');
+    const provider = makeIntracranialProvider();
+    render(<EegViewer provider={provider} channelNames={provider.channelNames} />);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const select = screen.getByLabelText(/override automatic intracranial detection/i);
+    expect(select.value).toBe('ieeg');
+    expect(toast).toHaveBeenCalledWith('iEEG recording detected', { id: expect.any(String) });
+  });
+
+  it('keeps matched empty for intracranial recordings with no custom positions, even though standard_1005 was fetched', async () => {
+    const provider = makeIntracranialProvider();
+    render(<EegViewer provider={provider} channelNames={provider.channelNames} />);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      capturedClickHandler?.();
+    });
+
+    expect(global.fetch).toHaveBeenCalled(); // still fetched, just not used for rendering in this mode
+    expect(screen.getByText(/0\s*\/\s*3\s*channels mapped/i)).toBeTruthy();
+    expect(screen.getByTestId('topo-is-intracranial')).toHaveTextContent('true');
+  });
+
+  it('selecting the other option overrides the detected recording type directly', async () => {
+    const user = userEvent.setup();
+    await renderViewer(); // scalp-shaped fixture, defaults to 'eeg'
+    const select = screen.getByLabelText(/override automatic intracranial detection/i);
+
+    await user.selectOptions(select, 'ieeg');
+
+    expect(select.value).toBe('ieeg');
+  });
+});
+
+describe('EegViewer — lifted electrode state callback', () => {
+  it('calls onIntracranialElectrodesChange with the current mode, matched channels, and voltages', async () => {
+    const onIntracranialElectrodesChange = vi.fn();
+    const provider = makeProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        onIntracranialElectrodesChange={onIntracranialElectrodesChange}
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(onIntracranialElectrodesChange).toHaveBeenCalledWith(
+      expect.objectContaining({ isIntracranial: false, voltages: [] })
+    );
+
+    onIntracranialElectrodesChange.mockClear();
+    await act(async () => {
+      capturedClickHandler?.();
+    });
+
+    expect(onIntracranialElectrodesChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ isIntracranial: false, voltages: [4, 7] })
+    );
+  });
+});
+
+describe('EegViewer — customElectrodes prop', () => {
+  const CUSTOM_ELECTRODES = [{ label: 'EEG3', x: 1, y: 1, z: 1 }];
+
+  it('uses customElectrodes instead of the standard template when provided', async () => {
+    const provider = makeProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        customElectrodes={CUSTOM_ELECTRODES}
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      capturedClickHandler?.();
+    });
+
+    // Only EEG3 matches the custom template, vs EEG1+EEG2 in the standard one.
+    expect(screen.getByText(/1\s*\/\s*3\s*channels mapped/i)).toBeTruthy();
+  });
+
+  it('forwards customElecPosFileName to EegTopoViewer as customFileName', async () => {
+    const provider = makeProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        customElectrodes={CUSTOM_ELECTRODES}
+        customElecPosFileName="my_positions"
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      capturedClickHandler?.();
+    });
+
+    expect(screen.getByTestId('topo-custom-filename')).toHaveTextContent('my_positions');
+  });
+});
+
+describe('EegViewer — persistent electrode position dropzone', () => {
+  it('renders a "Drop electrode positions" dropzone even while the topography window is closed', async () => {
+    await renderViewer();
+    expect(screen.queryByTestId('eeg-topo-viewer')).toBeNull();
+    expect(screen.getByText('Drop electrode positions')).toBeInTheDocument();
+  });
+
+  it('calls onElecPosFile with the dropped file', async () => {
+    const onElecPosFile = vi.fn();
+    const provider = makeProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        onElecPosFile={onElecPosFile}
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const file = new File(['# ASA electrode file'], 'custom.elc');
+    const input = document.querySelector('input[type="file"]');
+    await userEvent.upload(input, file);
+
+    expect(onElecPosFile).toHaveBeenCalledWith(file);
   });
 });

@@ -1,4 +1,4 @@
-﻿import { useRef, useState, useEffect, useMemo, useCallback } from 'react';
+﻿import { useRef, useState, useEffect, useMemo } from 'react';
 import UplotReact from 'uplot-react';
 import { cn } from '../utils/utils';
 import toast from 'react-hot-toast';
@@ -22,11 +22,13 @@ import { useEegBuffer } from '@/loaders/eegBuffer';
 import { applyMontage } from '@/utils/eegViewerUtils';
 
 import { parseElcElectrodePositions } from '@/loaders/parseElcElectrodePositions';
-import { parseTsvElectrodePositions } from '@/loaders/parseTsvElectrodePositions';
 import { matchChannelsToPositions } from '@/utils/eegTopographyUtils';
+import { detectIsIntracranial } from '@/utils/intracranialDetection';
 import { EegTopoViewer } from '@/components/EegTopoViewer';
+import { FileDropZone } from '@/components/FileDropZone';
 
 const EEG_LOADING_TOAST_ID = 'eeg-buffer-loading'; // fixed id so the loading/success toasts update in place rather than stacking
+const RECORDING_TYPE_TOAST_ID = 'eeg-recording-type-detected'; // fixed id so re-detection updates the toast in place instead of stacking
 const Y_AXIS_WIDTH = 60; // px for the y-axis area (channel name + tick space) — must match x-axis strip left padding
 const PLOT_RIGHT_PAD = 20; // px right padding — must match in both channel plots and x-axis strip so ticks align
 const OVERDRAW = 2; // canvas height multiplier — peaks bleed ±50% into adjacent lanes instead of clipping
@@ -81,6 +83,10 @@ export const EegViewer = ({
   channelNames,
   onViewReady,
   onTopoNvReady,
+  customElectrodes = [], // [{label,x,y,z}] — owned by PatientView, loaded from a user-supplied .elc/.tsv file
+  customElecPosFileName = null,
+  onElecPosFile,
+  onIntracranialElectrodesChange,
 }) => {
   const { isDarkMode } = useTheme();
   const syncKey = 'eeg-sync'; // shared across all channels to link their interactions
@@ -175,55 +181,53 @@ export const EegViewer = ({
   // keeps the previous buffer's data on screen until the new one arrives (no flash).
   const { timestamps, channels, isLoading } = useEegBuffer(provider, startTime, windowSize);
 
-  // ── Topography state ────────────────────────────────────────────────────────
+  // ── Topography / recording-type state ───────────────────────────────────────
   const [topoVisible, setTopoVisible] = useState(false);
   const [topoTimepoint, setTopoTimepoint] = useState(null);
-  const [electrodes, setElectrodes] = useState([]);
-  const [matched, setMatched] = useState([]);
-  const [isStandardElectrodes, setIsStandardElectrodes] = useState(true);
+  // Detection-only — always holds the standard_1005 template + its match against
+  // channelNames, used purely as input to detectIsIntracranial. Never used to
+  // render the topography itself (that's customElectrodes' job — see below).
+  const [standard1005Electrodes, setStandard1005Electrodes] = useState([]);
+  const [standard1005Matched, setStandard1005Matched] = useState([]);
+  // 'eeg' | 'ieeg' — holds either the last auto-detection result or the user's
+  // direct override; there's no separate "auto" mode to track.
+  const [recordingType, setRecordingType] = useState('eeg');
 
-  // Fetch the built-in electrode position template and match it against the recording's channel names.
-  // Resets to standard whenever channelNames changes (new recording loaded).
+  // Fetch the built-in electrode position template, match it against the recording's
+  // channel names (for detection purposes only), then (re-)detect the recording type
+  // and surface it via a toast. Re-runs whenever channelNames changes (new recording loaded).
   useEffect(() => {
     fetch('electrode_positions/standard_1005.elc')
       .then((r) => r.text())
       .then((text) => {
         const { electrodes: parsedElectrodes } = parseElcElectrodePositions(text);
-        setElectrodes(parsedElectrodes);
-        setMatched(matchChannelsToPositions(channelNames, parsedElectrodes).matched);
-        setIsStandardElectrodes(true);
+        setStandard1005Electrodes(parsedElectrodes);
+        setStandard1005Matched(matchChannelsToPositions(channelNames, parsedElectrodes).matched);
+        const detected = detectIsIntracranial(channelNames, parsedElectrodes) ? 'ieeg' : 'eeg';
+        setRecordingType(detected);
+        toast(detected === 'ieeg' ? 'iEEG recording detected' : 'EEG recording detected', {
+          id: RECORDING_TYPE_TOAST_ID,
+        });
       })
       .catch(() => {}); // silently ignore if file unavailable (e.g. in tests without the asset)
   }, [channelNames]);
 
-  // Parse a user-supplied electrode position file and replace the current positions.
-  const handleCustomElecPos = useCallback(
-    (file) => {
-      const reader = new FileReader();
-      const fileExtension = file.name.split('.').pop().toLowerCase();
-      // Registers the callback to run later; does not execute it now.
-      reader.onload = (e) => {
-        // Runs asynchronously once readAsText finishes, with the file content in e.target.result.
-        let parsedElectrodes;
-        if (fileExtension === 'elc') {
-          parsedElectrodes = parseElcElectrodePositions(e.target.result).electrodes;
-        } else if (fileExtension === 'tsv') {
-          parsedElectrodes = parseTsvElectrodePositions(e.target.result).electrodes;
-        } else {
-          toast.error(`Unsupported electrode position file type: .${fileExtension}`);
-          return;
-        }
+  const isIntracranial = recordingType === 'ieeg';
 
-        if (!parsedElectrodes.length) return; // ignore empty or unparseable files
-        setElectrodes(parsedElectrodes);
-        setMatched(matchChannelsToPositions(channelNames, parsedElectrodes).matched);
-        setIsStandardElectrodes(false);
-      };
-      // Starts the async read; handleCustomElecPos returns before this completes.
-      reader.readAsText(file);
-    },
-    [channelNames]
+  // Channels matched against the custom electrode positions (if any) — independent
+  // of mode, since intracranial recordings need this for the 3D connectome too.
+  const customMatched = useMemo(
+    () => matchChannelsToPositions(channelNames, customElectrodes).matched,
+    [channelNames, customElectrodes]
   );
+
+  // Render-facing electrodes/matched. Scalp mode falls back to the standard_1005
+  // template when no custom file is loaded (today's behavior); intracranial mode
+  // never falls back to it — standard_1005 simply doesn't apply to depth probes.
+  const usingCustom = isIntracranial || customElectrodes.length > 0;
+  const electrodes = usingCustom ? customElectrodes : standard1005Electrodes;
+  const matched = usingCustom ? customMatched : standard1005Matched;
+  const isStandardElectrodes = !isIntracranial && customElectrodes.length === 0;
 
   // Apply the selected montage once, shared by the channel plots and the topography snapshot
   const montagedChannels = useMemo(() => {
@@ -231,16 +235,35 @@ export const EegViewer = ({
     return applyMontage(channels, montage);
   }, [channels, montage]);
 
-  // Extract one voltage per matched channel from the buffer at the clicked timepoint
-  const topoVoltages = useMemo(() => {
-    if (topoTimepoint === null || !timestamps?.length || !montagedChannels || !matched.length)
-      return [];
-    const idx = Math.max(
+  // Sample index shared by both voltage snapshots below.
+  const topoSampleIndex = useMemo(() => {
+    if (topoTimepoint === null || !timestamps?.length) return null;
+    return Math.max(
       0,
       Math.min(timestamps.length - 1, Math.round((topoTimepoint - timestamps[0]) * provider.fs))
     );
-    return matched.map((m) => montagedChannels[m.channelIdx]?.[idx] ?? 0);
-  }, [topoTimepoint, timestamps, montagedChannels, matched, provider.fs]);
+  }, [topoTimepoint, timestamps, provider.fs]);
+
+  // Extract one voltage per matched channel at the clicked timepoint — drives the
+  // scalp mesh and the intracranial 3D connectome (both need real x/y/z positions).
+  const topoVoltages = useMemo(() => {
+    if (topoSampleIndex === null || !montagedChannels || !matched.length) return [];
+    return matched.map((m) => montagedChannels[m.channelIdx]?.[topoSampleIndex] ?? 0);
+  }, [topoSampleIndex, montagedChannels, matched]);
+
+  // Extract one voltage per channel (not just position-matched ones) at the same
+  // timepoint — drives the intracranial matrix, which has no position-file gate.
+  const topoVoltagesByChannel = useMemo(() => {
+    if (topoSampleIndex === null || !montagedChannels) return [];
+    return montagedChannels.map((ch) => ch?.[topoSampleIndex] ?? 0);
+  }, [topoSampleIndex, montagedChannels]);
+
+  // Lift the live electrode/voltage state up so PatientView can build the
+  // intracranial connectome layer for the Neuroimaging pane — fires regardless of
+  // whether the topography window itself is open, since the connectome auto-shows.
+  useEffect(() => {
+    onIntracranialElectrodesChange?.({ isIntracranial, matched, voltages: topoVoltages });
+  }, [isIntracranial, matched, topoVoltages, onIntracranialElectrodesChange]);
 
   // Show a loading toast while the initial buffer loads, then update it to a success
   // message — self-contained so EegViewer reports its own status regardless of where
@@ -464,7 +487,7 @@ export const EegViewer = ({
             Uses a custom hover tooltip instead of the native title attribute, since native
             tooltips have a long built-in show delay — long enough that clicking the icon (to
             focus the viewer) often fired before the tooltip ever appeared. */}
-        <div className="absolute bottom-2 right-2 z-20 group/tip">
+        <div className="absolute bottom-10 right-2 z-20 group/tip">
           <div className="text-foreground/40 hover:text-foreground/80 group-focus/viewer:text-secondary transition-colors cursor-help">
             <Keyboard size={18} />
           </div>
@@ -563,6 +586,23 @@ export const EegViewer = ({
                 <option value="none">None</option>
                 <option value="average">Average</option>
                 <option value="median">Median</option>
+              </select>
+            </div>
+            <div
+              className="flex flex-col items-center gap-1 pb-1"
+              title="Automatically detected from channel naming — override here if it's wrong"
+            >
+              <span className="text-xs text-foreground select-none pointer-events-none">
+                Recording type:
+              </span>
+              <select
+                value={recordingType}
+                onChange={(e) => setRecordingType(e.target.value)}
+                aria-label="Override automatic intracranial detection"
+                className="bg-background border border-border rounded px-1 py-0.5 text-xs text-heading cursor-pointer"
+              >
+                <option value="eeg">EEG</option>
+                <option value="ieeg">iEEG</option>
               </select>
             </div>
           </div>
@@ -880,6 +920,18 @@ export const EegViewer = ({
             </div>
           </div>
         </div>
+
+        {/* Persistent electrode-position dropzone — always available once EEG is loaded,
+            not just buried in the topography popup. Overwrites whatever positions are
+            currently active (standard_1005, or a file loaded via any of the other entry
+            points) — onElecPosFile has no "only if empty" guard. */}
+        <FileDropZone
+          onFiles={(files) => onElecPosFile?.(files[0])}
+          accepted_formats=".elc,.tsv"
+          label="Drop electrode positions"
+          compact
+          className="shrink-0"
+        />
       </div>
 
       {/* Floating topography viewer — position:fixed so it overlays the whole page */}
@@ -889,12 +941,16 @@ export const EegViewer = ({
           electrodes={electrodes}
           matched={matched}
           voltages={topoVoltages}
+          channelNames={channelNames}
+          voltagesByChannel={topoVoltagesByChannel}
           totalChannels={channelNames.length}
           onClose={() => setTopoVisible(false)}
           onTopoNvReady={onTopoNvReady}
           isStandardElectrodes={isStandardElectrodes}
-          onElecPosFile={handleCustomElecPos}
+          onElecPosFile={onElecPosFile}
+          customFileName={customElecPosFileName}
           montage={montage}
+          isIntracranial={isIntracranial}
         />
       )}
     </>
