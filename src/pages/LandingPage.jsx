@@ -17,6 +17,7 @@ import {
   Brain,
   ShieldCheck,
   ChartLine,
+  ChartNetwork,
   FolderOpen,
   Columns2,
   FlaskConical,
@@ -50,6 +51,13 @@ const FEATURES = [
     description:
       'Browse hour-long, multi-channel recordings and generate 3D topography maps for any selected timepoint.',
     anchor: '#feature-eeg',
+  },
+  {
+    icon: ChartNetwork,
+    label: 'Intracranial EEG',
+    description:
+      'Switch to iEEG mode to auto-detect intracranial electrodes and view them as a 3D connectome or a per-electrode voltage matrix.',
+    anchor: '#feature-ieeg',
   },
   {
     icon: Brain,

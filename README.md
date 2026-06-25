@@ -1,6 +1,6 @@
 # VIDEPE
 
-![Version](https://img.shields.io/badge/version-0.6.0-blue)
+![Version](https://img.shields.io/badge/version-0.7.0-blue)
 
 **V**isualization & **I**ntegration of **D**ata for **E**pilepsy **P**resurgical **E**valuation
 
@@ -23,10 +23,13 @@ All data processing happens entirely in your browser. No files are ever uploaded
   - Configurable number of simultaneously visible channels
   - Min-max downsampling keeps rendering fast at any zoom level
   - Sliding-window buffer — only a portion of the recording is kept in memory at once, so hour-long, high-channel-count recordings stay fast without exhausting browser memory
-  - **EEG topography** — showing a 3D voltage map at the selected time point using [NiiVue](https://niivue.com/) mesh rendering
+  - **EEG topography** — a resizable panel showing a 3D voltage map at the selected time point using [NiiVue](https://niivue.com/) mesh rendering
     - Re-reference on the fly: none, average, or median reference
-    - Uses Standard 10-05 electrode positions by default; load custom positions via `.elc` file
+    - Diverging blue-white-red colormap with a live colorbar (µV), plus a colour-blind-friendly mode
+    - Individual electrode markers on the mesh — voltage-coloured for matched channels, grey for unmapped template positions
+    - Uses Standard 10-05 electrode positions by default; load custom positions via `.elc` or `.tsv` file
     - 3D rotation is synchronised with the neuroimaging viewer — rotate one and the other follows
+  - **Intracranial (iEEG) support** — toggle between scalp EEG and intracranial (sEEG/ECoG) recordings; iEEG channels are auto-detected from channel naming and shown as a per-electrode voltage matrix, or rendered as a 3D electrode connectome in the neuroimaging viewer once electrode positions are loaded
 
 - **Neuroimaging viewer** — full multiplanar and 3D rendering powered by [NiiVue](https://niivue.com/). Load multiple volumes simultaneously and adjust each one independently.
   - Supports NIfTI (`.nii`, `.nii.gz`), MGH/MGZ, GIFTI, PLY, OBJ
@@ -46,10 +49,11 @@ All data processing happens entirely in your browser. No files are ever uploaded
 
 ## Supported formats
 
-| Modality | Formats                                             |
-| -------- | --------------------------------------------------- |
-| EEG      | BrainVision (`.vhdr` + `.eeg`)                      |
-| Volumes  | NIfTI (`.nii`, `.nii.gz`), MGH/MGZ, GIFTI, PLY, OBJ |
+| Modality            | Formats                                             |
+| ------------------- | --------------------------------------------------- |
+| EEG                 | BrainVision (`.vhdr` + `.eeg`)                      |
+| Electrode positions | `.elc`, `.tsv`                                      |
+| Volumes             | NIfTI (`.nii`, `.nii.gz`), MGH/MGZ, GIFTI, PLY, OBJ |
 
 ## Tech stack
 
