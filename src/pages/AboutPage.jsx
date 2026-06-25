@@ -2,6 +2,7 @@
   ExternalLink,
   Brain,
   ChartLine,
+  ChartNetwork,
   FolderOpen,
   Columns2,
   FlaskConical,
@@ -212,7 +213,7 @@ export const AboutPage = () => {
                   <li>Configurable number of simultaneously visible channels</li>
                   <li>Min-max downsampling keeps rendering fast at any zoom level</li>
                   <li>
-                    EEG topography — a floating panel showing a 3D voltage map at the selected time
+                    EEG topography — a resizable panel showing a 3D voltage map at the selected time
                     point using{' '}
                     <a
                       href="https://niivue.com/"
@@ -222,10 +223,46 @@ export const AboutPage = () => {
                     >
                       NiiVue
                     </a>{' '}
-                    mesh rendering; re-reference on the fly (none, average, or median); uses
-                    Standard 10-05 electrode positions by default with support for custom{' '}
-                    <code>.elc</code> files; 3D rotation is synchronised with the neuroimaging
-                    viewer — rotate one and the other follows
+                    mesh rendering; re-reference on the fly (none, average, or median); diverging
+                    blue-white-red colormap with a live colorbar (µV) and a colour-blind-friendly
+                    mode; individual electrode markers on the mesh, voltage-coloured for matched
+                    channels; uses Standard 10-05 electrode positions by default with support for
+                    custom <code>.elc</code> or <code>.tsv</code> files; 3D rotation is synchronised
+                    with the neuroimaging viewer — rotate one and the other follows
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            <div id="feature-ieeg" className="flex gap-3">
+              <ChartNetwork
+                size={22}
+                className="shrink-0 mt-0.5"
+                style={{ color: 'var(--c-primary)' }}
+              />
+              <div>
+                <p className="font-semibold text-heading">Intracranial (iEEG) support</p>
+                <p className="text-sm mt-1" style={{ color: 'var(--c-foreground)' }}>
+                  Toggle between scalp EEG and intracranial (sEEG/ECoG) recordings. Intracranial
+                  channels are auto-detected from channel naming, with a manual override always
+                  available.
+                </p>
+                <ul
+                  className="text-sm mt-2 flex flex-col gap-1 list-disc list-inside"
+                  style={{ color: 'var(--c-foreground)' }}
+                >
+                  <li>
+                    Intracranial channels are shown as a per-electrode-group, per-contact voltage
+                    matrix instead of the scalp topography mesh
+                  </li>
+                  <li>
+                    Once electrode positions are loaded, intracranial electrodes are also rendered
+                    as a 3D electrode connectome in the neuroimaging viewer, synchronised with the
+                    selected EEG timepoint
+                  </li>
+                  <li>
+                    Supports custom electrode positions via <code>.elc</code> or <code>.tsv</code>{' '}
+                    files
                   </li>
                 </ul>
               </div>
