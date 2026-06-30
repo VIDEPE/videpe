@@ -13,6 +13,7 @@ import { SplitPane } from '../components/SplitPane';
 import { loadBrainVisionEEG } from '../loaders/loadBrainVisionEEG';
 import { detectAndLoadEEG, checkEegFiles } from '../loaders/eegFormats';
 import { parseElectrodePositionFile } from '../loaders/parseElectrodePositionFile';
+import { parseInverseFiltersFieldtrip } from '../loaders/parseInverseFiltersFieldtrip';
 import { FileDropZone } from '../components/FileDropZone';
 import { detectVolumeType, filesToLayers } from '../components/NiiViewer.utils';
 import { buildConnectomeVolume } from '../utils/eegTopographyUtils';
@@ -29,7 +30,7 @@ const PANEL_TITLE_CLASS = 'h-7 flex items-center text-xl font-medium leading-non
 // Sits in the SplitPane's left title once EEG is loaded, replacing the static "EEG"
 // label. One switch, not two buttons — clicking anywhere flips the value regardless of
 // which label half was clicked. pointer-events-auto overrides panelHeader's <h2>.
-const RecordingTypeToggle = ({ recordingType, onChange }) => {
+const EEGTypeToggle = ({ recordingType, onChange }) => {
   const isIntracranial = recordingType === 'ieeg';
   return (
     <button
@@ -119,6 +120,7 @@ export const PatientView = () => {
   // toggle. EegViewer reports its auto-detection result up via the same setter that the
   // title's click handler uses, then reads the resulting value back down as a prop.
   const [recordingType, setRecordingType] = useState('eeg');
+  const [inverseFilters, setInverseFilters] = useState(null);
 
   const handleElecPosFile = useCallback(async (file) => {
     try {
@@ -126,6 +128,16 @@ export const PatientView = () => {
       if (!electrodes.length) return; // ignore empty or unparseable files
       setCustomElectrodes(electrodes);
       setCustomElecPosFileName(file.name.replace(/\.[^.]+$/, ''));
+    } catch (err) {
+      toast.error(err.message);
+    }
+  }, []);
+
+  const handleInverseFilterFile = useCallback(async (file) => {
+    try {
+      const parsedInverseFilters = await parseInverseFiltersFieldtrip(file);
+      if (!parsedInverseFilters.length) return; // ignore empty or unparseable files
+      setInverseFilters(parsedInverseFilters);
     } catch (err) {
       toast.error(err.message);
     }
@@ -361,7 +373,7 @@ export const PatientView = () => {
       <SplitPane
         leftLabel={
           eeg ? (
-            <RecordingTypeToggle recordingType={recordingType} onChange={setRecordingType} />
+            <EEGTypeToggle recordingType={recordingType} onChange={setRecordingType} />
           ) : (
             <span className={PANEL_TITLE_CLASS}>EEG</span>
           )
