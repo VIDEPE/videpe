@@ -43,11 +43,9 @@ const withInverseFilters = (overrides) => ({
 
 describe('parseInverseFiltersFieldtrip', () => {
   it('extracts sourcePositions, sourceFilters, insideMask, and channelLabels from the parsed struct', async () => {
+    // tell readmat to return a the fixture instead of actually reading a file
     readmat.mockReturnValue(FIXTURE);
-    const file = new File(
-      ['irrelevant — read() is mocked'],
-      'sub-1_meth-eloreta_desc-nonorm_inversefilters.mat'
-    );
+    const file = new File(['irrelevant — read() is mocked'], 'mocked_file_inversefilters.mat');
 
     const result = await parseInverseFiltersFieldtrip(file);
 
@@ -59,8 +57,9 @@ describe('parseInverseFiltersFieldtrip', () => {
   });
 
   it("passes the file's bytes to mat-for-js as an ArrayBuffer", async () => {
+    // tell readmat to return a the fixture instead of actually reading a file
     readmat.mockReturnValue(FIXTURE);
-    const file = new File(['irrelevant — read() is mocked'], 'inversefilters.mat');
+    const file = new File(['irrelevant — read() is mocked'], 'mocked_file_inversefilters.mat');
 
     await parseInverseFiltersFieldtrip(file);
 
@@ -68,8 +67,9 @@ describe('parseInverseFiltersFieldtrip', () => {
   });
 
   it('rejects with a descriptive error when the file has no inverse_filters struct', async () => {
+    // tell readmat to return a the fixture instead of actually reading a file
     readmat.mockReturnValue({ header: '...', data: {} });
-    const file = new File(['irrelevant — read() is mocked'], 'not-actually-inversefilters.mat');
+    const file = new File(['irrelevant — read() is mocked'], 'mocked_file_inversefilters.mat');
 
     await expect(parseInverseFiltersFieldtrip(file)).rejects.toThrow(/inverse_filters/);
   });
@@ -85,8 +85,9 @@ describe('parseInverseFiltersFieldtrip', () => {
     ['elec.label missing', { elec: {} }, /elec/],
     ['elec.label empty', { elec: { label: [] } }, /elec/],
   ])('rejects with a descriptive error when %s', async (_caseName, overrides, messagePattern) => {
+    // tell readmat to return a the fixture with the specified overrides instead of actually reading a file
     readmat.mockReturnValue(withInverseFilters(overrides));
-    const file = new File(['irrelevant — read() is mocked'], 'inversefilters.mat');
+    const file = new File(['irrelevant — read() is mocked'], 'mocked_file_inversefilters.mat');
 
     await expect(parseInverseFiltersFieldtrip(file)).rejects.toThrow(messagePattern);
   });
