@@ -276,28 +276,28 @@ timeit('Float32Array single pass', () => {
 //   matrixMuls: 530.84ms median over 10 runs
 //   mathjs multiply: 431.79ms median over 10 runs
 
-=== Test 2: ESI loop — 4500× [3×208] × [208×1] ===
-  matrixMul: 13.35ms median over 5 runs
-  matrixMuls: 142.07ms median over 5 runs
-  mathjs multiply: 112.55ms median over 5 runs
+// === Test 2: ESI loop — 4500× [3×208] × [208×1] ===
+//   matrixMul: 13.35ms median over 5 runs
+//   matrixMuls: 142.07ms median over 5 runs
+//   mathjs multiply: 112.55ms median over 5 runs
 
-=== Test 2: ESI loop — 12000× [3×208] × [208×1] ===
-  matrixMul: 32.58ms median over 5 runs
-  matrixMuls: 385.27ms median over 5 runs
-  mathjs multiply: 301.95ms median over 5 runs
+// === Test 2: ESI loop — 12000× [3×208] × [208×1] ===
+//   matrixMul: 32.58ms median over 5 runs
+//   matrixMuls: 385.27ms median over 5 runs
+//   mathjs multiply: 301.95ms median over 5 runs
 
-=== Test 3: Flat Float64Array — 4500× [3×208] × [208×1] ===
-  matrixMul (baseline): 13.03ms median over 10 runs
-  Float64Array single pass: 2.04ms median over 10 runs
+// === Test 3: Flat Float64Array — 4500× [3×208] × [208×1] ===
+//   matrixMul (baseline): 13.03ms median over 10 runs
+//   Float64Array single pass: 2.04ms median over 10 runs
 
-=== Test 3: Flat Float64Array — 12000× [3×208] × [208×1] ===
-  matrixMul (baseline): 34.31ms median over 10 runs
-  Float64Array single pass: 5.46ms median over 10 runs
+// === Test 3: Flat Float64Array — 12000× [3×208] × [208×1] ===
+//   matrixMul (baseline): 34.31ms median over 10 runs
+//   Float64Array single pass: 5.46ms median over 10 runs
 
-=== Test 4: Flat Float32Array — 4500× [3×208] × [208×1] ===
-  matrixMul (baseline): 12.68ms median over 10 runs
-  Float32Array single pass: 2.14ms median over 10 runs
+// === Test 4: Flat Float32Array — 4500× [3×208] × [208×1] ===
+//   matrixMul (baseline): 12.68ms median over 10 runs
+//   Float32Array single pass: 2.14ms median over 10 runs
 
-=== Test 4: Flat Float32Array — 12000× [3×208] × [208×1] ===
-  matrixMul (baseline): 33.95ms median over 10 runs
-  Float32Array single pass: 5.33ms median over 10 runs
+// === Test 4: Flat Float32Array — 12000× [3×208] × [208×1] ===
+//   matrixMul (baseline): 33.95ms median over 10 runs
+//   Float32Array single pass: 5.33ms median over 10 runs
