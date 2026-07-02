@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import {
   calculateSourcePower,
+  convertSourcePowersToConnectome,
   electricalSourceImaging,
 } from '@/utils/electricalSourceImagingUtils';
+import { ESI_CONNECTOME_URL } from '@/components/NiiViewer.utils';
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 //
@@ -87,6 +89,62 @@ describe('calculateSourcePower', () => {
   });
 });
 
+// ─── convertSourcePowersToConnectome ─────────────────────────────────────────
+
+// Two inside-brain source positions and pre-verified power values
+// (same as the TWO_SOURCE_FILTERS + channelVoltages=[2,3] case above).
+const CONNECTOME_POSITIONS = [
+  [-5, 15, 10],
+  [0, 10, 15],
+];
+const CONNECTOME_POWERS = new Float64Array([13, 25]);
+
+describe('convertSourcePowersToConnectome', () => {
+  it('returns an object with the correct NiiVue connectome layer shape', () => {
+    const result = convertSourcePowersToConnectome(CONNECTOME_POSITIONS, CONNECTOME_POWERS);
+
+    expect(result.url).toBe(ESI_CONNECTOME_URL);
+    expect(result.kind).toBe('connectome');
+    expect(result.type).toBe('ESI');
+    expect(result.name).toBe('ESI Source Power');
+    expect(result.edges).toEqual([]);
+    expect(result.nodes).toBeDefined();
+    expect(result.calMax).toBeDefined();
+  });
+
+  it('creates one node per inside-brain source', () => {
+    const result = convertSourcePowersToConnectome(CONNECTOME_POSITIONS, CONNECTOME_POWERS);
+
+    expect(result.nodes).toHaveLength(CONNECTOME_POSITIONS.length);
+  });
+
+  it('sets node x/y/z from insideSourcePositions', () => {
+    const result = convertSourcePowersToConnectome(CONNECTOME_POSITIONS, CONNECTOME_POWERS);
+
+    expect(result.nodes[0]).toMatchObject({ x: -5, y: 15, z: 10 });
+    expect(result.nodes[1]).toMatchObject({ x: 0, y: 10, z: 15 });
+  });
+
+  it('sets node colorValue from sourcePowers', () => {
+    const result = convertSourcePowersToConnectome(CONNECTOME_POSITIONS, CONNECTOME_POWERS);
+
+    expect(result.nodes[0].colorValue).toBe(13);
+    expect(result.nodes[1].colorValue).toBe(25);
+  });
+
+  it('sets calMax to the maximum source power', () => {
+    const result = convertSourcePowersToConnectome(CONNECTOME_POSITIONS, CONNECTOME_POWERS);
+
+    expect(result.calMax).toBe(25);
+  });
+
+  it('floors calMax at 1e-9 when all powers are zero to prevent NiiVue color-scale division-by-zero', () => {
+    const result = convertSourcePowersToConnectome(CONNECTOME_POSITIONS, new Float64Array([0, 0]));
+
+    expect(result.calMax).toBe(1e-9);
+  });
+});
+
 // ─── electricalSourceImaging ─────────────────────────────────────────────────
 //
 // Minimal model matching parseInverseFiltersFieldtrip's return shape.
@@ -118,14 +176,16 @@ describe('electricalSourceImaging', () => {
     expect(() => electricalSourceImaging(inverseFilters, channelVoltages)).toThrow(/format/);
   });
 
-  it('runs without error and returns the convertSourcePowersToVolume result', () => {
-    // convertSourcePowersToVolume is a stub that returns null — this test will need
-    // updating once it is implemented, but verifies the happy path does not throw.
+  it('runs end-to-end and returns a connectome layer for NiiViewer', () => {
     const inverseFilters = MINIMAL_MODEL;
     const channelVoltages = [2, 3];
 
     const result = electricalSourceImaging(inverseFilters, channelVoltages);
 
-    expect(result).toBeNull();
+    // Powers from this model are already verified: source 0 → 13, source 1 → 25
+    expect(result.kind).toBe('connectome');
+    expect(result.url).toBe(ESI_CONNECTOME_URL);
+    expect(result.nodes).toHaveLength(2);
+    expect(result.calMax).toBe(25);
   });
 });
