@@ -321,6 +321,7 @@ export const PatientView = () => {
     setCustomElecPosFileName(null);
     setIntracranialSnapshot(null);
     setInverseSolution(null);
+    setChannelSnapshot(null);
     setRecordingType('eeg');
   };
 
@@ -332,6 +333,8 @@ export const PatientView = () => {
     setCustomElecPosFileName(null);
     setRecordingType('eeg');
     setIntracranialSnapshot(null);
+    setInverseSolution(null);
+    setChannelSnapshot(null);
   };
 
   const handleNiiReset = () => {

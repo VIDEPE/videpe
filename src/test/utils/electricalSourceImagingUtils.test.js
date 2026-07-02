@@ -105,7 +105,7 @@ describe('convertSourcePowersToConnectome', () => {
 
     expect(result.url).toBe(ESI_CONNECTOME_URL);
     expect(result.kind).toBe('connectome');
-    expect(result.type).toBe('ESI');
+    expect(result.type).toBe('Electrical Source Imaging');
     expect(result.name).toBe('ESI Source Power');
     expect(result.edges).toEqual([]);
     expect(result.nodes).toBeDefined();
