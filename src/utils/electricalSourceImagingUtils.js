@@ -49,13 +49,13 @@ export function convertSourcePowersToConnectome(insideSourcePositions, sourcePow
     y: pos[1],
     z: pos[2],
     colorValue: sourcePowers[i],
-    sizeValue: 1,
+    sizeValue: sourcePowers[i] / calMax, // 0 → invisible, 1 → full nodeScale size
   }));
 
   return {
     url: ESI_CONNECTOME_URL,
     name: 'ESI Source Power',
-    type: 'ESI',
+    type: 'Electrical Source Imaging',
     kind: 'connectome',
     nodes,
     edges: [],

@@ -125,11 +125,14 @@ describe('convertSourcePowersToConnectome', () => {
     expect(result.nodes[1]).toMatchObject({ x: 0, y: 10, z: 15 });
   });
 
-  it('sets node colorValue from sourcePowers', () => {
+  it('sets node colorValue from sourcePowers and sizeValue proportional to power', () => {
+    // CONNECTOME_POWERS = [13, 25], calMax = 25
     const result = convertSourcePowersToConnectome(CONNECTOME_POSITIONS, CONNECTOME_POWERS);
 
     expect(result.nodes[0].colorValue).toBe(13);
     expect(result.nodes[1].colorValue).toBe(25);
+    expect(result.nodes[0].sizeValue).toBeCloseTo(13 / 25); // 0.52 — lower power, smaller sphere
+    expect(result.nodes[1].sizeValue).toBe(1); // highest power → full nodeScale size
   });
 
   it('sets calMax to the maximum source power', () => {
