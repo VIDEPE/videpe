@@ -12,6 +12,7 @@ const renderPatientView = () =>
   );
 import { loadBrainVisionEEG } from '@/loaders/loadBrainVisionEEG';
 import { checkEegFiles, detectAndLoadEEG } from '@/loaders/eegFormats';
+import { parseInverseSolutionFieldtrip } from '@/loaders/parseInverseSolutionFieldtrip';
 import { FileDropZone } from '@/components/FileDropZone';
 import { NiiViewer } from '@/components/NiiViewer';
 import { EegViewer } from '@/components/EegViewer';
@@ -33,40 +34,56 @@ vi.mock('@/loaders/loadBrainVisionEEG', () => ({
     .mockResolvedValue({ channelNames: ['Ch1'], fs: 1, tMax: 1, getChunk: vi.fn() }),
 }));
 
-vi.mock('@/loaders/eegFormats', () => ({
-  checkEegFiles: vi.fn(),
-  detectAndLoadEEG: vi.fn(),
-}));
+vi.mock('@/loaders/eegFormats', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual, // preserves ELEC_POS_EXTENSIONS, INV_SOLUTIONS_EXTENSIONS, etc.
+    checkEegFiles: vi.fn(),
+    detectAndLoadEEG: vi.fn(),
+  };
+});
 
 vi.mock('@/components/EegViewer', () => ({
-  EegViewer: vi.fn(
-    ({ customElectrodes, customElecPosFileName, onIntracranialElectrodesChange }) => (
-      <div data-testid="eeg-viewer">
-        <span data-testid="eeg-custom-electrodes-count">{customElectrodes?.length ?? 0}</span>
-        <span data-testid="eeg-custom-filename">{customElecPosFileName ?? ''}</span>
-        {/* Simulates EegViewer reporting live intracranial electrode/voltage state, the way it
+  EegViewer: vi.fn(({ customElectrodes, customElecPosFileName, onIntracranialSnapshotChange }) => (
+    <div data-testid="eeg-viewer">
+      <span data-testid="eeg-custom-electrodes-count">{customElectrodes?.length ?? 0}</span>
+      <span data-testid="eeg-custom-filename">{customElecPosFileName ?? ''}</span>
+      {/* Simulates EegViewer reporting live intracranial electrode/voltage state, the way it
           would after detecting an intracranial recording and matching a position file. */}
-        <button
-          type="button"
-          data-testid="trigger-intracranial-change"
-          onClick={() =>
-            onIntracranialElectrodesChange?.({
-              isIntracranial: true,
-              matched: [{ channelIdx: 0, name: 'B1', pos: { label: 'B1', x: 0, y: 0, z: 0 } }],
-              voltages: [5],
-            })
-          }
-        >
-          trigger
-        </button>
-      </div>
-    )
-  ),
+      <button
+        type="button"
+        data-testid="trigger-intracranial-change"
+        onClick={() =>
+          onIntracranialSnapshotChange?.({
+            isIntracranial: true,
+            matched: [{ channelIdx: 0, name: 'B1', pos: { label: 'B1', x: 0, y: 0, z: 0 } }],
+            voltages: [5],
+          })
+        }
+      >
+        trigger
+      </button>
+    </div>
+  )),
 }));
 vi.mock('@/components/NiiViewer', () => ({
   NiiViewer: vi.fn(() => <div data-testid="nii-viewer" />),
 }));
 vi.mock('@/components/FileDropZone', () => ({ FileDropZone: vi.fn(() => null) }));
+
+vi.mock('@/loaders/parseInverseSolutionFieldtrip', () => ({
+  parseInverseSolutionFieldtrip: vi.fn().mockResolvedValue({
+    format: 'FieldTrip',
+    flatSourceFilters: new Float64Array([1, 0, 0, 1, 0, 0]),
+    insideSourcePositions: [[-5, 15, 10]],
+    nInsideSources: 1,
+    nChannels: 2,
+    channelLabels: ['1', '2'],
+    sourcePositions: [[-5, 15, 10]],
+    insideMask: [1],
+    indicesInsideSources: [0],
+  }),
+}));
 vi.mock('@/components/ThemeToggle', () => ({ ThemeToggle: () => null }));
 
 const makeFile = (name) => new File([''], name);
@@ -501,6 +518,66 @@ describe('PatientView — electrode position files', () => {
   });
 });
 
+describe('PatientView — inverse solution files', () => {
+  beforeEach(() => {
+    FileDropZone.mockClear();
+    EegViewer.mockClear();
+    checkEegFiles.mockClear();
+    checkEegFiles.mockReturnValue({
+      formatName: null,
+      complete: false,
+      missing: null,
+      warning: null,
+    });
+    parseInverseSolutionFieldtrip.mockClear();
+  });
+
+  it('accepts .mat at the initial EEG dropzone', () => {
+    renderPatientView();
+    const eegDropZoneProps = FileDropZone.mock.calls.find(([p]) => p.label === 'Drop EEG files')[0];
+    expect(eegDropZoneProps.accepted_formats).toContain('.mat');
+  });
+
+  it('routes a dropped .mat file to parseInverseSolutionFieldtrip instead of EEG accumulation', async () => {
+    renderPatientView();
+    const file = makeFile('sub-19_meth-eloreta_desc-nonorm_inversefilters.mat');
+
+    await act(async () => {
+      await getEegOnFiles()([file]);
+    });
+
+    expect(parseInverseSolutionFieldtrip).toHaveBeenCalledWith(file);
+    expect(checkEegFiles).not.toHaveBeenCalled();
+  });
+
+  it('processes both an EEG file and an inverse solution file dropped together', async () => {
+    checkEegFiles.mockReturnValue({
+      formatName: 'BrainVision',
+      complete: true,
+      missing: [],
+      warning: null,
+    });
+    detectAndLoadEEG.mockResolvedValue({
+      channelNames: ['1', '2'],
+      fs: 256,
+      tMax: 10,
+      getChunk: vi.fn(),
+    });
+    renderPatientView();
+
+    await act(async () => {
+      await getEegOnFiles()([
+        makeFile('sub01.vhdr'),
+        makeFile('sub01.eeg'),
+        makeFile('sub-19_inversefilters.mat'),
+      ]);
+    });
+
+    expect(screen.getByTestId('eeg-viewer')).toBeInTheDocument();
+    expect(parseInverseSolutionFieldtrip).toHaveBeenCalled();
+  });
+});
+
 describe('PatientView — intracranial connectome layer', () => {
   beforeEach(() => {
     FileDropZone.mockClear();
@@ -526,7 +603,7 @@ describe('PatientView — intracranial connectome layer', () => {
     await userEvent.click(screen.getByTestId('trigger-intracranial-change'));
 
     expect(screen.getByTestId('nii-viewer')).toBeInTheDocument();
-    expect(NiiViewer.mock.lastCall[0].connectomeLayer).toMatchObject({ kind: 'connectome' });
+    expect(NiiViewer.mock.lastCall[0].intracranialLayer).toMatchObject({ kind: 'connectome' });
   });
 
   it('clears the connectome layer on reset', async () => {

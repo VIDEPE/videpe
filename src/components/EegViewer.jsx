@@ -22,6 +22,7 @@ import { useEegBuffer } from '@/loaders/eegBuffer';
 import { applyMontage } from '@/utils/eegViewerUtils';
 
 import { parseElcElectrodePositions } from '@/loaders/parseElcElectrodePositions';
+import { ELEC_POS_EXTENSIONS, INV_SOLUTIONS_EXTENSIONS } from '@/loaders/eegFormats';
 import { matchChannelsToPositions } from '@/utils/eegTopographyUtils';
 import { detectIsIntracranial } from '@/utils/intracranialDetection';
 import { EegTopoViewer } from '@/components/EegTopoViewer';
@@ -86,7 +87,9 @@ export const EegViewer = ({
   customElectrodes = [], // [{label,x,y,z}] — owned by PatientView, loaded from a user-supplied .elc/.tsv file
   customElecPosFileName = null,
   onElecPosFile,
-  onIntracranialElectrodesChange,
+  onInverseSolutionFile,
+  onIntracranialSnapshotChange,
+  onChannelSnapshotChange,
   recordingType = 'eeg', // 'eeg' | 'ieeg' — controlled by PatientView, which shows/drives the toggle in the panel title
   onRecordingTypeChange,
 }) => {
@@ -268,8 +271,23 @@ export const EegViewer = ({
   // intracranial connectome layer for the Neuroimaging pane — fires regardless of
   // whether the topography window itself is open, since the connectome auto-shows.
   useEffect(() => {
-    onIntracranialElectrodesChange?.({ isIntracranial, matched, voltages: topoVoltages });
-  }, [isIntracranial, matched, topoVoltages, onIntracranialElectrodesChange]);
+    onIntracranialSnapshotChange?.({ isIntracranial, matched, voltages: topoVoltages });
+  }, [isIntracranial, matched, topoVoltages, onIntracranialSnapshotChange]);
+
+  // Lift all-channel voltages for ESI — fires only when topoTimepoint changes (i.e. on
+  // user clicks), NOT on every buffer refresh. Depending on topoVoltagesByChannel would
+  // also fire whenever timestamps shift during buffer loads, causing rapid cascading
+  // re-renders that supersede EegTopoViewer's async mesh load and leave it stuck loading.
+  useEffect(() => {
+    if (topoTimepoint === null || !montagedChannels || !timestamps?.length) return;
+    const sampleIndex = Math.max(
+      0,
+      Math.min(timestamps.length - 1, Math.round((topoTimepoint - timestamps[0]) * provider.fs))
+    );
+    const voltages = montagedChannels.map((ch) => ch?.[sampleIndex] ?? 0);
+    onChannelSnapshotChange?.({ isIntracranial, channelNames, voltages });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [topoTimepoint, isIntracranial, channelNames, onChannelSnapshotChange]);
 
   // Show a loading toast while the initial buffer loads, then update it to a success
   // message — self-contained so EegViewer reports its own status regardless of where
@@ -918,9 +936,19 @@ export const EegViewer = ({
             currently active (standard_1005, or a file loaded via any of the other entry
             points) — onElecPosFile has no "only if empty" guard. */}
         <FileDropZone
-          onFiles={(files) => onElecPosFile?.(files[0])}
-          accepted_formats=".elc,.tsv"
-          label="Drop electrode positions"
+          onFiles={(files) => {
+            const all = Array.from(files);
+            const invFile = all.findLast((f) =>
+              INV_SOLUTIONS_EXTENSIONS.some((ext) => f.name.toLowerCase().endsWith(ext))
+            );
+            if (invFile) onInverseSolutionFile?.(invFile);
+            const elecFile = all.findLast((f) =>
+              ELEC_POS_EXTENSIONS.some((ext) => f.name.toLowerCase().endsWith(ext))
+            );
+            if (elecFile) onElecPosFile?.(elecFile);
+          }}
+          accepted_formats=".elc,.tsv,.mat"
+          label="Drop electrode positions / inverse solution"
           compact
           className="shrink-0"
         />

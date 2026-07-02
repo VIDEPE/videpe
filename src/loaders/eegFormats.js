@@ -2,6 +2,11 @@ import { loadBrainVisionEEG } from './loadBrainVisionEEG';
 
 // This module defines supported EEG formats and provides a function to detect and load them.
 
+// File extensions routed to their respective handlers in PatientView and EegViewer.
+// Exported so both components share the same truth without duplicating the lists.
+export const ELEC_POS_EXTENSIONS = ['.elc', '.tsv'];
+export const INV_SOLUTIONS_EXTENSIONS = ['.mat'];
+
 const baseName = (filename) => filename.slice(0, filename.lastIndexOf('.'));
 
 // EEG_FORMATS is an array of supported EEG formats. Each format has:
