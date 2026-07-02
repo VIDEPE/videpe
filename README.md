@@ -1,6 +1,6 @@
 # VIDEPE
 
-![Version](https://img.shields.io/badge/version-0.7.0-blue)
+![Version](https://img.shields.io/badge/version-0.8.0-blue)
 
 **V**isualization & **I**ntegration of **D**ata for **E**pilepsy **P**resurgical **E**valuation
 
@@ -30,6 +30,7 @@ All data processing happens entirely in your browser. No files are ever uploaded
     - Uses Standard 10-05 electrode positions by default; load custom positions via `.elc` or `.tsv` file
     - 3D rotation is synchronised with the neuroimaging viewer — rotate one and the other follows
   - **Intracranial (iEEG) support** — toggle between scalp EEG and intracranial (sEEG/ECoG) recordings; iEEG channels are auto-detected from channel naming and shown as a per-electrode voltage matrix, or rendered as a 3D electrode connectome in the neuroimaging viewer once electrode positions are loaded
+  - **Electrical Source Imaging** - When uploading an Inverse Solutions file (currently only Fieldtrip *_inversefilters.mat supported), it will render a 3D rendered connectome with per source power at the time point selected in the EEG plots.
 
 - **Neuroimaging viewer** — full multiplanar and 3D rendering powered by [NiiVue](https://niivue.com/). Load multiple volumes simultaneously and adjust each one independently.
   - Supports NIfTI (`.nii`, `.nii.gz`), MGH/MGZ, GIFTI, PLY, OBJ
