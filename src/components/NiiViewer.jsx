@@ -10,6 +10,7 @@ import {
   getInitialLayerSettings,
   filesToLayers,
   INTRACRANIAL_CONNECTOME_URL,
+  ESI_CONNECTOME_URL,
 } from './NiiViewer.utils';
 import { ImagingControls } from './ImagingControls';
 import { FileDropZone } from '../components/FileDropZone';
@@ -20,13 +21,8 @@ import {
   EEG_NODE_NEG,
 } from '@/utils/eegColormaps';
 
-// Loads image volumes into an existing NiiVue instance and applies all layer settings.
-// layers/layerSettings are the FULL desired lists (existing + new) — any volumes already
-// present in nv.volumes are left in place and only the new ones are loaded.
-// Reordering uses setVolume instead, since that doesn't need a re-fetch.
-// Connectome (and other mesh) layers never flow through here — see the dedicated
-// connectome-sync/build effects below, which track that layer separately so a
-// voltage-driven data refresh never resets every other layer's settings.
+// Loads only new image volumes into nv (existing ones stay) and applies all settings.
+// Connectome/mesh layers are excluded — they're tracked separately by the build effects.
 export async function syncVolumesAndApplySettings(nv, layers, layerSettings) {
   const indexOffset = nv.volumes.length; // Volumes before this index are already loaded into nv.
   const newLayers = layers.slice(indexOffset);
@@ -51,56 +47,64 @@ export async function syncVolumesAndApplySettings(nv, layers, layerSettings) {
   nv.updateGLVolume();
 }
 
+// Pure updater functions for merging a connectome layer into orderedLayers/layerSettings
+// by its sentinel URL. Used by both the intracranialLayer and esiLayer merge effects.
+function makeLayerMergeUpdater(layer, sentinelUrl) {
+  return (prevLayers) => {
+    const idx = prevLayers.findIndex((l) => l.url === sentinelUrl);
+    if (!layer) {
+      if (idx === -1) return prevLayers; // already absent — nothing to do
+      return prevLayers.filter((_, i) => i !== idx); // remove the card
+    }
+    if (idx === -1) return [...prevLayers, layer]; // first appearance — append
+    if (prevLayers[idx] === layer) return prevLayers; // same object — no change
+    const next = prevLayers.slice();
+    next[idx] = layer; // data changed — update in place
+    return next;
+  };
+}
+
+function makeSettingsMergeUpdater(layer, sentinelUrl) {
+  return (prevSettings) => {
+    const idx = prevSettings.findIndex((s) => s.url === sentinelUrl);
+    if (!layer) return idx === -1 ? prevSettings : prevSettings.filter((_, i) => i !== idx);
+    if (idx !== -1) return prevSettings; // already has an entry — data-only refresh never touches settings
+    return [...prevSettings, ...getInitialLayerSettings([layer], prevSettings.length)];
+  };
+}
+
 export const NiiViewer = ({
   nvRef,
   layers = [], // image volumes/meshes loaded from files — e.g. .nii/.mgz/.gii/.ply/.obj drops
-  connectomeLayer = null, // intracranial electrode connectome layer — kept separate from `layers`
-  // (see the connectome-sync effect below) so a voltage-driven data refresh never resets
-  // every other layer's settings.
+  intracranialLayer = null, // kept separate from `layers` so a voltage-driven refresh never resets other layers' settings
+  esiLayer = null, // same pattern — ESI source power connectome layer
   onViewReady,
   onNiiNvReady,
   isFullscreen = false,
 }) => {
-  // layerSettings is an array with one settings object per loaded layer (image volume,
-  // connectome, or other mesh).
+  // ─── State ─────────────────────────────────────────────────────────────────
   const [layerSettings, setLayerSettings] = useState(() => getInitialLayerSettings(layers));
-  // orderedLayers mirrors the `layers` prop (plus the merged-in connectomeLayer, if any)
-  // but can be rearranged by drag-to-reorder.
-  const [orderedLayers, setOrderedLayers] = useState(layers);
+  const [orderedLayers, setOrderedLayers] = useState(layers); // mirrors `layers` + any merged connectome layers; user-reorderable
   const [isLoading, setIsLoading] = useState(true);
+  const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
+  const [activeSliceType, setActiveSliceType] = useState(SLICE_TYPE.MULTIPLANAR);
 
-  // Show a loading toast while volumes load, then update to success — self-contained
-  // so NiiViewer reports its own status regardless of where it's embedded.
-  useEffect(() => {
-    if (isLoading) {
-      toast.loading('Loading imaging data…', { id: NII_LOADING_TOAST_ID });
-    } else {
-      toast.success('Imaging data loaded!', { id: NII_LOADING_TOAST_ID });
-    }
-  }, [isLoading]);
-
-  // Dismiss the toast if the viewer unmounts mid-load (e.g. resetting the imaging panel)
-  useEffect(() => {
-    return () => toast.dismiss(NII_LOADING_TOAST_ID);
-  }, []);
-
+  // ─── Refs ───────────────────────────────────────────────────────────────────
   const canvas = useRef();
   const canvasContainerRef = useRef();
-  const canvasRowRef = useRef(); // the canvas + slice-type sidebar row — its min-height is dragged by the resize handle below it
-  const canvasReadyRef = useRef(false); // guards attachToCanvas so StrictMode's double-invoke doesn't reinitialise the GL context
-  const loadingLayersRef = useRef(null); // reference to the layers array currently being loaded — prevents StrictMode's double-invoke from firing nv.loadVolumes twice
-  const opacityRafRef = useRef(null); // pending rAF id for opacity updates — cancelled on each new drag event so only the latest value redraws
-  const canvasSizeTimeoutRef = useRef(null); // pending debounce timeout for canvas size updates
-  const connectomeMeshRef = useRef(null); // the single intracranial-electrode connectome mesh currently in the scene, or null
-  const lastConnectomeLayerRef = useRef(null); // the connectomeLayer the mesh above was built from — guards against rebuilding on unrelated re-renders
-  const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
+  const canvasRowRef = useRef(); // min-height dragged by the resize handle below
+  const canvasReadyRef = useRef(false); // guards attachToCanvas against StrictMode double-invoke
+  const loadingLayersRef = useRef(null); // guards nv.loadVolumes against StrictMode double-invoke
+  const opacityRafRef = useRef(null); // rAF id — cancelled on each drag so only the latest value redraws
+  const canvasSizeTimeoutRef = useRef(null); // debounce timeout for canvas size updates
+  const intracranialMeshRef = useRef(null); // current intracranial connectome mesh in the scene
+  const lastIntracranialLayerRef = useRef(null); // guards against rebuilding on unrelated re-renders
+  const esiMeshRef = useRef(null); // current ESI connectome mesh in the scene
+  const lastEsiLayerRef = useRef(null); // guards against rebuilding on unrelated re-renders
 
-  const [activeSliceType, setActiveSliceType] = useState(SLICE_TYPE.MULTIPLANAR);
-  // 2D slice views have no volume data to cut through without an actual image volume —
-  // a connectome-only scene (e.g. intracranial electrodes with no MRI loaded) always
-  // renders as 3D regardless of opts.sliceType, per NiiVue's drawSceneCore. Derived from
-  // orderedLayers (not the `layers` prop) since a volume can also arrive via this
-  // component's own "Drop additional files" zone, which never touches `layers`.
+  // ─── Derived values ─────────────────────────────────────────────────────────
+  // Derived from orderedLayers (not `layers`) to also catch files dropped into this
+  // component's own zone, which never touches the `layers` prop.
   const hasImageVolumes = orderedLayers.some((l) => l.kind !== 'connectome');
   const sliceTypeOptions = [
     { sliceType: SLICE_TYPE.AXIAL, label: 'Axial', buttonLabel: 'Ax' },
@@ -110,24 +114,11 @@ export const NiiViewer = ({
     { sliceType: SLICE_TYPE.RENDER, label: '3D', buttonLabel: '3D' },
   ];
 
+  // ─── Handlers ───────────────────────────────────────────────────────────────
   const handleSliceTypeChange = (sliceType) => {
     setActiveSliceType(sliceType);
     nvRef.current?.setSliceType(sliceType);
   };
-
-  // Keep the UI in sync with what NiiVue actually draws — force the 3D view (and grey
-  // out the others below) whenever there's no image volume to show 2D slices of. Only
-  // acts on the "no volumes" side deliberately: it must not also fire a redundant
-  // nv.setSliceType() the moment a volume (re)appears — that call previously landed
-  // concurrently with an in-flight nv.loadVolumes()/addVolumesFromUrl() triggered by this
-  // component's own "Drop additional files" handler, which could leave the load hanging.
-  // The mount effect above already syncs nv's starting slice type once; ongoing
-  // user-driven changes go through handleSliceTypeChange directly.
-  useEffect(() => {
-    if (hasImageVolumes) return;
-    setActiveSliceType(SLICE_TYPE.RENDER);
-    nvRef.current?.setSliceType(SLICE_TYPE.RENDER);
-  }, [hasImageVolumes, nvRef]);
 
   const handleSettingChange = useCallback(
     (layerIndex, key, value) => {
@@ -145,7 +136,8 @@ export const NiiViewer = ({
       // separately above) — update the mesh object directly instead of going through
       // nv.setOpacity/setColormap, which index into nv.volumes.
       if (layer.kind === 'connectome') {
-        const mesh = connectomeMeshRef.current;
+        const mesh =
+          layer.url === ESI_CONNECTOME_URL ? esiMeshRef.current : intracranialMeshRef.current;
         if (!mesh) return;
         if (key === 'visible') {
           mesh.opacity = value ? nextLayerSettings[layerIndex].opacity : 0;
@@ -192,72 +184,29 @@ export const NiiViewer = ({
     [layerSettings, orderedLayers]
   );
 
-  // Handler for when imaging files are dropped or selected. It reads the files as ArrayBuffers and prepares them for visualization, updating state accordingly.
   const handleNiiFiles = async (files) => {
-    if (!nvRef.current) return; // Guard clause — if NiiVue isn't initialized yet, there's nothing to append to
-
-    // show loading spinner
+    if (!nvRef.current) return;
     setIsLoading(true);
-    // Convert the FileList to an array of layer objects with { url, name, type, subtype }
     const newLayers = filesToLayers(files);
     const allLayers = [...orderedLayers, ...newLayers];
-
-    // startIndex tells getInitialLayerSettings these layers aren't the first ones overall,
-    // so the first new layer gets 0.6 opacity instead of being treated as layer 0
+    // startIndex ensures new layers get 0.6 opacity rather than being treated as the first
     const newLayerSettings = getInitialLayerSettings(newLayers, orderedLayers.length);
     const allLayerSettings = [...layerSettings, ...newLayerSettings];
     setOrderedLayers(allLayers);
     setLayerSettings(allLayerSettings);
-
-    // syncVolumesAndApplySettings only knows about image volumes (nv.volumes) — strip out
-    // the connectome layer, if present, before handing the list off. Otherwise it tries to
-    // nv.loadVolumes() the connectome's sentinel url as if it were a real image file, which
-    // never resolves, and (with no try/catch) leaves the spinner stuck forever.
+    // Strip connectome layers — syncVolumesAndApplySettings only handles nv.volumes (image files)
     const imageLayers = allLayers.filter((l) => l.kind !== 'connectome');
     const imageLayerSettings = allLayerSettings.filter(
       (_, i) => allLayers[i].kind !== 'connectome'
     );
-
     try {
-      // Load only the new layers into the existing NiiVue instance and reapply all layer settings
       await syncVolumesAndApplySettings(nvRef.current, imageLayers, imageLayerSettings);
     } catch (loadError) {
       toast.error(`Failed to load image: ${loadError.message}`);
     } finally {
-      // updateGLVolume schedules a GL redraw but returns before it paints — wait one frame before clearing the spinner
-      requestAnimationFrame(() => setIsLoading(false));
+      requestAnimationFrame(() => setIsLoading(false)); // wait one frame before clearing spinner
     }
   };
-
-  // Track the canvas container's dimensions so the layout effect can react to resizes
-  // (browser window resize, split-pane drag, etc.). Disconnects on unmount to avoid leaks.
-  useEffect(() => {
-    const canvasContainer = canvasContainerRef.current;
-    if (!canvasContainer) return;
-    const canvasSizeObserver = new ResizeObserver(([entry]) => {
-      const { width, height } = entry.contentRect;
-      // Debounce — fires on every frame during the SplitPane resize/maximize transition;
-      // wait for it to settle before triggering a multiplanar layout switch
-      if (canvasSizeTimeoutRef.current) clearTimeout(canvasSizeTimeoutRef.current);
-      canvasSizeTimeoutRef.current = setTimeout(() => {
-        setCanvasSize({ width, height });
-      }, 150);
-    });
-    canvasSizeObserver.observe(canvasContainer); // Start observing the canvas container for size changes
-    return () => {
-      canvasSizeObserver.disconnect(); // Clean up the observer on unmount
-      if (canvasSizeTimeoutRef.current) clearTimeout(canvasSizeTimeoutRef.current); // Clear any pending debounce timeout on unmount
-    };
-  }, []);
-
-  // Switch between AUTO (panels in a row) and GRID (2×2) based on aspect ratio.
-  // AUTO is used when the canvas is at least twice as wide as it is tall.
-  // height > 0 guards against the initial {0,0} state incorrectly triggering AUTO.
-  useEffect(() => {
-    if (!nvRef.current) return;
-    const isWide = canvasSize.height > 0 && canvasSize.width >= 1.75 * canvasSize.height;
-    nvRef.current.setMultiplanarLayout(isWide ? MULTIPLANAR_TYPE.AUTO : MULTIPLANAR_TYPE.GRID);
-  }, [canvasSize]);
 
   const handleReorder = useCallback(
     (event) => {
@@ -306,11 +255,13 @@ export const NiiViewer = ({
       const layer = orderedLayers[index];
 
       if (layer?.kind === 'connectome') {
-        if (connectomeMeshRef.current) {
-          nv.removeMesh(connectomeMeshRef.current);
-          connectomeMeshRef.current = null;
+        // Dispatch to the right mesh ref by URL — each connectome layer tracks its own mesh
+        const meshRef = layer.url === ESI_CONNECTOME_URL ? esiMeshRef : intracranialMeshRef;
+        if (meshRef.current) {
+          nv.removeMesh(meshRef.current);
+          meshRef.current = null;
         }
-        // Note: PatientView keeps re-deriving connectomeLayer from live EEG state, so this
+        // Note: PatientView keeps re-deriving intracranialLayer from live EEG state, so this
         // card reappears on the next voltage update unless that upstream state also clears —
         // acceptable for now, not a locked-in requirement to support a persistent dismissal.
       } else {
@@ -323,13 +274,8 @@ export const NiiViewer = ({
     [orderedLayers, layerSettings]
   );
 
-  // Drag the handle below the canvas to raise its min-height past whatever the flex layout
-  // would otherwise give it — pushing the rest of the panel into scroll instead of letting a
-  // long volume list keep squeezing the canvas down to MIN_CANVAS_HEIGHT. Dragging back up
-  // lowers that floor; once it drops below what the flex layout already provides, the row
-  // simply renders at its natural (auto) size and stops shrinking any further.
-  // Writes directly to the DOM (like SplitPane's divider) instead of React state, since this
-  // component already re-renders the canvas/controls tree on every drag-frame would be wasteful.
+  // Drag to raise the canvas row's min-height, pushing the volume list into scroll.
+  // Writes to DOM directly (not React state) to avoid re-rendering on every drag frame.
   const handleCanvasResizeStart = useCallback((e) => {
     e.preventDefault();
     const row = canvasRowRef.current;
@@ -349,12 +295,58 @@ export const NiiViewer = ({
     window.addEventListener('mouseup', onUp);
   }, []);
 
-  // Attach the NiiVue instance to the canvas once when the viewer mounts.
-  // Separated from volume loading so that React StrictMode's double-invoke of effects
-  // (which runs every effect twice in development) does not call attachToCanvas twice.
-  // A second attachToCanvas call reinitialises the WebGL context, wiping all loaded
-  // volumes and colormaps — causing them to turn grey. The canvasReadyRef guard ensures
-  // the setup only runs once even when StrictMode re-invokes the effect.
+  // ─── Effects: UI ────────────────────────────────────────────────────────────
+
+  // Loading toast — self-contained so NiiViewer reports its own status regardless of where it's embedded.
+  useEffect(() => {
+    if (isLoading) {
+      toast.loading('Loading imaging data…', { id: NII_LOADING_TOAST_ID });
+    } else {
+      toast.success('Imaging data loaded!', { id: NII_LOADING_TOAST_ID });
+    }
+  }, [isLoading]);
+
+  // Dismiss the toast if the viewer unmounts mid-load.
+  useEffect(() => {
+    return () => toast.dismiss(NII_LOADING_TOAST_ID);
+  }, []);
+
+  // Force 3D view when there are no image volumes — connectome-only scenes have no slices.
+  // Only acts on the "no volumes" side: firing on re-appearance races with an in-flight
+  // nv.loadVolumes() and can leave the spinner stuck.
+  useEffect(() => {
+    if (hasImageVolumes) return;
+    setActiveSliceType(SLICE_TYPE.RENDER);
+    nvRef.current?.setSliceType(SLICE_TYPE.RENDER);
+  }, [hasImageVolumes, nvRef]);
+
+  // ─── Effects: canvas setup ───────────────────────────────────────────────────
+
+  // Track canvas container dimensions; debounced to avoid thrashing during resize transitions.
+  useEffect(() => {
+    const canvasContainer = canvasContainerRef.current;
+    if (!canvasContainer) return;
+    const canvasSizeObserver = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      if (canvasSizeTimeoutRef.current) clearTimeout(canvasSizeTimeoutRef.current);
+      canvasSizeTimeoutRef.current = setTimeout(() => setCanvasSize({ width, height }), 150);
+    });
+    canvasSizeObserver.observe(canvasContainer);
+    return () => {
+      canvasSizeObserver.disconnect();
+      if (canvasSizeTimeoutRef.current) clearTimeout(canvasSizeTimeoutRef.current);
+    };
+  }, []);
+
+  // Switch between AUTO (panels in a row) and GRID (2×2) based on aspect ratio.
+  useEffect(() => {
+    if (!nvRef.current) return;
+    const isWide = canvasSize.height > 0 && canvasSize.width >= 1.75 * canvasSize.height;
+    nvRef.current.setMultiplanarLayout(isWide ? MULTIPLANAR_TYPE.AUTO : MULTIPLANAR_TYPE.GRID);
+  }, [canvasSize]);
+
+  // Attach NiiVue to the canvas once on mount. canvasReadyRef guards against StrictMode's
+  // double-invoke — a second attachToCanvas would reinitialise WebGL, wiping all volumes.
   useEffect(() => {
     if (!nvRef.current || canvasReadyRef.current) return;
     canvasReadyRef.current = true;
@@ -368,23 +360,15 @@ export const NiiViewer = ({
     nv.addColormap(EEG_NODE_POS_KEY, EEG_NODE_POS);
     nv.addColormap(EEG_NODE_NEG_KEY, EEG_NODE_NEG);
     nv.attachToCanvas(canvas.current);
-    // Sync nv's slice type to this fresh mount's starting state, rather than leaving it
-    // at whatever it was last set to on this long-lived instance (e.g. RENDER, forced
-    // during an earlier connectome-only phase) — which would otherwise silently diverge
-    // from React's own (different) default of MULTIPLANAR. Read once, at mount, only —
-    // later additions are handled by the hasImageVolumes effect below (false side only),
-    // so this never fires again concurrently with an in-flight volume load.
+    // Sync slice type on mount — nv is long-lived and may have been left in RENDER from
+    // a previous connectome-only phase. Later changes go through handleSliceTypeChange.
     nv.setSliceType(hasImageVolumes ? activeSliceType : SLICE_TYPE.RENDER);
     onNiiNvReady?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // nv is a single long-lived instance owned by the parent, reused across this component's
-  // mount/unmount cycles (e.g. the Neuroimaging pane unmounts to a drop-zone placeholder
-  // when there's nothing to show, then remounts later). Without this, volumes/meshes loaded
-  // before an unmount stay in nv and silently reappear fully rendered on the next mount
-  // (attachToCanvas re-uploads whatever's still in nv.volumes/nv.meshes) — with no matching
-  // card in ImagingControls, since this component's own state resets on every fresh mount.
+  // nv is long-lived and reused across remounts — clear volumes/meshes on unmount so they
+  // don't silently reappear (as ghost layers with no ImagingControls card) on the next mount.
   useEffect(() => {
     return () => {
       const nv = nvRef.current;
@@ -394,37 +378,29 @@ export const NiiViewer = ({
     };
   }, [nvRef]);
 
-  // Load and sync volumes whenever the layers prop changes.
-  // loadingLayersRef serves two purposes:
-  //   1. Guard at the top: same array reference means this exact load is already in flight
-  //      (StrictMode double-invoke). Bail out before touching NiiVue so nv.loadVolumes is
-  //      never called twice, which would leave nv.volumes in a corrupted empty state.
-  //   2. Guard in the async callback: if loadingLayersRef has moved on to a different
-  //      layers array by the time the load completes, this load has been superseded and
-  //      must not update React state (setIsLoading / onViewReady).
-  // connectomeLayer deliberately is NOT a dependency here — it's merged into orderedLayers
-  // by the dedicated sync effect below instead, so a voltage-driven connectome refresh never
-  // re-triggers this image-loading effect or resets every other layer's settings.
+  // ─── Effects: image volume loading ──────────────────────────────────────────
+
+  // Load image volumes when the layers prop changes. loadingLayersRef has two guards:
+  // (1) same reference at the top → StrictMode double-invoke, bail before touching nv;
+  // (2) stale reference in the async callback → a newer load superseded this one, don't update state.
+  // Connectome layers are intentionally excluded from deps — their own merge effects handle them.
   useEffect(() => {
     if (!layers.length) {
       loadingLayersRef.current = null; // reset so the next non-empty load can proceed
-      // Nothing to load on the image side (e.g. a connectome-only scene with no NIfTI
-      // files, or an imaging-only reset while a connectome keeps this component mounted)
-      // — clear any volumes left over from before so stale imaging never lingers behind
-      // the electrodes, then stop the spinner (else it'd stay stuck `true` forever).
+      // No image volumes — clear any stale ones from nv and remove their ImagingControls cards.
+      // Connectome cards (identified by sentinel URL) are left alone.
       const nv = nvRef.current;
       if (nv?.volumes.length) {
         while (nv.volumes.length > 0) nv.removeVolumeByIndex(0);
         nv.updateGLVolume();
       }
-      // Drop the now-stale image-kind cards from ImagingControls too — otherwise they
-      // keep showing even though the volumes behind them were just removed above. The
-      // connectome's own card (if any) is left alone. Each filter is self-contained (a
-      // layer's own kind, a settings entry's own url) rather than cross-referencing the
-      // other array by position — that stays correct regardless of what order this effect
-      // and the connectomeLayer sync effect happen to run in within the same commit.
-      setOrderedLayers((prev) => prev.filter((l) => l.kind === 'connectome'));
-      setLayerSettings((prev) => prev.filter((s) => s.url === INTRACRANIAL_CONNECTOME_URL));
+      setOrderedLayers((prev) => prev.filter((layer) => layer.kind === 'connectome'));
+      setLayerSettings((prev) =>
+        prev.filter(
+          (setting) =>
+            setting.url === INTRACRANIAL_CONNECTOME_URL || setting.url === ESI_CONNECTOME_URL
+        )
+      );
       setIsLoading(false);
       return;
     }
@@ -452,84 +428,58 @@ export const NiiViewer = ({
     loadAndSync();
   }, [layers]);
 
-  // Merges the separately-tracked connectomeLayer prop into orderedLayers/layerSettings by
-  // matching its fixed sentinel URL — keeps it in the same draggable ImagingControls list as
-  // image volumes without ever touching their settings when only the connectome's own data
-  // (nodes/edges/calMax) refreshes (which produces a new connectomeLayer object on every
-  // EEG voltage update).
-  // Two independent, self-contained updater-function calls — deliberately not one nested
-  // inside the other. setLayerSettings used to be called from inside setOrderedLayers's
-  // updater; StrictMode's purity-check double-invocation then fired that nested call twice,
-  // silently appending the connectome's settings entry twice while orderedLayers only got it
-  // once, permanently misaligning the two arrays (which later crashed handleNiiFiles when
-  // adding an image volume). Each updater here instead locates the connectome independently
-  // within its own prev array (layerSettings via the url tag getInitialLayerSettings now
-  // attaches to every entry) and is idempotent on its own: re-running it against its own
-  // already-updated result (exactly what happens on a double-invoke, or when another effect's
-  // update is processed first in the same commit) finds the entry already in place and
-  // returns prev unchanged, rather than appending again.
-  useEffect(() => {
-    setOrderedLayers((prevLayers) => {
-      const idx = prevLayers.findIndex((l) => l.url === INTRACRANIAL_CONNECTOME_URL);
-      if (!connectomeLayer) {
-        if (idx === -1) return prevLayers;
-        return prevLayers.filter((_, i) => i !== idx);
-      }
-      if (idx === -1) return [...prevLayers, connectomeLayer];
-      if (prevLayers[idx] === connectomeLayer) return prevLayers; // no change
-      const next = prevLayers.slice();
-      next[idx] = connectomeLayer;
-      return next;
-    });
-    setLayerSettings((prevSettings) => {
-      const idx = prevSettings.findIndex((s) => s.url === INTRACRANIAL_CONNECTOME_URL);
-      if (!connectomeLayer)
-        return idx === -1 ? prevSettings : prevSettings.filter((_, i) => i !== idx);
-      if (idx !== -1) return prevSettings; // already has an entry — a data-only refresh never touches settings
-      return [...prevSettings, ...getInitialLayerSettings([connectomeLayer], prevSettings.length)];
-    });
-  }, [connectomeLayer]);
+  // ─── Effects: intracranial electrode layer ──────────────────────────────────
 
-  // Builds/rebuilds/removes the actual NiiVue connectome mesh whenever connectomeLayer's
+  // Merges intracranialLayer into orderedLayers/layerSettings by its sentinel URL so it
+  // appears in the ImagingControls card list without disturbing other layers' settings on
+  // every voltage-driven refresh. Two independent setState calls (not nested) — nesting
+  // caused StrictMode's double-invoke to append the settings entry twice, misaligning
+  // the arrays and crashing handleNiiFiles. Each updater is idempotent on its own.
+  useEffect(() => {
+    setOrderedLayers(makeLayerMergeUpdater(intracranialLayer, INTRACRANIAL_CONNECTOME_URL));
+    setLayerSettings(makeSettingsMergeUpdater(intracranialLayer, INTRACRANIAL_CONNECTOME_URL));
+  }, [intracranialLayer]);
+
+  // Builds/rebuilds/removes the actual NiiVue connectome mesh whenever intracranialLayer's
   // data changes. Rebuilt wholesale on every change rather than mutated in place — mirrors
   // how EegTopoViewer rebuilds its own mesh on every topoTimepoint click.
   useEffect(() => {
     const nv = nvRef.current; // guard clause — nothing to do before NiiVue has attached to a canvas
     if (!nv) return;
 
-    if (!connectomeLayer) {
+    if (!intracranialLayer) {
       // No connectome to show anymore (e.g. positions/EEG cleared) — tear down the existing mesh, if any.
-      if (connectomeMeshRef.current) {
-        nv.removeMesh(connectomeMeshRef.current); // drop it from the 3D scene
-        connectomeMeshRef.current = null; // nothing left to track
-        lastConnectomeLayerRef.current = null; // so a future re-add isn't mistaken for "unchanged"
+      if (intracranialMeshRef.current) {
+        nv.removeMesh(intracranialMeshRef.current); // drop it from the 3D scene
+        intracranialMeshRef.current = null; // nothing left to track
+        lastIntracranialLayerRef.current = null; // so a future re-add isn't mistaken for "unchanged"
         nv.updateGLVolume(); // redraw without it
       }
       return;
     }
 
-    if (connectomeLayer === lastConnectomeLayerRef.current) return; // unrelated re-render (e.g. another layer's settings changed)
-    lastConnectomeLayerRef.current = connectomeLayer; // remember what this rebuild is based on
+    if (intracranialLayer === lastIntracranialLayerRef.current) return; // unrelated re-render (e.g. another layer's settings changed)
+    lastIntracranialLayerRef.current = intracranialLayer; // remember what this rebuild is based on
 
-    if (connectomeMeshRef.current) nv.removeMesh(connectomeMeshRef.current); // drop the stale mesh before building its replacement
+    if (intracranialMeshRef.current) nv.removeMesh(intracranialMeshRef.current); // drop the stale mesh before building its replacement
 
     // Build the new connectome mesh in memory — not yet added to the scene.
     const mesh = nv.loadConnectomeAsMesh({
-      name: connectomeLayer.name,
+      name: intracranialLayer.name,
       nodeColormap: EEG_NODE_POS_KEY,
       nodeColormapNegative: EEG_NODE_NEG_KEY,
       nodeMinColor: 0,
-      nodeMaxColor: connectomeLayer.calMax,
+      nodeMaxColor: intracranialLayer.calMax,
       nodeScale: 4,
       edgeColormap: EEG_NODE_POS_KEY,
       edgeColormapNegative: EEG_NODE_NEG_KEY,
       edgeMin: 0,
-      edgeMax: connectomeLayer.calMax,
+      edgeMax: intracranialLayer.calMax,
       edgeScale: 0.5,
       showLegend: false,
       colorbarVisible: false, // suppresses the node+edge colorbar entries NiiVue would otherwise add for a populated `edges` array
-      nodes: connectomeLayer.nodes,
-      edges: connectomeLayer.edges,
+      nodes: intracranialLayer.nodes,
+      edges: intracranialLayer.edges,
     });
 
     // Apply whatever opacity/visibility is already set for this layer (preserved across
@@ -539,13 +489,79 @@ export const NiiViewer = ({
     const existingIndex = orderedLayers.findIndex((l) => l.url === INTRACRANIAL_CONNECTOME_URL); // its current position in the card list, if it has one yet
     const settings =
       layerSettings[existingIndex] ?? // its existing settings, preserved across this rebuild
-      getInitialLayerSettings([connectomeLayer], orderedLayers.length)[0]; // or computed fresh on first appearance
+      getInitialLayerSettings([intracranialLayer], orderedLayers.length)[0]; // or computed fresh on first appearance
     mesh.opacity = settings.visible ? settings.opacity : 0; // 0 opacity is how a hidden mesh is represented, same convention as image volumes
 
     nv.addMesh(mesh); // actually add it to the 3D scene
-    connectomeMeshRef.current = mesh; // track it so the next change/removal can find it
+    intracranialMeshRef.current = mesh; // track it so the next change/removal can find it
     nv.updateGLVolume(); // redraw with the new mesh visible
-  }, [connectomeLayer, orderedLayers, layerSettings, nvRef]);
+  }, [intracranialLayer, orderedLayers, layerSettings, nvRef]);
+
+  // ─── Effects: ESI source power layer ────────────────────────────────────────
+
+  // Merges the separately-tracked esiLayer prop into orderedLayers/layerSettings — same
+  // pattern as the intracranialLayer merge effect above, keyed on ESI_CONNECTOME_URL.
+  useEffect(() => {
+    setOrderedLayers(makeLayerMergeUpdater(esiLayer, ESI_CONNECTOME_URL));
+    setLayerSettings(makeSettingsMergeUpdater(esiLayer, ESI_CONNECTOME_URL));
+  }, [esiLayer]);
+
+  // Builds/rebuilds/removes the ESI source-power connectome mesh whenever esiLayer changes.
+  // Same pattern as the intracranialLayer build effect above.
+  useEffect(() => {
+    const nv = nvRef.current; // guard — nothing to do before NiiVue has attached to a canvas
+    if (!nv) return;
+
+    if (!esiLayer) {
+      // No ESI layer to show (e.g. no inverse solution loaded, or iEEG mode) — tear down.
+      if (esiMeshRef.current) {
+        nv.removeMesh(esiMeshRef.current); // drop it from the 3D scene
+        esiMeshRef.current = null; // nothing left to track
+        lastEsiLayerRef.current = null; // so a future re-add isn't mistaken for "unchanged"
+        nv.updateGLVolume(); // redraw without it
+      }
+      return;
+    }
+
+    if (esiLayer === lastEsiLayerRef.current) return; // unrelated re-render — data hasn't changed
+    lastEsiLayerRef.current = esiLayer; // remember what this rebuild is based on
+
+    if (esiMeshRef.current) nv.removeMesh(esiMeshRef.current); // drop the stale mesh before building its replacement
+
+    // Source power is always non-negative (squared magnitude) — use the positive colormap
+    // for both slots; the negative colormap is never reached.
+    const mesh = nv.loadConnectomeAsMesh({
+      name: esiLayer.name,
+      nodeColormap: EEG_NODE_POS_KEY,
+      nodeColormapNegative: EEG_NODE_POS_KEY, // unused — power is always ≥ 0
+      nodeMinColor: 0,
+      nodeMaxColor: esiLayer.calMax,
+      nodeScale: 4,
+      edgeColormap: EEG_NODE_POS_KEY,
+      edgeColormapNegative: EEG_NODE_POS_KEY,
+      edgeMin: 0,
+      edgeMax: esiLayer.calMax,
+      edgeScale: 0.5,
+      showLegend: false,
+      colorbarVisible: false, // suppresses the colorbar entry NiiVue would otherwise add
+      nodes: esiLayer.nodes,
+      edges: esiLayer.edges, // always [] for ESI — source points have no connecting structure
+    });
+
+    // Apply whatever opacity/visibility is already set for this layer (preserved across
+    // data refreshes by the sync effect above); fall back to the default on first appearance.
+    const existingIndex = orderedLayers.findIndex((l) => l.url === ESI_CONNECTOME_URL);
+    const settings =
+      layerSettings[existingIndex] ?? // existing settings, preserved across this rebuild
+      getInitialLayerSettings([esiLayer], orderedLayers.length)[0]; // fresh defaults on first appearance
+    mesh.opacity = settings.visible ? settings.opacity : 0;
+
+    nv.addMesh(mesh); // actually add it to the 3D scene
+    esiMeshRef.current = mesh; // track it so the next change/removal can find it
+    nv.updateGLVolume(); // redraw with the new mesh visible
+  }, [esiLayer, orderedLayers, layerSettings, nvRef]);
+
+  // ─── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <div className="h-full flex flex-col pb-3 px-2 gap-2">
@@ -566,11 +582,7 @@ export const NiiViewer = ({
         />
       </div>
 
-      {/* The canvas + loading spinner are in a flex item that fills the remaining height, but never shrinks
-          below MIN_CANVAS_HEIGHT. If the controls panel above expands past the point where that much height
-          remains, the parent scrolls. Dragging the resize handle below raises that floor past whatever the
-          flex layout would naturally give it, locking the canvas at a taller size instead of letting a long
-          volume list keep squeezing it down — see handleCanvasResizeStart. */}
+      {/* Canvas fills remaining height, min MIN_CANVAS_HEIGHT. Resize handle below can raise that floor. */}
       <div
         ref={canvasRowRef}
         data-testid="nii-canvas-row"
@@ -625,10 +637,9 @@ export const NiiViewer = ({
         </div>
       </div>
 
-      {/* Drag down to grow the canvas row past its natural size (forces the parent pane to scroll);
-          drag up to shrink it back — once it reaches the row's natural flex size, further upward
-          dragging has no effect, since min-height never shrinks a flex item below what it'd render
-          at anyway. See handleCanvasResizeStart. */}
+      {/* Resize handle — drag down to grow canvas past flex size, drag up to shrink back. 
+          Once it reaches the row's natural flex size, further upward dragging has no effect, 
+          since min-height never shrinks a flex item below what it'd render at anyway. See handleCanvasResizeStart*/}
       <div
         data-testid="nii-canvas-resize-handle"
         className="h-1.5 w-full shrink-0 cursor-row-resize rounded-sm select-none bg-border hover:bg-secondary active:bg-primary"

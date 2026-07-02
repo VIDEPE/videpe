@@ -426,13 +426,13 @@ describe('buildEegMesh', () => {
 });
 
 // ---------------------------------------------------------------------------
-// buildIntracranialMatrix / buildIntracranialConnectome / buildConnectomeVolume
+// buildIntracranialMatrix / buildIntracranialConnectome / buildIntracranialLayer
 // ---------------------------------------------------------------------------
 
 import {
   buildIntracranialMatrix,
   buildIntracranialConnectome,
-  buildConnectomeVolume,
+  buildIntracranialLayer,
 } from '@/utils/eegTopographyUtils';
 import { INTRACRANIAL_CONNECTOME_URL } from '@/components/NiiViewer.utils';
 
@@ -528,22 +528,22 @@ describe('buildIntracranialConnectome', () => {
   });
 });
 
-describe('buildConnectomeVolume', () => {
+describe('buildIntracranialLayer', () => {
   const matched = [
     { channelIdx: 0, name: 'B1', pos: { label: 'B1', x: 0, y: 0, z: 0 } },
     { channelIdx: 1, name: 'B2', pos: { label: 'B2', x: 1, y: 1, z: 1 } },
   ];
 
   it('returns null when not intracranial', () => {
-    expect(buildConnectomeVolume({ isIntracranial: false, matched, voltages: [1, 2] })).toBeNull();
+    expect(buildIntracranialLayer({ isIntracranial: false, matched, voltages: [1, 2] })).toBeNull();
   });
 
   it('returns null when there are no matched (positioned) channels yet', () => {
-    expect(buildConnectomeVolume({ isIntracranial: true, matched: [], voltages: [] })).toBeNull();
+    expect(buildIntracranialLayer({ isIntracranial: true, matched: [], voltages: [] })).toBeNull();
   });
 
   it('returns a well-formed connectome volume entry otherwise', () => {
-    const volume = buildConnectomeVolume({ isIntracranial: true, matched, voltages: [10, -4] });
+    const volume = buildIntracranialLayer({ isIntracranial: true, matched, voltages: [10, -4] });
     expect(volume).toMatchObject({
       url: INTRACRANIAL_CONNECTOME_URL,
       kind: 'connectome',
@@ -553,7 +553,7 @@ describe('buildConnectomeVolume', () => {
   });
 
   it('sets calMax to the maximum absolute voltage', () => {
-    const volume = buildConnectomeVolume({ isIntracranial: true, matched, voltages: [10, -25] });
+    const volume = buildIntracranialLayer({ isIntracranial: true, matched, voltages: [10, -25] });
     expect(volume.calMax).toBe(25);
   });
 });

@@ -11,11 +11,18 @@ import { EegViewer } from '../components/EegViewer';
 import { NiiViewer } from '../components/NiiViewer';
 import { SplitPane } from '../components/SplitPane';
 import { loadBrainVisionEEG } from '../loaders/loadBrainVisionEEG';
-import { detectAndLoadEEG, checkEegFiles } from '../loaders/eegFormats';
+import {
+  detectAndLoadEEG,
+  checkEegFiles,
+  ELEC_POS_EXTENSIONS,
+  INV_SOLUTIONS_EXTENSIONS,
+} from '../loaders/eegFormats';
 import { parseElectrodePositionFile } from '../loaders/parseElectrodePositionFile';
+import { parseInverseSolutionFieldtrip } from '../loaders/parseInverseSolutionFieldtrip';
 import { FileDropZone } from '../components/FileDropZone';
 import { detectVolumeType, filesToLayers } from '../components/NiiViewer.utils';
-import { buildConnectomeVolume } from '../utils/eegTopographyUtils';
+import { buildIntracranialLayer } from '../utils/eegTopographyUtils';
+import { electricalSourceImaging } from '../utils/electricalSourceImagingUtils';
 
 const DEMO_EEG = {
   header: 'demo_data/sub-synth_task-rest_eeg.vhdr',
@@ -29,7 +36,7 @@ const PANEL_TITLE_CLASS = 'h-7 flex items-center text-xl font-medium leading-non
 // Sits in the SplitPane's left title once EEG is loaded, replacing the static "EEG"
 // label. One switch, not two buttons — clicking anywhere flips the value regardless of
 // which label half was clicked. pointer-events-auto overrides panelHeader's <h2>.
-const RecordingTypeToggle = ({ recordingType, onChange }) => {
+const EEGTypeToggle = ({ recordingType, onChange }) => {
   const isIntracranial = recordingType === 'ieeg';
   return (
     <button
@@ -81,7 +88,6 @@ const DEMO_LAYERS = [
 
 // Electrode position files are routed to handleElecPosFile instead of the EEG-format
 // accumulation logic below, regardless of which dropzone/button they came in through.
-const ELEC_POS_EXTENSIONS = ['.elc', '.tsv'];
 
 export const PatientView = () => {
   // Prevent default browser drag-and-drop behavior (e.g., opening files in a new tab)
@@ -114,11 +120,13 @@ export const PatientView = () => {
   const [customElecPosFileName, setCustomElecPosFileName] = useState(null);
   // Live EEG/electrode state lifted out of EegViewer — drives the intracranial connectome
   // layer in the Neuroimaging pane. { isIntracranial, matched, voltages } | null.
-  const [intracranialElectrodes, setIntracranialElectrodes] = useState(null);
+  const [intracranialSnapshot, setIntracranialSnapshot] = useState(null);
   // 'eeg' | 'ieeg' — owned here (not EegViewer) so the SplitPane title can show/drive the
   // toggle. EegViewer reports its auto-detection result up via the same setter that the
   // title's click handler uses, then reads the resulting value back down as a prop.
   const [recordingType, setRecordingType] = useState('eeg');
+  const [inverseSolution, setInverseSolution] = useState(null);
+  const [channelSnapshot, setChannelSnapshot] = useState(null); // { isIntracranial, channelNames, voltages } lifted from EegViewer on each click
 
   const handleElecPosFile = useCallback(async (file) => {
     try {
@@ -131,13 +139,27 @@ export const PatientView = () => {
     }
   }, []);
 
+  const handleInverseSolutionFile = useCallback(async (file) => {
+    try {
+      const parsedInverseSolution = await parseInverseSolutionFieldtrip(file);
+      setInverseSolution(parsedInverseSolution);
+    } catch (err) {
+      toast.error(err.message);
+    }
+  }, []);
+
   // Derives the Neuroimaging pane's connectome layer from the EEG state lifted out of
   // EegViewer — null until there's an intracranial recording with at least one
   // position-matched channel. `?? {}` guards the initial (pre-EegViewer-effect) null state.
-  const connectomeLayer = useMemo(
-    () => buildConnectomeVolume(intracranialElectrodes ?? {}),
-    [intracranialElectrodes]
-  );
+  const intracranialLayer = useMemo(
+    () => buildIntracranialLayer(intracranialSnapshot ?? {}),
+    [intracranialSnapshot]
+  ); // intracranial electrodes
+
+  const esiLayer = useMemo(
+    () => electricalSourceImaging(inverseSolution, channelSnapshot),
+    [inverseSolution, channelSnapshot]
+  ); // ESI source power
 
   // when both these flags are true, then the two plots can be synchronised
   const [niiNvReady, setNiiNvReady] = useState(false); // flag when the NiiViewer canvas is initialised
@@ -180,15 +202,25 @@ export const PatientView = () => {
   // they're orthogonal to EEG format detection and can arrive alone or alongside EEG files.
   const handleEegFiles = async (newFiles) => {
     const allFiles = Array.from(newFiles);
+    // Detect and handle electrode position files
     const elecPosFiles = allFiles.filter((f) =>
       ELEC_POS_EXTENSIONS.some((ext) => f.name.toLowerCase().endsWith(ext))
     );
     if (elecPosFiles.length > 0) {
       await handleElecPosFile(elecPosFiles[elecPosFiles.length - 1]); // keep only the last if multiple were dropped at once
     }
+    // Detect and handle inverse filter files
+    const invFiltFiles = allFiles.filter((f) =>
+      INV_SOLUTIONS_EXTENSIONS.some((ext) => f.name.toLowerCase().endsWith(ext))
+    );
+    if (invFiltFiles.length > 0) {
+      await handleInverseSolutionFile(invFiltFiles[invFiltFiles.length - 1]); // keep only the last if multiple were dropped at once
+    }
 
-    const eegFiles = allFiles.filter((f) => !elecPosFiles.includes(f));
-    if (eegFiles.length === 0) return; // pure electrode-position drop — nothing else to do
+    // Exclude electrode position and inverse filter files from EEG format detection — they are handled separately above. The remaining files are checked for EEG formats.
+    const eegFiles = allFiles.filter((f) => !elecPosFiles.includes(f) && !invFiltFiles.includes(f));
+
+    if (eegFiles.length === 0) return; // pure electrode-position/inv-filter drop — nothing else to do
 
     // Merge pending with new files
     const merged = [...pendingEegFiles, ...eegFiles];
@@ -287,7 +319,9 @@ export const PatientView = () => {
     setEegHint(null);
     setCustomElectrodes([]);
     setCustomElecPosFileName(null);
-    setIntracranialElectrodes(null);
+    setIntracranialSnapshot(null);
+    setInverseSolution(null);
+    setChannelSnapshot(null);
     setRecordingType('eeg');
   };
 
@@ -298,7 +332,9 @@ export const PatientView = () => {
     setCustomElectrodes([]);
     setCustomElecPosFileName(null);
     setRecordingType('eeg');
-    setIntracranialElectrodes(null);
+    setIntracranialSnapshot(null);
+    setInverseSolution(null);
+    setChannelSnapshot(null);
   };
 
   const handleNiiReset = () => {
@@ -361,14 +397,16 @@ export const PatientView = () => {
       <SplitPane
         leftLabel={
           eeg ? (
-            <RecordingTypeToggle recordingType={recordingType} onChange={setRecordingType} />
+            <EEGTypeToggle recordingType={recordingType} onChange={setRecordingType} />
           ) : (
             <span className={PANEL_TITLE_CLASS}>EEG</span>
           )
         }
         rightLabel={<span className={PANEL_TITLE_CLASS}>Neuroimaging</span>}
         onLeftReset={eeg || pendingEegFiles.length > 0 ? handleEegReset : undefined}
-        onRightReset={layers.length > 0 || connectomeLayer ? handleNiiReset : undefined}
+        onRightReset={
+          layers.length > 0 || intracranialLayer || esiLayer ? handleNiiReset : undefined
+        }
         onMaximizeChange={setMaximizedPanel}
         left={
           eeg ? (
@@ -383,13 +421,15 @@ export const PatientView = () => {
               recordingType={recordingType}
               onRecordingTypeChange={setRecordingType}
               onElecPosFile={handleElecPosFile}
-              onIntracranialElectrodesChange={setIntracranialElectrodes}
+              onInverseSolutionFile={handleInverseSolutionFile}
+              onIntracranialSnapshotChange={setIntracranialSnapshot}
+              onChannelSnapshotChange={setChannelSnapshot}
             />
           ) : (
             <div className="h-full p-2">
               <FileDropZone
                 onFiles={handleEegFiles}
-                accepted_formats=".vhdr,.eeg,.elc,.tsv"
+                accepted_formats=".vhdr,.eeg,.elc,.tsv,.mat"
                 label="Drop EEG files"
                 description="BrainVision: .vhdr + .eeg (+ optional .elc/.tsv electrode positions)"
                 pendingFiles={pendingEegFiles}
@@ -400,11 +440,12 @@ export const PatientView = () => {
           )
         }
         right={
-          layers.length > 0 || connectomeLayer ? (
+          layers.length > 0 || intracranialLayer || esiLayer ? (
             <NiiViewer
               nvRef={nvRef_niiviewer}
               layers={layers}
-              connectomeLayer={connectomeLayer}
+              intracranialLayer={intracranialLayer}
+              esiLayer={esiLayer}
               isFullscreen={maximizedPanel === 'right'}
               onViewReady={() => niiReadyResolveRef.current?.()}
               onNiiNvReady={() => setNiiNvReady(true)}
