@@ -9,12 +9,12 @@
 // @param {number} nInsideSources - number of inside-brain source points
 // @param {number} nChannels - number of EEG channels
 // @returns {Float64Array} source power per inside-brain point, length = nInsideSources
-export function calculateSourcePower(
+export function calculateSourcePower({
   flatSourceFilters,
   channelVoltages,
   nInsideSources,
-  nChannels
-) {
+  nChannels,
+}) {
   const sourcePowers = new Float64Array(nInsideSources);
 
   for (let iSource = 0; iSource < nInsideSources; iSource++) {
@@ -64,12 +64,12 @@ export function electricalSourceImaging(inverseFilters, channelVoltages) {
 
     const { flatSourceFilters, insideSourcePositions, nInsideSources, nChannels } = inverseFilters;
 
-    const sourcePowers = calculateSourcePower(
+    const sourcePowers = calculateSourcePower({
       flatSourceFilters,
       channelVoltages,
       nInsideSources,
-      nChannels
-    );
+      nChannels,
+    });
 
     return convertSourcePowersToVolume(insideSourcePositions, sourcePowers);
   } else {
