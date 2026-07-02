@@ -121,7 +121,7 @@ export const PatientView = () => {
   // toggle. EegViewer reports its auto-detection result up via the same setter that the
   // title's click handler uses, then reads the resulting value back down as a prop.
   const [recordingType, setRecordingType] = useState('eeg');
-  const [inverseSolution, setEsiModel] = useState(null);
+  const [inverseSolution, setInverseSolution] = useState(null);
 
   const handleElecPosFile = useCallback(async (file) => {
     try {
@@ -134,11 +134,11 @@ export const PatientView = () => {
     }
   }, []);
 
-  const handleInverseFilterFile = useCallback(async (file) => {
+  const handleInverseSolutionFile = useCallback(async (file) => {
     try {
-      const parsedEsiModel = await parseInverseSolutionFieldtrip(file);
-      if (!parsedEsiModel.length) return; // ignore empty or unparseable files
-      setEsiModel(parsedEsiModel);
+      const parsedInverseSolution = await parseInverseSolutionFieldtrip(file);
+      if (!parsedInverseSolution.length) return; // ignore empty or unparseable files
+      setInverseSolution(parsedInverseSolution);
     } catch (err) {
       toast.error(err.message);
     }
@@ -205,7 +205,7 @@ export const PatientView = () => {
       INV_FILT_EXTENSIONS.some((ext) => f.name.toLowerCase().endsWith(ext))
     );
     if (invFiltFiles.length > 0) {
-      await handleInverseFilterFile(invFiltFiles[invFiltFiles.length - 1]); // keep only the last if multiple were dropped at once
+      await handleInverseSolutionFile(invFiltFiles[invFiltFiles.length - 1]); // keep only the last if multiple were dropped at once
     }
 
     // Exclude electrode position and inverse filter files from EEG format detection — they are handled separately above. The remaining files are checked for EEG formats.
@@ -311,6 +311,7 @@ export const PatientView = () => {
     setCustomElectrodes([]);
     setCustomElecPosFileName(null);
     setIntracranialElectrodes(null);
+    setInverseSolution(null);
     setRecordingType('eeg');
   };
 

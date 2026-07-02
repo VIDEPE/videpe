@@ -5,7 +5,7 @@ import { ESI_CONNECTOME_URL } from '@/components/NiiViewer.utils';
 // (stored row-major in flatSourceFilters) by the channel voltage vector, giving a
 // [momentX, momentY, momentZ] dipole moment vector. Power = ||moment||² = mx²+my²+mz².
 //
-// @param {Float64Array} flatSourceFilters - pre-packed filter data from parseInverseFiltersFieldtrip
+// @param {Float64Array} flatSourceFilters - pre-packed filter data from parseInverseSolutionFieldtrip
 // @param {number[]|Float64Array} channelVoltages - voltage at each channel at the clicked timepoint,
 //   flat 1D array ordered to match inverseSolution.channelLabels (not a column vector)
 // @param {number} nInsideSources - number of inside-brain source points
@@ -72,10 +72,10 @@ export function convertSourcePowersToVolume(insideSourcePositions, sourcePowers)
 
 // Main entry point for Electrical Source Imaging. Called on each EEG plot click with
 // the loaded inverse filter model and the channel voltages at the clicked timepoint.
-// The model's flatSourceFilters is pre-computed at file-load time by parseInverseFiltersFieldtrip,
+// The model's flatSourceFilters is pre-computed at file-load time by parseInverseSolutionFieldtrip,
 // so this function only performs the fast per-click matrix multiply.
 //
-// @param {object} inverseSolution - parsed inverse filter model from parseInverseFiltersFieldtrip:
+// @param {object} inverseSolution - parsed inverse filter model from parseInverseSolutionFieldtrip:
 //   { format, flatSourceFilters, insideSourcePositions, nInsideSources, nChannels, channelLabels, ... }
 // @param {number[]|Float64Array} channelVoltages - voltage at each channel at the clicked timepoint,
 //   flat 1D array ordered to match inverseSolution.channelLabels

@@ -147,7 +147,7 @@ describe('convertSourcePowersToConnectome', () => {
 
 // ─── electricalSourceImaging ─────────────────────────────────────────────────
 //
-// Minimal model matching parseInverseFiltersFieldtrip's return shape.
+// Minimal model matching parseInverseSolutionFieldtrip's return shape.
 // Uses the same 2-source, 2-channel setup as TWO_SOURCE_FILTERS above
 // so expected powers are already verified: source 0 → 13, source 1 → 25.
 
