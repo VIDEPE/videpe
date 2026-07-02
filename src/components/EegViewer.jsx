@@ -274,12 +274,20 @@ export const EegViewer = ({
     onIntracranialSnapshotChange?.({ isIntracranial, matched, voltages: topoVoltages });
   }, [isIntracranial, matched, topoVoltages, onIntracranialSnapshotChange]);
 
-  // Lift all-channel voltages at the clicked timepoint for ESI computation. Separate from
-  // onIntracranialSnapshotChange — ESI needs the full channel vector (not just position-matched
-  // channels) to multiply against the inverse filter matrix.
+  // Lift all-channel voltages for ESI — fires only when topoTimepoint changes (i.e. on
+  // user clicks), NOT on every buffer refresh. Depending on topoVoltagesByChannel would
+  // also fire whenever timestamps shift during buffer loads, causing rapid cascading
+  // re-renders that supersede EegTopoViewer's async mesh load and leave it stuck loading.
   useEffect(() => {
-    onChannelSnapshotChange?.({ isIntracranial, channelNames, voltages: topoVoltagesByChannel });
-  }, [isIntracranial, channelNames, topoVoltagesByChannel, onChannelSnapshotChange]);
+    if (topoTimepoint === null || !montagedChannels || !timestamps?.length) return;
+    const sampleIndex = Math.max(
+      0,
+      Math.min(timestamps.length - 1, Math.round((topoTimepoint - timestamps[0]) * provider.fs))
+    );
+    const voltages = montagedChannels.map((ch) => ch?.[sampleIndex] ?? 0);
+    onChannelSnapshotChange?.({ isIntracranial, channelNames, voltages });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [topoTimepoint, isIntracranial, channelNames, onChannelSnapshotChange]);
 
   // Show a loading toast while the initial buffer loads, then update it to a success
   // message — self-contained so EegViewer reports its own status regardless of where
