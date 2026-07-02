@@ -87,6 +87,7 @@ export const EegViewer = ({
   customElecPosFileName = null,
   onElecPosFile,
   onIntracranialSnapshotChange,
+  onChannelSnapshotChange,
   recordingType = 'eeg', // 'eeg' | 'ieeg' — controlled by PatientView, which shows/drives the toggle in the panel title
   onRecordingTypeChange,
 }) => {
@@ -270,6 +271,13 @@ export const EegViewer = ({
   useEffect(() => {
     onIntracranialSnapshotChange?.({ isIntracranial, matched, voltages: topoVoltages });
   }, [isIntracranial, matched, topoVoltages, onIntracranialSnapshotChange]);
+
+  // Lift all-channel voltages at the clicked timepoint for ESI computation. Separate from
+  // onIntracranialSnapshotChange — ESI needs the full channel vector (not just position-matched
+  // channels) to multiply against the inverse filter matrix.
+  useEffect(() => {
+    onChannelSnapshotChange?.({ isIntracranial, channelNames, voltages: topoVoltagesByChannel });
+  }, [isIntracranial, channelNames, topoVoltagesByChannel, onChannelSnapshotChange]);
 
   // Show a loading toast while the initial buffer loads, then update it to a success
   // message — self-contained so EegViewer reports its own status regardless of where

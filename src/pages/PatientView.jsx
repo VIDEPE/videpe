@@ -415,6 +415,7 @@ export const PatientView = () => {
               onRecordingTypeChange={setRecordingType}
               onElecPosFile={handleElecPosFile}
               onIntracranialSnapshotChange={setIntracranialSnapshot}
+              onChannelSnapshotChange={setChannelSnapshot}
             />
           ) : (
             <div className="h-full p-2">
