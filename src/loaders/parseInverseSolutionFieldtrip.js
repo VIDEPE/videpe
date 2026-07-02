@@ -1,22 +1,4 @@
 import { read as readmat } from 'mat-for-js';
-import { readFileSync } from 'node:fs';
-
-// // Test script to
-// const TESTFILEPATH = new URL(
-//   '../../public/temp/sub-19_meth-eloreta_desc-nonorm_inversefilters.mat',
-//   import.meta.url
-// ); //import.meta.url is needed to accept a relative path
-
-// const buffer = readFileSync(TESTFILEPATH);
-// // buffer.buffer can be a shared, larger Node Buffer pool (for small files); slice out just this file's bytes
-// const arrayBuffer = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
-
-// const result = readmat(arrayBuffer);
-
-// const inside = result.data.inverse_filters.inside;
-// const pos = result.data.inverse_filters.pos;
-// const filter = result.data.inverse_filters.filter;
-// const elec = result.data.inverse_filters.elec;
 
 // parser to extract the following fields from the *_inversefilters.mat*
 //  - pos: (nDipoles,1) with [x,y,z] triplets indicating the 3D position of each dipole
