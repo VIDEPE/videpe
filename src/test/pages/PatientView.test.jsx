@@ -526,7 +526,7 @@ describe('PatientView — intracranial connectome layer', () => {
     await userEvent.click(screen.getByTestId('trigger-intracranial-change'));
 
     expect(screen.getByTestId('nii-viewer')).toBeInTheDocument();
-    expect(NiiViewer.mock.lastCall[0].connectomeLayer).toMatchObject({ kind: 'connectome' });
+    expect(NiiViewer.mock.lastCall[0].intracranialLayer).toMatchObject({ kind: 'connectome' });
   });
 
   it('clears the connectome layer on reset', async () => {

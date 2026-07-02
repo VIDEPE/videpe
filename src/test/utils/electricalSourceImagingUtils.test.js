@@ -162,6 +162,18 @@ const MINIMAL_MODEL = {
 };
 
 describe('electricalSourceImaging', () => {
+  it('returns null when inverseSolution is null (not yet loaded)', () => {
+    expect(electricalSourceImaging(null, [2, 3])).toBeNull();
+  });
+
+  it('returns null when channelVoltages is null (no EEG click yet)', () => {
+    expect(electricalSourceImaging(MINIMAL_MODEL, null)).toBeNull();
+  });
+
+  it('returns null when channelVoltages is empty (pre-click state from useMemo ?? [])', () => {
+    expect(electricalSourceImaging(MINIMAL_MODEL, [])).toBeNull();
+  });
+
   it('returns [] when flatSourceFilters is empty', () => {
     const inverseSolution = { ...MINIMAL_MODEL, flatSourceFilters: new Float64Array(0) };
     const channelVoltages = [2, 3];

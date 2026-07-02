@@ -54,7 +54,7 @@ export async function syncVolumesAndApplySettings(nv, layers, layerSettings) {
 export const NiiViewer = ({
   nvRef,
   layers = [], // image volumes/meshes loaded from files — e.g. .nii/.mgz/.gii/.ply/.obj drops
-  connectomeLayer = null, // intracranial electrode connectome layer — kept separate from `layers`
+  intracranialLayer = null, // intracranial electrode connectome layer — kept separate from `layers`
   // (see the connectome-sync effect below) so a voltage-driven data refresh never resets
   // every other layer's settings.
   onViewReady,
@@ -64,7 +64,7 @@ export const NiiViewer = ({
   // layerSettings is an array with one settings object per loaded layer (image volume,
   // connectome, or other mesh).
   const [layerSettings, setLayerSettings] = useState(() => getInitialLayerSettings(layers));
-  // orderedLayers mirrors the `layers` prop (plus the merged-in connectomeLayer, if any)
+  // orderedLayers mirrors the `layers` prop (plus the merged-in intracranialLayer, if any)
   // but can be rearranged by drag-to-reorder.
   const [orderedLayers, setOrderedLayers] = useState(layers);
   const [isLoading, setIsLoading] = useState(true);
@@ -91,8 +91,8 @@ export const NiiViewer = ({
   const loadingLayersRef = useRef(null); // reference to the layers array currently being loaded — prevents StrictMode's double-invoke from firing nv.loadVolumes twice
   const opacityRafRef = useRef(null); // pending rAF id for opacity updates — cancelled on each new drag event so only the latest value redraws
   const canvasSizeTimeoutRef = useRef(null); // pending debounce timeout for canvas size updates
-  const connectomeMeshRef = useRef(null); // the single intracranial-electrode connectome mesh currently in the scene, or null
-  const lastConnectomeLayerRef = useRef(null); // the connectomeLayer the mesh above was built from — guards against rebuilding on unrelated re-renders
+  const intracranialMeshRef = useRef(null); // the single intracranial-electrode connectome mesh currently in the scene, or null
+  const lastIntracranialLayerRef = useRef(null); // the intracranialLayer the mesh above was built from — guards against rebuilding on unrelated re-renders
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
 
   const [activeSliceType, setActiveSliceType] = useState(SLICE_TYPE.MULTIPLANAR);
@@ -145,7 +145,7 @@ export const NiiViewer = ({
       // separately above) — update the mesh object directly instead of going through
       // nv.setOpacity/setColormap, which index into nv.volumes.
       if (layer.kind === 'connectome') {
-        const mesh = connectomeMeshRef.current;
+        const mesh = intracranialMeshRef.current;
         if (!mesh) return;
         if (key === 'visible') {
           mesh.opacity = value ? nextLayerSettings[layerIndex].opacity : 0;
@@ -306,11 +306,11 @@ export const NiiViewer = ({
       const layer = orderedLayers[index];
 
       if (layer?.kind === 'connectome') {
-        if (connectomeMeshRef.current) {
-          nv.removeMesh(connectomeMeshRef.current);
-          connectomeMeshRef.current = null;
+        if (intracranialMeshRef.current) {
+          nv.removeMesh(intracranialMeshRef.current);
+          intracranialMeshRef.current = null;
         }
-        // Note: PatientView keeps re-deriving connectomeLayer from live EEG state, so this
+        // Note: PatientView keeps re-deriving intracranialLayer from live EEG state, so this
         // card reappears on the next voltage update unless that upstream state also clears —
         // acceptable for now, not a locked-in requirement to support a persistent dismissal.
       } else {
@@ -402,7 +402,7 @@ export const NiiViewer = ({
   //   2. Guard in the async callback: if loadingLayersRef has moved on to a different
   //      layers array by the time the load completes, this load has been superseded and
   //      must not update React state (setIsLoading / onViewReady).
-  // connectomeLayer deliberately is NOT a dependency here — it's merged into orderedLayers
+  // intracranialLayer deliberately is NOT a dependency here — it's merged into orderedLayers
   // by the dedicated sync effect below instead, so a voltage-driven connectome refresh never
   // re-triggers this image-loading effect or resets every other layer's settings.
   useEffect(() => {
@@ -422,7 +422,7 @@ export const NiiViewer = ({
       // connectome's own card (if any) is left alone. Each filter is self-contained (a
       // layer's own kind, a settings entry's own url) rather than cross-referencing the
       // other array by position — that stays correct regardless of what order this effect
-      // and the connectomeLayer sync effect happen to run in within the same commit.
+      // and the intracranialLayer sync effect happen to run in within the same commit.
       setOrderedLayers((prev) => prev.filter((l) => l.kind === 'connectome'));
       setLayerSettings((prev) => prev.filter((s) => s.url === INTRACRANIAL_CONNECTOME_URL));
       setIsLoading(false);
@@ -452,10 +452,10 @@ export const NiiViewer = ({
     loadAndSync();
   }, [layers]);
 
-  // Merges the separately-tracked connectomeLayer prop into orderedLayers/layerSettings by
+  // Merges the separately-tracked intracranialLayer prop into orderedLayers/layerSettings by
   // matching its fixed sentinel URL — keeps it in the same draggable ImagingControls list as
   // image volumes without ever touching their settings when only the connectome's own data
-  // (nodes/edges/calMax) refreshes (which produces a new connectomeLayer object on every
+  // (nodes/edges/calMax) refreshes (which produces a new intracranialLayer object on every
   // EEG voltage update).
   // Two independent, self-contained updater-function calls — deliberately not one nested
   // inside the other. setLayerSettings used to be called from inside setOrderedLayers's
@@ -471,65 +471,68 @@ export const NiiViewer = ({
   useEffect(() => {
     setOrderedLayers((prevLayers) => {
       const idx = prevLayers.findIndex((l) => l.url === INTRACRANIAL_CONNECTOME_URL);
-      if (!connectomeLayer) {
+      if (!intracranialLayer) {
         if (idx === -1) return prevLayers;
         return prevLayers.filter((_, i) => i !== idx);
       }
-      if (idx === -1) return [...prevLayers, connectomeLayer];
-      if (prevLayers[idx] === connectomeLayer) return prevLayers; // no change
+      if (idx === -1) return [...prevLayers, intracranialLayer];
+      if (prevLayers[idx] === intracranialLayer) return prevLayers; // no change
       const next = prevLayers.slice();
-      next[idx] = connectomeLayer;
+      next[idx] = intracranialLayer;
       return next;
     });
     setLayerSettings((prevSettings) => {
       const idx = prevSettings.findIndex((s) => s.url === INTRACRANIAL_CONNECTOME_URL);
-      if (!connectomeLayer)
+      if (!intracranialLayer)
         return idx === -1 ? prevSettings : prevSettings.filter((_, i) => i !== idx);
       if (idx !== -1) return prevSettings; // already has an entry — a data-only refresh never touches settings
-      return [...prevSettings, ...getInitialLayerSettings([connectomeLayer], prevSettings.length)];
+      return [
+        ...prevSettings,
+        ...getInitialLayerSettings([intracranialLayer], prevSettings.length),
+      ];
     });
-  }, [connectomeLayer]);
+  }, [intracranialLayer]);
 
-  // Builds/rebuilds/removes the actual NiiVue connectome mesh whenever connectomeLayer's
+  // Builds/rebuilds/removes the actual NiiVue connectome mesh whenever intracranialLayer's
   // data changes. Rebuilt wholesale on every change rather than mutated in place — mirrors
   // how EegTopoViewer rebuilds its own mesh on every topoTimepoint click.
   useEffect(() => {
     const nv = nvRef.current; // guard clause — nothing to do before NiiVue has attached to a canvas
     if (!nv) return;
 
-    if (!connectomeLayer) {
+    if (!intracranialLayer) {
       // No connectome to show anymore (e.g. positions/EEG cleared) — tear down the existing mesh, if any.
-      if (connectomeMeshRef.current) {
-        nv.removeMesh(connectomeMeshRef.current); // drop it from the 3D scene
-        connectomeMeshRef.current = null; // nothing left to track
-        lastConnectomeLayerRef.current = null; // so a future re-add isn't mistaken for "unchanged"
+      if (intracranialMeshRef.current) {
+        nv.removeMesh(intracranialMeshRef.current); // drop it from the 3D scene
+        intracranialMeshRef.current = null; // nothing left to track
+        lastIntracranialLayerRef.current = null; // so a future re-add isn't mistaken for "unchanged"
         nv.updateGLVolume(); // redraw without it
       }
       return;
     }
 
-    if (connectomeLayer === lastConnectomeLayerRef.current) return; // unrelated re-render (e.g. another layer's settings changed)
-    lastConnectomeLayerRef.current = connectomeLayer; // remember what this rebuild is based on
+    if (intracranialLayer === lastIntracranialLayerRef.current) return; // unrelated re-render (e.g. another layer's settings changed)
+    lastIntracranialLayerRef.current = intracranialLayer; // remember what this rebuild is based on
 
-    if (connectomeMeshRef.current) nv.removeMesh(connectomeMeshRef.current); // drop the stale mesh before building its replacement
+    if (intracranialMeshRef.current) nv.removeMesh(intracranialMeshRef.current); // drop the stale mesh before building its replacement
 
     // Build the new connectome mesh in memory — not yet added to the scene.
     const mesh = nv.loadConnectomeAsMesh({
-      name: connectomeLayer.name,
+      name: intracranialLayer.name,
       nodeColormap: EEG_NODE_POS_KEY,
       nodeColormapNegative: EEG_NODE_NEG_KEY,
       nodeMinColor: 0,
-      nodeMaxColor: connectomeLayer.calMax,
+      nodeMaxColor: intracranialLayer.calMax,
       nodeScale: 4,
       edgeColormap: EEG_NODE_POS_KEY,
       edgeColormapNegative: EEG_NODE_NEG_KEY,
       edgeMin: 0,
-      edgeMax: connectomeLayer.calMax,
+      edgeMax: intracranialLayer.calMax,
       edgeScale: 0.5,
       showLegend: false,
       colorbarVisible: false, // suppresses the node+edge colorbar entries NiiVue would otherwise add for a populated `edges` array
-      nodes: connectomeLayer.nodes,
-      edges: connectomeLayer.edges,
+      nodes: intracranialLayer.nodes,
+      edges: intracranialLayer.edges,
     });
 
     // Apply whatever opacity/visibility is already set for this layer (preserved across
@@ -539,13 +542,13 @@ export const NiiViewer = ({
     const existingIndex = orderedLayers.findIndex((l) => l.url === INTRACRANIAL_CONNECTOME_URL); // its current position in the card list, if it has one yet
     const settings =
       layerSettings[existingIndex] ?? // its existing settings, preserved across this rebuild
-      getInitialLayerSettings([connectomeLayer], orderedLayers.length)[0]; // or computed fresh on first appearance
+      getInitialLayerSettings([intracranialLayer], orderedLayers.length)[0]; // or computed fresh on first appearance
     mesh.opacity = settings.visible ? settings.opacity : 0; // 0 opacity is how a hidden mesh is represented, same convention as image volumes
 
     nv.addMesh(mesh); // actually add it to the 3D scene
-    connectomeMeshRef.current = mesh; // track it so the next change/removal can find it
+    intracranialMeshRef.current = mesh; // track it so the next change/removal can find it
     nv.updateGLVolume(); // redraw with the new mesh visible
-  }, [connectomeLayer, orderedLayers, layerSettings, nvRef]);
+  }, [intracranialLayer, orderedLayers, layerSettings, nvRef]);
 
   return (
     <div className="h-full flex flex-col pb-3 px-2 gap-2">

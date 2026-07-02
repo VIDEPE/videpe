@@ -16,7 +16,8 @@ import { parseElectrodePositionFile } from '../loaders/parseElectrodePositionFil
 import { parseInverseSolutionFieldtrip } from '../loaders/parseInverseSolutionFieldtrip';
 import { FileDropZone } from '../components/FileDropZone';
 import { detectVolumeType, filesToLayers } from '../components/NiiViewer.utils';
-import { buildConnectomeVolume } from '../utils/eegTopographyUtils';
+import { buildIntracranialLayer } from '../utils/eegTopographyUtils';
+import { electricalSourceImaging } from '../utils/electricalSourceImagingUtils';
 
 const DEMO_EEG = {
   header: 'demo_data/sub-synth_task-rest_eeg.vhdr',
@@ -122,6 +123,7 @@ export const PatientView = () => {
   // title's click handler uses, then reads the resulting value back down as a prop.
   const [recordingType, setRecordingType] = useState('eeg');
   const [inverseSolution, setInverseSolution] = useState(null);
+  const [channelSnapshot, setChannelSnapshot] = useState(null); // { isIntracranial, channelNames, voltages } lifted from EegViewer on each click
 
   const handleElecPosFile = useCallback(async (file) => {
     try {
@@ -147,10 +149,15 @@ export const PatientView = () => {
   // Derives the Neuroimaging pane's connectome layer from the EEG state lifted out of
   // EegViewer — null until there's an intracranial recording with at least one
   // position-matched channel. `?? {}` guards the initial (pre-EegViewer-effect) null state.
-  const connectomeLayer = useMemo(
-    () => buildConnectomeVolume(intracranialElectrodes ?? {}),
+  const intracranialLayer = useMemo(
+    () => buildIntracranialLayer(intracranialElectrodes ?? {}),
     [intracranialElectrodes]
-  );
+  ); // intracranial electrodes
+
+  const esiLayer = useMemo(
+    () => electricalSourceImaging(inverseSolution, channelSnapshot?.voltages ?? []),
+    [inverseSolution, channelSnapshot]
+  ); // ESI source power
 
   // when both these flags are true, then the two plots can be synchronised
   const [niiNvReady, setNiiNvReady] = useState(false); // flag when the NiiViewer canvas is initialised
@@ -392,7 +399,7 @@ export const PatientView = () => {
         }
         rightLabel={<span className={PANEL_TITLE_CLASS}>Neuroimaging</span>}
         onLeftReset={eeg || pendingEegFiles.length > 0 ? handleEegReset : undefined}
-        onRightReset={layers.length > 0 || connectomeLayer ? handleNiiReset : undefined}
+        onRightReset={layers.length > 0 || intracranialLayer ? handleNiiReset : undefined}
         onMaximizeChange={setMaximizedPanel}
         left={
           eeg ? (
@@ -424,11 +431,11 @@ export const PatientView = () => {
           )
         }
         right={
-          layers.length > 0 || connectomeLayer ? (
+          layers.length > 0 || intracranialLayer ? (
             <NiiViewer
               nvRef={nvRef_niiviewer}
               layers={layers}
-              connectomeLayer={connectomeLayer}
+              intracranialLayer={intracranialLayer}
               isFullscreen={maximizedPanel === 'right'}
               onViewReady={() => niiReadyResolveRef.current?.()}
               onNiiNvReady={() => setNiiNvReady(true)}

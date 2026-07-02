@@ -81,6 +81,8 @@ export function convertSourcePowersToVolume(insideSourcePositions, sourcePowers)
 //   flat 1D array ordered to match inverseSolution.channelLabels
 // @returns NiiVue connectome layer object for rendering source power in NiiViewer
 export function electricalSourceImaging(inverseSolution, channelVoltages) {
+  if (!inverseSolution) return null;
+  if (!channelVoltages?.length) return null;
   if (inverseSolution.format === 'FieldTrip') {
     if (!inverseSolution?.flatSourceFilters?.length) return [];
 

@@ -254,7 +254,7 @@ describe('ImagingControls', () => {
   });
 
   describe('connectome layer', () => {
-    const makeConnectomeVolume = () => ({
+    const makeIntracranialLayer = () => ({
       kind: 'connectome',
       type: 'Intracranial',
       subtype: 'Electrodes',
@@ -262,7 +262,7 @@ describe('ImagingControls', () => {
     });
 
     it('does not render Colormap, Invert, or Colorbar controls for a connectome-kind layer', async () => {
-      renderControls([makeConnectomeVolume()], [makeSettings()]);
+      renderControls([makeIntracranialLayer()], [makeSettings()]);
       await userEvent.click(
         screen.getByRole('button', { name: 'Expand Intracranial - Electrodes controls' })
       );
@@ -277,7 +277,7 @@ describe('ImagingControls', () => {
     });
 
     it('still renders the Opacity slider and Delete button for a connectome-kind layer', async () => {
-      renderControls([makeConnectomeVolume()], [makeSettings()]);
+      renderControls([makeIntracranialLayer()], [makeSettings()]);
       await userEvent.click(
         screen.getByRole('button', { name: 'Expand Intracranial - Electrodes controls' })
       );
@@ -289,7 +289,7 @@ describe('ImagingControls', () => {
     });
 
     it('still renders the visibility toggle and drag handle in the header for a connectome-kind layer', () => {
-      renderControls([makeConnectomeVolume()], [makeSettings()]);
+      renderControls([makeIntracranialLayer()], [makeSettings()]);
 
       expect(
         screen.getByRole('button', { name: 'Hide Intracranial - Electrodes' })

@@ -264,7 +264,7 @@ export function buildIntracranialConnectome(matched, voltages) {
 //
 // @param {{ isIntracranial: boolean, matched: object[], voltages: number[] }} args
 // @returns {object | null}
-export function buildConnectomeVolume({ isIntracranial, matched, voltages }) {
+export function buildIntracranialLayer({ isIntracranial, matched, voltages }) {
   if (!isIntracranial || !matched?.length) return null; // nothing to render yet
 
   const { nodes, edges } = buildIntracranialConnectome(matched, voltages);
