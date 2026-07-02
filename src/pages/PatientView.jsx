@@ -155,7 +155,7 @@ export const PatientView = () => {
   ); // intracranial electrodes
 
   const esiLayer = useMemo(
-    () => electricalSourceImaging(inverseSolution, channelSnapshot?.voltages ?? []),
+    () => electricalSourceImaging(inverseSolution, channelSnapshot),
     [inverseSolution, channelSnapshot]
   ); // ESI source power
 

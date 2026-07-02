@@ -71,18 +71,21 @@ export function convertSourcePowersToVolume(insideSourcePositions, sourcePowers)
 }
 
 // Main entry point for Electrical Source Imaging. Called on each EEG plot click with
-// the loaded inverse filter model and the channel voltages at the clicked timepoint.
+// the loaded inverse filter model and a snapshot of the current channel state.
 // The model's flatSourceFilters is pre-computed at file-load time by parseInverseSolutionFieldtrip,
 // so this function only performs the fast per-click matrix multiply.
 //
 // @param {object} inverseSolution - parsed inverse filter model from parseInverseSolutionFieldtrip:
 //   { format, flatSourceFilters, insideSourcePositions, nInsideSources, nChannels, channelLabels, ... }
-// @param {number[]|Float64Array} channelVoltages - voltage at each channel at the clicked timepoint,
-//   flat 1D array ordered to match inverseSolution.channelLabels
+// @param {object} channelSnapshot - per-click EEG state lifted from EegViewer:
+//   { isIntracranial: boolean, channelNames: string[], voltages: number[] }
 // @returns NiiVue connectome layer object for rendering source power in NiiViewer
-export function electricalSourceImaging(inverseSolution, channelVoltages) {
+export function electricalSourceImaging(inverseSolution, channelSnapshot) {
   if (!inverseSolution) return null;
-  if (!channelVoltages?.length) return null;
+  if (!channelSnapshot?.voltages?.length) return null;
+  // ESI inverse filters are computed from scalp EEG models — applying them to intracranial
+  // recordings would produce nonsensical results, so we guard here rather than in the caller.
+  if (channelSnapshot.isIntracranial) return null;
   if (inverseSolution.format === 'FieldTrip') {
     if (!inverseSolution?.flatSourceFilters?.length) return [];
 
@@ -90,7 +93,7 @@ export function electricalSourceImaging(inverseSolution, channelVoltages) {
 
     const sourcePowers = calculateSourcePower({
       flatSourceFilters,
-      channelVoltages,
+      channelVoltages: channelSnapshot.voltages,
       nInsideSources,
       nChannels,
     });

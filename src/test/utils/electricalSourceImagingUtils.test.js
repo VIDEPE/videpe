@@ -161,38 +161,41 @@ const MINIMAL_MODEL = {
   channelLabels: ['1', '2'],
 };
 
+// channelSnapshot fixtures — the per-click EEG state lifted from EegViewer
+const SCALP_SNAPSHOT = { isIntracranial: false, channelNames: ['1', '2'], voltages: [2, 3] };
+const IEEG_SNAPSHOT = { isIntracranial: true, channelNames: ['B1', 'B2'], voltages: [2, 3] };
+
 describe('electricalSourceImaging', () => {
   it('returns null when inverseSolution is null (not yet loaded)', () => {
-    expect(electricalSourceImaging(null, [2, 3])).toBeNull();
+    expect(electricalSourceImaging(null, SCALP_SNAPSHOT)).toBeNull();
   });
 
-  it('returns null when channelVoltages is null (no EEG click yet)', () => {
+  it('returns null when channelSnapshot is null (no EEG click yet)', () => {
     expect(electricalSourceImaging(MINIMAL_MODEL, null)).toBeNull();
   });
 
-  it('returns null when channelVoltages is empty (pre-click state from useMemo ?? [])', () => {
-    expect(electricalSourceImaging(MINIMAL_MODEL, [])).toBeNull();
+  it('returns null when channelSnapshot voltages are empty (pre-click state)', () => {
+    expect(electricalSourceImaging(MINIMAL_MODEL, { ...SCALP_SNAPSHOT, voltages: [] })).toBeNull();
+  });
+
+  it('returns null for iEEG recordings — ESI inverse filters require scalp EEG', () => {
+    expect(electricalSourceImaging(MINIMAL_MODEL, IEEG_SNAPSHOT)).toBeNull();
   });
 
   it('returns [] when flatSourceFilters is empty', () => {
     const inverseSolution = { ...MINIMAL_MODEL, flatSourceFilters: new Float64Array(0) };
-    const channelVoltages = [2, 3];
 
-    expect(electricalSourceImaging(inverseSolution, channelVoltages)).toEqual([]);
+    expect(electricalSourceImaging(inverseSolution, SCALP_SNAPSHOT)).toEqual([]);
   });
 
   it('throws a descriptive error for an unknown format', () => {
     const inverseSolution = { ...MINIMAL_MODEL, format: 'Unknown' };
-    const channelVoltages = [2, 3];
 
-    expect(() => electricalSourceImaging(inverseSolution, channelVoltages)).toThrow(/format/);
+    expect(() => electricalSourceImaging(inverseSolution, SCALP_SNAPSHOT)).toThrow(/format/);
   });
 
   it('runs end-to-end and returns a connectome layer for NiiViewer', () => {
-    const inverseSolution = MINIMAL_MODEL;
-    const channelVoltages = [2, 3];
-
-    const result = electricalSourceImaging(inverseSolution, channelVoltages);
+    const result = electricalSourceImaging(MINIMAL_MODEL, SCALP_SNAPSHOT);
 
     // Powers from this model are already verified: source 0 → 13, source 1 → 25
     expect(result.kind).toBe('connectome');
