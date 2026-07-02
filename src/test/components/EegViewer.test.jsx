@@ -1451,14 +1451,14 @@ describe('EegViewer — recording type detection', () => {
 });
 
 describe('EegViewer — lifted electrode state callback', () => {
-  it('calls onIntracranialElectrodesChange with the current mode, matched channels, and voltages', async () => {
-    const onIntracranialElectrodesChange = vi.fn();
+  it('calls onIntracranialSnapshotChange with the current mode, matched channels, and voltages', async () => {
+    const onIntracranialSnapshotChange = vi.fn();
     const provider = makeProvider();
     render(
       <EegViewer
         provider={provider}
         channelNames={provider.channelNames}
-        onIntracranialElectrodesChange={onIntracranialElectrodesChange}
+        onIntracranialSnapshotChange={onIntracranialSnapshotChange}
       />
     );
     await act(async () => {
@@ -1466,16 +1466,16 @@ describe('EegViewer — lifted electrode state callback', () => {
       await Promise.resolve();
     });
 
-    expect(onIntracranialElectrodesChange).toHaveBeenCalledWith(
+    expect(onIntracranialSnapshotChange).toHaveBeenCalledWith(
       expect.objectContaining({ isIntracranial: false, voltages: [] })
     );
 
-    onIntracranialElectrodesChange.mockClear();
+    onIntracranialSnapshotChange.mockClear();
     await act(async () => {
       capturedClickHandler?.();
     });
 
-    expect(onIntracranialElectrodesChange).toHaveBeenLastCalledWith(
+    expect(onIntracranialSnapshotChange).toHaveBeenLastCalledWith(
       expect.objectContaining({ isIntracranial: false, voltages: [4, 7] })
     );
   });

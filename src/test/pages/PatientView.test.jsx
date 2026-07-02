@@ -39,29 +39,27 @@ vi.mock('@/loaders/eegFormats', () => ({
 }));
 
 vi.mock('@/components/EegViewer', () => ({
-  EegViewer: vi.fn(
-    ({ customElectrodes, customElecPosFileName, onIntracranialElectrodesChange }) => (
-      <div data-testid="eeg-viewer">
-        <span data-testid="eeg-custom-electrodes-count">{customElectrodes?.length ?? 0}</span>
-        <span data-testid="eeg-custom-filename">{customElecPosFileName ?? ''}</span>
-        {/* Simulates EegViewer reporting live intracranial electrode/voltage state, the way it
+  EegViewer: vi.fn(({ customElectrodes, customElecPosFileName, onIntracranialSnapshotChange }) => (
+    <div data-testid="eeg-viewer">
+      <span data-testid="eeg-custom-electrodes-count">{customElectrodes?.length ?? 0}</span>
+      <span data-testid="eeg-custom-filename">{customElecPosFileName ?? ''}</span>
+      {/* Simulates EegViewer reporting live intracranial electrode/voltage state, the way it
           would after detecting an intracranial recording and matching a position file. */}
-        <button
-          type="button"
-          data-testid="trigger-intracranial-change"
-          onClick={() =>
-            onIntracranialElectrodesChange?.({
-              isIntracranial: true,
-              matched: [{ channelIdx: 0, name: 'B1', pos: { label: 'B1', x: 0, y: 0, z: 0 } }],
-              voltages: [5],
-            })
-          }
-        >
-          trigger
-        </button>
-      </div>
-    )
-  ),
+      <button
+        type="button"
+        data-testid="trigger-intracranial-change"
+        onClick={() =>
+          onIntracranialSnapshotChange?.({
+            isIntracranial: true,
+            matched: [{ channelIdx: 0, name: 'B1', pos: { label: 'B1', x: 0, y: 0, z: 0 } }],
+            voltages: [5],
+          })
+        }
+      >
+        trigger
+      </button>
+    </div>
+  )),
 }));
 vi.mock('@/components/NiiViewer', () => ({
   NiiViewer: vi.fn(() => <div data-testid="nii-viewer" />),

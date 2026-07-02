@@ -117,7 +117,7 @@ export const PatientView = () => {
   const [customElecPosFileName, setCustomElecPosFileName] = useState(null);
   // Live EEG/electrode state lifted out of EegViewer — drives the intracranial connectome
   // layer in the Neuroimaging pane. { isIntracranial, matched, voltages } | null.
-  const [intracranialElectrodes, setIntracranialElectrodes] = useState(null);
+  const [intracranialSnapshot, setIntracranialSnapshot] = useState(null);
   // 'eeg' | 'ieeg' — owned here (not EegViewer) so the SplitPane title can show/drive the
   // toggle. EegViewer reports its auto-detection result up via the same setter that the
   // title's click handler uses, then reads the resulting value back down as a prop.
@@ -150,8 +150,8 @@ export const PatientView = () => {
   // EegViewer — null until there's an intracranial recording with at least one
   // position-matched channel. `?? {}` guards the initial (pre-EegViewer-effect) null state.
   const intracranialLayer = useMemo(
-    () => buildIntracranialLayer(intracranialElectrodes ?? {}),
-    [intracranialElectrodes]
+    () => buildIntracranialLayer(intracranialSnapshot ?? {}),
+    [intracranialSnapshot]
   ); // intracranial electrodes
 
   const esiLayer = useMemo(
@@ -317,7 +317,7 @@ export const PatientView = () => {
     setEegHint(null);
     setCustomElectrodes([]);
     setCustomElecPosFileName(null);
-    setIntracranialElectrodes(null);
+    setIntracranialSnapshot(null);
     setInverseSolution(null);
     setRecordingType('eeg');
   };
@@ -329,7 +329,7 @@ export const PatientView = () => {
     setCustomElectrodes([]);
     setCustomElecPosFileName(null);
     setRecordingType('eeg');
-    setIntracranialElectrodes(null);
+    setIntracranialSnapshot(null);
   };
 
   const handleNiiReset = () => {
@@ -414,7 +414,7 @@ export const PatientView = () => {
               recordingType={recordingType}
               onRecordingTypeChange={setRecordingType}
               onElecPosFile={handleElecPosFile}
-              onIntracranialElectrodesChange={setIntracranialElectrodes}
+              onIntracranialSnapshotChange={setIntracranialSnapshot}
             />
           ) : (
             <div className="h-full p-2">
@@ -436,6 +436,7 @@ export const PatientView = () => {
               nvRef={nvRef_niiviewer}
               layers={layers}
               intracranialLayer={intracranialLayer}
+              esiLayer={esiLayer}
               isFullscreen={maximizedPanel === 'right'}
               onViewReady={() => niiReadyResolveRef.current?.()}
               onNiiNvReady={() => setNiiNvReady(true)}

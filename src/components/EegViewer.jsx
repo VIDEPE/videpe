@@ -86,7 +86,7 @@ export const EegViewer = ({
   customElectrodes = [], // [{label,x,y,z}] — owned by PatientView, loaded from a user-supplied .elc/.tsv file
   customElecPosFileName = null,
   onElecPosFile,
-  onIntracranialElectrodesChange,
+  onIntracranialSnapshotChange,
   recordingType = 'eeg', // 'eeg' | 'ieeg' — controlled by PatientView, which shows/drives the toggle in the panel title
   onRecordingTypeChange,
 }) => {
@@ -268,8 +268,8 @@ export const EegViewer = ({
   // intracranial connectome layer for the Neuroimaging pane — fires regardless of
   // whether the topography window itself is open, since the connectome auto-shows.
   useEffect(() => {
-    onIntracranialElectrodesChange?.({ isIntracranial, matched, voltages: topoVoltages });
-  }, [isIntracranial, matched, topoVoltages, onIntracranialElectrodesChange]);
+    onIntracranialSnapshotChange?.({ isIntracranial, matched, voltages: topoVoltages });
+  }, [isIntracranial, matched, topoVoltages, onIntracranialSnapshotChange]);
 
   // Show a loading toast while the initial buffer loads, then update it to a success
   // message — self-contained so EegViewer reports its own status regardless of where
