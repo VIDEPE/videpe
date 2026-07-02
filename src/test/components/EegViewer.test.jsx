@@ -1528,13 +1528,13 @@ describe('EegViewer — customElectrodes prop', () => {
 });
 
 describe('EegViewer — persistent electrode position dropzone', () => {
-  it('renders a "Drop electrode positions" dropzone even while the topography window is closed', async () => {
+  it('renders a dropzone for electrode positions and inverse solution even while the topography window is closed', async () => {
     await renderViewer();
     expect(screen.queryByTestId('eeg-topo-viewer')).toBeNull();
-    expect(screen.getByText('Drop electrode positions')).toBeInTheDocument();
+    expect(screen.getByText('Drop electrode positions / inverse solution')).toBeInTheDocument();
   });
 
-  it('calls onElecPosFile with the dropped file', async () => {
+  it('calls onElecPosFile with the dropped .elc file', async () => {
     const onElecPosFile = vi.fn();
     const provider = makeProvider();
     render(
@@ -1554,5 +1554,53 @@ describe('EegViewer — persistent electrode position dropzone', () => {
     await userEvent.upload(input, file);
 
     expect(onElecPosFile).toHaveBeenCalledWith(file);
+  });
+
+  it('calls onInverseSolutionFile with a dropped .mat file', async () => {
+    const onInverseSolutionFile = vi.fn();
+    const provider = makeProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        onInverseSolutionFile={onInverseSolutionFile}
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const file = new File(['binary'], 'sub-19_inversefilters.mat');
+    const input = document.querySelector('input[type="file"]');
+    await userEvent.upload(input, file);
+
+    expect(onInverseSolutionFile).toHaveBeenCalledWith(file);
+  });
+
+  it('routes .elc and .mat to their respective handlers when dropped together', async () => {
+    const onElecPosFile = vi.fn();
+    const onInverseSolutionFile = vi.fn();
+    const provider = makeProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        onElecPosFile={onElecPosFile}
+        onInverseSolutionFile={onInverseSolutionFile}
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const elcFile = new File(['# ASA electrode file'], 'positions.elc');
+    const matFile = new File(['binary'], 'sub-19_inversefilters.mat');
+    const input = document.querySelector('input[type="file"]');
+    await userEvent.upload(input, [elcFile, matFile]);
+
+    expect(onElecPosFile).toHaveBeenCalledWith(elcFile);
+    expect(onInverseSolutionFile).toHaveBeenCalledWith(matFile);
   });
 });

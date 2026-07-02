@@ -11,7 +11,12 @@ import { EegViewer } from '../components/EegViewer';
 import { NiiViewer } from '../components/NiiViewer';
 import { SplitPane } from '../components/SplitPane';
 import { loadBrainVisionEEG } from '../loaders/loadBrainVisionEEG';
-import { detectAndLoadEEG, checkEegFiles } from '../loaders/eegFormats';
+import {
+  detectAndLoadEEG,
+  checkEegFiles,
+  ELEC_POS_EXTENSIONS,
+  INV_SOLUTIONS_EXTENSIONS,
+} from '../loaders/eegFormats';
 import { parseElectrodePositionFile } from '../loaders/parseElectrodePositionFile';
 import { parseInverseSolutionFieldtrip } from '../loaders/parseInverseSolutionFieldtrip';
 import { FileDropZone } from '../components/FileDropZone';
@@ -83,8 +88,6 @@ const DEMO_LAYERS = [
 
 // Electrode position files are routed to handleElecPosFile instead of the EEG-format
 // accumulation logic below, regardless of which dropzone/button they came in through.
-const ELEC_POS_EXTENSIONS = ['.elc', '.tsv'];
-const INV_FILT_EXTENSIONS = ['.mat'];
 
 export const PatientView = () => {
   // Prevent default browser drag-and-drop behavior (e.g., opening files in a new tab)
@@ -139,7 +142,6 @@ export const PatientView = () => {
   const handleInverseSolutionFile = useCallback(async (file) => {
     try {
       const parsedInverseSolution = await parseInverseSolutionFieldtrip(file);
-      if (!parsedInverseSolution.length) return; // ignore empty or unparseable files
       setInverseSolution(parsedInverseSolution);
     } catch (err) {
       toast.error(err.message);
@@ -209,7 +211,7 @@ export const PatientView = () => {
     }
     // Detect and handle inverse filter files
     const invFiltFiles = allFiles.filter((f) =>
-      INV_FILT_EXTENSIONS.some((ext) => f.name.toLowerCase().endsWith(ext))
+      INV_SOLUTIONS_EXTENSIONS.some((ext) => f.name.toLowerCase().endsWith(ext))
     );
     if (invFiltFiles.length > 0) {
       await handleInverseSolutionFile(invFiltFiles[invFiltFiles.length - 1]); // keep only the last if multiple were dropped at once
@@ -399,7 +401,9 @@ export const PatientView = () => {
         }
         rightLabel={<span className={PANEL_TITLE_CLASS}>Neuroimaging</span>}
         onLeftReset={eeg || pendingEegFiles.length > 0 ? handleEegReset : undefined}
-        onRightReset={layers.length > 0 || intracranialLayer ? handleNiiReset : undefined}
+        onRightReset={
+          layers.length > 0 || intracranialLayer || esiLayer ? handleNiiReset : undefined
+        }
         onMaximizeChange={setMaximizedPanel}
         left={
           eeg ? (
@@ -414,6 +418,7 @@ export const PatientView = () => {
               recordingType={recordingType}
               onRecordingTypeChange={setRecordingType}
               onElecPosFile={handleElecPosFile}
+              onInverseSolutionFile={handleInverseSolutionFile}
               onIntracranialSnapshotChange={setIntracranialSnapshot}
               onChannelSnapshotChange={setChannelSnapshot}
             />
@@ -421,7 +426,7 @@ export const PatientView = () => {
             <div className="h-full p-2">
               <FileDropZone
                 onFiles={handleEegFiles}
-                accepted_formats=".vhdr,.eeg,.elc,.tsv"
+                accepted_formats=".vhdr,.eeg,.elc,.tsv,.mat"
                 label="Drop EEG files"
                 description="BrainVision: .vhdr + .eeg (+ optional .elc/.tsv electrode positions)"
                 pendingFiles={pendingEegFiles}
@@ -432,7 +437,7 @@ export const PatientView = () => {
           )
         }
         right={
-          layers.length > 0 || intracranialLayer ? (
+          layers.length > 0 || intracranialLayer || esiLayer ? (
             <NiiViewer
               nvRef={nvRef_niiviewer}
               layers={layers}
