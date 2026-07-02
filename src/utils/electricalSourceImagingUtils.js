@@ -7,7 +7,7 @@ import { ESI_CONNECTOME_URL } from '@/components/NiiViewer.utils';
 //
 // @param {Float64Array} flatSourceFilters - pre-packed filter data from parseInverseFiltersFieldtrip
 // @param {number[]|Float64Array} channelVoltages - voltage at each channel at the clicked timepoint,
-//   flat 1D array ordered to match inverseFilters.channelLabels (not a column vector)
+//   flat 1D array ordered to match inverseSolution.channelLabels (not a column vector)
 // @param {number} nInsideSources - number of inside-brain source points
 // @param {number} nChannels - number of EEG channels
 // @returns {Float64Array} source power per inside-brain point, length = nInsideSources
@@ -75,16 +75,16 @@ export function convertSourcePowersToVolume(insideSourcePositions, sourcePowers)
 // The model's flatSourceFilters is pre-computed at file-load time by parseInverseFiltersFieldtrip,
 // so this function only performs the fast per-click matrix multiply.
 //
-// @param {object} inverseFilters - parsed inverse filter model from parseInverseFiltersFieldtrip:
+// @param {object} inverseSolution - parsed inverse filter model from parseInverseFiltersFieldtrip:
 //   { format, flatSourceFilters, insideSourcePositions, nInsideSources, nChannels, channelLabels, ... }
 // @param {number[]|Float64Array} channelVoltages - voltage at each channel at the clicked timepoint,
-//   flat 1D array ordered to match inverseFilters.channelLabels
+//   flat 1D array ordered to match inverseSolution.channelLabels
 // @returns NiiVue connectome layer object for rendering source power in NiiViewer
-export function electricalSourceImaging(inverseFilters, channelVoltages) {
-  if (inverseFilters.format === 'FieldTrip') {
-    if (!inverseFilters?.flatSourceFilters?.length) return [];
+export function electricalSourceImaging(inverseSolution, channelVoltages) {
+  if (inverseSolution.format === 'FieldTrip') {
+    if (!inverseSolution?.flatSourceFilters?.length) return [];
 
-    const { flatSourceFilters, insideSourcePositions, nInsideSources, nChannels } = inverseFilters;
+    const { flatSourceFilters, insideSourcePositions, nInsideSources, nChannels } = inverseSolution;
 
     const sourcePowers = calculateSourcePower({
       flatSourceFilters,

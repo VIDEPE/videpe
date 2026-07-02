@@ -13,7 +13,7 @@ import { SplitPane } from '../components/SplitPane';
 import { loadBrainVisionEEG } from '../loaders/loadBrainVisionEEG';
 import { detectAndLoadEEG, checkEegFiles } from '../loaders/eegFormats';
 import { parseElectrodePositionFile } from '../loaders/parseElectrodePositionFile';
-import { parseInverseFiltersFieldtrip } from '../loaders/parseInverseFiltersFieldtrip';
+import { parseInverseSolutionFieldtrip } from '../loaders/parseInverseSolutionFieldtrip';
 import { FileDropZone } from '../components/FileDropZone';
 import { detectVolumeType, filesToLayers } from '../components/NiiViewer.utils';
 import { buildConnectomeVolume } from '../utils/eegTopographyUtils';
@@ -83,6 +83,7 @@ const DEMO_LAYERS = [
 // Electrode position files are routed to handleElecPosFile instead of the EEG-format
 // accumulation logic below, regardless of which dropzone/button they came in through.
 const ELEC_POS_EXTENSIONS = ['.elc', '.tsv'];
+const INV_FILT_EXTENSIONS = ['.mat'];
 
 export const PatientView = () => {
   // Prevent default browser drag-and-drop behavior (e.g., opening files in a new tab)
@@ -120,7 +121,7 @@ export const PatientView = () => {
   // toggle. EegViewer reports its auto-detection result up via the same setter that the
   // title's click handler uses, then reads the resulting value back down as a prop.
   const [recordingType, setRecordingType] = useState('eeg');
-  const [inverseFilters, setInverseFilters] = useState(null);
+  const [inverseSolution, setEsiModel] = useState(null);
 
   const handleElecPosFile = useCallback(async (file) => {
     try {
@@ -135,9 +136,9 @@ export const PatientView = () => {
 
   const handleInverseFilterFile = useCallback(async (file) => {
     try {
-      const parsedInverseFilters = await parseInverseFiltersFieldtrip(file);
-      if (!parsedInverseFilters.length) return; // ignore empty or unparseable files
-      setInverseFilters(parsedInverseFilters);
+      const parsedEsiModel = await parseInverseSolutionFieldtrip(file);
+      if (!parsedEsiModel.length) return; // ignore empty or unparseable files
+      setEsiModel(parsedEsiModel);
     } catch (err) {
       toast.error(err.message);
     }
@@ -192,15 +193,25 @@ export const PatientView = () => {
   // they're orthogonal to EEG format detection and can arrive alone or alongside EEG files.
   const handleEegFiles = async (newFiles) => {
     const allFiles = Array.from(newFiles);
+    // Detect and handle electrode position files
     const elecPosFiles = allFiles.filter((f) =>
       ELEC_POS_EXTENSIONS.some((ext) => f.name.toLowerCase().endsWith(ext))
     );
     if (elecPosFiles.length > 0) {
       await handleElecPosFile(elecPosFiles[elecPosFiles.length - 1]); // keep only the last if multiple were dropped at once
     }
+    // Detect and handle inverse filter files
+    const invFiltFiles = allFiles.filter((f) =>
+      INV_FILT_EXTENSIONS.some((ext) => f.name.toLowerCase().endsWith(ext))
+    );
+    if (invFiltFiles.length > 0) {
+      await handleInverseFilterFile(invFiltFiles[invFiltFiles.length - 1]); // keep only the last if multiple were dropped at once
+    }
 
-    const eegFiles = allFiles.filter((f) => !elecPosFiles.includes(f));
-    if (eegFiles.length === 0) return; // pure electrode-position drop — nothing else to do
+    // Exclude electrode position and inverse filter files from EEG format detection — they are handled separately above. The remaining files are checked for EEG formats.
+    const eegFiles = allFiles.filter((f) => !elecPosFiles.includes(f) && !invFiltFiles.includes(f));
+
+    if (eegFiles.length === 0) return; // pure electrode-position/inv-filter drop — nothing else to do
 
     // Merge pending with new files
     const merged = [...pendingEegFiles, ...eegFiles];

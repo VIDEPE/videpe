@@ -23,7 +23,7 @@ import { readFileSync } from 'node:fs';
 //  - filter: (nDipoles,1), each either [] (outside point, e.g. index 0) or 3 sub-arrays of nChannels numbers each — the [3 x nChannels] x/y/z-orientation matrix ✓
 //  - inside: (nDipoles,1) flat array of 0 (dipole pos is outside the brain) or 1 (dipole pos it inside the brain)
 //  - elec.label: nchannels bare-numeric strings, ending in 'VREF'
-export const parseInverseFiltersFieldtrip = async (file) => {
+export const parseInverseSolutionFieldtrip = async (file) => {
   // The arrayBuffer() method returns a Promise that resolves with the contents of the blob as binary data contained in an ArrayBuffer.
   const arrayBuffer = await file.arrayBuffer();
   // Which can be read by mat4js.read function

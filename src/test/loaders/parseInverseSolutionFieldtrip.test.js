@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { read as readmat } from 'mat-for-js';
-import { parseInverseFiltersFieldtrip } from '@/loaders/parseInverseFiltersFieldtrip';
+import { parseInverseSolutionFieldtrip } from '@/loaders/parseInverseSolutionFieldtrip';
 
 // mat-for-js does the actual MAT5 binary decoding — that's its job to get right, not ours
 // to re-verify here. What we own is the adapter from its generic {header, data} shape to
@@ -41,12 +41,12 @@ const withInverseFilters = (overrides) => ({
   data: { inverse_filters: { ...FIXTURE.data.inverse_filters, ...overrides } },
 });
 
-describe('parseInverseFiltersFieldtrip', () => {
+describe('parseInverseSolutionFieldtrip', () => {
   it('returns the full expected shape for a valid file', async () => {
     readmat.mockReturnValue(FIXTURE);
     const file = new File(['irrelevant — read() is mocked'], 'mocked_file_inversefilters.mat');
 
-    const result = await parseInverseFiltersFieldtrip(file);
+    const result = await parseInverseSolutionFieldtrip(file);
 
     // Raw fields passed through from the MAT struct
     expect(result.format).toBe('FieldTrip');
@@ -70,7 +70,7 @@ describe('parseInverseFiltersFieldtrip', () => {
     readmat.mockReturnValue(FIXTURE);
     const file = new File(['irrelevant — read() is mocked'], 'mocked_file_inversefilters.mat');
 
-    const result = await parseInverseFiltersFieldtrip(file);
+    const result = await parseInverseSolutionFieldtrip(file);
 
     expect(result.sourceFilters).toBeUndefined();
   });
@@ -80,7 +80,7 @@ describe('parseInverseFiltersFieldtrip', () => {
     readmat.mockReturnValue(FIXTURE);
     const file = new File(['irrelevant — read() is mocked'], 'mocked_file_inversefilters.mat');
 
-    const result = await parseInverseFiltersFieldtrip(file);
+    const result = await parseInverseSolutionFieldtrip(file);
 
     expect(result.indicesInsideSources).toEqual([1]);
     expect(result.nInsideSources).toBe(1);
@@ -93,7 +93,7 @@ describe('parseInverseFiltersFieldtrip', () => {
     readmat.mockReturnValue(FIXTURE);
     const file = new File(['irrelevant — read() is mocked'], 'mocked_file_inversefilters.mat');
 
-    const result = await parseInverseFiltersFieldtrip(file);
+    const result = await parseInverseSolutionFieldtrip(file);
 
     expect(result.flatSourceFilters).toBeInstanceOf(Float64Array);
     expect(result.nChannels).toBe(2);
@@ -105,7 +105,7 @@ describe('parseInverseFiltersFieldtrip', () => {
     readmat.mockReturnValue(FIXTURE);
     const file = new File(['irrelevant — read() is mocked'], 'mocked_file_inversefilters.mat');
 
-    const result = await parseInverseFiltersFieldtrip(file);
+    const result = await parseInverseSolutionFieldtrip(file);
 
     expect(result.flatSourceFilters.length).toBe(1 * 3 * 2); // nInsideSources × 3 × nChannels
   });
@@ -115,7 +115,7 @@ describe('parseInverseFiltersFieldtrip', () => {
     readmat.mockReturnValue(FIXTURE);
     const file = new File(['irrelevant — read() is mocked'], 'mocked_file_inversefilters.mat');
 
-    await parseInverseFiltersFieldtrip(file);
+    await parseInverseSolutionFieldtrip(file);
 
     expect(readmat).toHaveBeenCalledWith(expect.any(ArrayBuffer));
   });
@@ -125,7 +125,7 @@ describe('parseInverseFiltersFieldtrip', () => {
     readmat.mockReturnValue({ header: '...', data: {} });
     const file = new File(['irrelevant — read() is mocked'], 'mocked_file_inversefilters.mat');
 
-    await expect(parseInverseFiltersFieldtrip(file)).rejects.toThrow(/inverse_filters/);
+    await expect(parseInverseSolutionFieldtrip(file)).rejects.toThrow(/inverse_filters/);
   });
 
   it.each([
@@ -143,6 +143,6 @@ describe('parseInverseFiltersFieldtrip', () => {
     readmat.mockReturnValue(withInverseFilters(overrides));
     const file = new File(['irrelevant — read() is mocked'], 'mocked_file_inversefilters.mat');
 
-    await expect(parseInverseFiltersFieldtrip(file)).rejects.toThrow(messagePattern);
+    await expect(parseInverseSolutionFieldtrip(file)).rejects.toThrow(messagePattern);
   });
 });

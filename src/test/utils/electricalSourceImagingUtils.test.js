@@ -163,24 +163,24 @@ const MINIMAL_MODEL = {
 
 describe('electricalSourceImaging', () => {
   it('returns [] when flatSourceFilters is empty', () => {
-    const inverseFilters = { ...MINIMAL_MODEL, flatSourceFilters: new Float64Array(0) };
+    const inverseSolution = { ...MINIMAL_MODEL, flatSourceFilters: new Float64Array(0) };
     const channelVoltages = [2, 3];
 
-    expect(electricalSourceImaging(inverseFilters, channelVoltages)).toEqual([]);
+    expect(electricalSourceImaging(inverseSolution, channelVoltages)).toEqual([]);
   });
 
   it('throws a descriptive error for an unknown format', () => {
-    const inverseFilters = { ...MINIMAL_MODEL, format: 'Unknown' };
+    const inverseSolution = { ...MINIMAL_MODEL, format: 'Unknown' };
     const channelVoltages = [2, 3];
 
-    expect(() => electricalSourceImaging(inverseFilters, channelVoltages)).toThrow(/format/);
+    expect(() => electricalSourceImaging(inverseSolution, channelVoltages)).toThrow(/format/);
   });
 
   it('runs end-to-end and returns a connectome layer for NiiViewer', () => {
-    const inverseFilters = MINIMAL_MODEL;
+    const inverseSolution = MINIMAL_MODEL;
     const channelVoltages = [2, 3];
 
-    const result = electricalSourceImaging(inverseFilters, channelVoltages);
+    const result = electricalSourceImaging(inverseSolution, channelVoltages);
 
     // Powers from this model are already verified: source 0 → 13, source 1 → 25
     expect(result.kind).toBe('connectome');
