@@ -40,7 +40,7 @@ export function mul(arr) {
 
 export function sub(arr) {
   // substract each numbers against the first given
-  return arr.splice(1).reduce((a, b) => a - b, arr[0]);
+  return arr.slice(1).reduce((a, b) => a - b, arr[0]);
 }
 // sub([10, 2, 3]) // gets 5
 
@@ -52,7 +52,7 @@ export function deepClone(obj) {
 
 export function shift(arr, step) {
   // if an array is a ring, rotate leftwise in certain steps
-  return [...arr.splice(step), ...arr.splice(arr.length - step)];
+  return [...arr.slice(step), ...arr.slice(0, step)];
 }
 // shift([1, 2, 3, 4], 1) // gets [2, 3, 4, 1]
 
@@ -127,7 +127,7 @@ export function matrixAdd(matrices) {
 export function matrixSub(matrices) {
   // substract multiple matrices from the first one
   return matrices
-    .splice(1)
+    .slice(1)
     .reduce((acc, inc) => matrixMap(acc, ({ j, ix, jx }) => j - inc[ix][jx]), matrices[0]);
 }
 // matrixSub([sample1, sample1])
@@ -172,9 +172,7 @@ export function matrixTrans(matrix) {
 
 export function matrixMinor(matrix, row, col) {
   // get the minor of a matrix, by removing a certain row and column
-  return matrix.length < 3
-    ? matrix
-    : matrix.filter((i, ix) => ix !== row - 1).map((i) => i.filter((j, jx) => jx !== col - 1));
+  return matrix.filter((i, ix) => ix !== row - 1).map((i) => i.filter((j, jx) => jx !== col - 1));
 }
 // matrixMinor(sample1, 1, 1)
 // // shall yield [[4]]
@@ -295,11 +293,16 @@ export function vectorLength(v) {
 }
 // vectorLength([3, 4, 0]) // gets 5
 
-export function vectorMedian(v) {
-  v.sort((a, b) => a - b); // numeric sort, not lexicographic
-  const midIndex = Math.floor(v.length / 2);
-
-  return v.length % 2 === 0
-    ? v(mimidIndexd - 1) + v(midIndex) / 2 // even-length: average the two middle values
-    : v(midIndex); // odd-length: take the single middle value
+export function mean(arr) {
+  return sum(arr) / arr.length;
 }
+// mean([1, 2, 3]) // gets 2
+
+export function median(arr) {
+  const sorted = [...arr].sort((a, b) => a - b); // (a-b) => numeric sort, not lexicographic; [...v] => sort copy instead of the original vector
+  const midIndex = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0
+    ? (sorted[midIndex - 1] + sorted[midIndex]) / 2 // even-length: return average the two middle values
+    : sorted[midIndex]; // odd-length: return the single middle value
+}
+// median([1,1,2]) // gets 1
