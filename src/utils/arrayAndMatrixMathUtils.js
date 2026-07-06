@@ -24,31 +24,37 @@ export function withAs(obj, cb) {
   // pass object around in a purely expressive function
   return cb(obj);
 }
+// withAs('abc', str => str.toUpperCase()) // gets 'ABC'
 
 export function sum(arr) {
   // sum any given array of numbers
   return arr.reduce((a, b) => a + b);
 }
+// sum([1, 2, 3]) // gets 6
 
 export function mul(arr) {
   // multiply each given numbers in an array
   return arr.reduce((a, b) => a * b);
 }
+// mul([1, 2, 3]) // gets 6
 
 export function sub(arr) {
   // substract each numbers against the first given
   return arr.splice(1).reduce((a, b) => a - b, arr[0]);
 }
+// sub([10, 2, 3]) // gets 5
 
 export function deepClone(obj) {
   // when array spread syntax didn't work, this one will
   return JSON.parse(JSON.stringify(obj));
 }
+// deepClone(sample1) // gets [[1, 2], [3, 4]]
 
-export function shifter(arr, step) {
+export function shift(arr, step) {
   // if an array is a ring, rotate leftwise in certain steps
   return [...arr.splice(step), ...arr.splice(arr.length - step)];
 }
+// shift([1, 2, 3, 4], 1) // gets [2, 3, 4, 1]
 
 export function makeArray(n, cb) {
   // create an array with certain length
@@ -83,11 +89,11 @@ export function matrixSize(matrix) {
   return [matrix.length, matrix[0].length];
 }
 
-export function arr2mat(len, wid, arr) {
+export function arrayToMatrix(len, wid, arr) {
   // convert a 1D array into a 2D matrix
   return makeArray(len).map((i) => arr.slice(i * wid, i * wid + wid));
 }
-// arr2mat(2, 3, [1, 2, 3, 4, 5, 6])
+// arrayToMatrix(2, 3, [1, 2, 3, 4, 5, 6])
 // /* get [
 //   [1, 2, 3],
 //   [4, 5, 6]
@@ -154,7 +160,7 @@ export function matrixMuls(matrices) {
 
 export function matrixTrans(matrix) {
   // transpose a matrix
-  return makeMatrix(...shifter(matrixSize(matrix), 1), (i, j) => matrix[j][i]);
+  return makeMatrix(...shift(matrixSize(matrix), 1), (i, j) => matrix[j][i]);
 }
 // matrixTrans(sample1) // [[1, 3], [2, 4]]
 // matrixTrans(sample3) /* shall yield [
@@ -191,7 +197,7 @@ export function matrixDet(matrix) {
   // get the determinant of a matrix
   return withAs(deepClone(matrix), (clone) =>
     matrix.length < 3
-      ? sub(matrixTrans(clone.map(shifter)).map(mul))
+      ? sub(matrixTrans(clone.map(shift)).map(mul))
       : sum(
           clone[0].map(
             (i, ix) => matrixDet(matrixMinor(matrix, 1, ix + 1)) * Math.pow(-1, ix + 2) * i
@@ -260,3 +266,40 @@ export function matrixLinSolve(conds, res) {
 //     [2, 1,-2, 3]
 //   ], [-12, 34, 41, 14]
 // ) // correctly get [2, 3, 4, 5]
+
+export function euclideanDistance(a, b) {
+  return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]); // hypot returns square root of sum of squares
+}
+// euclideanDistance([3, 4, 5],[0, 0, 0]);
+// Expected output: 7.0710678118654755
+
+export function vectorSubtract(a, b) {
+  // elementwise subtraction of two 3D points/vectors — not to be confused with sub(), which
+  // subtracts a flat list of plain numbers sequentially
+  return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+}
+// vectorSubtract([5, 7, 9], [1, 2, 3]) // gets [4, 5, 6]
+
+export function dotProduct(a, b) {
+  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+// dotProduct([1, 2, 3], [4, 5, 6]) // gets 32
+
+export function crossProduct(a, b) {
+  return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+}
+// crossProduct([1, 0, 0], [0, 1, 0]) // gets [0, 0, 1]
+
+export function vectorLength(v) {
+  return Math.hypot(v[0], v[1], v[2]);
+}
+// vectorLength([3, 4, 0]) // gets 5
+
+export function vectorMedian(v) {
+  v.sort((a, b) => a - b); // numeric sort, not lexicographic
+  const midIndex = Math.floor(v.length / 2);
+
+  return v.length % 2 === 0
+    ? v(mimidIndexd - 1) + v(midIndex) / 2 // even-length: average the two middle values
+    : v(midIndex); // odd-length: take the single middle value
+}
