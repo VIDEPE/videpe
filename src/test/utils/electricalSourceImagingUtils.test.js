@@ -3,8 +3,13 @@ import {
   calculateSourcePower,
   convertSourcePowersToConnectome,
   electricalSourceImaging,
+  findSourceGridBasis,
 } from '@/utils/electricalSourceImagingUtils';
 import { ESI_CONNECTOME_URL } from '@/components/NiiViewer.utils';
+import { estimateGridSpacing } from '../../utils/electricalSourceImagingUtils';
+
+const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const length = (v) => Math.hypot(v[0], v[1], v[2]);
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 //
@@ -86,6 +91,84 @@ describe('calculateSourcePower', () => {
     const result = calculateSourcePower({ ...SINGLE_SOURCE_FILTERS, channelVoltages: [0, 0] });
 
     expect(Array.from(result)).toEqual([0]);
+  });
+});
+
+// ─── findSourceGridBasis ──────────────────────────────────────────────────────
+//
+// FieldTrip source grids are warped into subject space, which rotates the grid's own
+// axes away from world x/y/z but preserves true 3D spacing exactly (verified against a
+// real *_inversefilters.mat sample: nearest-neighbor distance was exact to the mm, but
+// per-axis spacing was not — see conversation). findSourceGridBasis recovers that
+// rotated basis from an anchor point's neighbor offsets so positions can later be
+// mapped to exact integer voxel indices instead of lossy axis-aligned rounding.
+
+describe('findSourceGridBasis', () => {
+  it('returns an estimatedGridSpacing of 6 for a 6mm cube', () => {
+    const positions = [];
+    for (let i = 0; i < 3; i++)
+      for (let j = 0; j < 3; j++) for (let k = 0; k < 3; k++) positions.push([i * 6, j * 6, k * 6]);
+
+    const result = estimateGridSpacing(positions);
+    expect(result).not.toBeNull();
+    expect(result).toBeCloseTo(6,5);
+  });
+  
+  it('recovers spacing and an orthogonal basis for a simple axis-aligned grid', () => {
+    // 3×3×3 grid, 2mm spacing, no rotation — the simplest possible case.
+    const positions = [];
+    for (let i = 0; i < 3; i++)
+      for (let j = 0; j < 3; j++) for (let k = 0; k < 3; k++) positions.push([i * 2, j * 2, k * 2]);
+
+    const result = findSourceGridBasis(positions);
+
+    expect(result).not.toBeNull();
+    expect(result.spacing).toBeCloseTo(2, 5);
+    for (const v of result.basis) expect(length(v)).toBeCloseTo(2, 5);
+  });
+
+  it('recovers the rotated basis for a grid rotated 30° about the z-axis', () => {
+    const angle = Math.PI / 6;
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    const rotate = ([x, y, z]) => [x * cos - y * sin, x * sin + y * cos, z];
+
+    const positions = [];
+    for (let i = -1; i <= 1; i++)
+      for (let j = -1; j <= 1; j++)
+        for (let k = -1; k <= 1; k++) positions.push(rotate([i * 5, j * 5, k * 5]));
+
+    const result = findSourceGridBasis(positions);
+
+    expect(result).not.toBeNull();
+    expect(result.spacing).toBeCloseTo(5, 5);
+    const [e1, e2, e3] = result.basis;
+    for (const v of result.basis) expect(length(v)).toBeCloseTo(5, 5);
+    // it's a rotation of a cube, so the basis vectors must stay mutually orthogonal
+    expect(dot(e1, e2)).toBeCloseTo(0, 5);
+    expect(dot(e1, e3)).toBeCloseTo(0, 5);
+    expect(dot(e2, e3)).toBeCloseTo(0, 5);
+  });
+
+  it('returns null for a point cloud with no regular grid structure', () => {
+    const positions = [
+      [0, 0, 0],
+      [1, 7, 3],
+      [9, 2, 8],
+      [4, 4, 4],
+    ];
+
+    expect(findSourceGridBasis(positions)).toBeNull();
+  });
+
+  it('returns null when there are too few points to form a grid', () => {
+    expect(
+      findSourceGridBasis([
+        [0, 0, 0],
+        [1, 0, 0],
+        [0, 1, 0],
+      ])
+    ).toBeNull();
   });
 });
 
@@ -197,13 +280,15 @@ describe('electricalSourceImaging', () => {
     expect(() => electricalSourceImaging(inverseSolution, SCALP_SNAPSHOT)).toThrow(/format/);
   });
 
-  it('runs end-to-end and returns a connectome layer for NiiViewer', () => {
+  it('runs end-to-end and returns both a connectome layer and a volume layer for NiiViewer', () => {
     const result = electricalSourceImaging(MINIMAL_MODEL, SCALP_SNAPSHOT);
 
     // Powers from this model are already verified: source 0 → 13, source 1 → 25
-    expect(result.kind).toBe('connectome');
-    expect(result.url).toBe(ESI_CONNECTOME_URL);
-    expect(result.nodes).toHaveLength(2);
-    expect(result.calMax).toBe(25);
+    expect(result.sourcePowerConnectomes.kind).toBe('connectome');
+    expect(result.sourcePowerConnectomes.url).toBe(ESI_CONNECTOME_URL);
+    expect(result.sourcePowerConnectomes.nodes).toHaveLength(2);
+    expect(result.sourcePowerConnectomes.calMax).toBe(25);
+    // convertSourcePowersToVolume is still a stub — locks in today's actual behavior
+    expect(result.sourcePowerVolumes).toBeNull();
   });
 });

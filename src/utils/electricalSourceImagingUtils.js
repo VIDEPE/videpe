@@ -1,4 +1,13 @@
 import { ESI_CONNECTOME_URL } from '@/components/NiiViewer.utils';
+import {
+  median,
+  euclideanDistance,
+  vectorSubtract,
+  dotProduct,
+  crossProduct,
+  vectorLength,
+  matrixLinSolve,
+} from './arrayAndMatrixMathUtils';
 
 // Computes the instantaneous dipole power at each inside-brain source point for a single
 // clicked EEG timepoint. For each source, multiplies its [3 × nChannels] inverse filter
@@ -98,8 +107,92 @@ export function electricalSourceImaging(inverseSolution, channelSnapshot) {
       nChannels,
     });
 
-    return convertSourcePowersToConnectome(insideSourcePositions, sourcePowers);
+    const sourcePowerConnectomes = convertSourcePowersToConnectome(
+      insideSourcePositions,
+      sourcePowers
+    );
+    const sourcePowerVolumes = convertSourcePowersToVolume(insideSourcePositions, sourcePowers);
+
+    return { sourcePowerConnectomes, sourcePowerVolumes };
   } else {
-    throw new Error(`inverseFilter object has missing/empty 'format' parameter.`);
+    throw new Error(`inverseFilter object has unkown/empty 'format' parameter.`);
   }
 }
+
+export function estimateGridSpacing(positions, sampleSize = 200) {
+  // estimate the grid spacing by calculating the median nearest-neighbor distance between source points, 
+  // using a sample of points if there are many
+  const nSources = positions.length;
+  const step = Math.max(1, Math.floor(positions.length / sampleSize)); // don't check every single point, just a spread sample
+  let nearestDistances = [];
+  for (let i = 0; i < nSources; i += step) {
+    let nearest = Infinity;
+    for (let j = 0; j < nSources; j++) {
+      if (j === i) continue;
+      const d = euclideanDistance(positions[i], positions[j]);
+      nearest = Math.min(nearest, d);
+    }
+    nearestDistances.push(nearest);
+  }
+
+  return median(nearestDistances);
+}
+
+export function isParallel(a,b) {
+  // The cross product of two vectors is ~0, when two vectors point in the same (paralell) or opposite (antiparellel) direction
+  // isParallel returns True in this case. => used to skip a redundant neighbor-offset candidate that doesn't add an indepdant axis
+  // The tolerance is relative (scaled by the vectors' own lengths), not a fixed 1e-6.
+  return vectorLength(crossProduct(a, b)) < 1e-6 * vectorLength(a) * vectorLength(b)
+}
+
+export function isCoplanar(a,b,c) {
+  // The triple product is similar to isParallel, but then for three vectors a,b,c
+  // It is ~0 when all three vectors lie in the same plane
+  // isCoplanar() returns True in this case => used to reject a third neighbour-offset candidate that doesn't add the missing third dimension.
+  // The tolerance is relative (scaled by the vectors' own lengths), not a fixed 1e-6.
+  const tripleProduct = dotProduct(a, crossProduct(b, c))
+  return Math.abs(tripleProduct) < 1e-6 * vectorLength(a) * vectorLength(b) * vectorLength(c)
+}
+
+export function pickIndependentBasis(offsets) {
+  // Tries triples of candidate offset vectors until it finds one that form a genuine 3D space
+  const nVectors = offsets.length
+  for (let a=0; a<nVectors; a++){
+    for (let b=a+1; b<nVectors; b++){
+      // first test if a double is parallel
+      if (isParallel(offsets[a], offsets[b])) continue
+      for (let c=b+1; c<nVectors; c++) {
+        // if not, then take a third and check if they lie on the same plane
+        if (isCoplanar(offsets[a], offsets[b], offsets[c])) continue
+        // if not, you have an independant basis (note these are not necessarily orthogonal!)
+        return [offsets[a], offsets[b], offsets[c]]
+      }
+    }
+  }
+  return null
+}
+
+export function findSourceGridBasis(sourcePositions) {
+  if (sourcePositions.length < 4) return null // too few sources
+  const spacing = estimateGridSpacing(sourcePositions)   // estimate grid spacing
+  const tolerance = spacing * 0.1
+
+  for (const anchor of sourcePositions){
+    const offsets = []
+    for (const point of sourcePositions){
+      if (point === anchor) continue   // skip if point is the same as the anchor
+        const offset = vectorSubtract(point, anchor)
+        // Check if the offset length is approximately equal to the estimated spacing (within tolerance)    
+        if (Math.abs(vectorLength(offset) - spacing) <= tolerance ) {
+          // if so, this means the point is a neighbor of the anchor in the grid, and we can use it to find a basis
+          offsets.push(offset)
+        }
+    }
+    // Now we have a list of offsets from the anchor to its neighbors.
+    // We can try to pick an independent basis from these offsets.
+    const basis = pickIndependentBasis(offsets)
+    if (basis) return { anchor, basis, spacing }
+  }
+  return null
+}
+
