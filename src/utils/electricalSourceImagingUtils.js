@@ -7,6 +7,9 @@ import {
   crossProduct,
   vectorLength,
   matrixLinSolve,
+  matrixTrans,
+  matrixInverse,
+  matrixMul,
 } from './arrayAndMatrixMathUtils';
 
 // Computes the instantaneous dipole power at each inside-brain source point for a single
@@ -120,7 +123,7 @@ export function electricalSourceImaging(inverseSolution, channelSnapshot) {
 }
 
 export function estimateGridSpacing(positions, sampleSize = 200) {
-  // estimate the grid spacing by calculating the median nearest-neighbor distance between source points, 
+  // estimate the grid spacing by calculating the median nearest-neighbor distance between source points,
   // using a sample of points if there are many
   const nSources = positions.length;
   const step = Math.max(1, Math.floor(positions.length / sampleSize)); // don't check every single point, just a spread sample
@@ -138,61 +141,123 @@ export function estimateGridSpacing(positions, sampleSize = 200) {
   return median(nearestDistances);
 }
 
-export function isParallel(a,b) {
+export function isParallel(a, b) {
   // The cross product of two vectors is ~0, when two vectors point in the same (paralell) or opposite (antiparellel) direction
   // isParallel returns True in this case. => used to skip a redundant neighbor-offset candidate that doesn't add an indepdant axis
   // The tolerance is relative (scaled by the vectors' own lengths), not a fixed 1e-6.
-  return vectorLength(crossProduct(a, b)) < 1e-6 * vectorLength(a) * vectorLength(b)
+  return vectorLength(crossProduct(a, b)) < 1e-6 * vectorLength(a) * vectorLength(b);
 }
 
-export function isCoplanar(a,b,c) {
+export function isCoplanar(a, b, c) {
   // The triple product is similar to isParallel, but then for three vectors a,b,c
   // It is ~0 when all three vectors lie in the same plane
   // isCoplanar() returns True in this case => used to reject a third neighbour-offset candidate that doesn't add the missing third dimension.
   // The tolerance is relative (scaled by the vectors' own lengths), not a fixed 1e-6.
-  const tripleProduct = dotProduct(a, crossProduct(b, c))
-  return Math.abs(tripleProduct) < 1e-6 * vectorLength(a) * vectorLength(b) * vectorLength(c)
+  const tripleProduct = dotProduct(a, crossProduct(b, c));
+  return Math.abs(tripleProduct) < 1e-6 * vectorLength(a) * vectorLength(b) * vectorLength(c);
 }
 
 export function pickIndependentBasis(offsets) {
   // Tries triples of candidate offset vectors until it finds one that form a genuine 3D space
-  const nVectors = offsets.length
-  for (let a=0; a<nVectors; a++){
-    for (let b=a+1; b<nVectors; b++){
+  const nVectors = offsets.length;
+  for (let a = 0; a < nVectors; a++) {
+    for (let b = a + 1; b < nVectors; b++) {
       // first test if a double is parallel
-      if (isParallel(offsets[a], offsets[b])) continue
-      for (let c=b+1; c<nVectors; c++) {
+      if (isParallel(offsets[a], offsets[b])) continue;
+      for (let c = b + 1; c < nVectors; c++) {
         // if not, then take a third and check if they lie on the same plane
-        if (isCoplanar(offsets[a], offsets[b], offsets[c])) continue
+        if (isCoplanar(offsets[a], offsets[b], offsets[c])) continue;
         // if not, you have an independant basis (note these are not necessarily orthogonal!)
-        return [offsets[a], offsets[b], offsets[c]]
+        return [offsets[a], offsets[b], offsets[c]];
       }
     }
   }
-  return null
+  return null;
 }
 
 export function findSourceGridBasis(sourcePositions) {
-  if (sourcePositions.length < 4) return null // too few sources
-  const spacing = estimateGridSpacing(sourcePositions)   // estimate grid spacing
-  const tolerance = spacing * 0.1
+  if (sourcePositions.length < 4) return null; // too few sources
+  const spacing = estimateGridSpacing(sourcePositions); // estimate grid spacing
+  const tolerance = spacing * 0.1;
 
-  for (const anchor of sourcePositions){
-    const offsets = []
-    for (const point of sourcePositions){
-      if (point === anchor) continue   // skip if point is the same as the anchor
-        const offset = vectorSubtract(point, anchor)
-        // Check if the offset length is approximately equal to the estimated spacing (within tolerance)    
-        if (Math.abs(vectorLength(offset) - spacing) <= tolerance ) {
-          // if so, this means the point is a neighbor of the anchor in the grid, and we can use it to find a basis
-          offsets.push(offset)
-        }
+  for (const anchor of sourcePositions) {
+    const offsets = [];
+    for (const point of sourcePositions) {
+      if (point === anchor) continue; // skip if point is the same as the anchor
+      const offset = vectorSubtract(point, anchor);
+      // Check if the offset length is approximately equal to the estimated spacing (within tolerance)
+      if (Math.abs(vectorLength(offset) - spacing) <= tolerance) {
+        // if so, this means the point is a neighbor of the anchor in the grid, and we can use it to find a basis
+        offsets.push(offset);
+      }
     }
     // Now we have a list of offsets from the anchor to its neighbors.
     // We can try to pick an independent basis from these offsets.
-    const basis = pickIndependentBasis(offsets)
-    if (basis) return { anchor, basis, spacing }
+    const basis = pickIndependentBasis(offsets);
+    if (basis) return { anchor, basis, spacing };
   }
-  return null
+  return null;
 }
 
+export function mapPositionsToGridIndices(sourcePositions, anchor, basis) {
+  // basis = [b1, b2, b3], each a 3D vector (e.g. b1 = [x1,y1,z1]) — what one step along
+  // grid-axis 1 (or 2, or 3) looks like in real-world mm space.
+  // (i,j,k) = the grid indices (integers) we want to find for each position: how many
+  // steps along each basis direction it takes to reach that position from the anchor.
+  // offset = the real, known mm displacement from the anchor to a given position.
+  //
+  // Every position on the lattice satisfies: offset = i*b1 + j*b2 + k*b3
+  // e.g. if b1=[2,0,0], b2=[0,2,0], b3=[0,0,2] (a simple axis-aligned 2mm grid) and a
+  // point's offset from the anchor is [4,2,6], then i=2, j=1, k=3 — 2 steps along b1,
+  // 1 along b2, 3 along b3 — since 2·[2,0,0] + 1·[0,2,0] + 3·[0,0,2] = [4,2,6].
+  //
+  // We know offset and [b1,b2,b3], and want to solve for the unknown (i,j,k).
+  // => conds * [i,j,k] = offset"
+  //    Note that conds needs b1,b2,b3 as its COLUMNS, not its rows (see MatrixLinSolve tests for an example)
+  //    transpose [b1,b2,b3 to get conds => conds = matrixTrans([b1,b2,b3])
+  // 
+  // That equation only goes forward, index → mm (vox2mm).
+  // To go the other way, mm → index (mm2vox), it has to be inverted: 
+  // [i,j,k] = matrixInverse(conds) * offset.
+  // matrixLinSolve(conds, offset) does exactly this in one call, but it re-inverts conds
+  // internally every time it's called. Conds however never changes across the whole loop of
+  // source positions below, so instead conds is inverted once up front (basisInverted),
+  // and each position below reuses it via a plain matrixMul, avoiding thousands a redundant matrix
+  // inversion per source.
+
+  const basisTransposed = matrixTrans(basis); // conds — basis vectors as columns, not rows
+  const basisInverted = matrixInverse(basisTransposed);
+
+  let sourceVolumeIndices = [];
+  let iMin = Infinity;
+  let jMin = Infinity;
+  let kMin = Infinity;
+  for (let iSource = 0; iSource < sourcePositions.length; iSource++) {
+    const source = sourcePositions[iSource];
+    // substract anchor from the point to get the offset
+    const offset = vectorSubtract(source, anchor);
+    // get volume indices (i,j,k) for each source pos (in mm)
+    let [i, j, k] = matrixMul(
+      basisInverted,
+      offset.map((i) => [i])
+    ).map((i) => i[0]);
+
+    // Round the indices as the floating point math might return 1.999999 instead of 2
+    i = Math.round(i);
+    j = Math.round(j);
+    k = Math.round(k);
+    sourceVolumeIndices.push([i, j, k]); // store i,j,k for each source
+
+    // find [iMin, jMin and kMin]
+    if (i < iMin) iMin = i;
+    if (j < jMin) jMin = j;
+    if (k < kMin) kMin = k;
+  }
+
+  // These volume indices however are in respect to the anchor, which could be any source point within the grid
+  // Instead we want to substract [iMin, jMin and kMin] from these to get indices starting from 0
+  for (let iSource = 0; iSource < sourceVolumeIndices.length; iSource++) {
+    sourceVolumeIndices[iSource] = vectorSubtract(sourceVolumeIndices[iSource], [iMin, jMin, kMin]);
+  }
+  return sourceVolumeIndices;
+}

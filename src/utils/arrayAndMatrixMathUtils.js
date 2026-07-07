@@ -251,6 +251,8 @@ export function matrixInverse(matrix) {
 
 export function matrixLinSolve(conds, res) {
   // solve a linear equation system, given the conditions and results
+  // res [4x1] = conds [4x4] * return [4x1] — res and the return value are column vectors
+  // mathematically, even though both are passed/returned here as flat arrays (rows) for convenience
   return matrixMul(
     matrixInverse(conds),
     res.map((i) => [i])

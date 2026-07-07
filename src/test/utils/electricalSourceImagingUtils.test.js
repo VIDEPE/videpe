@@ -4,6 +4,7 @@ import {
   convertSourcePowersToConnectome,
   electricalSourceImaging,
   findSourceGridBasis,
+  mapPositionsToGridIndices,
 } from '@/utils/electricalSourceImagingUtils';
 import { ESI_CONNECTOME_URL } from '@/components/NiiViewer.utils';
 import { estimateGridSpacing } from '../../utils/electricalSourceImagingUtils';
@@ -111,9 +112,9 @@ describe('findSourceGridBasis', () => {
 
     const result = estimateGridSpacing(positions);
     expect(result).not.toBeNull();
-    expect(result).toBeCloseTo(6,5);
+    expect(result).toBeCloseTo(6, 5);
   });
-  
+
   it('recovers spacing and an orthogonal basis for a simple axis-aligned grid', () => {
     // 3×3×3 grid, 2mm spacing, no rotation — the simplest possible case.
     const positions = [];
@@ -169,6 +170,99 @@ describe('findSourceGridBasis', () => {
         [0, 1, 0],
       ])
     ).toBeNull();
+  });
+});
+
+// ─── mapPositionsToGridIndices ────────────────────────────────────────────────
+//
+// Given the {anchor, basis} findSourceGridBasis already found, projects every source
+// position onto the basis to get its integer (i,j,k) grid index — solving
+// offset = i*b1 + j*b2 + k*b3 for (i,j,k), then shifting so the minimum index in
+// each axis lands at 0 (indices are relative to an arbitrary anchor point, which
+// could sit anywhere inside the grid, not necessarily at its corner).
+
+describe('mapPositionsToGridIndices', () => {
+  // 3×3×3 grid, 2mm spacing, axis-aligned — same shape as findSourceGridBasis's simplest
+  // test case, but the basis is supplied directly here so this function is tested in isolation.
+  const AXIS_ALIGNED_POSITIONS = [];
+  for (let i = 0; i < 3; i++)
+    for (let j = 0; j < 3; j++)
+      for (let k = 0; k < 3; k++) AXIS_ALIGNED_POSITIONS.push([i * 2, j * 2, k * 2]);
+  const AXIS_ALIGNED_BASIS = [
+    [2, 0, 0],
+    [0, 2, 0],
+    [0, 0, 2],
+  ];
+  // anchor is the grid's own centre point [2,2,2] (i=j=k=1), not a corner — indices found
+  // relative to it are expected to include negatives before the zero-shift is applied.
+  const AXIS_ALIGNED_ANCHOR = [2, 2, 2];
+
+  it('returns one grid index per source position, in the same order', () => {
+    const result = mapPositionsToGridIndices(
+      AXIS_ALIGNED_POSITIONS,
+      AXIS_ALIGNED_ANCHOR,
+      AXIS_ALIGNED_BASIS
+    );
+
+    expect(result).toHaveLength(AXIS_ALIGNED_POSITIONS.length);
+  });
+
+  it('shifts indices so the minimum lands at [0,0,0] and the maximum at [2,2,2] for a 3×3×3 grid', () => {
+    const result = mapPositionsToGridIndices(
+      AXIS_ALIGNED_POSITIONS,
+      AXIS_ALIGNED_ANCHOR,
+      AXIS_ALIGNED_BASIS
+    );
+
+    const min = [0, 1, 2].map((axis) => Math.min(...result.map((index) => index[axis])));
+    const max = [0, 1, 2].map((axis) => Math.max(...result.map((index) => index[axis])));
+    expect(min).toEqual([0, 0, 0]);
+    expect(max).toEqual([2, 2, 2]);
+  });
+
+  it('returns exact, zero-based integer indices for known corner and centre positions', () => {
+    const result = mapPositionsToGridIndices(
+      AXIS_ALIGNED_POSITIONS,
+      AXIS_ALIGNED_ANCHOR,
+      AXIS_ALIGNED_BASIS
+    );
+
+    // AXIS_ALIGNED_POSITIONS is built with i outermost, k innermost, each 0..2 — so
+    // position [0,0,0] is index 0, the anchor [2,2,2] is index 13 (i=j=k=1), and the
+    // far corner [4,4,4] is the last index, 26 (i=j=k=2).
+    expect(result[0]).toEqual([0, 0, 0]); // lowest corner
+    expect(result[13]).toEqual([1, 1, 1]); // the anchor itself → centre of the shifted grid
+    expect(result[26]).toEqual([2, 2, 2]); // far corner
+  });
+
+  it('rounds near-integer floating-point solutions to exact integers for a rotated basis', () => {
+    // Same rotated-30°-about-z setup as findSourceGridBasis's rotation test — the linear
+    // solve involves cos/sin, so raw results land close to but not exactly on integers
+    // (e.g. 1.9999999998) until Math.round is applied.
+    const angle = Math.PI / 6;
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    const rotate = ([x, y, z]) => [x * cos - y * sin, x * sin + y * cos, z];
+
+    const positions = [];
+    for (let i = -1; i <= 1; i++)
+      for (let j = -1; j <= 1; j++)
+        for (let k = -1; k <= 1; k++) positions.push(rotate([i * 5, j * 5, k * 5]));
+
+    const anchor = rotate([0, 0, 0]); // = [0,0,0], the grid's own centre point
+    const basis = [rotate([5, 0, 0]), rotate([0, 5, 0]), rotate([0, 0, 5])];
+
+    const result = mapPositionsToGridIndices(positions, anchor, basis);
+
+    for (const [i, j, k] of result) {
+      expect(Number.isInteger(i)).toBe(true);
+      expect(Number.isInteger(j)).toBe(true);
+      expect(Number.isInteger(k)).toBe(true);
+    }
+    const min = [0, 1, 2].map((axis) => Math.min(...result.map((index) => index[axis])));
+    const max = [0, 1, 2].map((axis) => Math.max(...result.map((index) => index[axis])));
+    expect(min).toEqual([0, 0, 0]);
+    expect(max).toEqual([2, 2, 2]);
   });
 });
 

@@ -451,6 +451,46 @@ describe('matrixLinSolve', () => {
     expect(x3).toBeCloseTo(4, 5);
     expect(x4).toBeCloseTo(5, 5);
   });
+  // Example for Electrical Source Imaging: mapPositionsToGridIndices needs to solve
+  // offset = i*b1 + j*b2 + k*b3 for (i,j,k) — any source point can be reached from the anchor
+  // by taking an integer number of steps along each basis direction.
+  // e.g. if b1=[2,0,0], b2=[0,2,0], b3=[0,0,2] (a simple axis-aligned 2mm grid) and a point's
+  // offset from the anchor is [4,2,6], then i·[2,0,0] + j·[0,2,0] + k·[0,0,2] = [4,2,6]
+  // gives i=2, j=1, k=3 — 2 steps along b1, 1 along b2, 3 along b3.
+  //
+  // That simple axis-aligned example can't be used to test whether matrixLinSolve's `conds`
+  // needs basis vectors as rows or as columns, though: it's a diagonal matrix, and a diagonal
+  // matrix is its own transpose, so stacking b1/b2/b3 as rows or as columns of `conds` produces
+  // the exact same matrix either way — the test would pass regardless of which orientation
+  // matrixLinSolve actually expects.
+  // A rotated basis breaks that symmetry (B ≠ Bᵀ), so only the correct orientation gives the
+  // right answer — which is why this test uses one instead.
+  it('solves a linear system with a non-symmetric (rotated) basis to determine whether conds needs basis vectors as rows or columns', () => {
+    // b1/b2/b3 don't need to be a real rotated grid basis — matrixLinSolve just needs B=[b1,b2,b3]
+    // to be asymmetric (B ≠ Bᵀ, so row vs. column orientation actually matters) and invertible
+    // (det(B) ≠ 0, so a solution exists). These simple values satisfy both.
+    const b1 = [4, 2.5, 0];
+    const b2 = [-2.5, 4, 0];
+    const b3 = [0, 0, 5];
+
+    // offset = i*b1 + j*b2 + k*b3, chosen with i=2, j=-1, k=3 (negative j exercises sign handling too)
+    const offset = [10.5, 1, 15];
+
+    // "offset = i*b1 + j*b2 + k*b3" is the standard linear-algebra shape "M * x = offset" where M's
+    // COLUMNS are the basis vectors b1, b2, b3 (not its rows) — multiplying a matrix by a vector gives
+    // a linear combination of the matrix's columns, weighted by the vector's entries.
+    // matrixTrans([b1, b2, b3]) turns the natural row-stack of the three basis vectors into the
+    // column-stack matrixLinSolve's `conds` argument actually needs.
+    const conds = matrixTrans([b1, b2, b3]);
+    const [i, j, k] = matrixLinSolve(conds, offset);
+
+    expect(i).toBeCloseTo(2, 5);
+    expect(j).toBeCloseTo(-1, 5);
+    expect(k).toBeCloseTo(3, 5);
+
+    // Conclusion for mapPositionsToGridIndices: when solving offset = i*b1 + j*b2 + k*b3 for (i,j,k),
+    // pass matrixTrans([b1, b2, b3]) as `conds`, not [b1, b2, b3] directly.
+  });
 });
 
 // ─── euclideanDistance / vectorSubtract / dotProduct / crossProduct / vectorLength ──
