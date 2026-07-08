@@ -5,6 +5,8 @@ import {
   electricalSourceImaging,
   findSourceGridBasis,
   mapPositionsToGridIndices,
+  ijkIndexToFlatIndex,
+  buildSourceVolumeGrid,
 } from '@/utils/electricalSourceImagingUtils';
 import { ESI_CONNECTOME_URL } from '@/components/NiiViewer.utils';
 import { estimateGridSpacing } from '../../utils/electricalSourceImagingUtils';
@@ -124,7 +126,7 @@ describe('findSourceGridBasis', () => {
     const result = findSourceGridBasis(positions);
 
     expect(result).not.toBeNull();
-    expect(result.spacing).toBeCloseTo(2, 5);
+    expect(result.gridSpacing).toBeCloseTo(2, 5);
     for (const v of result.basis) expect(length(v)).toBeCloseTo(2, 5);
   });
 
@@ -142,7 +144,7 @@ describe('findSourceGridBasis', () => {
     const result = findSourceGridBasis(positions);
 
     expect(result).not.toBeNull();
-    expect(result.spacing).toBeCloseTo(5, 5);
+    expect(result.gridSpacing).toBeCloseTo(5, 5);
     const [e1, e2, e3] = result.basis;
     for (const v of result.basis) expect(length(v)).toBeCloseTo(5, 5);
     // it's a rotation of a cube, so the basis vectors must stay mutually orthogonal
@@ -198,30 +200,34 @@ describe('mapPositionsToGridIndices', () => {
   const AXIS_ALIGNED_ANCHOR = [2, 2, 2];
 
   it('returns one grid index per source position, in the same order', () => {
-    const result = mapPositionsToGridIndices(
+    const { sourceVolumeIndices } = mapPositionsToGridIndices(
       AXIS_ALIGNED_POSITIONS,
       AXIS_ALIGNED_ANCHOR,
       AXIS_ALIGNED_BASIS
     );
 
-    expect(result).toHaveLength(AXIS_ALIGNED_POSITIONS.length);
+    expect(sourceVolumeIndices).toHaveLength(AXIS_ALIGNED_POSITIONS.length);
   });
 
   it('shifts indices so the minimum lands at [0,0,0] and the maximum at [2,2,2] for a 3×3×3 grid', () => {
-    const result = mapPositionsToGridIndices(
+    const { sourceVolumeIndices } = mapPositionsToGridIndices(
       AXIS_ALIGNED_POSITIONS,
       AXIS_ALIGNED_ANCHOR,
       AXIS_ALIGNED_BASIS
     );
 
-    const min = [0, 1, 2].map((axis) => Math.min(...result.map((index) => index[axis])));
-    const max = [0, 1, 2].map((axis) => Math.max(...result.map((index) => index[axis])));
+    const min = [0, 1, 2].map((axis) =>
+      Math.min(...sourceVolumeIndices.map((index) => index[axis]))
+    );
+    const max = [0, 1, 2].map((axis) =>
+      Math.max(...sourceVolumeIndices.map((index) => index[axis]))
+    );
     expect(min).toEqual([0, 0, 0]);
     expect(max).toEqual([2, 2, 2]);
   });
 
   it('returns exact, zero-based integer indices for known corner and centre positions', () => {
-    const result = mapPositionsToGridIndices(
+    const { sourceVolumeIndices } = mapPositionsToGridIndices(
       AXIS_ALIGNED_POSITIONS,
       AXIS_ALIGNED_ANCHOR,
       AXIS_ALIGNED_BASIS
@@ -230,9 +236,9 @@ describe('mapPositionsToGridIndices', () => {
     // AXIS_ALIGNED_POSITIONS is built with i outermost, k innermost, each 0..2 — so
     // position [0,0,0] is index 0, the anchor [2,2,2] is index 13 (i=j=k=1), and the
     // far corner [4,4,4] is the last index, 26 (i=j=k=2).
-    expect(result[0]).toEqual([0, 0, 0]); // lowest corner
-    expect(result[13]).toEqual([1, 1, 1]); // the anchor itself → centre of the shifted grid
-    expect(result[26]).toEqual([2, 2, 2]); // far corner
+    expect(sourceVolumeIndices[0]).toEqual([0, 0, 0]); // lowest corner
+    expect(sourceVolumeIndices[13]).toEqual([1, 1, 1]); // the anchor itself → centre of the shifted grid
+    expect(sourceVolumeIndices[26]).toEqual([2, 2, 2]); // far corner
   });
 
   it('rounds near-integer floating-point solutions to exact integers for a rotated basis', () => {
@@ -252,17 +258,198 @@ describe('mapPositionsToGridIndices', () => {
     const anchor = rotate([0, 0, 0]); // = [0,0,0], the grid's own centre point
     const basis = [rotate([5, 0, 0]), rotate([0, 5, 0]), rotate([0, 0, 5])];
 
-    const result = mapPositionsToGridIndices(positions, anchor, basis);
+    const { sourceVolumeIndices } = mapPositionsToGridIndices(positions, anchor, basis);
 
-    for (const [i, j, k] of result) {
+    for (const [i, j, k] of sourceVolumeIndices) {
       expect(Number.isInteger(i)).toBe(true);
       expect(Number.isInteger(j)).toBe(true);
       expect(Number.isInteger(k)).toBe(true);
     }
-    const min = [0, 1, 2].map((axis) => Math.min(...result.map((index) => index[axis])));
-    const max = [0, 1, 2].map((axis) => Math.max(...result.map((index) => index[axis])));
+    const min = [0, 1, 2].map((axis) =>
+      Math.min(...sourceVolumeIndices.map((index) => index[axis]))
+    );
+    const max = [0, 1, 2].map((axis) =>
+      Math.max(...sourceVolumeIndices.map((index) => index[axis]))
+    );
     expect(min).toEqual([0, 0, 0]);
     expect(max).toEqual([2, 2, 2]);
+  });
+
+  it('returns gridDimensions of [3,3,3] for a 3×3×3 grid, regardless of anchor position', () => {
+    // dimensions = (max index - min index + 1) per axis — since indices span 0..2 on
+    // every axis after the zero-shift, each dimension should be 3, not 2 (max) or off by one.
+    const { gridDimensions } = mapPositionsToGridIndices(
+      AXIS_ALIGNED_POSITIONS,
+      AXIS_ALIGNED_ANCHOR,
+      AXIS_ALIGNED_BASIS
+    );
+
+    expect(gridDimensions).toEqual([3, 3, 3]);
+  });
+
+  it('returns gridDimensions matching a non-cubic grid', () => {
+    // 2×3×4 grid (different point count per axis) — dimensions must track each axis
+    // independently, not assume a cube.
+    const positions = [];
+    for (let i = 0; i < 2; i++)
+      for (let j = 0; j < 3; j++) for (let k = 0; k < 4; k++) positions.push([i * 2, j * 2, k * 2]);
+    const basis = [
+      [2, 0, 0],
+      [0, 2, 0],
+      [0, 0, 2],
+    ];
+    const anchor = [0, 0, 0]; // corner anchor this time, not centre
+
+    const { gridDimensions } = mapPositionsToGridIndices(positions, anchor, basis);
+
+    expect(gridDimensions).toEqual([2, 3, 4]);
+  });
+});
+
+// ─── ijkIndexToFlatIndex ──────────────────────────────────────────────────────
+//
+// Converts a (i,j,k) grid index into a single flat array index, one scalar per voxel,
+// in i-fastest/k-slowest order — matching NIfTI's on-disk voxel data layout.
+
+describe('ijkIndexToFlatIndex', () => {
+  it('maps the origin to flat index 0', () => {
+    expect(ijkIndexToFlatIndex(0, 0, 0, [2, 2, 2])).toBe(0);
+  });
+
+  it('steps through i fastest, before j or k advance', () => {
+    expect(ijkIndexToFlatIndex(0, 0, 0, [2, 2, 2])).toBe(0);
+    expect(ijkIndexToFlatIndex(1, 0, 0, [2, 2, 2])).toBe(1);
+  });
+
+  it('advances j only once i has wrapped around dimI', () => {
+    expect(ijkIndexToFlatIndex(0, 1, 0, [2, 2, 2])).toBe(2);
+    expect(ijkIndexToFlatIndex(1, 1, 0, [2, 2, 2])).toBe(3);
+  });
+
+  it('advances k only once both i and j have wrapped', () => {
+    expect(ijkIndexToFlatIndex(0, 0, 1, [2, 2, 2])).toBe(4);
+    expect(ijkIndexToFlatIndex(1, 1, 1, [2, 2, 2])).toBe(7);
+  });
+
+  it('maps the far corner to the last flat index (total voxel count - 1)', () => {
+    const gridDimensions = [2, 3, 4];
+    const totalVoxels = gridDimensions[0] * gridDimensions[1] * gridDimensions[2];
+
+    expect(ijkIndexToFlatIndex(1, 2, 3, gridDimensions)).toBe(totalVoxels - 1);
+  });
+
+  it('produces a unique flat index for every (i,j,k) in a non-cubic grid, covering the full range', () => {
+    const gridDimensions = [2, 3, 4];
+    const seen = new Set();
+    for (let k = 0; k < gridDimensions[2]; k++)
+      for (let j = 0; j < gridDimensions[1]; j++)
+        for (let i = 0; i < gridDimensions[0]; i++)
+          seen.add(ijkIndexToFlatIndex(i, j, k, gridDimensions));
+
+    const totalVoxels = gridDimensions[0] * gridDimensions[1] * gridDimensions[2];
+    expect(seen.size).toBe(totalVoxels);
+    expect(Math.min(...seen)).toBe(0);
+    expect(Math.max(...seen)).toBe(totalVoxels - 1);
+  });
+});
+
+// ─── buildSourceVolumeGrid ────────────────────────────────────────────────────
+//
+// End-to-end: finds the basis, maps positions to grid indices, then places each
+// source's power into a flat Float32Array voxel grid (summing when sources share a voxel).
+
+describe('buildSourceVolumeGrid', () => {
+  // 3×3×3 grid, 2mm spacing, axis-aligned, built corner-first (i outer, k inner) — so
+  // findSourceGridBasis picks positions[0]=[0,0,0] as anchor (its 3 nearest, mutually
+  // orthogonal neighbors are found immediately) with basis=[[2,0,0],[0,2,0],[0,0,2]].
+  // With a corner anchor there's no min-shift, so grid index == [i,j,k] loop index directly.
+  const AXIS_ALIGNED_POSITIONS = [];
+  for (let i = 0; i < 3; i++)
+    for (let j = 0; j < 3; j++)
+      for (let k = 0; k < 3; k++) AXIS_ALIGNED_POSITIONS.push([i * 2, j * 2, k * 2]);
+  // one power per position, matching its position in the array (index 0 → power 1, etc.)
+  // so each expected value is easy to trace back to its source.
+  const AXIS_ALIGNED_POWERS = AXIS_ALIGNED_POSITIONS.map((_, idx) => idx + 1);
+
+  it('returns gridDimensions [3,3,3] and a Float32Array of length 27 for a 3×3×3 grid', () => {
+    const { sourceVolumeGrid, gridDimensions } = buildSourceVolumeGrid(
+      AXIS_ALIGNED_POSITIONS,
+      AXIS_ALIGNED_POWERS
+    );
+
+    expect(gridDimensions).toEqual([3, 3, 3]);
+    expect(sourceVolumeGrid).toBeInstanceOf(Float32Array);
+    expect(sourceVolumeGrid).toHaveLength(27);
+  });
+
+  it('places each source power at its correct flat voxel index', () => {
+    // Which real axis (x/y/z) ends up labeled i/j/k depends on the order findSourceGridBasis's
+    // neighbor search happens to discover its 3 basis offsets in — not necessarily x,y,z order.
+    // So the expected flat index is computed the same way buildSourceVolumeGrid computes it
+    // internally (findSourceGridBasis → mapPositionsToGridIndices → ijkIndexToFlatIndex),
+    // rather than hand-picking one assuming a specific axis order.
+    const targetSourceIndex = 19; // arbitrary, non-symmetric source
+    const { anchor, basis } = findSourceGridBasis(AXIS_ALIGNED_POSITIONS);
+    const { sourceVolumeIndices, gridDimensions } = mapPositionsToGridIndices(
+      AXIS_ALIGNED_POSITIONS,
+      anchor,
+      basis
+    );
+    const [i, j, k] = sourceVolumeIndices[targetSourceIndex];
+    const expectedFlatIndex = ijkIndexToFlatIndex(i, j, k, gridDimensions);
+
+    const { sourceVolumeGrid } = buildSourceVolumeGrid(AXIS_ALIGNED_POSITIONS, AXIS_ALIGNED_POWERS);
+
+    expect(sourceVolumeGrid[expectedFlatIndex]).toBe(AXIS_ALIGNED_POWERS[targetSourceIndex]);
+  });
+
+  it('sums powers when two sources land in the same voxel instead of overwriting', () => {
+    // duplicate the grid's centre point (array index 13, position [2,2,2] → grid index [1,1,1])
+    // as an extra 28th source with a distinct power, so both should land in flat index 13.
+    const positions = [...AXIS_ALIGNED_POSITIONS, AXIS_ALIGNED_POSITIONS[13]];
+    const powers = [...AXIS_ALIGNED_POWERS, 100];
+
+    const { sourceVolumeGrid, gridDimensions } = buildSourceVolumeGrid(positions, powers);
+
+    expect(gridDimensions).toEqual([3, 3, 3]); // duplicate doesn't introduce a new min/max
+    expect(sourceVolumeGrid[13]).toBe(AXIS_ALIGNED_POWERS[13] + 100); // 14 + 100 = 114
+  });
+
+  it('leaves voxels with no matching source at 0', () => {
+    // Drop one point (array index 25, position [4,4,2]) that isn't a full corner on any real
+    // axis — other remaining points still span the full range on every axis, so the grid stays
+    // fully-sized but exactly one voxel (the removed point's) ends up with no source at all.
+    const positions = AXIS_ALIGNED_POSITIONS.filter((_, idx) => idx !== 25);
+    const powers = AXIS_ALIGNED_POWERS.filter((_, idx) => idx !== 25);
+
+    // Find whichever flat index the remaining sources *don't* land on, the same way
+    // buildSourceVolumeGrid computes flat indices internally (see previous test's comment
+    // on why the expected index can't be hand-picked assuming a fixed i/j/k↔x/y/z order).
+    const { anchor, basis } = findSourceGridBasis(positions);
+    const { sourceVolumeIndices, gridDimensions } = mapPositionsToGridIndices(
+      positions,
+      anchor,
+      basis
+    );
+    const totalVoxels = gridDimensions[0] * gridDimensions[1] * gridDimensions[2];
+    const usedFlatIndices = new Set(
+      sourceVolumeIndices.map(([i, j, k]) => ijkIndexToFlatIndex(i, j, k, gridDimensions))
+    );
+    expect(usedFlatIndices.size).toBe(totalVoxels - 1); // exactly one voxel left empty
+    let emptyFlatIndex = -1;
+    for (let f = 0; f < totalVoxels; f++) {
+      if (!usedFlatIndices.has(f)) emptyFlatIndex = f;
+    }
+
+    const { sourceVolumeGrid } = buildSourceVolumeGrid(positions, powers);
+
+    expect(sourceVolumeGrid[emptyFlatIndex]).toBe(0);
+  });
+
+  it('throws when insideSourcePositions and sourcePowers have different lengths', () => {
+    expect(() => buildSourceVolumeGrid(AXIS_ALIGNED_POSITIONS, [1, 2, 3])).toThrow(
+      /unequal number/
+    );
   });
 });
 

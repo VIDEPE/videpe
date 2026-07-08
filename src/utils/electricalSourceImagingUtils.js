@@ -142,14 +142,14 @@ export function estimateGridSpacing(positions, sampleSize = 200) {
 }
 
 export function isParallel(a, b) {
-  // The cross product of two vectors is ~0, when two vectors point in the same (paralell) or opposite (antiparellel) direction
+  // The cross product of two vectors is vector with length ~0, when two vectors point in the same (paralell) or opposite (antiparellel) direction
   // isParallel returns True in this case. => used to skip a redundant neighbor-offset candidate that doesn't add an indepdant axis
   // The tolerance is relative (scaled by the vectors' own lengths), not a fixed 1e-6.
   return vectorLength(crossProduct(a, b)) < 1e-6 * vectorLength(a) * vectorLength(b);
 }
 
 export function isCoplanar(a, b, c) {
-  // The triple product is similar to isParallel, but then for three vectors a,b,c
+  // The triple scalar product is similar to isParallel, but then for three vectors a,b,c
   // It is ~0 when all three vectors lie in the same plane
   // isCoplanar() returns True in this case => used to reject a third neighbour-offset candidate that doesn't add the missing third dimension.
   // The tolerance is relative (scaled by the vectors' own lengths), not a fixed 1e-6.
@@ -177,8 +177,8 @@ export function pickIndependentBasis(offsets) {
 
 export function findSourceGridBasis(sourcePositions) {
   if (sourcePositions.length < 4) return null; // too few sources
-  const spacing = estimateGridSpacing(sourcePositions); // estimate grid spacing
-  const tolerance = spacing * 0.1;
+  const gridSpacing = estimateGridSpacing(sourcePositions); // estimate grid spacing
+  const tolerance = gridSpacing * 0.1;
 
   for (const anchor of sourcePositions) {
     const offsets = [];
@@ -186,7 +186,7 @@ export function findSourceGridBasis(sourcePositions) {
       if (point === anchor) continue; // skip if point is the same as the anchor
       const offset = vectorSubtract(point, anchor);
       // Check if the offset length is approximately equal to the estimated spacing (within tolerance)
-      if (Math.abs(vectorLength(offset) - spacing) <= tolerance) {
+      if (Math.abs(vectorLength(offset) - gridSpacing) <= tolerance) {
         // if so, this means the point is a neighbor of the anchor in the grid, and we can use it to find a basis
         offsets.push(offset);
       }
@@ -194,7 +194,7 @@ export function findSourceGridBasis(sourcePositions) {
     // Now we have a list of offsets from the anchor to its neighbors.
     // We can try to pick an independent basis from these offsets.
     const basis = pickIndependentBasis(offsets);
-    if (basis) return { anchor, basis, spacing };
+    if (basis) return { anchor, basis, gridSpacing };
   }
   return null;
 }
@@ -212,12 +212,12 @@ export function mapPositionsToGridIndices(sourcePositions, anchor, basis) {
   // 1 along b2, 3 along b3 — since 2·[2,0,0] + 1·[0,2,0] + 3·[0,0,2] = [4,2,6].
   //
   // We know offset and [b1,b2,b3], and want to solve for the unknown (i,j,k).
-  // => conds * [i,j,k] = offset"
+  // => conds * [i,j,k] = offset
   //    Note that conds needs b1,b2,b3 as its COLUMNS, not its rows (see MatrixLinSolve tests for an example)
   //    transpose [b1,b2,b3 to get conds => conds = matrixTrans([b1,b2,b3])
-  // 
+  //
   // That equation only goes forward, index → mm (vox2mm).
-  // To go the other way, mm → index (mm2vox), it has to be inverted: 
+  // To go the other way, mm → index (mm2vox), it has to be inverted:
   // [i,j,k] = matrixInverse(conds) * offset.
   // matrixLinSolve(conds, offset) does exactly this in one call, but it re-inverts conds
   // internally every time it's called. Conds however never changes across the whole loop of
@@ -232,6 +232,9 @@ export function mapPositionsToGridIndices(sourcePositions, anchor, basis) {
   let iMin = Infinity;
   let jMin = Infinity;
   let kMin = Infinity;
+  let iMax = -Infinity;
+  let jMax = -Infinity;
+  let kMax = -Infinity;
   for (let iSource = 0; iSource < sourcePositions.length; iSource++) {
     const source = sourcePositions[iSource];
     // substract anchor from the point to get the offset
@@ -252,6 +255,11 @@ export function mapPositionsToGridIndices(sourcePositions, anchor, basis) {
     if (i < iMin) iMin = i;
     if (j < jMin) jMin = j;
     if (k < kMin) kMin = k;
+
+    // find [iMax, jMax and kMax]
+    if (i > iMax) iMax = i;
+    if (j > jMax) jMax = j;
+    if (k > kMax) kMax = k;
   }
 
   // These volume indices however are in respect to the anchor, which could be any source point within the grid
@@ -259,5 +267,50 @@ export function mapPositionsToGridIndices(sourcePositions, anchor, basis) {
   for (let iSource = 0; iSource < sourceVolumeIndices.length; iSource++) {
     sourceVolumeIndices[iSource] = vectorSubtract(sourceVolumeIndices[iSource], [iMin, jMin, kMin]);
   }
-  return sourceVolumeIndices;
+
+  const gridDimensions = [iMax - iMin + 1, jMax - jMin + 1, kMax - kMin + 1]; // correct Max to same zero start and + 1 to offset indices starting from 0
+
+  return { sourceVolumeIndices, gridDimensions };
+}
+
+export function ijkIndexToFlatIndex(i, j, k, gridDimensions) {
+  // Convert a (i,j,k) grid index into a flat array index, one scalar per voxel, in
+  // i-fastest / k-slowest order (matches NIfTI's on-disk voxel layout):
+  // flat index 0,1,2,...,dimI-1 steps through i alone (j=0,k=0); once i wraps, j increments;
+  // once j wraps too, k increments. E.g. for gridDimensions=[2,2,2], the order is:
+  // (0,0,0),(1,0,0),(0,1,0),(1,1,0),(0,0,1),(1,0,1),(0,1,1),(1,1,1) → flat indices 0..7
+  const [dimI, dimJ, dimK] = gridDimensions;
+  const flatIndex = i + j * dimI + k * dimI * dimJ;
+  return flatIndex;
+}
+
+export function buildSourceVolumeGrid(insideSourcePositions, sourcePowers) {
+  // Get anchor, basis needed to get GridIndices
+  const { anchor, basis, gridSpacing } = findSourceGridBasis(insideSourcePositions);
+  // Get grid indices for each source
+  const { sourceVolumeIndices, gridDimensions } = mapPositionsToGridIndices(
+    insideSourcePositions,
+    anchor,
+    basis
+  );
+
+  // Create ESI volume grid as flat array
+  let sourceVolumeGrid = new Float32Array(
+    gridDimensions[0] * gridDimensions[1] * gridDimensions[2]
+  );
+  // Loop over source powers and sum up in "grid"
+  // first check if we have equal number of insidesourcepositions as sourcepowers
+  if (insideSourcePositions.length !== sourcePowers.length) {
+    throw new Error(
+      `unequal number of inside source positions (n=${insideSourcePositions.length}) compared to source powers (n=${sourcePowers.length})`
+    );
+  }
+  for (let iSource = 0; iSource < sourceVolumeIndices.length; iSource++) {
+    const [i, j, k] = sourceVolumeIndices[iSource];
+    const flatArrayInd = ijkIndexToFlatIndex(i, j, k, gridDimensions);
+    // sum sourcePowers to the correct flat array pos
+    sourceVolumeGrid[flatArrayInd] = sourceVolumeGrid[flatArrayInd] + sourcePowers[iSource];
+  }
+
+  return { sourceVolumeGrid, gridDimensions };
 }
