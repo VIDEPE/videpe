@@ -6,6 +6,7 @@ import {
   findSourceGridBasis,
   mapPositionsToGridIndices,
   ijkIndexToFlatIndex,
+  buildAffineMatrix,
   buildSourceVolumeGrid,
 } from '@/utils/electricalSourceImagingUtils';
 import { ESI_CONNECTOME_URL } from '@/components/NiiViewer.utils';
@@ -303,6 +304,112 @@ describe('mapPositionsToGridIndices', () => {
     const { gridDimensions } = mapPositionsToGridIndices(positions, anchor, basis);
 
     expect(gridDimensions).toEqual([2, 3, 4]);
+  });
+
+  it('returns minCorner reflecting how far the zero-shift moved things relative to the anchor', () => {
+    // AXIS_ALIGNED_ANCHOR is the grid's centre point (i=j=k=1 in the 3×3×3 grid), so raw
+    // anchor-relative indices span -1..1 on every axis before the zero-shift — minCorner
+    // should be exactly that pre-shift minimum, [-1,-1,-1].
+    const { minCorner } = mapPositionsToGridIndices(
+      AXIS_ALIGNED_POSITIONS,
+      AXIS_ALIGNED_ANCHOR,
+      AXIS_ALIGNED_BASIS
+    );
+
+    expect(minCorner).toEqual([-1, -1, -1]);
+  });
+
+  it('returns minCorner of [0,0,0] when the anchor itself is already the grid corner', () => {
+    const positions = [];
+    for (let i = 0; i < 2; i++)
+      for (let j = 0; j < 3; j++) for (let k = 0; k < 4; k++) positions.push([i * 2, j * 2, k * 2]);
+    const basis = [
+      [2, 0, 0],
+      [0, 2, 0],
+      [0, 0, 2],
+    ];
+    const anchor = [0, 0, 0];
+
+    const { minCorner } = mapPositionsToGridIndices(positions, anchor, basis);
+
+    expect(minCorner).toEqual([0, 0, 0]);
+  });
+});
+
+// ─── buildAffineMatrix ────────────────────────────────────────────────────────
+//
+// Builds the NIfTI-style vox2mm affine [b1 b2 b3 | origin; 0 0 0 1] that maps a voxel
+// index (i,j,k) to its real-world mm position — origin is voxel [0,0,0]'s mm position,
+// which is the anchor walked back by minCorner basis-steps (see the function's own comment).
+
+describe('buildAffineMatrix', () => {
+  it('sets basis vectors as the first 3 columns, for a simple axis-aligned grid', () => {
+    const anchor = [10, 20, 30];
+    const basis = [
+      [2, 0, 0],
+      [0, 2, 0],
+      [0, 0, 2],
+    ];
+    const minCorner = [0, 0, 0]; // anchor is already voxel [0,0,0]
+
+    const affine = buildAffineMatrix(anchor, basis, minCorner);
+
+    expect(affine[0]).toEqual([2, 0, 0, 10]);
+    expect(affine[1]).toEqual([0, 2, 0, 20]);
+    expect(affine[2]).toEqual([0, 0, 2, 30]);
+    expect(affine[3]).toEqual([0, 0, 0, 1]);
+  });
+
+  it('shifts the origin back from the anchor by minCorner basis-steps when the anchor is not voxel [0,0,0]', () => {
+    // anchor = grid centre, minCorner = [-1,-1,-1] (same setup as mapPositionsToGridIndices's
+    // centre-anchor test) — origin should be 1 basis-step in the negative direction from anchor
+    // on every axis: origin = anchor + (-1)*b1 + (-1)*b2 + (-1)*b3.
+    const anchor = [2, 2, 2];
+    const basis = [
+      [2, 0, 0],
+      [0, 2, 0],
+      [0, 0, 2],
+    ];
+    const minCorner = [-1, -1, -1];
+
+    const affine = buildAffineMatrix(anchor, basis, minCorner);
+
+    // origin = [2,2,2] + (-1)*[2,0,0] + (-1)*[0,2,0] + (-1)*[0,0,2] = [0,0,0]
+    expect(affine[0][3]).toBe(0);
+    expect(affine[1][3]).toBe(0);
+    expect(affine[2][3]).toBe(0);
+  });
+
+  it('recovers the correct real-world position for a known voxel via the affine, for a rotated basis', () => {
+    // Same rotated-30°-about-z grid as findSourceGridBasis/mapPositionsToGridIndices's rotation
+    // tests. Applying the affine to voxel [1,1,1] should land back on the original mm position
+    // of the source that mapped to that voxel — proving the affine correctly inverts the
+    // index→mm relationship mapPositionsToGridIndices solves, including the zero-shift.
+    const angle = Math.PI / 6;
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    const rotate = ([x, y, z]) => [x * cos - y * sin, x * sin + y * cos, z];
+
+    const anchor = rotate([0, 0, 0]);
+    const basis = [rotate([5, 0, 0]), rotate([0, 5, 0]), rotate([0, 0, 5])];
+    const knownPosition = rotate([5, 5, 5]); // i=j=k=1 relative to the anchor, before shifting
+
+    const { sourceVolumeIndices, minCorner } = mapPositionsToGridIndices(
+      [knownPosition],
+      anchor,
+      basis
+    );
+    const affine = buildAffineMatrix(anchor, basis, minCorner);
+    const [i, j, k] = sourceVolumeIndices[0];
+
+    // affine * [i,j,k,1] should reproduce knownPosition
+    const recoveredPosition = [0, 1, 2].map(
+      (row) => affine[row][0] * i + affine[row][1] * j + affine[row][2] * k + affine[row][3]
+    );
+
+    expect(recoveredPosition[0]).toBeCloseTo(knownPosition[0], 5);
+    expect(recoveredPosition[1]).toBeCloseTo(knownPosition[1], 5);
+    expect(recoveredPosition[2]).toBeCloseTo(knownPosition[2], 5);
   });
 });
 

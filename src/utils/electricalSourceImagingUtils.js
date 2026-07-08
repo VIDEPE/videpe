@@ -3,6 +3,7 @@ import {
   median,
   euclideanDistance,
   vectorSubtract,
+  vectorAdd,
   dotProduct,
   crossProduct,
   vectorLength,
@@ -270,7 +271,42 @@ export function mapPositionsToGridIndices(sourcePositions, anchor, basis) {
 
   const gridDimensions = [iMax - iMin + 1, jMax - jMin + 1, kMax - kMin + 1]; // correct Max to same zero start and + 1 to offset indices starting from 0
 
-  return { sourceVolumeIndices, gridDimensions };
+  // minCorner = how many basis-steps the zero-shift above moved everything by — needed by
+  // buildAffineMatrix to recover the real-world mm position of voxel [0,0,0], since that's
+  // no longer the anchor itself once indices get shifted to be zero-based.
+  const minCorner = [iMin, jMin, kMin];
+
+  return { sourceVolumeIndices, gridDimensions, minCorner };
+}
+
+export function buildAffineMatrix(anchor, basis, minCorner) {
+  // The affine (NIfTI vox2mm convention) maps voxel index (i,j,k) → real-world mm position [x,y,z]:
+  // [x,y,z] = i*b1 + j*b2 + k*b3 + origin, => can be writtenas Affine 4×4 matrix [b1 b2 b3 | origin; 0 0 0 1].
+  //   | b1x, b2x, b3x, originx |
+  //   | b1y, b2y, b3y, originy |
+  //   | b1z, b2z, b3z, originz |
+  //   |   0,   0,   0,   1     |
+  //
+  // origin = the real-world mm position of voxel [0,0,0] in the 'zero-shifted' grid. 
+  // Note this is not anchor itself — mapPositionsToGridIndices's zero-shift moved voxel [0,0,0] away from the
+  // anchor by minCorner=[iMin,jMin,kMin] basis-steps, so origin = anchor + (that many steps
+  // back toward the anchor). Same forward index→mm math as mapPositionsToGridIndices's own
+  // vox2mm equation (conds*[i,j,k]=offset), just evaluated at [i,j,k]=minCorner instead of
+  // solved for.
+  const [b1, b2, b3] = basis;
+  const conds = matrixTrans(basis); // basis vectors as columns, not rows (see mapPositionsToGridIndices)
+  const originOffset = matrixMul(
+    conds,
+    minCorner.map((m) => [m])
+  ).map((row) => row[0]);  // conds · [i,j,k] = origin shift in mm
+  const origin = vectorAdd(anchor, originOffset); // anchor + originShift => realworld location in mm of voxel [0,0,0]
+
+  return [
+    [b1[0], b2[0], b3[0], origin[0]],
+    [b1[1], b2[1], b3[1], origin[1]],
+    [b1[2], b2[2], b3[2], origin[2]],
+    [    0,     0,     0,         1],
+  ];
 }
 
 export function ijkIndexToFlatIndex(i, j, k, gridDimensions) {
@@ -288,11 +324,12 @@ export function buildSourceVolumeGrid(insideSourcePositions, sourcePowers) {
   // Get anchor, basis needed to get GridIndices
   const { anchor, basis, gridSpacing } = findSourceGridBasis(insideSourcePositions);
   // Get grid indices for each source
-  const { sourceVolumeIndices, gridDimensions } = mapPositionsToGridIndices(
+  const { sourceVolumeIndices, gridDimensions, minCorner } = mapPositionsToGridIndices(
     insideSourcePositions,
     anchor,
     basis
   );
+  const affine = buildAffineMatrix(anchor, basis, minCorner);
 
   // Create ESI volume grid as flat array
   let sourceVolumeGrid = new Float32Array(
@@ -312,5 +349,5 @@ export function buildSourceVolumeGrid(insideSourcePositions, sourcePowers) {
     sourceVolumeGrid[flatArrayInd] = sourceVolumeGrid[flatArrayInd] + sourcePowers[iSource];
   }
 
-  return { sourceVolumeGrid, gridDimensions };
+  return { sourceVolumeGrid, gridDimensions, affine };
 }

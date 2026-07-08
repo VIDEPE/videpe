@@ -280,6 +280,13 @@ export function vectorSubtract(a, b) {
 }
 // vectorSubtract([5, 7, 9], [1, 2, 3]) // gets [4, 5, 6]
 
+export function vectorAdd(a, b) {
+  // elementwise addition of two 3D points/vectors — not to be confused with sum(), which
+  // adds up a flat list of plain numbers
+  return [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+}
+// vectorAdd([5, 7, 9], [1, 2, 3]) // gets [6, 9, 12]
+
 export function dotProduct(a, b) {
   return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 }

@@ -25,6 +25,7 @@ import {
   matrixLinSolve,
   euclideanDistance,
   vectorSubtract,
+  vectorAdd,
   dotProduct,
   crossProduct,
   vectorLength,
@@ -519,6 +520,26 @@ describe('vectorSubtract', () => {
     vectorSubtract(a, b);
     expect(a).toEqual([5, 7, 9]);
     expect(b).toEqual([1, 2, 3]);
+  });
+});
+
+describe('vectorAdd', () => {
+  it('adds two 3D points elementwise', () => {
+    expect(vectorAdd([5, 7, 9], [1, 2, 3])).toEqual([6, 9, 12]);
+  });
+
+  it('does not mutate either input', () => {
+    const a = [5, 7, 9];
+    const b = [1, 2, 3];
+    vectorAdd(a, b);
+    expect(a).toEqual([5, 7, 9]);
+    expect(b).toEqual([1, 2, 3]);
+  });
+
+  it('is the inverse of vectorSubtract — adding back a subtracted vector returns the original', () => {
+    const a = [5, 7, 9];
+    const b = [1, 2, 3];
+    expect(vectorAdd(vectorSubtract(a, b), b)).toEqual(a);
   });
 });
 
