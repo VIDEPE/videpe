@@ -156,13 +156,10 @@ export const PatientView = () => {
     [intracranialSnapshot]
   ); // intracranial electrodes
 
-  const esiResult = useMemo(
+  const esiLayer = useMemo(
     () => electricalSourceImaging(inverseSolution, channelSnapshot),
     [inverseSolution, channelSnapshot]
   ); // ESI source power — { sourcePowerConnectomes, sourcePowerVolume } | null | []
-  // NiiViewer currently only renders the connectome layer; sourcePowerVolume is unused for
-  // now until the Connectome/Volume mode toggle is wired up.
-  const esiLayer = esiResult?.sourcePowerConnectomes ?? esiResult;
 
   // when both these flags are true, then the two plots can be synchronised
   const [niiNvReady, setNiiNvReady] = useState(false); // flag when the NiiViewer canvas is initialised

@@ -51,6 +51,7 @@ export const getInitialLayerSettings = (layers, startIndex = 0) =>
     colormap: TYPE_COLORMAP_DEFAULTS[layer.type] ?? 'gray',
     invert: false,
     showColorbar: false,
+    isEsiVolume: false,
   }));
 
 // Detects imaging modality from a filename using BIDS suffix first, then keyword fallback.

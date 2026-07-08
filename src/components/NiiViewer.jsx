@@ -49,26 +49,57 @@ export async function syncVolumesAndApplySettings(nv, layers, layerSettings) {
 
 // Pure updater functions for merging a connectome layer into orderedLayers/layerSettings
 // by its sentinel URL. Used by both the intracranialLayer and esiLayer merge effects.
+// Five possible cases, based on whether `layer` is present and whether an entry
+// already exists at `sentinelUrl`:
+//   no layer   + not present  → no-op
+//   no layer   + present      → remove it
+//   has layer  + not present  → append it
+//   has layer  + present, same object      → no-op (data unchanged)
+//   has layer  + present, different object → replace it in place
 function makeLayerMergeUpdater(layer, sentinelUrl) {
   return (prevLayers) => {
-    const idx = prevLayers.findIndex((l) => l.url === sentinelUrl);
+    const existingIndex = prevLayers.findIndex((l) => l.url === sentinelUrl);
+    const alreadyPresent = existingIndex !== -1;
+
     if (!layer) {
-      if (idx === -1) return prevLayers; // already absent — nothing to do
-      return prevLayers.filter((_, i) => i !== idx); // remove the card
+      // Nothing to show — remove the existing entry, or leave the array as-is if there wasn't one.
+      return alreadyPresent ? prevLayers.filter((_, i) => i !== existingIndex) : prevLayers;
     }
-    if (idx === -1) return [...prevLayers, layer]; // first appearance — append
-    if (prevLayers[idx] === layer) return prevLayers; // same object — no change
+
+    if (!alreadyPresent) {
+      // First appearance — append as a new layer.
+      return [...prevLayers, layer];
+    }
+
+    if (prevLayers[existingIndex] === layer) {
+      // Same object reference — data hasn't changed, avoid an unnecessary update.
+      return prevLayers;
+    }
+
+    // Data changed — replace the existing entry in place, preserving its position.
     const next = prevLayers.slice();
-    next[idx] = layer; // data changed — update in place
+    next[existingIndex] = layer;
     return next;
   };
 }
 
 function makeSettingsMergeUpdater(layer, sentinelUrl) {
   return (prevSettings) => {
-    const idx = prevSettings.findIndex((s) => s.url === sentinelUrl);
-    if (!layer) return idx === -1 ? prevSettings : prevSettings.filter((_, i) => i !== idx);
-    if (idx !== -1) return prevSettings; // already has an entry — data-only refresh never touches settings
+    const existingIndex = prevSettings.findIndex((s) => s.url === sentinelUrl);
+    const alreadyPresent = existingIndex !== -1;
+
+    if (!layer) {
+      // Nothing to show — remove its settings entry, or leave the array as-is if there wasn't one.
+      return alreadyPresent ? prevSettings.filter((_, i) => i !== existingIndex) : prevSettings;
+    }
+
+    if (alreadyPresent) {
+      // Already has a settings entry — a data-only refresh (e.g. new sourcePowers) never touches
+      // user-chosen settings like opacity/visibility, so leave it untouched.
+      return prevSettings;
+    }
+
+    // First appearance — seed default settings for it.
     return [...prevSettings, ...getInitialLayerSettings([layer], prevSettings.length)];
   };
 }
@@ -77,7 +108,7 @@ export const NiiViewer = ({
   nvRef,
   layers = [], // image volumes/meshes loaded from files — e.g. .nii/.mgz/.gii/.ply/.obj drops
   intracranialLayer = null, // kept separate from `layers` so a voltage-driven refresh never resets other layers' settings
-  esiLayer = null, // same pattern — ESI source power connectome layer
+  esiLayer = null, // same pattern — ESI source power connectome/volume layer
   onViewReady,
   onNiiNvReady,
   isFullscreen = false,
@@ -500,8 +531,18 @@ export const NiiViewer = ({
   // Merges the separately-tracked esiLayer prop into orderedLayers/layerSettings — same
   // pattern as the intracranialLayer merge effect above, keyed on ESI_LAYER_URL.
   useEffect(() => {
-    setOrderedLayers(makeLayerMergeUpdater(esiLayer, ESI_LAYER_URL));
-    setLayerSettings(makeSettingsMergeUpdater(esiLayer, ESI_LAYER_URL));
+    const isEsiVolumeMode = layerSettings.find((s) => s.url === ESI_LAYER_URL)?.isEsiVolume;
+
+    const activeEsiLayer = esiLayer
+      ? isEsiVolumeMode
+        ? esiLayer.sourcePowerVolume
+        : esiLayer.sourcePowerConnectomes
+      : esiLayer;
+
+    // Add/replace/remove the ESI entry in orderedLayers to match activeEsiLayer
+    setOrderedLayers(makeLayerMergeUpdater(activeEsiLayer, ESI_LAYER_URL));
+    // Add/remove its settings entry (visible/opacity/isEsiVolume/etc.); leaves an existing entry untouched
+    setLayerSettings(makeSettingsMergeUpdater(activeEsiLayer, ESI_LAYER_URL));
   }, [esiLayer]);
 
   // Builds/rebuilds/removes the ESI source-power connectome mesh whenever esiLayer changes.
