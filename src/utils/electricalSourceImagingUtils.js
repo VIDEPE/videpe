@@ -76,10 +76,21 @@ export function convertSourcePowersToConnectome(insideSourcePositions, sourcePow
   };
 }
 
-// Stub — NIfTI volume heatmap output, to be implemented after the connectome approach.
-// Will need grid dimensions/voxelSize/gridOrigin/insideVoxelIndices pre-computed at
+// NIfTI volume heatmap output
+// needs grid dimensions/voxelSize/gridOrigin/insideVoxelIndices pre-computed at
 // parse time and passed in, rather than deriving them here from insideSourcePositions alone.
-export function convertSourcePowersToVolume(insideSourcePositions, sourcePowers) {
+export function convertSourcePowersToVolume(
+  insideSourcePositions,
+  sourcePowers,
+  affine,
+  gridDimensions
+) {
+  const sourceVolumeGrid = buildSourceVolumeGrid(
+    insideSourcePositions,
+    sourcePowers,
+    gridDimensions
+  );
+
   return null;
 }
 
@@ -102,7 +113,15 @@ export function electricalSourceImaging(inverseSolution, channelSnapshot) {
   if (inverseSolution.format === 'FieldTrip') {
     if (!inverseSolution?.flatSourceFilters?.length) return [];
 
-    const { flatSourceFilters, insideSourcePositions, nInsideSources, nChannels } = inverseSolution;
+    const {
+      flatSourceFilters,
+      insideSourcePositions,
+      nInsideSources,
+      nChannels,
+      sourceVolumeIndices,
+      gridDimensions,
+      affine,
+    } = inverseSolution;
 
     const sourcePowers = calculateSourcePower({
       flatSourceFilters,
@@ -111,11 +130,18 @@ export function electricalSourceImaging(inverseSolution, channelSnapshot) {
       nChannels,
     });
 
+    // Build power connectomes from the inside source positions
     const sourcePowerConnectomes = convertSourcePowersToConnectome(
       insideSourcePositions,
       sourcePowers
     );
-    const sourcePowerVolumes = convertSourcePowersToVolume(insideSourcePositions, sourcePowers);
+    // Build power volume from inside volume indices
+    const sourcePowerVolumes = convertSourcePowersToVolume(
+      sourceVolumeIndices,
+      sourcePowers,
+      affine,
+      gridDimensions
+    );
 
     return { sourcePowerConnectomes, sourcePowerVolumes };
   } else {
@@ -287,7 +313,7 @@ export function buildAffineMatrix(anchor, basis, minCorner) {
   //   | b1z, b2z, b3z, originz |
   //   |   0,   0,   0,   1     |
   //
-  // origin = the real-world mm position of voxel [0,0,0] in the 'zero-shifted' grid. 
+  // origin = the real-world mm position of voxel [0,0,0] in the 'zero-shifted' grid.
   // Note this is not anchor itself — mapPositionsToGridIndices's zero-shift moved voxel [0,0,0] away from the
   // anchor by minCorner=[iMin,jMin,kMin] basis-steps, so origin = anchor + (that many steps
   // back toward the anchor). Same forward index→mm math as mapPositionsToGridIndices's own
@@ -298,14 +324,14 @@ export function buildAffineMatrix(anchor, basis, minCorner) {
   const originOffset = matrixMul(
     conds,
     minCorner.map((m) => [m])
-  ).map((row) => row[0]);  // conds · [i,j,k] = origin shift in mm
+  ).map((row) => row[0]); // conds · [i,j,k] = origin shift in mm
   const origin = vectorAdd(anchor, originOffset); // anchor + originShift => realworld location in mm of voxel [0,0,0]
 
   return [
     [b1[0], b2[0], b3[0], origin[0]],
     [b1[1], b2[1], b3[1], origin[1]],
     [b1[2], b2[2], b3[2], origin[2]],
-    [    0,     0,     0,         1],
+    [0, 0, 0, 1],
   ];
 }
 
@@ -320,28 +346,19 @@ export function ijkIndexToFlatIndex(i, j, k, gridDimensions) {
   return flatIndex;
 }
 
-export function buildSourceVolumeGrid(insideSourcePositions, sourcePowers) {
-  // Get anchor, basis needed to get GridIndices
-  const { anchor, basis, gridSpacing } = findSourceGridBasis(insideSourcePositions);
-  // Get grid indices for each source
-  const { sourceVolumeIndices, gridDimensions, minCorner } = mapPositionsToGridIndices(
-    insideSourcePositions,
-    anchor,
-    basis
-  );
-  const affine = buildAffineMatrix(anchor, basis, minCorner);
-
-  // Create ESI volume grid as flat array
+export function buildSourceVolumeGrid(sourceVolumeIndices, sourcePowers, gridDimensions) {
+  // Create ESI volume grid as flat array and occupy it with (inside) source power values
   let sourceVolumeGrid = new Float32Array(
     gridDimensions[0] * gridDimensions[1] * gridDimensions[2]
   );
-  // Loop over source powers and sum up in "grid"
+
   // first check if we have equal number of insidesourcepositions as sourcepowers
-  if (insideSourcePositions.length !== sourcePowers.length) {
+  if (sourceVolumeIndices.length !== sourcePowers.length) {
     throw new Error(
-      `unequal number of inside source positions (n=${insideSourcePositions.length}) compared to source powers (n=${sourcePowers.length})`
+      `unequal number of inside source volume indices (n=${sourceVolumeIndices.length}) compared to source powers (n=${sourcePowers.length})`
     );
   }
+  // Loop over source powers and sum up in "grid"
   for (let iSource = 0; iSource < sourceVolumeIndices.length; iSource++) {
     const [i, j, k] = sourceVolumeIndices[iSource];
     const flatArrayInd = ijkIndexToFlatIndex(i, j, k, gridDimensions);
@@ -349,5 +366,5 @@ export function buildSourceVolumeGrid(insideSourcePositions, sourcePowers) {
     sourceVolumeGrid[flatArrayInd] = sourceVolumeGrid[flatArrayInd] + sourcePowers[iSource];
   }
 
-  return { sourceVolumeGrid, gridDimensions, affine };
+  return { sourceVolumeGrid };
 }

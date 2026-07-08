@@ -462,99 +462,96 @@ describe('ijkIndexToFlatIndex', () => {
 
 // ─── buildSourceVolumeGrid ────────────────────────────────────────────────────
 //
-// End-to-end: finds the basis, maps positions to grid indices, then places each
-// source's power into a flat Float32Array voxel grid (summing when sources share a voxel).
+// Pure fill step: takes already-computed sourceVolumeIndices + gridDimensions (as
+// mapPositionsToGridIndices would produce, precomputed once at parse time) plus per-click
+// sourcePowers, and places each source's power into a flat Float32Array voxel grid
+// (summing when sources share a voxel). No longer calls findSourceGridBasis itself.
 
 describe('buildSourceVolumeGrid', () => {
-  // 3×3×3 grid, 2mm spacing, axis-aligned, built corner-first (i outer, k inner) — so
-  // findSourceGridBasis picks positions[0]=[0,0,0] as anchor (its 3 nearest, mutually
-  // orthogonal neighbors are found immediately) with basis=[[2,0,0],[0,2,0],[0,0,2]].
-  // With a corner anchor there's no min-shift, so grid index == [i,j,k] loop index directly.
-  const AXIS_ALIGNED_POSITIONS = [];
-  for (let i = 0; i < 3; i++)
-    for (let j = 0; j < 3; j++)
-      for (let k = 0; k < 3; k++) AXIS_ALIGNED_POSITIONS.push([i * 2, j * 2, k * 2]);
-  // one power per position, matching its position in the array (index 0 → power 1, etc.)
-  // so each expected value is easy to trace back to its source.
-  const AXIS_ALIGNED_POWERS = AXIS_ALIGNED_POSITIONS.map((_, idx) => idx + 1);
+  // 2×2×2 grid — small and fully deterministic since indices are supplied directly rather
+  // than discovered via findSourceGridBasis's search order.
+  const GRID_DIMENSIONS = [2, 2, 2];
 
-  it('returns gridDimensions [3,3,3] and a Float32Array of length 27 for a 3×3×3 grid', () => {
-    const { sourceVolumeGrid, gridDimensions } = buildSourceVolumeGrid(
-      AXIS_ALIGNED_POSITIONS,
-      AXIS_ALIGNED_POWERS
+  it('returns a Float32Array sized to the total voxel count', () => {
+    const sourceVolumeIndices = [
+      [0, 0, 0],
+      [1, 0, 0],
+      [0, 1, 0],
+      [0, 0, 1],
+    ];
+    const sourcePowers = [10, 20, 30, 40];
+
+    const { sourceVolumeGrid } = buildSourceVolumeGrid(
+      sourceVolumeIndices,
+      sourcePowers,
+      GRID_DIMENSIONS
     );
 
-    expect(gridDimensions).toEqual([3, 3, 3]);
     expect(sourceVolumeGrid).toBeInstanceOf(Float32Array);
-    expect(sourceVolumeGrid).toHaveLength(27);
+    expect(sourceVolumeGrid).toHaveLength(8); // 2×2×2
   });
 
   it('places each source power at its correct flat voxel index', () => {
-    // Which real axis (x/y/z) ends up labeled i/j/k depends on the order findSourceGridBasis's
-    // neighbor search happens to discover its 3 basis offsets in — not necessarily x,y,z order.
-    // So the expected flat index is computed the same way buildSourceVolumeGrid computes it
-    // internally (findSourceGridBasis → mapPositionsToGridIndices → ijkIndexToFlatIndex),
-    // rather than hand-picking one assuming a specific axis order.
-    const targetSourceIndex = 19; // arbitrary, non-symmetric source
-    const { anchor, basis } = findSourceGridBasis(AXIS_ALIGNED_POSITIONS);
-    const { sourceVolumeIndices, gridDimensions } = mapPositionsToGridIndices(
-      AXIS_ALIGNED_POSITIONS,
-      anchor,
-      basis
+    // flatIndex = i + j*dimI + k*dimI*dimJ, dims=[2,2,2] → dimI=dimJ=2
+    const sourceVolumeIndices = [
+      [0, 0, 0], // flatIndex 0
+      [1, 0, 0], // flatIndex 1
+      [0, 1, 0], // flatIndex 2
+      [0, 0, 1], // flatIndex 4
+    ];
+    const sourcePowers = [10, 20, 30, 40];
+
+    const { sourceVolumeGrid } = buildSourceVolumeGrid(
+      sourceVolumeIndices,
+      sourcePowers,
+      GRID_DIMENSIONS
     );
-    const [i, j, k] = sourceVolumeIndices[targetSourceIndex];
-    const expectedFlatIndex = ijkIndexToFlatIndex(i, j, k, gridDimensions);
 
-    const { sourceVolumeGrid } = buildSourceVolumeGrid(AXIS_ALIGNED_POSITIONS, AXIS_ALIGNED_POWERS);
-
-    expect(sourceVolumeGrid[expectedFlatIndex]).toBe(AXIS_ALIGNED_POWERS[targetSourceIndex]);
+    expect(sourceVolumeGrid[0]).toBe(10);
+    expect(sourceVolumeGrid[1]).toBe(20);
+    expect(sourceVolumeGrid[2]).toBe(30);
+    expect(sourceVolumeGrid[4]).toBe(40);
   });
 
   it('sums powers when two sources land in the same voxel instead of overwriting', () => {
-    // duplicate the grid's centre point (array index 13, position [2,2,2] → grid index [1,1,1])
-    // as an extra 28th source with a distinct power, so both should land in flat index 13.
-    const positions = [...AXIS_ALIGNED_POSITIONS, AXIS_ALIGNED_POSITIONS[13]];
-    const powers = [...AXIS_ALIGNED_POWERS, 100];
+    const sourceVolumeIndices = [
+      [1, 1, 1],
+      [1, 1, 1], // same voxel as above
+    ];
+    const sourcePowers = [14, 100];
 
-    const { sourceVolumeGrid, gridDimensions } = buildSourceVolumeGrid(positions, powers);
+    const { sourceVolumeGrid } = buildSourceVolumeGrid(
+      sourceVolumeIndices,
+      sourcePowers,
+      GRID_DIMENSIONS
+    );
 
-    expect(gridDimensions).toEqual([3, 3, 3]); // duplicate doesn't introduce a new min/max
-    expect(sourceVolumeGrid[13]).toBe(AXIS_ALIGNED_POWERS[13] + 100); // 14 + 100 = 114
+    // flatIndex for (1,1,1) in [2,2,2] = 1 + 1*2 + 1*2*2 = 7
+    expect(sourceVolumeGrid[7]).toBe(114);
   });
 
   it('leaves voxels with no matching source at 0', () => {
-    // Drop one point (array index 25, position [4,4,2]) that isn't a full corner on any real
-    // axis — other remaining points still span the full range on every axis, so the grid stays
-    // fully-sized but exactly one voxel (the removed point's) ends up with no source at all.
-    const positions = AXIS_ALIGNED_POSITIONS.filter((_, idx) => idx !== 25);
-    const powers = AXIS_ALIGNED_POWERS.filter((_, idx) => idx !== 25);
+    const sourceVolumeIndices = [[0, 0, 0]]; // only voxel 0 gets filled
+    const sourcePowers = [5];
 
-    // Find whichever flat index the remaining sources *don't* land on, the same way
-    // buildSourceVolumeGrid computes flat indices internally (see previous test's comment
-    // on why the expected index can't be hand-picked assuming a fixed i/j/k↔x/y/z order).
-    const { anchor, basis } = findSourceGridBasis(positions);
-    const { sourceVolumeIndices, gridDimensions } = mapPositionsToGridIndices(
-      positions,
-      anchor,
-      basis
+    const { sourceVolumeGrid } = buildSourceVolumeGrid(
+      sourceVolumeIndices,
+      sourcePowers,
+      GRID_DIMENSIONS
     );
-    const totalVoxels = gridDimensions[0] * gridDimensions[1] * gridDimensions[2];
-    const usedFlatIndices = new Set(
-      sourceVolumeIndices.map(([i, j, k]) => ijkIndexToFlatIndex(i, j, k, gridDimensions))
-    );
-    expect(usedFlatIndices.size).toBe(totalVoxels - 1); // exactly one voxel left empty
-    let emptyFlatIndex = -1;
-    for (let f = 0; f < totalVoxels; f++) {
-      if (!usedFlatIndices.has(f)) emptyFlatIndex = f;
-    }
 
-    const { sourceVolumeGrid } = buildSourceVolumeGrid(positions, powers);
-
-    expect(sourceVolumeGrid[emptyFlatIndex]).toBe(0);
+    expect(sourceVolumeGrid[7]).toBe(0); // never touched
   });
 
-  it('throws when insideSourcePositions and sourcePowers have different lengths', () => {
-    expect(() => buildSourceVolumeGrid(AXIS_ALIGNED_POSITIONS, [1, 2, 3])).toThrow(
+  it('throws when sourceVolumeIndices and sourcePowers have different lengths', () => {
+    const sourceVolumeIndices = [
+      [0, 0, 0],
+      [1, 0, 0],
+      [0, 1, 0],
+      [0, 0, 1],
+    ];
+
+    expect(() => buildSourceVolumeGrid(sourceVolumeIndices, [1, 2, 3], GRID_DIMENSIONS)).toThrow(
       /unequal number/
     );
   });
@@ -633,6 +630,20 @@ const MINIMAL_MODEL = {
     [0, 10, 15],
   ],
   channelLabels: ['1', '2'],
+  // Volume-grid structure, as parseInverseSolutionFieldtrip would precompute once at parse
+  // time — doesn't need to geometrically correspond to insideSourcePositions above, since
+  // convertSourcePowersToVolume/buildSourceVolumeGrid only consume these, not the raw positions.
+  sourceVolumeIndices: [
+    [0, 0, 0],
+    [1, 0, 0],
+  ],
+  gridDimensions: [2, 1, 1],
+  affine: [
+    [1, 0, 0, 0],
+    [0, 1, 0, 0],
+    [0, 0, 1, 0],
+    [0, 0, 0, 1],
+  ],
 };
 
 // channelSnapshot fixtures — the per-click EEG state lifted from EegViewer
