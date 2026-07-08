@@ -481,7 +481,7 @@ describe('buildSourceVolumeGrid', () => {
     ];
     const sourcePowers = [10, 20, 30, 40];
 
-    const { sourceVolumeGrid } = buildSourceVolumeGrid(
+    const sourceVolumeGrid = buildSourceVolumeGrid(
       sourceVolumeIndices,
       sourcePowers,
       GRID_DIMENSIONS
@@ -501,7 +501,7 @@ describe('buildSourceVolumeGrid', () => {
     ];
     const sourcePowers = [10, 20, 30, 40];
 
-    const { sourceVolumeGrid } = buildSourceVolumeGrid(
+    const sourceVolumeGrid = buildSourceVolumeGrid(
       sourceVolumeIndices,
       sourcePowers,
       GRID_DIMENSIONS
@@ -520,7 +520,7 @@ describe('buildSourceVolumeGrid', () => {
     ];
     const sourcePowers = [14, 100];
 
-    const { sourceVolumeGrid } = buildSourceVolumeGrid(
+    const sourceVolumeGrid = buildSourceVolumeGrid(
       sourceVolumeIndices,
       sourcePowers,
       GRID_DIMENSIONS
@@ -534,7 +534,7 @@ describe('buildSourceVolumeGrid', () => {
     const sourceVolumeIndices = [[0, 0, 0]]; // only voxel 0 gets filled
     const sourcePowers = [5];
 
-    const { sourceVolumeGrid } = buildSourceVolumeGrid(
+    const sourceVolumeGrid = buildSourceVolumeGrid(
       sourceVolumeIndices,
       sourcePowers,
       GRID_DIMENSIONS
@@ -638,6 +638,7 @@ const MINIMAL_MODEL = {
     [1, 0, 0],
   ],
   gridDimensions: [2, 1, 1],
+  pixDims: [1, 1, 1],
   affine: [
     [1, 0, 0, 0],
     [0, 1, 0, 0],
@@ -679,7 +680,7 @@ describe('electricalSourceImaging', () => {
     expect(() => electricalSourceImaging(inverseSolution, SCALP_SNAPSHOT)).toThrow(/format/);
   });
 
-  it('runs end-to-end and returns both a connectome layer and a volume layer for NiiViewer', () => {
+  it('runs end-to-end and returns both a connectome layer and a NIfTI volume byte array for NiiViewer', () => {
     const result = electricalSourceImaging(MINIMAL_MODEL, SCALP_SNAPSHOT);
 
     // Powers from this model are already verified: source 0 → 13, source 1 → 25
@@ -687,7 +688,11 @@ describe('electricalSourceImaging', () => {
     expect(result.sourcePowerConnectomes.url).toBe(ESI_CONNECTOME_URL);
     expect(result.sourcePowerConnectomes.nodes).toHaveLength(2);
     expect(result.sourcePowerConnectomes.calMax).toBe(25);
-    // convertSourcePowersToVolume is still a stub — locks in today's actual behavior
-    expect(result.sourcePowerVolumes).toBeNull();
+
+    // convertSourcePowersToVolume now returns a real NIfTI-1 file, built by
+    // NVImage.createNiftiArray: 352-byte standard header + the voxel data
+    // (2 voxels × 4 bytes/voxel for float32 = 8 bytes → 360 bytes total).
+    expect(result.sourcePowerVolume).toBeInstanceOf(Uint8Array);
+    expect(result.sourcePowerVolume).toHaveLength(360);
   });
 });

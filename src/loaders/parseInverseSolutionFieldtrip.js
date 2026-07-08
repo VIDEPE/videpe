@@ -4,6 +4,7 @@ import {
   mapPositionsToGridIndices,
   buildAffineMatrix,
 } from '@/utils/electricalSourceImagingUtils';
+import { vectorLength } from '@/utils/arrayAndMatrixMathUtils';
 
 // parser to extract the following fields from the *_inversefilters.mat*
 //  - pos: (nDipoles,1) with [x,y,z] triplets indicating the 3D position of each dipole
@@ -105,6 +106,7 @@ export const parseInverseSolutionFieldtrip = async (file) => {
     anchor,
     basis
   );
+  const pixDims = basis.map(vectorLength);
   const affine = buildAffineMatrix(anchor, basis, minCorner);
 
   // sourceFilters (the raw nested cell array) is intentionally excluded from the return —
@@ -122,6 +124,7 @@ export const parseInverseSolutionFieldtrip = async (file) => {
     sourceVolumeIndices,
     gridDimensions,
     gridSpacing,
+    pixDims,
     affine,
   };
 };

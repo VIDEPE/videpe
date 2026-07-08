@@ -1,3 +1,4 @@
+import { NVImage } from '@niivue/niivue';
 import { ESI_CONNECTOME_URL } from '@/components/NiiViewer.utils';
 import {
   median,
@@ -11,7 +12,7 @@ import {
   matrixTrans,
   matrixInverse,
   matrixMul,
-} from './arrayAndMatrixMathUtils';
+} from '@/utils/arrayAndMatrixMathUtils';
 
 // Computes the instantaneous dipole power at each inside-brain source point for a single
 // clicked EEG timepoint. For each source, multiplies its [3 × nChannels] inverse filter
@@ -76,22 +77,30 @@ export function convertSourcePowersToConnectome(insideSourcePositions, sourcePow
   };
 }
 
-// NIfTI volume heatmap output
-// needs grid dimensions/voxelSize/gridOrigin/insideVoxelIndices pre-computed at
-// parse time and passed in, rather than deriving them here from insideSourcePositions alone.
+// Build NIfTI volume power heatmap output
+// takes gridDimensions, pixDims, affine, and sourceVolumeIndices pre-computed during parse time
+// it just (re)computes the sourceVolumeGrid with the latest sourcePowers and creates an NVImage
 export function convertSourcePowersToVolume(
-  insideSourcePositions,
+  sourceVolumeIndices,
   sourcePowers,
-  affine,
-  gridDimensions
+  gridDimensions,
+  pixDims,
+  affine
 ) {
-  const sourceVolumeGrid = buildSourceVolumeGrid(
-    insideSourcePositions,
-    sourcePowers,
-    gridDimensions
-  );
+  // First build the source volume grid with the (updated) sourcePower values
+  const sourceVolumeGrid = buildSourceVolumeGrid(sourceVolumeIndices, sourcePowers, gridDimensions);
 
-  return null;
+  // Convert this into a Nifty volume
+  const affineFlat = affine.flat(); // Flatten affine [4x4] into [16x1] => nifty array required affine.length == 16
+  const datatypeCode = 16; // 16 stand for float32 (=> matches souceVolumeGrid's Float32Array)
+
+  return NVImage.createNiftiArray(
+    gridDimensions,
+    pixDims,
+    affineFlat,
+    datatypeCode,
+    sourceVolumeGrid
+  ); // returns Uint8Array directly, no Promise;
 }
 
 // Main entry point for Electrical Source Imaging. Called on each EEG plot click with
@@ -120,6 +129,7 @@ export function electricalSourceImaging(inverseSolution, channelSnapshot) {
       nChannels,
       sourceVolumeIndices,
       gridDimensions,
+      pixDims,
       affine,
     } = inverseSolution;
 
@@ -136,14 +146,15 @@ export function electricalSourceImaging(inverseSolution, channelSnapshot) {
       sourcePowers
     );
     // Build power volume from inside volume indices
-    const sourcePowerVolumes = convertSourcePowersToVolume(
+    const sourcePowerVolume = convertSourcePowersToVolume(
       sourceVolumeIndices,
       sourcePowers,
-      affine,
-      gridDimensions
+      gridDimensions,
+      pixDims,
+      affine
     );
 
-    return { sourcePowerConnectomes, sourcePowerVolumes };
+    return { sourcePowerConnectomes, sourcePowerVolume };
   } else {
     throw new Error(`inverseFilter object has unkown/empty 'format' parameter.`);
   }
@@ -366,5 +377,5 @@ export function buildSourceVolumeGrid(sourceVolumeIndices, sourcePowers, gridDim
     sourceVolumeGrid[flatArrayInd] = sourceVolumeGrid[flatArrayInd] + sourcePowers[iSource];
   }
 
-  return { sourceVolumeGrid };
+  return sourceVolumeGrid;
 }

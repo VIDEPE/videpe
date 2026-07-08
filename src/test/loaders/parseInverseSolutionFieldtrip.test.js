@@ -88,6 +88,7 @@ describe('parseInverseSolutionFieldtrip', () => {
     expect(result.sourceVolumeIndices).toBeDefined();
     expect(result.gridDimensions).toBeDefined();
     expect(result.gridSpacing).toBeDefined();
+    expect(result.pixDims).toBeDefined();
     expect(result.affine).toBeDefined();
 
     // sourceFilters (raw nested cell array) should not be in the return —
@@ -178,6 +179,18 @@ describe('parseInverseSolutionFieldtrip', () => {
     const result = await parseInverseSolutionFieldtrip(file);
 
     expect(result.gridSpacing).toBeCloseTo(2, 5);
+  });
+
+  it('computes pixDims as the per-axis basis vector magnitudes (2mm on every axis for this fixture)', async () => {
+    // basis=[[2,0,0],[0,2,0],[0,0,2]] — each basis vector has length 2, regardless of axis
+    readmat.mockReturnValue(FIXTURE);
+    const file = new File(['irrelevant — read() is mocked'], 'mocked_file_inversefilters.mat');
+
+    const result = await parseInverseSolutionFieldtrip(file);
+
+    expect(result.pixDims[0]).toBeCloseTo(2, 5);
+    expect(result.pixDims[1]).toBeCloseTo(2, 5);
+    expect(result.pixDims[2]).toBeCloseTo(2, 5);
   });
 
   it('computes the affine as [b1 b2 b3 | origin; 0 0 0 1] for the anchor-at-origin fixture', async () => {
