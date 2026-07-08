@@ -2,7 +2,7 @@ import { StrictMode } from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { getInitialLayerSettings, detectVolumeType } from '@/components/NiiViewer.utils';
+import { getInitialLayerSettings, detectVolumeType } from '@/utils/NiiViewer.utils';
 import { NiiViewer, syncVolumesAndApplySettings } from '@/components/NiiViewer';
 
 const SLICE_TYPE_OPTIONS = [

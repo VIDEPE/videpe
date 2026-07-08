@@ -434,7 +434,7 @@ import {
   buildIntracranialConnectome,
   buildIntracranialLayer,
 } from '@/utils/eegTopographyUtils';
-import { INTRACRANIAL_CONNECTOME_URL } from '@/components/NiiViewer.utils';
+import { INTRACRANIAL_CONNECTOME_URL } from '@/utils/NiiViewer.utils';
 
 describe('buildIntracranialMatrix', () => {
   it('groups channels by electrode group, sorted by contact number ascending', () => {

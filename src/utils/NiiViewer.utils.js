@@ -31,8 +31,8 @@ export const TYPE_COLORMAP_DEFAULTS = {
 // connectome be tracked, reordered, and deleted the same way as any other layer.
 export const INTRACRANIAL_CONNECTOME_URL = '__intracranial-electrodes__';
 
-// Same sentinel-URL pattern for the ESI source-power connectome layer.
-export const ESI_CONNECTOME_URL = '__esi-source-power__';
+// Same sentinel-URL pattern for the ESI source-power connectome/volume layer.
+export const ESI_LAYER_URL = '__esi-source-power__';
 
 // Returns an array of display settings, one per layer (image volume, connectome, or
 // other mesh). Colormap is derived from layer.type via TYPE_COLORMAP_DEFAULTS — layers

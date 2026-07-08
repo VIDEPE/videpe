@@ -9,7 +9,7 @@ import {
   buildAffineMatrix,
   buildSourceVolumeGrid,
 } from '@/utils/electricalSourceImagingUtils';
-import { ESI_CONNECTOME_URL } from '@/components/NiiViewer.utils';
+import { ESI_LAYER_URL } from '@/utils/NiiViewer.utils';
 import { estimateGridSpacing } from '../../utils/electricalSourceImagingUtils';
 
 const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
@@ -571,7 +571,7 @@ describe('convertSourcePowersToConnectome', () => {
   it('returns an object with the correct NiiVue connectome layer shape', () => {
     const result = convertSourcePowersToConnectome(CONNECTOME_POSITIONS, CONNECTOME_POWERS);
 
-    expect(result.url).toBe(ESI_CONNECTOME_URL);
+    expect(result.url).toBe(ESI_LAYER_URL);
     expect(result.kind).toBe('connectome');
     expect(result.type).toBe('Electrical Source Imaging');
     expect(result.name).toBe('ESI Source Power');
@@ -685,14 +685,18 @@ describe('electricalSourceImaging', () => {
 
     // Powers from this model are already verified: source 0 → 13, source 1 → 25
     expect(result.sourcePowerConnectomes.kind).toBe('connectome');
-    expect(result.sourcePowerConnectomes.url).toBe(ESI_CONNECTOME_URL);
+    expect(result.sourcePowerConnectomes.url).toBe(ESI_LAYER_URL);
     expect(result.sourcePowerConnectomes.nodes).toHaveLength(2);
     expect(result.sourcePowerConnectomes.calMax).toBe(25);
 
-    // convertSourcePowersToVolume now returns a real NIfTI-1 file, built by
-    // NVImage.createNiftiArray: 352-byte standard header + the voxel data
-    // (2 voxels × 4 bytes/voxel for float32 = 8 bytes → 360 bytes total).
-    expect(result.sourcePowerVolume).toBeInstanceOf(Uint8Array);
-    expect(result.sourcePowerVolume).toHaveLength(360);
+    // convertSourcePowersToVolume now returns a NiiVue-ready volume layer object — same
+    // sentinel-URL pattern as the connectome, with the real NIfTI-1 bytes (built by
+    // NVImage.createNiftiArray: 352-byte standard header + 8 bytes of voxel data for
+    // 2 voxels × 4 bytes/voxel float32 = 360 bytes total) under a separate `bytes` field.
+    expect(result.sourcePowerVolume.kind).toBe('volume');
+    expect(result.sourcePowerVolume.url).toBe(ESI_LAYER_URL);
+    expect(result.sourcePowerVolume.calMax).toBe(25);
+    expect(result.sourcePowerVolume.bytes).toBeInstanceOf(Uint8Array);
+    expect(result.sourcePowerVolume.bytes).toHaveLength(360);
   });
 });

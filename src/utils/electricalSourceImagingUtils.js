@@ -1,5 +1,5 @@
 import { NVImage } from '@niivue/niivue';
-import { ESI_CONNECTOME_URL } from '@/components/NiiViewer.utils';
+import { ESI_LAYER_URL } from '@/utils/NiiViewer.utils';
 import {
   median,
   euclideanDistance,
@@ -298,7 +298,7 @@ export function convertSourcePowersToConnectome(insideSourcePositions, sourcePow
   }));
 
   return {
-    url: ESI_CONNECTOME_URL,
+    url: ESI_LAYER_URL,
     name: 'ESI Source Power',
     type: 'Electrical Source Imaging',
     kind: 'connectome',
@@ -325,13 +325,28 @@ export function convertSourcePowersToVolume(
   const affineFlat = affine.flat(); // Flatten affine [4x4] into [16x1] => nifty array required affine.length == 16
   const datatypeCode = 16; // 16 stand for float32 (=> matches souceVolumeGrid's Float32Array)
 
-  return NVImage.createNiftiArray(
+  const niftyArray = NVImage.createNiftiArray(
     gridDimensions,
     pixDims,
     affineFlat,
     datatypeCode,
     sourceVolumeGrid
   ); // returns Uint8Array directly, no Promise;
+
+  let calMax = 1e-9;
+  for (let i = 0; i < sourcePowers.length; i++) {
+    if (sourcePowers[i] > calMax) calMax = sourcePowers[i];
+  }
+
+  return {
+    url: ESI_LAYER_URL,
+    bytes: niftyArray,
+    name: 'ESI Source Power',
+    type: 'Electrical Source Imaging',
+    kind: 'volume',
+    edges: [],
+    calMax,
+  };
 }
 
 // Main entry point for Electrical Source Imaging. Called on each EEG plot click with

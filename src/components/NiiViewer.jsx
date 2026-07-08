@@ -10,8 +10,8 @@ import {
   getInitialLayerSettings,
   filesToLayers,
   INTRACRANIAL_CONNECTOME_URL,
-  ESI_CONNECTOME_URL,
-} from './NiiViewer.utils';
+  ESI_LAYER_URL,
+} from '../utils/NiiViewer.utils';
 import { ImagingControls } from './ImagingControls';
 import { FileDropZone } from '../components/FileDropZone';
 import {
@@ -136,8 +136,7 @@ export const NiiViewer = ({
       // separately above) — update the mesh object directly instead of going through
       // nv.setOpacity/setColormap, which index into nv.volumes.
       if (layer.kind === 'connectome') {
-        const mesh =
-          layer.url === ESI_CONNECTOME_URL ? esiMeshRef.current : intracranialMeshRef.current;
+        const mesh = layer.url === ESI_LAYER_URL ? esiMeshRef.current : intracranialMeshRef.current;
         if (!mesh) return;
         if (key === 'visible') {
           mesh.opacity = value ? nextLayerSettings[layerIndex].opacity : 0;
@@ -256,7 +255,7 @@ export const NiiViewer = ({
 
       if (layer?.kind === 'connectome') {
         // Dispatch to the right mesh ref by URL — each connectome layer tracks its own mesh
-        const meshRef = layer.url === ESI_CONNECTOME_URL ? esiMeshRef : intracranialMeshRef;
+        const meshRef = layer.url === ESI_LAYER_URL ? esiMeshRef : intracranialMeshRef;
         if (meshRef.current) {
           nv.removeMesh(meshRef.current);
           meshRef.current = null;
@@ -397,8 +396,7 @@ export const NiiViewer = ({
       setOrderedLayers((prev) => prev.filter((layer) => layer.kind === 'connectome'));
       setLayerSettings((prev) =>
         prev.filter(
-          (setting) =>
-            setting.url === INTRACRANIAL_CONNECTOME_URL || setting.url === ESI_CONNECTOME_URL
+          (setting) => setting.url === INTRACRANIAL_CONNECTOME_URL || setting.url === ESI_LAYER_URL
         )
       );
       setIsLoading(false);
@@ -500,10 +498,10 @@ export const NiiViewer = ({
   // ─── Effects: ESI source power layer ────────────────────────────────────────
 
   // Merges the separately-tracked esiLayer prop into orderedLayers/layerSettings — same
-  // pattern as the intracranialLayer merge effect above, keyed on ESI_CONNECTOME_URL.
+  // pattern as the intracranialLayer merge effect above, keyed on ESI_LAYER_URL.
   useEffect(() => {
-    setOrderedLayers(makeLayerMergeUpdater(esiLayer, ESI_CONNECTOME_URL));
-    setLayerSettings(makeSettingsMergeUpdater(esiLayer, ESI_CONNECTOME_URL));
+    setOrderedLayers(makeLayerMergeUpdater(esiLayer, ESI_LAYER_URL));
+    setLayerSettings(makeSettingsMergeUpdater(esiLayer, ESI_LAYER_URL));
   }, [esiLayer]);
 
   // Builds/rebuilds/removes the ESI source-power connectome mesh whenever esiLayer changes.
@@ -550,7 +548,7 @@ export const NiiViewer = ({
 
     // Apply whatever opacity/visibility is already set for this layer (preserved across
     // data refreshes by the sync effect above); fall back to the default on first appearance.
-    const existingIndex = orderedLayers.findIndex((l) => l.url === ESI_CONNECTOME_URL);
+    const existingIndex = orderedLayers.findIndex((l) => l.url === ESI_LAYER_URL);
     const settings =
       layerSettings[existingIndex] ?? // existing settings, preserved across this rebuild
       getInitialLayerSettings([esiLayer], orderedLayers.length)[0]; // fresh defaults on first appearance
