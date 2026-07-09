@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   calculateSourcePower,
   convertSourcePowersToConnectome,
+  convertSourcePowersToVolume,
   electricalSourceImaging,
   findSourceGridBasis,
   mapPositionsToGridIndices,
@@ -613,6 +614,54 @@ describe('convertSourcePowersToConnectome', () => {
     const result = convertSourcePowersToConnectome(CONNECTOME_POSITIONS, new Float64Array([0, 0]));
 
     expect(result.calMax).toBe(1e-9);
+  });
+});
+
+// ─── convertSourcePowersToVolume ─────────────────────────────────────────────
+
+describe('convertSourcePowersToVolume', () => {
+  const VOLUME_INDICES = [
+    [0, 0, 0],
+    [1, 0, 0],
+  ];
+  const VOLUME_POWERS = [13, 25];
+  const VOLUME_DIMENSIONS = [2, 2, 2];
+  const VOLUME_PIX_DIMS = [1, 1, 1];
+  const VOLUME_AFFINE = [
+    [1, 0, 0, 0],
+    [0, 1, 0, 0],
+    [0, 0, 1, 0],
+    [0, 0, 0, 1],
+  ];
+
+  it('returns an object with the correct NiiVue volume layer shape', () => {
+    const result = convertSourcePowersToVolume(
+      VOLUME_INDICES,
+      VOLUME_POWERS,
+      VOLUME_DIMENSIONS,
+      VOLUME_PIX_DIMS,
+      VOLUME_AFFINE
+    );
+
+    expect(result.url).toBe(ESI_LAYER_URL);
+    expect(result.kind).toBe('volume');
+    expect(result.type).toBe('Electrical Source Imaging');
+    expect(result.bytes).toBeInstanceOf(Uint8Array);
+    expect(result.calMax).toBe(25);
+  });
+
+  // NiiVue's addVolumesFromUrl infers the file type from this name's extension — a bare
+  // name with no '.' crashes with "Cannot read properties of undefined (reading 'toUpperCase')".
+  it('gives the layer a name with a NIfTI file extension', () => {
+    const result = convertSourcePowersToVolume(
+      VOLUME_INDICES,
+      VOLUME_POWERS,
+      VOLUME_DIMENSIONS,
+      VOLUME_PIX_DIMS,
+      VOLUME_AFFINE
+    );
+
+    expect(result.name).toMatch(/\.nii$/);
   });
 });
 

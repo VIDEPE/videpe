@@ -635,22 +635,25 @@ export const NiiViewer = ({
 
       // activeEsiLayer.bytes is the raw NIfTI-1 Uint8Array (from NVImage.createNiftiArray) —
       // NVImage.loadFromUrl accepts raw bytes directly as `url`, same as a real file's blob URL.
-      nv.addVolumesFromUrl([{ url: activeEsiLayer.bytes, name: activeEsiLayer.name }]).then(() => {
-        const nvIndex = nv.volumes.length - 1; // just-appended volume is always last
-        const nvVolume = nv.volumes[nvIndex];
-        esiVolumeRef.current = nvVolume; // track it so the next change/removal can find it
+      nv.addVolumesFromUrl([{ url: activeEsiLayer.bytes, name: activeEsiLayer.name }])
+        .then(() => {
+          console.log('ESI volume added', nv.volumes.length);
+          const nvIndex = nv.volumes.length - 1; // just-appended volume is always last
+          const nvVolume = nv.volumes[nvIndex];
+          esiVolumeRef.current = nvVolume; // track it so the next change/removal can find it
 
-        nv.setOpacity(nvIndex, settings.visible ? settings.opacity : 0);
-        nv.setColormap(nvVolume.id, settings.colormap);
-        if (settings.invert) nvVolume.colormapInvert = true;
-        nvVolume.colorbarVisible = settings.showColorbar;
+          nv.setOpacity(nvIndex, settings.visible ? settings.opacity : 0);
+          nv.setColormap(nvVolume.id, settings.colormap);
+          if (settings.invert) nvVolume.colormapInvert = true;
+          nvVolume.colorbarVisible = settings.showColorbar;
 
-        if (staleVolume) {
-          const staleIndex = nv.volumes.indexOf(staleVolume);
-          if (staleIndex !== -1) nv.removeVolumeByIndex(staleIndex);
-        }
-        nv.updateGLVolume(); // redraw with the new volume visible
-      });
+          if (staleVolume) {
+            const staleIndex = nv.volumes.indexOf(staleVolume);
+            if (staleIndex !== -1) nv.removeVolumeByIndex(staleIndex);
+          }
+          nv.updateGLVolume(); // redraw with the new volume visible
+        })
+        .catch((err) => console.error('ESI volume failed to load', err));
     }
   }, [esiLayer, orderedLayers, layerSettings, nvRef]);
 

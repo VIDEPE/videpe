@@ -341,7 +341,7 @@ export function convertSourcePowersToVolume(
   return {
     url: ESI_LAYER_URL,
     bytes: niftyArray,
-    name: 'ESI Source Power',
+    name: 'ESI Source Power.nii', // NiiVue infers file type from this extension — a bare name crashes addVolumesFromUrl
     type: 'Electrical Source Imaging',
     kind: 'volume',
     edges: [],
