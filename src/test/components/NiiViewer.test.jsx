@@ -2,7 +2,7 @@ import { StrictMode } from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { getInitialLayerSettings, detectVolumeType } from '@/components/NiiViewer.utils';
+import { getInitialLayerSettings, detectVolumeType } from '@/utils/NiiViewer.utils';
 import { NiiViewer, syncVolumesAndApplySettings } from '@/components/NiiViewer';
 
 const SLICE_TYPE_OPTIONS = [
@@ -355,6 +355,11 @@ describe('NiiViewer', () => {
     it('defaults colormap to gray for unknown types', () => {
       const result = getInitialLayerSettings([{ type: 'unknown_scan' }]);
       expect(result[0].colormap).toBe('gray');
+    });
+
+    it('defaults the ESI layer colormap to inferno', () => {
+      const result = getInitialLayerSettings([{ type: 'Electrical Source Imaging' }]);
+      expect(result[0].colormap).toBe('inferno');
     });
 
     it('defaults invert and showColorbar to false', () => {

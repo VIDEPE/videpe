@@ -3,6 +3,7 @@ import { Eye, EyeOff, ChevronDown, ChevronUp, GripVertical } from 'lucide-react'
 import { DragDropProvider } from '@dnd-kit/react';
 import { useSortable } from '@dnd-kit/react/sortable';
 import { X } from 'lucide-react';
+import { ESI_LAYER_URL } from '@/utils/NiiViewer.utils';
 
 const COLORMAP_OPTIONS = [
   { value: 'gray', label: 'Grayscale' },
@@ -49,6 +50,8 @@ function SortableSettingsCard({
   // node/edge colormap, not a NiiVue volume colormap — the intensity colormap dropdown,
   // invert toggle, and colorbar toggle don't apply to them.
   const isConnectome = layer.kind === 'connectome';
+  // ESI layers have their own toggle for ESI Volume / ESI Connectome
+  const isEsiLayer = layer.url === ESI_LAYER_URL;
 
   // Local string state — allows typing a partial value (e.g. empty string) without breaking the numeric opacity
   const [opacityStr, setOpacityStr] = useState(() => String(Math.round(settings.opacity * 100)));
@@ -193,6 +196,17 @@ function SortableSettingsCard({
             )}
 
             <div className="flex flex-row">
+              {isEsiLayer && (
+                <div className="w-1/2 flex items-center gap-2.5">
+                  <span className="text-foreground select-none pointer-events-none">Volume</span>
+                  <ToggleSwitch
+                    checked={settings.isEsiVolume}
+                    onChange={(value) => onSettingChange(index, 'isEsiVolume', value)}
+                    aria-label={`Show ${label} as volume`}
+                    title={`Show ${label} as volume`}
+                  />
+                </div>
+              )}
               {/* Invert / Show colorbar — also not applicable to connectome layers */}
               {!isConnectome && (
                 <>

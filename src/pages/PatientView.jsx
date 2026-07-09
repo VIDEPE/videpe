@@ -20,7 +20,7 @@ import {
 import { parseElectrodePositionFile } from '../loaders/parseElectrodePositionFile';
 import { parseInverseSolutionFieldtrip } from '../loaders/parseInverseSolutionFieldtrip';
 import { FileDropZone } from '../components/FileDropZone';
-import { detectVolumeType, filesToLayers } from '../components/NiiViewer.utils';
+import { detectVolumeType, filesToLayers } from '../utils/NiiViewer.utils';
 import { buildIntracranialLayer } from '../utils/eegTopographyUtils';
 import { electricalSourceImaging } from '../utils/electricalSourceImagingUtils';
 
@@ -127,6 +127,10 @@ export const PatientView = () => {
   const [recordingType, setRecordingType] = useState('eeg');
   const [inverseSolution, setInverseSolution] = useState(null);
   const [channelSnapshot, setChannelSnapshot] = useState(null); // { isIntracranial, channelNames, voltages } lifted from EegViewer on each click
+  // 'none' | 'average' | 'median' — owned here (not EegViewer) because ESI requires the
+  // Average montage: loading an inverse solution forces this to 'average', and switching
+  // away hides the ESI layer (see handleMontageChange/esiLayer below).
+  const [montage, setMontage] = useState('none');
 
   const handleElecPosFile = useCallback(async (file) => {
     try {
@@ -143,10 +147,28 @@ export const PatientView = () => {
     try {
       const parsedInverseSolution = await parseInverseSolutionFieldtrip(file);
       setInverseSolution(parsedInverseSolution);
+      // ESI is only valid under a common average reference — force it and let the user
+      // know why, rather than silently computing nonsensical source power.
+      setMontage('average');
+      toast('Montage set to Average — required for Electrical Source Imaging');
     } catch (err) {
       toast.error(err.message);
     }
   }, []);
+
+  // Montage is a controlled prop on EegViewer so it can be forced to 'average' above; this
+  // is the other direction — the user switching away from it while ESI is active.
+  const handleMontageChange = useCallback(
+    (newMontage) => {
+      setMontage(newMontage);
+      if (newMontage !== 'average' && inverseSolution) {
+        toast('Electrical Source Imaging requires the Average montage — layer hidden', {
+          icon: '⚠️',
+        });
+      }
+    },
+    [inverseSolution]
+  );
 
   // Derives the Neuroimaging pane's connectome layer from the EEG state lifted out of
   // EegViewer — null until there's an intracranial recording with at least one
@@ -157,9 +179,10 @@ export const PatientView = () => {
   ); // intracranial electrodes
 
   const esiLayer = useMemo(
-    () => electricalSourceImaging(inverseSolution, channelSnapshot),
-    [inverseSolution, channelSnapshot]
-  ); // ESI source power
+    () =>
+      montage === 'average' ? electricalSourceImaging(inverseSolution, channelSnapshot) : null,
+    [inverseSolution, channelSnapshot, montage]
+  ); // ESI source power — { sourcePowerConnectomes, sourcePowerVolume } | null | [] — only valid under the Average montage
 
   // when both these flags are true, then the two plots can be synchronised
   const [niiNvReady, setNiiNvReady] = useState(false); // flag when the NiiViewer canvas is initialised
@@ -323,6 +346,7 @@ export const PatientView = () => {
     setInverseSolution(null);
     setChannelSnapshot(null);
     setRecordingType('eeg');
+    setMontage('none');
   };
 
   const handleEegReset = () => {
@@ -335,6 +359,7 @@ export const PatientView = () => {
     setIntracranialSnapshot(null);
     setInverseSolution(null);
     setChannelSnapshot(null);
+    setMontage('none');
   };
 
   const handleNiiReset = () => {
@@ -420,6 +445,8 @@ export const PatientView = () => {
               customElecPosFileName={customElecPosFileName}
               recordingType={recordingType}
               onRecordingTypeChange={setRecordingType}
+              montage={montage}
+              onMontageChange={handleMontageChange}
               onElecPosFile={handleElecPosFile}
               onInverseSolutionFile={handleInverseSolutionFile}
               onIntracranialSnapshotChange={setIntracranialSnapshot}

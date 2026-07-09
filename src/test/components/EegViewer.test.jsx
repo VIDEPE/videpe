@@ -1293,13 +1293,45 @@ describe('EegViewer — montage controls', () => {
     expect(values).toContain('median');
   });
 
-  it('selecting Average re-references the channel plot data', async () => {
-    const { default: UplotReactMock } = await import('uplot-react');
+  it('reports the selected montage via onMontageChange instead of applying it itself', async () => {
+    const onMontageChange = vi.fn();
     const user = userEvent.setup();
-    await renderViewer();
+    const provider = makeProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        montage="none"
+        onMontageChange={onMontageChange}
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await user.selectOptions(screen.getByLabelText(/montage/i), 'average');
+    expect(onMontageChange).toHaveBeenCalledWith('average');
+  });
+
+  // montage is a controlled prop (PatientView owns the state so it can force 'average'
+  // when ESI needs it and react when the user switches away) — tests simulate the parent
+  // feeding the updated value back down via rerender, same pattern as recordingType below.
+  it('re-references the channel plot data when the montage prop changes to average', async () => {
+    const { default: UplotReactMock } = await import('uplot-react');
+    const provider = makeProvider();
+    const { rerender } = render(
+      <EegViewer provider={provider} channelNames={provider.channelNames} montage="none" />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
 
     UplotReactMock.mockClear();
-    await user.selectOptions(screen.getByLabelText(/montage/i), 'average');
+    rerender(
+      <EegViewer provider={provider} channelNames={provider.channelNames} montage="average" />
+    );
 
     // EEG1 raw values for the visible window are [1,2,3]; averaged → [-3,-3,-3]
     const eeg1Data = Array.from(UplotReactMock.mock.calls[0][0].data[1]);
@@ -1308,9 +1340,15 @@ describe('EegViewer — montage controls', () => {
 });
 
 describe('EegViewer — topography uses the montaged buffer', () => {
-  it('topography voltages reflect the selected montage', async () => {
-    const user = userEvent.setup();
-    await renderViewer();
+  it('topography voltages reflect the montage prop', async () => {
+    const provider = makeProvider();
+    const { rerender } = render(
+      <EegViewer provider={provider} channelNames={provider.channelNames} montage="none" />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
 
     // Open the topography viewer at the mocked click timepoint
     await act(async () => {
@@ -1320,7 +1358,9 @@ describe('EegViewer — topography uses the montaged buffer', () => {
     // sample are EEG1=4, EEG2=7
     expect(screen.getByTestId('topo-voltages').textContent).toBe('4,7');
 
-    await user.selectOptions(screen.getByLabelText(/montage/i), 'average');
+    rerender(
+      <EegViewer provider={provider} channelNames={provider.channelNames} montage="average" />
+    );
 
     // cross-channel mean at that sample = (4+7+10)/3 = 7 → EEG1: 4-7=-3, EEG2: 7-7=0
     expect(screen.getByTestId('topo-voltages').textContent).toBe('-3,0');
@@ -1381,8 +1421,9 @@ describe('EegViewer — recording type detection', () => {
   it('shows a toast naming the detected recording type once detection resolves', async () => {
     const { default: toast } = await import('react-hot-toast');
     await renderViewer();
-    expect(toast).toHaveBeenCalledWith('EEG electrode configuration detected', {
+    expect(toast).toHaveBeenCalledWith('EEG recording detected', {
       id: expect.any(String),
+      icon: '🔍',
     });
   });
 
@@ -1403,8 +1444,9 @@ describe('EegViewer — recording type detection', () => {
     });
 
     expect(onRecordingTypeChange).toHaveBeenCalledWith('ieeg');
-    expect(toast).toHaveBeenCalledWith('iEEG electrode configuration detected', {
+    expect(toast).toHaveBeenCalledWith('iEEG recording detected', {
       id: expect.any(String),
+      icon: '🔍',
     });
   });
 

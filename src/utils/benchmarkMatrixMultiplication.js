@@ -1,5 +1,5 @@
 import { multiply } from 'mathjs';
-import { matrixMul, matrixMuls, matrixRandom } from './arrayAndMatrixMathUtils.js';
+import { matrixMul, matrixMuls, matrixRandom, median } from './arrayAndMatrixMathUtils.js';
 
 const sample1 = [
   [1, 2],
@@ -26,11 +26,9 @@ function timeit(label, fn, runs = 10) {
     fn();
     times.push(performance.now() - t0);
   }
-  const sorted = times.slice().sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  const median = sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
-  console.log(`  ${label}: ${median.toFixed(2)}ms median over ${runs} runs`);
-  return median;
+  const medianTime = median(times);
+  console.log(`  ${label}: ${medianTime.toFixed(2)}ms median over ${runs} runs`);
+  return medianTime;
 }
 
 // --- Test 1: Scaling square matrix multiplication ---
