@@ -357,6 +357,11 @@ describe('NiiViewer', () => {
       expect(result[0].colormap).toBe('gray');
     });
 
+    it('defaults the ESI layer colormap to inferno', () => {
+      const result = getInitialLayerSettings([{ type: 'Electrical Source Imaging' }]);
+      expect(result[0].colormap).toBe('inferno');
+    });
+
     it('defaults invert and showColorbar to false', () => {
       const result = getInitialLayerSettings([{ type: 'MRI' }]);
       expect(result[0].invert).toBe(false);

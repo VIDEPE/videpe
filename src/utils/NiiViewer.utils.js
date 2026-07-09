@@ -22,7 +22,8 @@ const MRI_BIDS_SUFFIXES = new Set([
 export const TYPE_COLORMAP_DEFAULTS = {
   MRI: 'gray',
   PET: 'viridis',
-  SPECT: 'magma',
+  SPECT: 'mako',
+  'Electrical Source Imaging': 'inferno',
 };
 
 // Every other layer is identified by its file's blob: URL. The intracranial
