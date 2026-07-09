@@ -3,6 +3,7 @@
   Brain,
   ChartLine,
   ChartNetwork,
+  Radar,
   FolderOpen,
   Columns2,
   FlaskConical,
@@ -234,40 +235,6 @@ export const AboutPage = () => {
               </div>
             </div>
 
-            <div id="feature-ieeg" className="flex gap-3">
-              <ChartNetwork
-                size={22}
-                className="shrink-0 mt-0.5"
-                style={{ color: 'var(--c-primary)' }}
-              />
-              <div>
-                <p className="font-semibold text-heading">Intracranial (iEEG) support</p>
-                <p className="text-sm mt-1" style={{ color: 'var(--c-foreground)' }}>
-                  Toggle between scalp EEG and intracranial (sEEG/ECoG) recordings. Intracranial
-                  channels are auto-detected from channel naming, with a manual override always
-                  available.
-                </p>
-                <ul
-                  className="text-sm mt-2 flex flex-col gap-1 list-disc list-inside"
-                  style={{ color: 'var(--c-foreground)' }}
-                >
-                  <li>
-                    Intracranial channels are shown as a per-electrode-group, per-contact voltage
-                    matrix instead of the scalp topography mesh
-                  </li>
-                  <li>
-                    Once electrode positions are loaded, intracranial electrodes are also rendered
-                    as a 3D electrode connectome in the neuroimaging viewer, synchronised with the
-                    selected EEG timepoint
-                  </li>
-                  <li>
-                    Supports custom electrode positions via <code>.elc</code> or <code>.tsv</code>{' '}
-                    files
-                  </li>
-                </ul>
-              </div>
-            </div>
-
             <div id="feature-neuroimaging" className="flex gap-3">
               <Brain size={22} className="shrink-0 mt-0.5" style={{ color: 'var(--c-primary)' }} />
               <div>
@@ -318,6 +285,67 @@ export const AboutPage = () => {
                   recording alongside aligned MRI, PET, and SPECT volumes — no upload, no account,
                   no wait.
                 </p>
+              </div>
+            </div>
+
+            <div id="feature-esi" className="flex gap-3">
+              <Radar size={22} className="shrink-0 mt-0.5" style={{ color: 'var(--c-primary)' }} />
+              <div>
+                <p className="font-semibold text-heading">Electrical Source Imaging (ESI)</p>
+                <p className="text-sm mt-1" style={{ color: 'var(--c-foreground)' }}>
+                  Load an inverse solution file (currently Fieldtrip{' '}
+                  <code>*_inversefilters.mat</code> only) to visualise per-source power at the
+                  selected EEG time point, rendered as either a 3D connectome or a 3D volumetric
+                  heatmap — toggle between the two in the imaging controls.
+                </p>
+                <ul
+                  className="text-sm mt-2 flex flex-col gap-1 list-disc list-inside"
+                  style={{ color: 'var(--c-foreground)' }}
+                >
+                  <li>
+                    Requires the Average montage — VIDEPE switches to it automatically when an
+                    inverse solution is loaded
+                  </li>
+                  <li>
+                    The ESI layer is hidden if you switch away from the Average montage, and
+                    reappears when you switch back
+                  </li>
+                  <li>Volume rendering defaults to the Inferno colormap</li>
+                </ul>
+              </div>
+            </div>
+
+            <div id="feature-ieeg" className="flex gap-3">
+              <ChartNetwork
+                size={22}
+                className="shrink-0 mt-0.5"
+                style={{ color: 'var(--c-primary)' }}
+              />
+              <div>
+                <p className="font-semibold text-heading">Intracranial (iEEG) support</p>
+                <p className="text-sm mt-1" style={{ color: 'var(--c-foreground)' }}>
+                  Toggle between scalp EEG and intracranial (sEEG/ECoG) recordings. Intracranial
+                  channels are auto-detected from channel naming, with a manual override always
+                  available.
+                </p>
+                <ul
+                  className="text-sm mt-2 flex flex-col gap-1 list-disc list-inside"
+                  style={{ color: 'var(--c-foreground)' }}
+                >
+                  <li>
+                    Intracranial channels are shown as a per-electrode-group, per-contact voltage
+                    matrix instead of the scalp topography mesh
+                  </li>
+                  <li>
+                    Once electrode positions are loaded, intracranial electrodes are also rendered
+                    as a 3D electrode connectome in the neuroimaging viewer, synchronised with the
+                    selected EEG timepoint
+                  </li>
+                  <li>
+                    Supports custom electrode positions via <code>.elc</code> or <code>.tsv</code>{' '}
+                    files
+                  </li>
+                </ul>
               </div>
             </div>
 

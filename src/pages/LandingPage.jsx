@@ -18,6 +18,7 @@ import {
   ShieldCheck,
   ChartLine,
   ChartNetwork,
+  Radar,
   FolderOpen,
   Columns2,
   FlaskConical,
@@ -53,13 +54,6 @@ const FEATURES = [
     anchor: '#feature-eeg',
   },
   {
-    icon: ChartNetwork,
-    label: 'Intracranial EEG',
-    description:
-      'Switch to iEEG mode to auto-detect intracranial electrodes and view them as a 3D connectome or a per-electrode voltage matrix.',
-    anchor: '#feature-ieeg',
-  },
-  {
     icon: Brain,
     label: 'Neuroimaging',
     description:
@@ -77,6 +71,20 @@ const FEATURES = [
       </>
     ),
     anchor: '#feature-demo',
+  },
+  {
+    icon: Radar,
+    label: 'Source Imaging',
+    description:
+      'Load an inverse solution to visualise per-source power as a 3D connectome or a volumetric heatmap.',
+    anchor: '#feature-esi',
+  },
+  {
+    icon: ChartNetwork,
+    label: 'Intracranial EEG',
+    description:
+      'Switch to iEEG mode to auto-detect intracranial electrodes and view them as a 3D connectome or a per-electrode voltage matrix.',
+    anchor: '#feature-ieeg',
   },
   {
     icon: FolderOpen,
