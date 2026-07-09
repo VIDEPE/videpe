@@ -578,6 +578,7 @@ describe('convertSourcePowersToConnectome', () => {
     expect(result.name).toBe('ESI Source Power');
     expect(result.edges).toEqual([]);
     expect(result.nodes).toBeDefined();
+    expect(result.calMin).toBe(0);
     expect(result.calMax).toBeDefined();
   });
 
@@ -647,7 +648,23 @@ describe('convertSourcePowersToVolume', () => {
     expect(result.kind).toBe('volume');
     expect(result.type).toBe('Electrical Source Imaging');
     expect(result.bytes).toBeInstanceOf(Uint8Array);
+    expect(result.calMin).toBeCloseTo(0.25); // 1% of calMax (25)
     expect(result.calMax).toBe(25);
+  });
+
+  // NiiVue's ZERO_TO_MAX_TRANSPARENT_BELOW_MIN shader only ramps voxels toward transparent
+  // when cal_min > 0 (alpha *= (f/cal_min)²) — a literal 0 silently disables that entirely,
+  // leaving the whole volume opaque.
+  it('sets calMin to a positive value, never 0, so NiiVue can render sub-threshold voxels transparent', () => {
+    const result = convertSourcePowersToVolume(
+      VOLUME_INDICES,
+      VOLUME_POWERS,
+      VOLUME_DIMENSIONS,
+      VOLUME_PIX_DIMS,
+      VOLUME_AFFINE
+    );
+
+    expect(result.calMin).toBeGreaterThan(0);
   });
 
   // NiiVue's addVolumesFromUrl infers the file type from this name's extension — a bare

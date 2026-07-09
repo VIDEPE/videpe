@@ -14,6 +14,10 @@ import {
   matrixMul,
 } from '@/utils/arrayAndMatrixMathUtils';
 
+// Placeholder threshold for the ESI volume's cal_min (see convertSourcePowersToVolume) until
+// it becomes a user-adjustable slider.
+const VOLUME_CAL_MIN_FRACTION = 0.01;
+
 // ─── Grid structure ───────────────────────────────────────────────────────────
 //
 // Computed once, at parse time (see parseInverseSolutionFieldtrip.js) — none of these
@@ -287,6 +291,9 @@ export function convertSourcePowersToConnectome(insideSourcePositions, sourcePow
   for (let i = 0; i < sourcePowers.length; i++) {
     if (sourcePowers[i] > calMax) calMax = sourcePowers[i];
   }
+  // Source power is always non-negative (squared magnitude) — 0 is a meaningful, fixed
+  // floor for the color scale, not just the sample minimum.
+  const calMin = 0;
 
   const nodes = insideSourcePositions.map((pos, i) => ({
     name: `esi-src-${i}`,
@@ -304,6 +311,7 @@ export function convertSourcePowersToConnectome(insideSourcePositions, sourcePow
     kind: 'connectome',
     nodes,
     edges: [],
+    calMin,
     calMax,
   };
 }
@@ -337,14 +345,22 @@ export function convertSourcePowersToVolume(
   for (let i = 0; i < sourcePowers.length; i++) {
     if (sourcePowers[i] > calMax) calMax = sourcePowers[i];
   }
+  // Unlike the connectome (where calMin=0 is fine — it only feeds a color-mapping range),
+  // the volume's cal_min doubles as NiiVue's transparent-below-threshold cutoff: its
+  // ZERO_TO_MAX_TRANSPARENT_BELOW_MIN shader only ramps voxels toward transparent when
+  // cal_min > 0 (alpha *= (f/cal_min)²) — a literal 0 disables that entirely, leaving the
+  // whole volume opaque. A fixed fraction of calMax is a placeholder threshold until this
+  // becomes a user-adjustable slider.
+  const calMin = VOLUME_CAL_MIN_FRACTION * calMax;
 
   return {
     url: ESI_LAYER_URL,
     bytes: niftyArray,
-    name: 'ESI Source Power.nii', // NiiVue infers file type from this extension — a bare name crashes addVolumesFromUrl
+    name: 'ESI Source Power.nii', // '.nii' extension required! => NiiVue infers file type from this extension — a bare name crashes addVolumesFromUrl
     type: 'Electrical Source Imaging',
     kind: 'volume',
     edges: [],
+    calMin,
     calMax,
   };
 }

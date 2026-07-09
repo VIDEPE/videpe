@@ -607,12 +607,12 @@ export const NiiViewer = ({
         name: activeEsiLayer.name,
         nodeColormap: EEG_NODE_POS_KEY,
         nodeColormapNegative: EEG_NODE_POS_KEY, // unused — power is always ≥ 0
-        nodeMinColor: 0,
+        nodeMinColor: activeEsiLayer.calMin,
         nodeMaxColor: activeEsiLayer.calMax,
         nodeScale: 4,
         edgeColormap: EEG_NODE_POS_KEY,
         edgeColormapNegative: EEG_NODE_POS_KEY,
-        edgeMin: 0,
+        edgeMin: activeEsiLayer.calMin,
         edgeMax: activeEsiLayer.calMax,
         edgeScale: 0.5,
         showLegend: false,
@@ -637,15 +637,29 @@ export const NiiViewer = ({
       // NVImage.loadFromUrl accepts raw bytes directly as `url`, same as a real file's blob URL.
       nv.addVolumesFromUrl([{ url: activeEsiLayer.bytes, name: activeEsiLayer.name }])
         .then(() => {
-          console.log('ESI volume added', nv.volumes.length);
           const nvIndex = nv.volumes.length - 1; // just-appended volume is always last
           const nvVolume = nv.volumes[nvIndex];
           esiVolumeRef.current = nvVolume; // track it so the next change/removal can find it
 
+          // nv.setColormap() calls updateGLVolume() internally, which re-triggers NiiVue's
+          // own cal_min/cal_max auto-scan — so cal_min/cal_max/colormapType MUST be set after
+          // this block, not before, or they get silently clobbered back to the auto-scanned
+          // values.
           nv.setOpacity(nvIndex, settings.visible ? settings.opacity : 0);
           nv.setColormap(nvVolume.id, settings.colormap);
           if (settings.invert) nvVolume.colormapInvert = true;
           nvVolume.colorbarVisible = settings.showColorbar;
+
+          // Fixed cal_min/cal_max (rather than NiiVue's auto-scan) keeps the color scale
+          // consistent with connectome mode, and avoids a "% of voxels are zero" warning
+          // from the auto-scan seeing this grid's mostly-empty background.
+          nvVolume.cal_min = activeEsiLayer.calMin;
+          nvVolume.cal_max = activeEsiLayer.calMax;
+          // 2 = ZERO_TO_MAX_TRANSLUCENT_BELOW_MIN (COLORMAP_TYPE isn't a runtime export of
+          // @niivue/niivue, only a TS-only enum). Voxels below cal_min get a hard alpha=0
+          // cutoff in NiiVue's shader — unlike type 1's smooth (f/cal_min)² ramp, there's no
+          // continuous scaling near-zero values can land on unpredictably.
+          nvVolume.colormapType = 1;
 
           if (staleVolume) {
             const staleIndex = nv.volumes.indexOf(staleVolume);
