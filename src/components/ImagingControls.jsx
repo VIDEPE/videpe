@@ -51,7 +51,7 @@ function SortableSettingsCard({
   // invert toggle, and colorbar toggle don't apply to them.
   const isConnectome = layer.kind === 'connectome';
   // ESI layers have their own toggle for ESI Volume / ESI Connectome
-  const isEsiLayer = layer.url === 'ESI_LAYER_URL';
+  const isEsiLayer = layer.url === ESI_LAYER_URL;
 
   // Local string state — allows typing a partial value (e.g. empty string) without breaking the numeric opacity
   const [opacityStr, setOpacityStr] = useState(() => String(Math.round(settings.opacity * 100)));
