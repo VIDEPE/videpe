@@ -3,7 +3,7 @@
 
 import convexHull from 'convex-hull';
 import { parseElectrodeContactName } from './intracranialDetection';
-import { INTRACRANIAL_CONNECTOME_URL } from '@/components/NiiViewer.utils';
+import { INTRACRANIAL_CONNECTOME_URL } from '@/utils/NiiViewer.utils';
 
 // Strips recording-type prefixes ("EEG ", "MEG ") and reference suffixes ("-Ref", "-A1", " Ref", etc.)
 // so that "EEG Fp1-Ref" normalises to "fp1" for lookup.

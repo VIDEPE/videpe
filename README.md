@@ -30,7 +30,8 @@ All data processing happens entirely in your browser. No files are ever uploaded
     - Uses Standard 10-05 electrode positions by default; load custom positions via `.elc` or `.tsv` file
     - 3D rotation is synchronised with the neuroimaging viewer — rotate one and the other follows
   - **Intracranial (iEEG) support** — toggle between scalp EEG and intracranial (sEEG/ECoG) recordings; iEEG channels are auto-detected from channel naming and shown as a per-electrode voltage matrix, or rendered as a 3D electrode connectome in the neuroimaging viewer once electrode positions are loaded
-  - **Electrical Source Imaging** — When uploading an Inverse Solution file (currently only Fieldtrip `*_inversefilters.mat` supported), renders per-source power at the selected EEG time point as either a 3D connectome or a volumetric heatmap (default Inferno colormap), with a toggle to switch between the two. Requires the Average montage — VIDEPE switches to it automatically when an inverse solution is loaded, and hides the layer if you switch away.
+  - **Electrical Source Imaging** — When uploading an Inverse Solution file (currently only Fieldtrip `*_inversefilters.mat` supported), renders per-source power at the selected EEG time point as either a 3D connectome or a volumetric heatmap, with a toggle to switch between the two. Requires the Average montage — VIDEPE switches to it automatically when an inverse solution is loaded, and hides the layer if you switch away.
+
 
 - **Neuroimaging viewer** — full multiplanar and 3D rendering powered by [NiiVue](https://niivue.com/). Load multiple volumes simultaneously and adjust each one independently.
   - Supports NIfTI (`.nii`, `.nii.gz`), MGH/MGZ, GIFTI, PLY, OBJ

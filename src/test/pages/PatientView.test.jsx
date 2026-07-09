@@ -10,23 +10,26 @@ const renderPatientView = () =>
       <PatientView />
     </MemoryRouter>
   );
+import toast from 'react-hot-toast';
 import { loadBrainVisionEEG } from '@/loaders/loadBrainVisionEEG';
 import { checkEegFiles, detectAndLoadEEG } from '@/loaders/eegFormats';
 import { parseInverseSolutionFieldtrip } from '@/loaders/parseInverseSolutionFieldtrip';
+import { electricalSourceImaging } from '@/utils/electricalSourceImagingUtils';
 import { FileDropZone } from '@/components/FileDropZone';
 import { NiiViewer } from '@/components/NiiViewer';
 import { EegViewer } from '@/components/EegViewer';
 
-// toast.promise just runs and returns the promise; toast.error is a no-op
-vi.mock('react-hot-toast', () => ({
-  default: {
-    promise: vi.fn().mockImplementation((p) => p),
-    error: vi.fn(),
-    loading: vi.fn(),
-    success: vi.fn(),
-    dismiss: vi.fn(),
-  },
-}));
+// toast(...) itself must be callable (used for plain info toasts), with toast.promise
+// just running and returning the promise, and toast.error a no-op.
+vi.mock('react-hot-toast', () => {
+  const toastFn = vi.fn();
+  toastFn.promise = vi.fn().mockImplementation((p) => p);
+  toastFn.error = vi.fn();
+  toastFn.loading = vi.fn();
+  toastFn.success = vi.fn();
+  toastFn.dismiss = vi.fn();
+  return { default: toastFn };
+});
 
 vi.mock('@/loaders/loadBrainVisionEEG', () => ({
   loadBrainVisionEEG: vi
@@ -44,27 +47,67 @@ vi.mock('@/loaders/eegFormats', async (importOriginal) => {
 });
 
 vi.mock('@/components/EegViewer', () => ({
-  EegViewer: vi.fn(({ customElectrodes, customElecPosFileName, onIntracranialSnapshotChange }) => (
-    <div data-testid="eeg-viewer">
-      <span data-testid="eeg-custom-electrodes-count">{customElectrodes?.length ?? 0}</span>
-      <span data-testid="eeg-custom-filename">{customElecPosFileName ?? ''}</span>
-      {/* Simulates EegViewer reporting live intracranial electrode/voltage state, the way it
+  EegViewer: vi.fn(
+    ({
+      customElectrodes,
+      customElecPosFileName,
+      onIntracranialSnapshotChange,
+      onChannelSnapshotChange,
+      montage,
+      onMontageChange,
+    }) => (
+      <div data-testid="eeg-viewer">
+        <span data-testid="eeg-custom-electrodes-count">{customElectrodes?.length ?? 0}</span>
+        <span data-testid="eeg-custom-filename">{customElecPosFileName ?? ''}</span>
+        <span data-testid="eeg-montage">{montage}</span>
+        {/* Simulates EegViewer reporting live intracranial electrode/voltage state, the way it
           would after detecting an intracranial recording and matching a position file. */}
-      <button
-        type="button"
-        data-testid="trigger-intracranial-change"
-        onClick={() =>
-          onIntracranialSnapshotChange?.({
-            isIntracranial: true,
-            matched: [{ channelIdx: 0, name: 'B1', pos: { label: 'B1', x: 0, y: 0, z: 0 } }],
-            voltages: [5],
-          })
-        }
-      >
-        trigger
-      </button>
-    </div>
-  )),
+        <button
+          type="button"
+          data-testid="trigger-intracranial-change"
+          onClick={() =>
+            onIntracranialSnapshotChange?.({
+              isIntracranial: true,
+              matched: [{ channelIdx: 0, name: 'B1', pos: { label: 'B1', x: 0, y: 0, z: 0 } }],
+              voltages: [5],
+            })
+          }
+        >
+          trigger
+        </button>
+        {/* Simulates EegViewer reporting a per-click channel snapshot, the way it would
+            after the user clicks a point on the EEG plot. */}
+        <button
+          type="button"
+          data-testid="trigger-channel-snapshot"
+          onClick={() =>
+            onChannelSnapshotChange?.({
+              isIntracranial: false,
+              channelNames: ['1', '2'],
+              voltages: [1, 2],
+            })
+          }
+        >
+          trigger-channel-snapshot
+        </button>
+        {/* Simulates the user selecting a montage from EegViewer's dropdown */}
+        <button
+          type="button"
+          data-testid="set-montage-none"
+          onClick={() => onMontageChange?.('none')}
+        >
+          set-montage-none
+        </button>
+        <button
+          type="button"
+          data-testid="set-montage-average"
+          onClick={() => onMontageChange?.('average')}
+        >
+          set-montage-average
+        </button>
+      </div>
+    )
+  ),
 }));
 vi.mock('@/components/NiiViewer', () => ({
   NiiViewer: vi.fn(() => <div data-testid="nii-viewer" />),
@@ -85,6 +128,13 @@ vi.mock('@/loaders/parseInverseSolutionFieldtrip', () => ({
   }),
 }));
 vi.mock('@/components/ThemeToggle', () => ({ ThemeToggle: () => null }));
+
+// electricalSourceImaging's own computation is covered by its dedicated unit tests
+// (electricalSourceImagingUtils.test.js) — stub it here so PatientView's montage-gating
+// logic can be tested in isolation from the fixture's grid/affine data.
+vi.mock('@/utils/electricalSourceImagingUtils', () => ({
+  electricalSourceImaging: vi.fn(),
+}));
 
 const makeFile = (name) => new File([''], name);
 
@@ -575,6 +625,106 @@ describe('PatientView — inverse solution files', () => {
 
     expect(screen.getByTestId('eeg-viewer')).toBeInTheDocument();
     expect(parseInverseSolutionFieldtrip).toHaveBeenCalled();
+  });
+});
+
+describe('PatientView — ESI requires the Average montage', () => {
+  const loadEegAndInverseSolution = async () => {
+    checkEegFiles.mockReturnValue({
+      formatName: 'BrainVision',
+      complete: true,
+      missing: [],
+      warning: null,
+    });
+    detectAndLoadEEG.mockResolvedValue({
+      channelNames: ['1', '2'],
+      fs: 256,
+      tMax: 10,
+      getChunk: vi.fn(),
+    });
+    // A loaded imaging layer keeps NiiViewer mounted regardless of esiLayer, so
+    // esiLayer's null/non-null value can be asserted directly off NiiViewer's props.
+    await act(async () => {
+      await getNiiOnFiles()([makeFile('sub-01_T1w.nii')]);
+    });
+    await act(async () => {
+      await getEegOnFiles()([
+        makeFile('sub01.vhdr'),
+        makeFile('sub01.eeg'),
+        makeFile('sub-19_inversefilters.mat'),
+      ]);
+    });
+  };
+
+  beforeEach(() => {
+    FileDropZone.mockClear();
+    NiiViewer.mockClear();
+    EegViewer.mockClear();
+    checkEegFiles.mockClear();
+    parseInverseSolutionFieldtrip.mockClear();
+    toast.mockClear();
+    electricalSourceImaging.mockReset();
+    electricalSourceImaging.mockReturnValue({
+      sourcePowerConnectomes: { fake: 'connectome' },
+      sourcePowerVolume: { fake: 'volume' },
+    });
+  });
+
+  it('forces the montage to Average and shows a toast when an inverse solution file is loaded', async () => {
+    renderPatientView();
+    await loadEegAndInverseSolution();
+
+    expect(screen.getByTestId('eeg-montage').textContent).toBe('average');
+    expect(toast).toHaveBeenCalledWith(expect.stringMatching(/average/i));
+  });
+
+  it('hides the ESI layer and toasts when the montage is switched away from Average', async () => {
+    renderPatientView();
+    await loadEegAndInverseSolution();
+    await userEvent.click(screen.getByTestId('trigger-channel-snapshot'));
+    expect(NiiViewer.mock.lastCall[0].esiLayer).toBeTruthy();
+
+    toast.mockClear();
+    await userEvent.click(screen.getByTestId('set-montage-none'));
+
+    expect(screen.getByTestId('eeg-montage').textContent).toBe('none');
+    expect(NiiViewer.mock.lastCall[0].esiLayer).toBeNull();
+    expect(toast).toHaveBeenCalledWith(expect.stringMatching(/average/i), { icon: '⚠️' });
+  });
+
+  it('shows the ESI layer again when the montage is switched back to Average', async () => {
+    renderPatientView();
+    await loadEegAndInverseSolution();
+    await userEvent.click(screen.getByTestId('trigger-channel-snapshot'));
+    await userEvent.click(screen.getByTestId('set-montage-none'));
+    expect(NiiViewer.mock.lastCall[0].esiLayer).toBeNull();
+
+    await userEvent.click(screen.getByTestId('set-montage-average'));
+
+    expect(NiiViewer.mock.lastCall[0].esiLayer).toBeTruthy();
+  });
+
+  it('does not toast about ESI when the montage changes with no inverse solution loaded', async () => {
+    checkEegFiles.mockReturnValue({
+      formatName: 'BrainVision',
+      complete: true,
+      missing: [],
+      warning: null,
+    });
+    detectAndLoadEEG.mockResolvedValue({
+      channelNames: ['1', '2'],
+      fs: 256,
+      tMax: 10,
+      getChunk: vi.fn(),
+    });
+    renderPatientView();
+    await act(async () => {
+      await getEegOnFiles()([makeFile('sub01.vhdr'), makeFile('sub01.eeg')]);
+    });
+
+    await userEvent.click(screen.getByTestId('set-montage-none'));
+
+    expect(toast).not.toHaveBeenCalled();
   });
 });
 
