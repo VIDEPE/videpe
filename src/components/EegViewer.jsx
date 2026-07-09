@@ -92,6 +92,8 @@ export const EegViewer = ({
   onChannelSnapshotChange,
   recordingType = 'eeg', // 'eeg' | 'ieeg' — controlled by PatientView, which shows/drives the toggle in the panel title
   onRecordingTypeChange,
+  montage = 'none', // 'none' | 'average' | 'median' — controlled by PatientView, which forces 'average' when ESI needs it
+  onMontageChange,
 }) => {
   const { isDarkMode } = useTheme();
   const syncKey = 'eeg-sync'; // shared across all channels to link their interactions
@@ -179,9 +181,6 @@ export const EegViewer = ({
     channelAreaHeight > 0 ? Math.floor(channelAreaHeight / visibleChannelCount) : 0;
   const axisColor = isDarkMode ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.8)';
 
-  // Montage for the
-  const [montage, setMontage] = useState('none'); // 'none' | 'average' | 'median'
-
   // Buffer of EEG data around the visible window — reloads on big jumps, otherwise
   // keeps the previous buffer's data on screen until the new one arrives (no flash).
   const { timestamps, channels, isLoading } = useEegBuffer(provider, startTime, windowSize);
@@ -211,10 +210,11 @@ export const EegViewer = ({
         onRecordingTypeChange?.(detected);
         toast(
           detected === 'ieeg'
-            ? 'iEEG electrode configuration detected'
-            : 'EEG electrode configuration detected',
+            ? 'iEEG recording detected'
+            : 'EEG recording detected',
           {
             id: RECORDING_TYPE_TOAST_ID,
+            icon: '🔍',
           }
         );
       })
@@ -603,7 +603,7 @@ export const EegViewer = ({
               </span>
               <select
                 value={montage}
-                onChange={(e) => setMontage(e.target.value)}
+                onChange={(e) => onMontageChange?.(e.target.value)}
                 aria-label="Apply EEG reference montage"
                 className="bg-background border border-border rounded px-1 py-0.5 text-xs text-heading cursor-pointer"
               >

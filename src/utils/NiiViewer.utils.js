@@ -23,6 +23,7 @@ export const TYPE_COLORMAP_DEFAULTS = {
   MRI: 'gray',
   PET: 'viridis',
   SPECT: 'magma',
+  'Electrical Source Imaging': 'inferno',
 };
 
 // Every other layer is identified by its file's blob: URL. The intracranial
@@ -31,8 +32,8 @@ export const TYPE_COLORMAP_DEFAULTS = {
 // connectome be tracked, reordered, and deleted the same way as any other layer.
 export const INTRACRANIAL_CONNECTOME_URL = '__intracranial-electrodes__';
 
-// Same sentinel-URL pattern for the ESI source-power connectome layer.
-export const ESI_CONNECTOME_URL = '__esi-source-power__';
+// Same sentinel-URL pattern for the ESI source-power connectome/volume layer.
+export const ESI_LAYER_URL = '__esi-source-power__';
 
 // Returns an array of display settings, one per layer (image volume, connectome, or
 // other mesh). Colormap is derived from layer.type via TYPE_COLORMAP_DEFAULTS — layers
@@ -51,6 +52,7 @@ export const getInitialLayerSettings = (layers, startIndex = 0) =>
     colormap: TYPE_COLORMAP_DEFAULTS[layer.type] ?? 'gray',
     invert: false,
     showColorbar: false,
+    isEsiVolume: true,
   }));
 
 // Detects imaging modality from a filename using BIDS suffix first, then keyword fallback.

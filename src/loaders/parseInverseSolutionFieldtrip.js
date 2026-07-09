@@ -1,4 +1,10 @@
 import { read as readmat } from 'mat-for-js';
+import {
+  findSourceGridBasis,
+  mapPositionsToGridIndices,
+  buildAffineMatrix,
+} from '@/utils/electricalSourceImagingUtils';
+import { vectorLength } from '@/utils/arrayAndMatrixMathUtils';
 
 // parser to extract the following fields from the *_inversefilters.mat*
 //  - pos: (nDipoles,1) with [x,y,z] triplets indicating the 3D position of each dipole
@@ -90,6 +96,19 @@ export const parseInverseSolutionFieldtrip = async (file) => {
     }
   }
 
+  //--- Prepare Volume Grid tructure for source power volume generation (only needs to be calculated once)
+
+  // Get anchor, basis needed to get grid indices
+  const { anchor, basis, gridSpacing } = findSourceGridBasis(insideSourcePositions);
+  // Get grid indices (i,j,k) for each source position [x,y,z]
+  const { sourceVolumeIndices, gridDimensions, minCorner } = mapPositionsToGridIndices(
+    insideSourcePositions,
+    anchor,
+    basis
+  );
+  const pixDims = basis.map(vectorLength);
+  const affine = buildAffineMatrix(anchor, basis, minCorner);
+
   // sourceFilters (the raw nested cell array) is intentionally excluded from the return —
   // flatSourceFilters replaces it for computation, avoiding a duplicate ~20MB allocation.
   return {
@@ -102,5 +121,10 @@ export const parseInverseSolutionFieldtrip = async (file) => {
     flatSourceFilters,
     nInsideSources,
     nChannels,
+    sourceVolumeIndices,
+    gridDimensions,
+    gridSpacing,
+    pixDims,
+    affine,
   };
 };

@@ -1,16 +1,18 @@
+import { mean, median } from './arrayAndMatrixMathUtils';
+
 // Re-reference by subtracting the channel mean. Standard default in EEG analysis.
 export function averageReference(channels) {
   const nChannels = channels.length;
   const nSamples = channels[0].length;
 
-  let sampleMeans = Array(nSamples);
+  const sampleMeans = Array(nSamples);
 
   for (let iSample = 0; iSample < nSamples; iSample++) {
-    let sum = 0;
+    const valuesAtSample = Array(nChannels);
     for (let iChan = 0; iChan < nChannels; iChan++) {
-      sum += channels[iChan][iSample];
+      valuesAtSample[iChan] = channels[iChan][iSample];
     }
-    sampleMeans[iSample] = sum / nChannels;
+    sampleMeans[iSample] = mean(valuesAtSample);
   }
 
   return channels.map((chan) => chan.map((value, iSamp) => value - sampleMeans[iSamp]));
@@ -29,13 +31,7 @@ export function medianReference(channels) {
     for (let iChan = 0; iChan < nChannels; iChan++) {
       valuesAtSample[iChan] = channels[iChan][iSample];
     }
-    valuesAtSample.sort((a, b) => a - b); // numeric sort, not lexicographic
-    const mid = Math.floor(nChannels / 2);
-    // even-length: average the two middle values; odd-length: take the single middle value
-    sampleMedians[iSample] =
-      nChannels % 2 === 0
-        ? (valuesAtSample[mid - 1] + valuesAtSample[mid]) / 2
-        : valuesAtSample[mid];
+    sampleMedians[iSample] = median(valuesAtSample);
   }
 
   return channels.map((chan) => chan.map((v, iSamp) => v - sampleMedians[iSamp]));
