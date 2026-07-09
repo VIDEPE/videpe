@@ -210,10 +210,11 @@ export const EegViewer = ({
         onRecordingTypeChange?.(detected);
         toast(
           detected === 'ieeg'
-            ? 'iEEG electrode configuration detected'
-            : 'EEG electrode configuration detected',
+            ? 'iEEG recording detected'
+            : 'EEG recording detected',
           {
             id: RECORDING_TYPE_TOAST_ID,
+            icon: '🔍',
           }
         );
       })

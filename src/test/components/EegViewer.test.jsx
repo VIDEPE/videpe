@@ -1421,8 +1421,9 @@ describe('EegViewer — recording type detection', () => {
   it('shows a toast naming the detected recording type once detection resolves', async () => {
     const { default: toast } = await import('react-hot-toast');
     await renderViewer();
-    expect(toast).toHaveBeenCalledWith('EEG electrode configuration detected', {
+    expect(toast).toHaveBeenCalledWith('EEG recording detected', {
       id: expect.any(String),
+      icon: '🔍',
     });
   });
 
@@ -1443,8 +1444,9 @@ describe('EegViewer — recording type detection', () => {
     });
 
     expect(onRecordingTypeChange).toHaveBeenCalledWith('ieeg');
-    expect(toast).toHaveBeenCalledWith('iEEG electrode configuration detected', {
+    expect(toast).toHaveBeenCalledWith('iEEG recording detected', {
       id: expect.any(String),
+      icon: '🔍',
     });
   });
 

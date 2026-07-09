@@ -162,7 +162,9 @@ export const PatientView = () => {
     (newMontage) => {
       setMontage(newMontage);
       if (newMontage !== 'average' && inverseSolution) {
-        toast('Electrical Source Imaging requires the Average montage — layer hidden');
+        toast('Electrical Source Imaging requires the Average montage — layer hidden', {
+          icon: '⚠️',
+        });
       }
     },
     [inverseSolution]

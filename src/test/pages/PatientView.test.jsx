@@ -689,7 +689,7 @@ describe('PatientView — ESI requires the Average montage', () => {
 
     expect(screen.getByTestId('eeg-montage').textContent).toBe('none');
     expect(NiiViewer.mock.lastCall[0].esiLayer).toBeNull();
-    expect(toast).toHaveBeenCalledWith(expect.stringMatching(/average/i));
+    expect(toast).toHaveBeenCalledWith(expect.stringMatching(/average/i), { icon: '⚠️' });
   });
 
   it('shows the ESI layer again when the montage is switched back to Average', async () => {
