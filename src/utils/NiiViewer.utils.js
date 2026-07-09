@@ -22,7 +22,7 @@ const MRI_BIDS_SUFFIXES = new Set([
 export const TYPE_COLORMAP_DEFAULTS = {
   MRI: 'gray',
   PET: 'viridis',
-  SPECT: 'mako',
+  SPECT: 'magma',
   'Electrical Source Imaging': 'inferno',
 };
 
