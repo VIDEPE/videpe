@@ -512,7 +512,12 @@ describe('PatientView — electrode position files', () => {
       await getEegOnFiles()([file]);
     });
 
-    expect(screen.getByText(/electrode positions: positions/i)).toBeInTheDocument();
+    const eegDropZoneProps = FileDropZone.mock.calls
+      .filter(([p]) => p.label === 'Drop EEG files')
+      .at(-1)[0];
+    expect(eegDropZoneProps.pendingFiles).toContainEqual({
+      name: 'Electrode positions: positions',
+    });
   });
 
   // EegViewer only mounts once an EEG recording is loaded, so these tests load one first —
@@ -655,9 +660,12 @@ describe('PatientView — inverse solution files', () => {
       await getEegOnFiles()([file]);
     });
 
-    expect(
-      screen.getByText(/inverse solution: sub-19_meth-eloreta_desc-nonorm_inversefilters/i)
-    ).toBeInTheDocument();
+    const eegDropZoneProps = FileDropZone.mock.calls
+      .filter(([p]) => p.label === 'Drop EEG files')
+      .at(-1)[0];
+    expect(eegDropZoneProps.pendingFiles).toContainEqual({
+      name: 'Inverse solution: sub-19_meth-eloreta_desc-nonorm_inversefilters',
+    });
   });
 
   it('processes both an EEG file and an inverse solution file dropped together', async () => {

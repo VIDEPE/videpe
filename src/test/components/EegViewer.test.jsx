@@ -1620,14 +1620,16 @@ describe('EegViewer — persistent electrode position dropzone', () => {
     expect(onInverseSolutionFile).toHaveBeenCalledWith(file);
   });
 
-  it('shows both electrode positions and inverse solution as "not added" when neither is loaded', async () => {
+  it('shows both status LEDs as "not loaded" when neither file is present', async () => {
     await renderViewer();
 
-    expect(screen.getByText('Electrode positions: not added')).toBeInTheDocument();
-    expect(screen.getByText('Inverse solution: not added')).toBeInTheDocument();
+    expect(screen.getByText('Electrode Position')).toBeInTheDocument();
+    expect(screen.getByTitle('No electrode position loaded')).toBeInTheDocument();
+    expect(screen.getByText('Inverse Solution')).toBeInTheDocument();
+    expect(screen.getByTitle('No inverse solution loaded')).toBeInTheDocument();
   });
 
-  it('shows the electrode position filename once customElecPosFileName is provided', async () => {
+  it('shows the electrode position filename in the status LED once customElecPosFileName is provided', async () => {
     const provider = makeProvider();
     render(
       <EegViewer
@@ -1641,11 +1643,11 @@ describe('EegViewer — persistent electrode position dropzone', () => {
       await Promise.resolve();
     });
 
-    expect(screen.getByText('Electrode positions: my_positions')).toBeInTheDocument();
-    expect(screen.getByText('Inverse solution: not added')).toBeInTheDocument();
+    expect(screen.getByTitle('my_positions')).toBeInTheDocument();
+    expect(screen.getByTitle('No inverse solution loaded')).toBeInTheDocument();
   });
 
-  it('shows the inverse solution filename once inverseSolutionFileName is provided', async () => {
+  it('shows the inverse solution filename in the status LED once inverseSolutionFileName is provided', async () => {
     const provider = makeProvider();
     render(
       <EegViewer
@@ -1659,8 +1661,8 @@ describe('EegViewer — persistent electrode position dropzone', () => {
       await Promise.resolve();
     });
 
-    expect(screen.getByText('Inverse solution: my_inverse_solution')).toBeInTheDocument();
-    expect(screen.getByText('Electrode positions: not added')).toBeInTheDocument();
+    expect(screen.getByTitle('my_inverse_solution')).toBeInTheDocument();
+    expect(screen.getByTitle('No electrode position loaded')).toBeInTheDocument();
   });
 
   it('routes .elc and .mat to their respective handlers when dropped together', async () => {

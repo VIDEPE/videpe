@@ -16,7 +16,6 @@ import {
   ListChevronsUpDown,
   ListChevronsDownUp,
   Keyboard,
-  FileCheck,
 } from 'lucide-react';
 import { minMaxDownsample } from '@/utils/downsample';
 import { useEegBuffer } from '@/loaders/eegBuffer';
@@ -77,6 +76,29 @@ const buildChannelOptions = ({
     legend: { show: false },
     padding: [0, PLOT_RIGHT_PAD, 0, Y_AXIS_WIDTH], // left padding replaces the hidden y-axis size; 0 top/bottom so overdraw areas aren't consumed by padding
   };
+};
+
+// Red/green LED-style indicator for whether an optional file (electrode positions,
+// inverse solution) is currently loaded — sits under the persistent dropzone since that
+// dropzone shows no state of its own in compact mode. title carries the filename so it's
+// discoverable on hover without permanently taking up space.
+const StatusLed = ({ label, fileName }) => {
+  const isActive = Boolean(fileName);
+  return (
+    <span
+      className="flex items-center gap-1.5 leading-none shrink-0 whitespace-nowrap"
+      title={isActive ? fileName : `No ${label.toLowerCase()} loaded`}
+    >
+      <span
+        className={cn(
+          'h-2 w-2 rounded-full shrink-0',
+          isActive ? 'bg-green-500 dark:bg-green-400' : 'bg-red-500/70 dark:bg-red-400/70'
+        )}
+        aria-hidden="true"
+      />
+      {label}
+    </span>
+  );
 };
 
 export const EegViewer = ({
@@ -948,30 +970,16 @@ export const EegViewer = ({
           label="Drop electrode positions / inverse solution"
           compact
           className="shrink-0"
-        />
-        {/* Makes it clear whether a custom electrode-position/inverse-solution file is
-            currently active, rather than leaving the user to guess from the dropzone alone
-            (which shows no state of its own in compact mode). */}
-        <div className="shrink-0 flex items-center justify-center gap-3 pb-1 text-[10px] text-foreground/50 flex-wrap">
-          <span
-            className={cn(
-              'flex items-center gap-1',
-              customElecPosFileName && 'text-green-600 dark:text-green-400'
-            )}
-          >
-            {customElecPosFileName && <FileCheck className="h-3 w-3 shrink-0" />}
-            Electrode positions: {customElecPosFileName ?? 'not added'}
-          </span>
-          <span
-            className={cn(
-              'flex items-center gap-1',
-              inverseSolutionFileName && 'text-green-600 dark:text-green-400'
-            )}
-          >
-            {inverseSolutionFileName && <FileCheck className="h-3 w-3 shrink-0" />}
-            Inverse solution: {inverseSolutionFileName ?? 'not added'}
-          </span>
-        </div>
+        >
+          {/* Makes it clear whether a custom electrode-position/inverse-solution file is
+              currently active, rather than leaving the user to guess from the dropzone alone
+              (which shows no state of its own in compact mode). shrink-0 keeps this block at
+              its natural size instead of being squeezed as the panel is resized narrower. */}
+          <div className="flex flex-col items-start gap-1 pr-2 mr-1 border-r border-border/50 text-[10px] text-foreground/60 shrink-0">
+            <StatusLed label="Electrode Position" fileName={customElecPosFileName} />
+            <StatusLed label="Inverse Solution" fileName={inverseSolutionFileName} />
+          </div>
+        </FileDropZone>
       </div>
 
       {/* Floating topography viewer — position:fixed so it overlays the whole page */}
