@@ -51,6 +51,7 @@ vi.mock('@/components/EegViewer', () => ({
     ({
       customElectrodes,
       customElecPosFileName,
+      inverseSolutionFileName,
       onIntracranialSnapshotChange,
       onChannelSnapshotChange,
       montage,
@@ -59,6 +60,7 @@ vi.mock('@/components/EegViewer', () => ({
       <div data-testid="eeg-viewer">
         <span data-testid="eeg-custom-electrodes-count">{customElectrodes?.length ?? 0}</span>
         <span data-testid="eeg-custom-filename">{customElecPosFileName ?? ''}</span>
+        <span data-testid="eeg-inverse-solution-filename">{inverseSolutionFileName ?? ''}</span>
         <span data-testid="eeg-montage">{montage}</span>
         {/* Simulates EegViewer reporting live intracranial electrode/voltage state, the way it
           would after detecting an intracranial recording and matching a position file. */}
@@ -484,6 +486,13 @@ describe('PatientView — electrode position files', () => {
     expect(eegDropZoneProps.accepted_formats).toContain('.tsv');
   });
 
+  it('mentions electrode positions and inverse solution files in the initial dropzone description', () => {
+    renderPatientView();
+    const eegDropZoneProps = FileDropZone.mock.calls.find(([p]) => p.label === 'Drop EEG files')[0];
+    expect(eegDropZoneProps.description).toMatch(/electrode positions/i);
+    expect(eegDropZoneProps.description).toMatch(/inverse solution/i);
+  });
+
   it('routes a dropped .tsv file to electrode position parsing instead of EEG accumulation', async () => {
     renderPatientView();
     const file = new File([MINIMAL_TSV], 'positions.tsv');
@@ -493,6 +502,17 @@ describe('PatientView — electrode position files', () => {
     });
 
     expect(checkEegFiles).not.toHaveBeenCalled(); // pure position-file drop never reaches EEG accumulation
+  });
+
+  it('confirms a dropped electrode position file even before any EEG recording is loaded', async () => {
+    renderPatientView();
+    const file = new File([MINIMAL_TSV], 'positions.tsv');
+
+    await act(async () => {
+      await getEegOnFiles()([file]);
+    });
+
+    expect(screen.getByText(/electrode positions: positions/i)).toBeInTheDocument();
   });
 
   // EegViewer only mounts once an EEG recording is loaded, so these tests load one first —
@@ -627,6 +647,19 @@ describe('PatientView — inverse solution files', () => {
     expect(checkEegFiles).not.toHaveBeenCalled();
   });
 
+  it('confirms a dropped inverse solution file even before any EEG recording is loaded', async () => {
+    renderPatientView();
+    const file = makeFile('sub-19_meth-eloreta_desc-nonorm_inversefilters.mat');
+
+    await act(async () => {
+      await getEegOnFiles()([file]);
+    });
+
+    expect(
+      screen.getByText(/inverse solution: sub-19_meth-eloreta_desc-nonorm_inversefilters/i)
+    ).toBeInTheDocument();
+  });
+
   it('processes both an EEG file and an inverse solution file dropped together', async () => {
     checkEegFiles.mockReturnValue({
       formatName: 'BrainVision',
@@ -652,6 +685,9 @@ describe('PatientView — inverse solution files', () => {
 
     expect(screen.getByTestId('eeg-viewer')).toBeInTheDocument();
     expect(parseInverseSolutionFieldtrip).toHaveBeenCalled();
+    expect(screen.getByTestId('eeg-inverse-solution-filename')).toHaveTextContent(
+      'sub-19_inversefilters'
+    );
   });
 });
 

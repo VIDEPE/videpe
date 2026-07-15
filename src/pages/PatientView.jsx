@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, FileCheck } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Niivue } from '@niivue/niivue';
 
@@ -99,7 +99,6 @@ const EEGTypeToggle = ({ recordingType, onChange }) => {
   );
 };
 
-
 // Electrode position files are routed to handleElecPosFile instead of the EEG-format
 // accumulation logic below, regardless of which dropzone/button they came in through.
 
@@ -140,6 +139,7 @@ export const PatientView = () => {
   // title's click handler uses, then reads the resulting value back down as a prop.
   const [recordingType, setRecordingType] = useState('eeg');
   const [inverseSolution, setInverseSolution] = useState(null);
+  const [inverseSolutionFileName, setInverseSolutionFileName] = useState(null);
   const [channelSnapshot, setChannelSnapshot] = useState(null); // { isIntracranial, channelNames, voltages } lifted from EegViewer on each click
   // 'none' | 'average' | 'median' — owned here (not EegViewer) because ESI requires the
   // Average montage: loading an inverse solution forces this to 'average', and switching
@@ -161,6 +161,7 @@ export const PatientView = () => {
     try {
       const parsedInverseSolution = await parseInverseSolutionFieldtrip(file);
       setInverseSolution(parsedInverseSolution);
+      setInverseSolutionFileName(file.name.replace(/\.[^.]+$/, ''));
       // ESI is only valid under a common average reference — force it and let the user
       // know why, rather than silently computing nonsensical source power.
       setMontage('average');
@@ -364,6 +365,7 @@ export const PatientView = () => {
     setCustomElecPosFileName(null);
     setIntracranialSnapshot(null);
     setInverseSolution(null);
+    setInverseSolutionFileName(null);
     setChannelSnapshot(null);
     setRecordingType('eeg');
     setMontage('none');
@@ -378,6 +380,7 @@ export const PatientView = () => {
     setRecordingType('eeg');
     setIntracranialSnapshot(null);
     setInverseSolution(null);
+    setInverseSolutionFileName(null);
     setChannelSnapshot(null);
     setMontage('none');
   };
@@ -463,6 +466,7 @@ export const PatientView = () => {
               onTopoNvReady={handleTopoNvReady} // topo canvas ready
               customElectrodes={customElectrodes}
               customElecPosFileName={customElecPosFileName}
+              inverseSolutionFileName={inverseSolutionFileName}
               recordingType={recordingType}
               onRecordingTypeChange={setRecordingType}
               montage={montage}
@@ -473,16 +477,36 @@ export const PatientView = () => {
               onChannelSnapshotChange={setChannelSnapshot}
             />
           ) : (
-            <div className="h-full p-2">
+            <div className="h-full p-2 flex flex-col gap-2">
               <FileDropZone
                 onFiles={handleEegFiles}
                 accepted_formats=".vhdr,.eeg,.elc,.tsv,.mat"
                 label="Drop EEG files"
-                description="BrainVision: .vhdr + .eeg (+ optional .elc/.tsv electrode positions)"
+                description="BrainVision: .vhdr + .eeg — optionally add .elc/.tsv electrode positions or a .mat inverse solution"
                 pendingFiles={pendingEegFiles}
                 hint={eegHint}
-                className="h-full min-h-48"
+                className="flex-1 min-h-48"
               />
+              {/* Confirms electrode-position/inverse-solution files dropped here before an EEG
+                  recording exists — without this, dropping just a .elc/.tsv/.mat file gives no
+                  visible feedback that anything happened (handleEegFiles returns early since
+                  there are no EEG files to accumulate). */}
+              {(customElecPosFileName || inverseSolutionFileName) && (
+                <div className="shrink-0 flex flex-col items-center gap-1 text-xs">
+                  {customElecPosFileName && (
+                    <span className="flex items-center gap-1 text-green-600 dark:text-green-400">
+                      <FileCheck className="h-3.5 w-3.5 shrink-0" />
+                      Electrode positions: {customElecPosFileName}
+                    </span>
+                  )}
+                  {inverseSolutionFileName && (
+                    <span className="flex items-center gap-1 text-green-600 dark:text-green-400">
+                      <FileCheck className="h-3.5 w-3.5 shrink-0" />
+                      Inverse solution: {inverseSolutionFileName}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           )
         }

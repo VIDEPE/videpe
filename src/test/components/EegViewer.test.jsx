@@ -1620,6 +1620,49 @@ describe('EegViewer — persistent electrode position dropzone', () => {
     expect(onInverseSolutionFile).toHaveBeenCalledWith(file);
   });
 
+  it('shows both electrode positions and inverse solution as "not added" when neither is loaded', async () => {
+    await renderViewer();
+
+    expect(screen.getByText('Electrode positions: not added')).toBeInTheDocument();
+    expect(screen.getByText('Inverse solution: not added')).toBeInTheDocument();
+  });
+
+  it('shows the electrode position filename once customElecPosFileName is provided', async () => {
+    const provider = makeProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        customElecPosFileName="my_positions"
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText('Electrode positions: my_positions')).toBeInTheDocument();
+    expect(screen.getByText('Inverse solution: not added')).toBeInTheDocument();
+  });
+
+  it('shows the inverse solution filename once inverseSolutionFileName is provided', async () => {
+    const provider = makeProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        inverseSolutionFileName="my_inverse_solution"
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText('Inverse solution: my_inverse_solution')).toBeInTheDocument();
+    expect(screen.getByText('Electrode positions: not added')).toBeInTheDocument();
+  });
+
   it('routes .elc and .mat to their respective handlers when dropped together', async () => {
     const onElecPosFile = vi.fn();
     const onInverseSolutionFile = vi.fn();

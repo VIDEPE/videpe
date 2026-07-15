@@ -16,6 +16,7 @@ import {
   ListChevronsUpDown,
   ListChevronsDownUp,
   Keyboard,
+  FileCheck,
 } from 'lucide-react';
 import { minMaxDownsample } from '@/utils/downsample';
 import { useEegBuffer } from '@/loaders/eegBuffer';
@@ -86,6 +87,7 @@ export const EegViewer = ({
   onTopoNvReady,
   customElectrodes = [], // [{label,x,y,z}] — owned by PatientView, loaded from a user-supplied .elc/.tsv file
   customElecPosFileName = null,
+  inverseSolutionFileName = null, // filename (no extension) of the loaded inverse-solution file — owned by PatientView, passed down
   onElecPosFile,
   onInverseSolutionFile,
   onIntracranialSnapshotChange,
@@ -947,6 +949,29 @@ export const EegViewer = ({
           compact
           className="shrink-0"
         />
+        {/* Makes it clear whether a custom electrode-position/inverse-solution file is
+            currently active, rather than leaving the user to guess from the dropzone alone
+            (which shows no state of its own in compact mode). */}
+        <div className="shrink-0 flex items-center justify-center gap-3 pb-1 text-[10px] text-foreground/50 flex-wrap">
+          <span
+            className={cn(
+              'flex items-center gap-1',
+              customElecPosFileName && 'text-green-600 dark:text-green-400'
+            )}
+          >
+            {customElecPosFileName && <FileCheck className="h-3 w-3 shrink-0" />}
+            Electrode positions: {customElecPosFileName ?? 'not added'}
+          </span>
+          <span
+            className={cn(
+              'flex items-center gap-1',
+              inverseSolutionFileName && 'text-green-600 dark:text-green-400'
+            )}
+          >
+            {inverseSolutionFileName && <FileCheck className="h-3 w-3 shrink-0" />}
+            Inverse solution: {inverseSolutionFileName ?? 'not added'}
+          </span>
+        </div>
       </div>
 
       {/* Floating topography viewer — position:fixed so it overlays the whole page */}
