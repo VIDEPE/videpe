@@ -137,7 +137,7 @@ export const EegViewer = ({
     String(defaultShiftTimeStepSize)
   );
 
-  const defaultYScale = 10;
+  const defaultYScale = 0.15;
   const [yScale, setYScale] = useState(defaultYScale); // y-axis half-range in µV; all channels share this
   const [yScaleStr, setYScaleStr] = useState(String(defaultYScale)); // separate state for the input string to allow temporary invalid states (e.g. empty string while editing) without breaking the numeric yScale used for plotting
   const [isDragging, setIsDragging] = useState(false); // true while the scrubber thumb is being dragged, so it stays highlighted

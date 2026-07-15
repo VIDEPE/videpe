@@ -25,9 +25,32 @@ import { buildIntracranialLayer } from '../utils/eegTopographyUtils';
 import { electricalSourceImaging } from '../utils/electricalSourceImagingUtils';
 
 const DEMO_EEG = {
-  header: 'demo_data/sub-synth_task-rest_eeg.vhdr',
-  data: 'demo_data/sub-synth_task-rest_eeg.eeg',
+  header: 'demo_data/sub-synth_task-rest_desc-spkavgall_eeg.vhdr',
+  data: 'demo_data/sub-synth_task-rest_desc-spkavgall_eeg.eeg',
+  elec_pos: 'demo_data/sub-synth_electrodes.tsv',
+  invers_solution: 'demo_data/sub-synth_desc-unitnoiselcmv_inversefilters.mat',
 };
+
+const DEMO_LAYERS = [
+  { url: 'demo_data/sub-synth_T1w.nii.gz', ...detectVolumeType('sub-synth_T1w.nii.gz') },
+  {
+    url: 'demo_data/sub-synth_label-WM_dseg.nii.gz',
+    ...detectVolumeType('sub-synth_label-WM_dseg.nii.gz'),
+  },
+  {
+    url: 'demo_data/sub-synth_label-CSF_dseg.nii.gz',
+    ...detectVolumeType('sub-synth_label-CSF_dseg.nii.gz'),
+  },
+];
+
+// Fetches a demo file by URL and wraps it as a File, so demo loading can feed the same
+// parseElectrodePositionFile/parseInverseSolutionFieldtrip entry points used by file drops.
+async function fetchAsFile(url) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`Failed to fetch ${url}: ${response.statusText}`);
+  const blob = await response.blob();
+  return new File([blob], url.split('/').pop());
+}
 
 // Shared title styling — keeps "Neuroimaging" and the toggle's labels visually
 // consistent, and both header bars the same height (TrafficLightButtons are 16px tall).
@@ -76,15 +99,6 @@ const EEGTypeToggle = ({ recordingType, onChange }) => {
   );
 };
 
-const DEMO_LAYERS = [
-  { url: 'demo_data/patT1.nii', ...detectVolumeType('patT1.nii') },
-  { url: 'demo_data/pat_PET_aligned.nii', ...detectVolumeType('pat_PET_aligned.nii') },
-  {
-    url: 'demo_data/pat_siscom_17-13.nii',
-    ...detectVolumeType('pat_siscom_17-13.nii'),
-    urlImgType: 'nii',
-  },
-];
 
 // Electrode position files are routed to handleElecPosFile instead of the EEG-format
 // accumulation logic below, regardless of which dropzone/button they came in through.
@@ -318,6 +332,12 @@ export const PatientView = () => {
           // Load and set EEG
           const result = await loadBrainVisionEEG(base + DEMO_EEG.header, base + DEMO_EEG.data);
           setEeg(result);
+          // Load and set electrode positions and inverse solution, via the same handlers
+          // file drops use, so they reach EegViewer/ESI exactly as a manual drop would.
+          const elecPosFile = await fetchAsFile(base + DEMO_EEG.elec_pos);
+          await handleElecPosFile(elecPosFile);
+          const inverseSolutionFile = await fetchAsFile(base + DEMO_EEG.invers_solution);
+          await handleInverseSolutionFile(inverseSolutionFile);
           // Load and set layers
           setLayers(DEMO_LAYERS);
           await Promise.all([eegReady, niiReady]);
