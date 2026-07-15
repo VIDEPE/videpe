@@ -1593,7 +1593,7 @@ describe('EegViewer — persistent electrode position dropzone', () => {
     await renderViewer();
     expect(screen.queryByTestId('eeg-topo-viewer')).toBeNull();
     expect(
-      screen.getByText('Browse or Drop electrode positions / inverse solution')
+      screen.getByText('Browse or drop electrode positions / inverse solution')
     ).toBeInTheDocument();
   });
 
