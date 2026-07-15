@@ -80,10 +80,12 @@ export const FileDropZone = ({
                 : 'text-[color-mix(in_srgb,var(--c-border),var(--c-foreground)_40%)]'
             )}
           />
-          {/* The label is the main instruction (e.g., "Drop EEG files"). */}
-          <p className="text-sm font-medium text-foreground">{label}</p>
-          {/* The description provides format details (e.g., "BrainVision: .vhdr + .eeg").*/}
-          <p className="text-xs text-foreground/50">{description}</p>
+          {/* The label is the main instruction (e.g., "Drop EEG files").
+              whitespace-pre-wrap lets callers use '\n' and '\t' while still wrapping long lines. */}
+          <p className="text-sm font-medium text-foreground whitespace-pre-wrap">{label}</p>
+          {/* The description provides format details (e.g., "BrainVision: .vhdr + .eeg").
+              whitespace-pre-wrap lets callers use '\n' and '\t' while still wrapping long lines. */}
+          <p className="text-xs text-foreground/50 whitespace-pre-wrap">{description}</p>
           {/* If there are pending files that are not yet complete, show them here with a checkmark. */}
           {hasPending && (
             <div className="flex flex-col items-center gap-1">

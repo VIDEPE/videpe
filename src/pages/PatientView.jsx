@@ -481,8 +481,10 @@ export const PatientView = () => {
               <FileDropZone
                 onFiles={handleEegFiles}
                 accepted_formats=".vhdr,.eeg,.elc,.tsv,.mat"
-                label="Drop EEG files"
-                description="BrainVision: .vhdr + .eeg — optionally add .elc/.tsv electrode positions or a .mat inverse solution"
+                label={'Drop EEG files'}
+                description={
+                  '\tBrainVision EEG:\t\t\t.vhdr + .eeg\nElectrode Positions:\t\t.elc + .tsv\n\t\tInverse Solution:\t\t\t.mat (FieldTrip)'
+                }
                 pendingFiles={pendingEegFiles}
                 hint={eegHint}
                 className="flex-1 min-h-48"
