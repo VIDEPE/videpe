@@ -568,7 +568,7 @@ export const EegViewer = ({
             Uses a custom hover tooltip instead of the native title attribute, since native
             tooltips have a long built-in show delay — long enough that clicking the icon (to
             focus the viewer) often fired before the tooltip ever appeared. */}
-        <div className="absolute bottom-10 right-2 z-20 group/tip">
+        <div className="absolute bottom-12 right-2 z-20 group/tip">
           <div className="text-foreground/40 hover:text-foreground/80 group-focus/viewer:text-secondary transition-colors cursor-help">
             <Keyboard size={18} />
           </div>
