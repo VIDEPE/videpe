@@ -82,18 +82,50 @@ const buildChannelOptions = ({
 // inverse solution) is currently loaded — sits under the persistent dropzone since that
 // dropzone shows no state of its own in compact mode. title carries the filename so it's
 // discoverable on hover without permanently taking up space.
-const StatusLed = ({ label, fileName }) => {
+// disabled greys the LED out for a file type that doesn't apply to the current recording
+// mode (e.g. inverse solution / ESI has no meaning for intracranial recordings) — greyed
+// rather than removed so the layout doesn't jump when the user flips the EEG/iEEG toggle,
+// and so a file that's still loaded (just unused right now) doesn't just disappear.
+const StatusLed = ({ label, fileName, disabled = false }) => {
+  // isDarkMode (not Tailwind's dark: variant) since dark: tracks the OS-level
+  // prefers-color-scheme media query, not this app's manually-toggled .dark class —
+  // isDarkMode is the one source of truth that actually reflects the app's theme toggle.
+  const { isDarkMode } = useTheme();
   const isActive = Boolean(fileName);
+  const dotColor = disabled
+    ? 'bg-foreground/20'
+    : isActive
+      ? isDarkMode
+        ? 'bg-green-400'
+        : 'bg-green-500'
+      : isDarkMode
+        ? 'bg-red-400/70'
+        : 'bg-red-500/70';
+  // Subtle glow only when on — off (red) stays a flat dot, matching "attention only when
+  // something needs it" (an always-on glow on both states would just be visual noise).
+  // Kept in style (not a shadow-[...] class) so the rgb values stay directly readable here.
+  const glow =
+    isActive && !disabled
+      ? isDarkMode
+        ? '0 0 4px 1px rgba(74,222,128,0.7)'
+        : '0 0 4px 1px rgba(34,197,94,0.7)'
+      : 'none';
+  const title = disabled
+    ? `${label} is not applicable for iEEG recordings`
+    : isActive
+      ? fileName
+      : `No ${label.toLowerCase()} loaded`;
   return (
     <span
-      className="flex items-center gap-1.5 leading-none shrink-0 whitespace-nowrap"
-      title={isActive ? fileName : `No ${label.toLowerCase()} loaded`}
+      className={cn(
+        'flex items-center gap-1.5 leading-none shrink-0 whitespace-nowrap',
+        disabled && (isDarkMode ? 'text-foreground/20': 'text-foreground/40')
+      )}
+      title={title}
     >
       <span
-        className={cn(
-          'h-2 w-2 rounded-full shrink-0',
-          isActive ? 'bg-green-500 dark:bg-green-400' : 'bg-red-500/70 dark:bg-red-400/70'
-        )}
+        className={cn('h-2 w-2 rounded-full shrink-0', dotColor)}
+        style={{ boxShadow: glow }}
         aria-hidden="true"
       />
       {label}
@@ -969,7 +1001,7 @@ export const EegViewer = ({
           accepted_formats=".elc,.tsv,.mat"
           label="Drop electrode positions / inverse solution"
           compact
-          className="shrink-0"
+          className="shrink-0 mb-1"
         >
           {/* Makes it clear whether a custom electrode-position/inverse-solution file is
               currently active, rather than leaving the user to guess from the dropzone alone
@@ -977,7 +1009,11 @@ export const EegViewer = ({
               its natural size instead of being squeezed as the panel is resized narrower. */}
           <div className="flex flex-col items-start gap-1 pr-2 mr-1 border-r border-border/50 text-[10px] text-foreground/60 shrink-0">
             <StatusLed label="Electrode Position" fileName={customElecPosFileName} />
-            <StatusLed label="Inverse Solution" fileName={inverseSolutionFileName} />
+            <StatusLed
+              label="Inverse Solution"
+              fileName={inverseSolutionFileName}
+              disabled={isIntracranial}
+            />
           </div>
         </FileDropZone>
       </div>

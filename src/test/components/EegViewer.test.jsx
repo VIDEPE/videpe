@@ -1665,6 +1665,28 @@ describe('EegViewer — persistent electrode position dropzone', () => {
     expect(screen.getByTitle('No electrode position loaded')).toBeInTheDocument();
   });
 
+  it('greys out the inverse solution LED in iEEG mode, even with a file loaded', async () => {
+    const provider = makeIntracranialProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        recordingType="ieeg"
+        inverseSolutionFileName="my_inverse_solution"
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(
+      screen.getByTitle('Inverse Solution is not applicable for iEEG recordings')
+    ).toBeInTheDocument();
+    // Electrode position stays fully active/relevant in iEEG mode.
+    expect(screen.queryByTitle(/electrode position is not applicable/i)).not.toBeInTheDocument();
+  });
+
   it('routes .elc and .mat to their respective handlers when dropped together', async () => {
     const onElecPosFile = vi.fn();
     const onInverseSolutionFile = vi.fn();
