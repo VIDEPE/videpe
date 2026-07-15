@@ -578,8 +578,8 @@ describe('convertSourcePowersToConnectome', () => {
     expect(result.name).toBe('ESI Source Power');
     expect(result.edges).toEqual([]);
     expect(result.nodes).toBeDefined();
-    expect(result.calMin).toBe(0);
-    expect(result.calMax).toBeDefined();
+    expect(result.boundMin).toBe(0);
+    expect(result.boundMax).toBeDefined();
   });
 
   it('creates one node per inside-brain source', () => {
@@ -596,7 +596,7 @@ describe('convertSourcePowersToConnectome', () => {
   });
 
   it('sets node colorValue from sourcePowers and sizeValue proportional to power', () => {
-    // CONNECTOME_POWERS = [13, 25], calMax = 25
+    // CONNECTOME_POWERS = [13, 25], boundMax = 25
     const result = convertSourcePowersToConnectome(CONNECTOME_POSITIONS, CONNECTOME_POWERS);
 
     expect(result.nodes[0].colorValue).toBe(13);
@@ -605,16 +605,16 @@ describe('convertSourcePowersToConnectome', () => {
     expect(result.nodes[1].sizeValue).toBe(1); // highest power → full nodeScale size
   });
 
-  it('sets calMax to the maximum source power', () => {
+  it('sets boundMax to the maximum source power', () => {
     const result = convertSourcePowersToConnectome(CONNECTOME_POSITIONS, CONNECTOME_POWERS);
 
-    expect(result.calMax).toBe(25);
+    expect(result.boundMax).toBe(25);
   });
 
-  it('floors calMax at 1e-9 when all powers are zero to prevent NiiVue color-scale division-by-zero', () => {
+  it('floors boundMax at 1e-9 when all powers are zero to prevent NiiVue color-scale division-by-zero', () => {
     const result = convertSourcePowersToConnectome(CONNECTOME_POSITIONS, new Float64Array([0, 0]));
 
-    expect(result.calMax).toBe(1e-9);
+    expect(result.boundMax).toBe(1e-9);
   });
 });
 
@@ -648,23 +648,8 @@ describe('convertSourcePowersToVolume', () => {
     expect(result.kind).toBe('volume');
     expect(result.type).toBe('Electrical Source Imaging');
     expect(result.bytes).toBeInstanceOf(Uint8Array);
-    expect(result.calMin).toBeCloseTo(0.25); // 1% of calMax (25)
-    expect(result.calMax).toBe(25);
-  });
-
-  // NiiVue's ZERO_TO_MAX_TRANSPARENT_BELOW_MIN shader only ramps voxels toward transparent
-  // when cal_min > 0 (alpha *= (f/cal_min)²) — a literal 0 silently disables that entirely,
-  // leaving the whole volume opaque.
-  it('sets calMin to a positive value, never 0, so NiiVue can render sub-threshold voxels transparent', () => {
-    const result = convertSourcePowersToVolume(
-      VOLUME_INDICES,
-      VOLUME_POWERS,
-      VOLUME_DIMENSIONS,
-      VOLUME_PIX_DIMS,
-      VOLUME_AFFINE
-    );
-
-    expect(result.calMin).toBeGreaterThan(0);
+    expect(result.boundMin).toBe(0);
+    expect(result.boundMax).toBe(25);
   });
 
   // NiiVue's addVolumesFromUrl infers the file type from this name's extension — a bare
@@ -753,7 +738,7 @@ describe('electricalSourceImaging', () => {
     expect(result.sourcePowerConnectomes.kind).toBe('connectome');
     expect(result.sourcePowerConnectomes.url).toBe(ESI_LAYER_URL);
     expect(result.sourcePowerConnectomes.nodes).toHaveLength(2);
-    expect(result.sourcePowerConnectomes.calMax).toBe(25);
+    expect(result.sourcePowerConnectomes.boundMax).toBe(25);
 
     // convertSourcePowersToVolume now returns a NiiVue-ready volume layer object — same
     // sentinel-URL pattern as the connectome, with the real NIfTI-1 bytes (built by
@@ -761,7 +746,7 @@ describe('electricalSourceImaging', () => {
     // 2 voxels × 4 bytes/voxel float32 = 360 bytes total) under a separate `bytes` field.
     expect(result.sourcePowerVolume.kind).toBe('volume');
     expect(result.sourcePowerVolume.url).toBe(ESI_LAYER_URL);
-    expect(result.sourcePowerVolume.calMax).toBe(25);
+    expect(result.sourcePowerVolume.boundMax).toBe(25);
     expect(result.sourcePowerVolume.bytes).toBeInstanceOf(Uint8Array);
     expect(result.sourcePowerVolume.bytes).toHaveLength(360);
   });

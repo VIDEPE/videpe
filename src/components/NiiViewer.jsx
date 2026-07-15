@@ -21,18 +21,17 @@ import {
   EEG_NODE_NEG,
 } from '@/utils/eegColormaps';
 
-// layerSettings.cal_min/cal_max are 0-1 *fractions* of a layer's own data range (same
-// "fraction, not absolute value" convention opacity already uses), not literal NiiVue
-// cal_min/cal_max values — those depend on the specific volume/source-power data, so a
-// raw 0-1 slider value would be meaningless applied directly. This resolves a layer's
+// NiiVue cal_min/cal_max values depend on the specific volume/source-power data values, so a
+// percentile 0-1 slider value would be meaningless applied directly. getCalBounds() resolves a layer's
 // actual bounds so a fraction can be converted to a real value:
-//  - ESI layers: power is always non-negative and layer.calMax is the observed ceiling
-//    for the current click, so bounds are simply [0, layer.calMax].
+//  - ESI layers: boundMin/boundMax come straight off the layer (see
+//    convertSourcePowersToConnectome/convertSourcePowersToVolume) — power is always
+//    non-negative and boundMax is the observed ceiling for the current click.
 //  - Regular volumes: bounds come from NiiVue's own robust_min/robust_max (percentile-
 //    clipped range) on the loaded NVImage — global_min/global_max would let one outlier
 //    voxel blow out the whole scale.
 function getCalBounds(layer, nvVolume) {
-  if (layer.url === ESI_LAYER_URL) return { boundMin: 0, boundMax: layer.calMax };
+  if (layer.url === ESI_LAYER_URL) return { boundMin: layer.boundMin, boundMax: layer.boundMax };
   return { boundMin: nvVolume?.robust_min ?? 0, boundMax: nvVolume?.robust_max ?? 1 };
 }
 
@@ -664,9 +663,9 @@ export const NiiViewer = ({
 
       // Source power is always non-negative (squared magnitude) — use the positive colormap
       // for both slots; the negative colormap is never reached.
-      // cal_min/cal_max on `settings` are the user's chosen fractions of activeEsiLayer.calMax
-      // (see getCalBounds) — reapplying them here (rather than activeEsiLayer.calMin/calMax
-      // directly) means a user-set threshold survives into the next EEG click's new bound.
+      // cal_min/cal_max on `settings` are the user's chosen fractions of this layer's own
+      // boundMin/boundMax (see getCalBounds) — resolving them fresh here means a user-set
+      // threshold survives into the next EEG click's new bound instead of resetting.
       const { boundMin: esiBoundMin, boundMax: esiBoundMax } = getCalBounds(activeEsiLayer);
       const esiCalMin = fractionToCalValue(settings.cal_min, esiBoundMin, esiBoundMax);
       const esiCalMax = fractionToCalValue(settings.cal_max, esiBoundMin, esiBoundMax);
@@ -719,8 +718,8 @@ export const NiiViewer = ({
           // Fixed cal_min/cal_max (rather than NiiVue's auto-scan) keeps the color scale
           // consistent with connectome mode, and avoids a "% of voxels are zero" warning
           // from the auto-scan seeing this grid's mostly-empty background. Resolved from the
-          // user's chosen fraction of activeEsiLayer.calMax, same as connectome mode above —
-          // so it survives into the next click's new bound instead of resetting.
+          // user's chosen fraction of this layer's own boundMin/boundMax, same as connectome
+          // mode above — so it survives into the next click's new bound instead of resetting.
           const { boundMin: esiVolBoundMin, boundMax: esiVolBoundMax } =
             getCalBounds(activeEsiLayer);
           nvVolume.cal_min = fractionToCalValue(settings.cal_min, esiVolBoundMin, esiVolBoundMax);

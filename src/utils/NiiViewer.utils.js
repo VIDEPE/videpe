@@ -53,7 +53,13 @@ export const getInitialLayerSettings = (layers, startIndex = 0) =>
     invert: false,
     showColorbar: false,
     isEsiVolume: true,
-    cal_min: 0.01,
+    // The Threshold slider's floor always allows dragging down to 0 (so users can always
+    // see every power value, however low — see getCalBounds in NiiViewer.jsx), but the
+    // ESI layer starts at a small positive default instead of 0: NiiVue's transparent-
+    // below-threshold shader ramp only kicks in when cal_min > 0, so a literal 0 would
+    // leave the whole ESI volume opaque on first render. Other volumes have no such
+    // shader quirk, so they default to showing everything (0) with no thresholding.
+    cal_min: layer.url === ESI_LAYER_URL ? 0.01 : 0,
     cal_max: 1,
   }));
 
