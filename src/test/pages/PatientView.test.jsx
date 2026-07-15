@@ -308,12 +308,39 @@ describe('PatientView — demo loading', () => {
   beforeEach(() => {
     FileDropZone.mockClear();
     NiiViewer.mockClear();
+    EegViewer.mockClear();
+    parseInverseSolutionFieldtrip.mockClear();
     checkEegFiles.mockReturnValue({
       formatName: null,
       complete: false,
       missing: null,
       warning: null,
     });
+    // Demo electrode positions/inverse solution are fetched by URL and wrapped as Files —
+    // stub fetch so that path exercises the same parsers a manual file drop would.
+    global.fetch = vi.fn((url) =>
+      Promise.resolve({
+        ok: true,
+        blob: () =>
+          Promise.resolve(
+            new Blob([url.endsWith('.tsv') ? MINIMAL_TSV : 'irrelevant — mat parser is mocked'])
+          ),
+      })
+    );
+  });
+
+  it('loads demo electrode positions and inverse solution, forwarding them to EegViewer', async () => {
+    renderPatientView();
+    fireEvent.click(screen.getByRole('button', { name: /load demo/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('eeg-custom-electrodes-count')).toHaveTextContent('2');
+    });
+    expect(screen.getByTestId('eeg-custom-filename')).toHaveTextContent('sub-synth_electrodes');
+    expect(screen.getByTestId('eeg-montage')).toHaveTextContent('average');
+    expect(parseInverseSolutionFieldtrip).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'sub-synth_desc-unitnoiselcmv_inversefilters.mat' })
+    );
   });
 
   it('passes demo volumes with correct type and subtype to NiiViewer', async () => {
@@ -330,9 +357,9 @@ describe('PatientView — demo loading', () => {
     });
 
     const layers = NiiViewer.mock.lastCall[0].layers;
-    expect(layers[0]).toMatchObject({ type: 'MRI', subtype: 'patT1' });
-    expect(layers[1]).toMatchObject({ type: 'PET', subtype: 'pat_PET_aligned' });
-    expect(layers[2]).toMatchObject({ type: 'SPECT', subtype: 'pat_siscom_17-13' });
+    expect(layers[0]).toMatchObject({ type: 'MRI', subtype: 'sub-synth_T1w' });
+    expect(layers[1]).toMatchObject({ type: 'sub-synth_label-WM_dseg', subtype: null });
+    expect(layers[2]).toMatchObject({ type: 'sub-synth_label-CSF_dseg', subtype: null });
   });
 
   it('renders both EegViewer and NiiViewer once demo data is loaded', async () => {
