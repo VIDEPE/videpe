@@ -57,14 +57,21 @@ function SortableSettingsCard({
   // Local string state — allows typing a partial value (e.g. empty string) without breaking the numeric opacity
   const [opacityStr, setOpacityStr] = useState(() => String(Math.round(settings.opacity * 100)));
 
-  // Shared by both the slider and the number field.
-  // Stays permissive (mirrors raw text, forwards only once parseable) for the number field's sake
-  // CommitOpacity below is the backstop that normalizes whatever is in the number field once it loses focus.
+  // Typing must stay permissive: mirror the raw text as-is so partial/empty input isn't
+  // clobbered mid-edit. Only forward a value upstream once it parses to a real number —
+  // commitOpacity below is the backstop for the number field once it loses focus.
   const handleOpacityChange = (e) => {
     setOpacityStr(e.target.value);
     const val = Number(e.target.value);
     if (e.target.value !== '' && !isNaN(val))
       onSettingChange(index, 'opacity', Math.max(0, Math.min(100, Math.round(val))) / 100);
+  };
+
+  // Radix's Slider always yields a single valid value in range, so unlike the typing handler
+  // above there's no parsing/clamping to do here.
+  const handleOpacitySliderChange = ([val]) => {
+    setOpacityStr(String(val));
+    onSettingChange(index, 'opacity', val / 100);
   };
 
   // Blur-time commit: unlike the typing handler above, this always forces a valid
@@ -204,16 +211,22 @@ function SortableSettingsCard({
               <span className="w-20 shrink-0 text-foreground select-none pointer-events-none">
                 Opacity
               </span>
-              <input
-                type="range"
+              <Slider.Root
+                className="relative flex-1 min-w-0 h-4 flex touch-none select-none items-center"
                 min={0}
                 max={100}
                 step={1}
-                value={Math.round(settings.opacity * 100)}
-                onChange={handleOpacityChange}
-                className="flex-1 min-w-0 cursor-pointer"
-                aria-label={`${label} opacity slider`}
-              />
+                value={[Math.round(settings.opacity * 100)]}
+                onValueChange={handleOpacitySliderChange}
+              >
+                <Slider.Track className="relative h-1 grow rounded bg-border">
+                  <Slider.Range className="absolute h-full rounded bg-primary" />
+                </Slider.Track>
+                <Slider.Thumb
+                  className="block h-3 w-3 rounded-full bg-primary cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  aria-label={`${label} opacity slider`}
+                />
+              </Slider.Root>
               <div className="flex items-center">
                 <input
                   type="number"

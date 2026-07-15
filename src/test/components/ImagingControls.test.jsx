@@ -157,9 +157,9 @@ describe('ImagingControls', () => {
       return { onSettingChange, onDeleteVolume };
     };
 
-    it('opacity slider reflects current opacity as a 0–100 value', async () => {
+    it('opacity slider reflects current opacity as aria-valuenow (0-100)', async () => {
       await setup('MRI', makeSettings({ opacity: 0.6 }));
-      expect(screen.getByLabelText('MRI opacity slider')).toHaveValue('60');
+      expect(screen.getByLabelText('MRI opacity slider')).toHaveAttribute('aria-valuenow', '60');
     });
 
     it('opacity number input reflects current opacity as a 0–100 integer', async () => {
@@ -167,10 +167,12 @@ describe('ImagingControls', () => {
       expect(screen.getByLabelText('MRI opacity')).toHaveValue(60);
     });
 
-    it('opacity slider change calls onSettingChange with a 0–1 float value', async () => {
-      const { onSettingChange } = await setup('MRI', makeSettings({ opacity: 1.0 }));
-      fireEvent.change(screen.getByLabelText('MRI opacity slider'), { target: { value: '50' } });
-      expect(onSettingChange).toHaveBeenCalledWith(0, 'opacity', 0.5);
+    it('opacity slider arrow-key change calls onSettingChange with a 0–1 float value', async () => {
+      const { onSettingChange } = await setup('MRI', makeSettings({ opacity: 0.5 }));
+      const slider = screen.getByLabelText('MRI opacity slider');
+      slider.focus();
+      fireEvent.keyDown(slider, { key: 'ArrowRight' });
+      expect(onSettingChange).toHaveBeenCalledWith(0, 'opacity', 0.51);
     });
 
     it('opacity number input change calls onSettingChange with rounded 0–1 value', async () => {
@@ -186,10 +188,12 @@ describe('ImagingControls', () => {
       expect(onSettingChange).toHaveBeenLastCalledWith(0, 'opacity', 1);
     });
 
-    it('opacity slider change updates the number input display', async () => {
-      await setup('MRI', makeSettings({ opacity: 1.0 }));
-      fireEvent.change(screen.getByLabelText('MRI opacity slider'), { target: { value: '40' } });
-      expect(screen.getByLabelText('MRI opacity')).toHaveValue(40);
+    it('opacity slider arrow-key change updates the number input display', async () => {
+      await setup('MRI', makeSettings({ opacity: 0.5 }));
+      const slider = screen.getByLabelText('MRI opacity slider');
+      slider.focus();
+      fireEvent.keyDown(slider, { key: 'ArrowLeft' });
+      expect(screen.getByLabelText('MRI opacity')).toHaveValue(49);
     });
 
     it('colormap select reflects current colormap', async () => {
