@@ -36,6 +36,7 @@ All data processing happens entirely in your browser. No files are ever uploaded
   - Supports NIfTI (`.nii`, `.nii.gz`), MGH/MGZ, GIFTI, PLY, OBJ
   - Multi-layer support for MRI, PET, and SPECT in one view
   - Per-layer opacity, colormap (grayscale, viridis, magma, mako), inversion, and colorbar
+  - Per-layer dual-thumb Threshold slider to clip out low/high intensity values from the display range
   - Drag-to-reorder layers, with a modality subtype label shown on each volume
   - Slice view buttons for axial, coronal, sagittal, multiplanar, and 3D render
   - Switches to auto layout when maximised, restores to grid on collapse
