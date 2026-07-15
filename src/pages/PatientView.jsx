@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, FileCheck } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Niivue } from '@niivue/niivue';
 
@@ -477,7 +477,7 @@ export const PatientView = () => {
               onChannelSnapshotChange={setChannelSnapshot}
             />
           ) : (
-            <div className="h-full p-2 flex flex-col gap-2">
+            <div className="h-full p-2">
               <FileDropZone
                 onFiles={handleEegFiles}
                 accepted_formats=".vhdr,.eeg,.elc,.tsv,.mat"
@@ -485,30 +485,19 @@ export const PatientView = () => {
                 description={
                   '\tBrainVision EEG:\t\t\t.vhdr + .eeg\nElectrode Positions:\t\t.elc + .tsv\n\t\tInverse Solution:\t\t\t.mat (FieldTrip)'
                 }
-                pendingFiles={pendingEegFiles}
+                // Registered electrode-position/inverse-solution files ride along in the same checkmark list as pending EEG files.
+                pendingFiles={[
+                  ...pendingEegFiles.map((f) => ({ name: `EEG Recording: ${f.name}` })),
+                  ...(customElecPosFileName
+                    ? [{ name: `Electrode positions: ${customElecPosFileName}` }]
+                    : []),
+                  ...(inverseSolutionFileName
+                    ? [{ name: `Inverse solution: ${inverseSolutionFileName}` }]
+                    : []),
+                ]}
                 hint={eegHint}
-                className="flex-1 min-h-48"
+                className="h-full min-h-48"
               />
-              {/* Confirms electrode-position/inverse-solution files dropped here before an EEG
-                  recording exists — without this, dropping just a .elc/.tsv/.mat file gives no
-                  visible feedback that anything happened (handleEegFiles returns early since
-                  there are no EEG files to accumulate). */}
-              {(customElecPosFileName || inverseSolutionFileName) && (
-                <div className="shrink-0 flex flex-col items-center gap-1 text-xs">
-                  {customElecPosFileName && (
-                    <span className="flex items-center gap-1 text-green-600 dark:text-green-400">
-                      <FileCheck className="h-3.5 w-3.5 shrink-0" />
-                      Electrode positions: {customElecPosFileName}
-                    </span>
-                  )}
-                  {inverseSolutionFileName && (
-                    <span className="flex items-center gap-1 text-green-600 dark:text-green-400">
-                      <FileCheck className="h-3.5 w-3.5 shrink-0" />
-                      Inverse solution: {inverseSolutionFileName}
-                    </span>
-                  )}
-                </div>
-              )}
             </div>
           )
         }
