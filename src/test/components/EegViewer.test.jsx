@@ -772,6 +772,17 @@ describe('EegViewer — timeline scrubber', () => {
     expect(parseFloat(thumb().style.width)).toBeCloseTo(66.67, 1);
   });
 
+  it('never lets the thumb exceed 100% for a short, non-integer tMax (no horizontal overflow)', async () => {
+    // Regression: defaultWindowSize used Math.ceil(tMax), so a non-integer tMax like 6.01
+    // (as the synthetic demo recording has) yielded windowSize=7 > tMax, making the thumb
+    // wider than the track and overflowing the panel to the right.
+    await renderViewer(makeProvider(6.01));
+    expect(parseFloat(thumb().style.left)).toBe(0);
+    // Full recording shown, but the thumb spans at most the whole track — not more.
+    expect(parseFloat(thumb().style.width)).toBeLessThanOrEqual(100);
+    expect(parseFloat(thumb().style.width)).toBeCloseTo(100, 1);
+  });
+
   it('clicking the bar jumps start time to the clicked position', async () => {
     await renderViewer();
     vi.spyOn(scrubber(), 'getBoundingClientRect').mockReturnValue({

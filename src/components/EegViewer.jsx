@@ -119,7 +119,7 @@ const StatusLed = ({ label, fileName, disabled = false }) => {
     <span
       className={cn(
         'flex items-center gap-1.5 leading-none shrink-0 whitespace-nowrap',
-        disabled && (isDarkMode ? 'text-foreground/20': 'text-foreground/40')
+        disabled && (isDarkMode ? 'text-foreground/20' : 'text-foreground/40')
       )}
       title={title}
     >
@@ -182,7 +182,11 @@ export const EegViewer = ({
   const Y_MAX = 10 ** Y_INPUT_MAX_LENGTH - 1; // 99999 — derived from Y_INPUT_MAX_LENGTH so both stay in sync
   const Y_MIN = 10 ** -(Y_INPUT_MAX_LENGTH - 2); // 0.001 minimum range (with Y_INPUT_MAX_LENGTH char length) to prevent uPlot from breaking with a zero or negative y-range
 
-  const defaultWindowSize = tMax < 20 ? Math.ceil(tMax) : 20; // default to showing the full recording if it's shorter than 20s, otherwise start with a 20s window
+  // Default to showing the full recording if it's shorter than 20s, otherwise start with a
+  // 20s window. Math.ceil is capped at tMax so a non-integer tMax (e.g. 6.01s) can't yield a
+  // window LARGER than the recording — that made the scrubber thumb wider than 100% and
+  // overflow to the right, dragging in a horizontal scrollbar.
+  const defaultWindowSize = tMax < 20 ? Math.min(tMax, Math.ceil(tMax)) : 20;
   const [windowSize, setWindowSize] = useState(defaultWindowSize); // seconds visible in the x-range, initialized to 20s or the full recording if shorter
   const [windowSizeStr, setWindowSizeStr] = useState(String(defaultWindowSize));
 
@@ -798,12 +802,15 @@ export const EegViewer = ({
                     );
                   }}
                 >
-                  {/* Timeline thumb */}
+                  {/* Timeline thumb. left/width are clamped so the thumb can never extend past
+                      the track's right edge — decimal-rounding in updateWindowSize can leave
+                      windowSize a hair above tMax, which would otherwise push the thumb past
+                      100% and overflow the panel (horizontal scrollbar / misaligned scrubber). */}
                   <div
                     data-testid="timeline-thumb"
                     style={{
-                      left: `${(startTime / tMax) * 100}%`,
-                      width: `${(windowSize / tMax) * 100}%`,
+                      left: `${Math.max(0, Math.min(100, (startTime / tMax) * 100))}%`,
+                      width: `${Math.min(100 - (startTime / tMax) * 100, (windowSize / tMax) * 100)}%`,
                     }}
                     className={`absolute inset-y-0 cursor-grab active:cursor-grabbing ${isDragging ? 'bg-primary' : 'bg-border hover:bg-foreground'}`}
                     onMouseDown={(e) => startDrag(e, 'move')}
