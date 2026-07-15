@@ -34,6 +34,7 @@ const Y_AXIS_WIDTH = 60; // px for the y-axis area (channel name + tick space) �
 const PLOT_RIGHT_PAD = 20; // px right padding — must match in both channel plots and x-axis strip so ticks align
 const OVERDRAW = 2; // canvas height multiplier — peaks bleed ±50% into adjacent lanes instead of clipping
 const MIN_PLOT_HEIGHT = 12; // minimum px per channel lane — prevents uPlot from collapsing at high channel counts
+const MIN_CHANNEL_AREA_HEIGHT = 120; // px floor for the channel-plot scroll area. Below this the whole viewer overflows and the pane's scroll container takes over (mirrors NiiViewer's MIN_CANVAS_HEIGHT) instead of letting the x-axis/scrubber/controls/dropzone overlap
 const ICON_SIZE = 22; // default size for lucide icons in the controls, used to compute input widths
 const INPUT_MIN_CH = 3; // minimum input width in ch units
 const INPUT_EXTRA_CH = 3; // extra ch of breathing room beyond the value's character length
@@ -600,8 +601,12 @@ export const EegViewer = ({
             </div>
           </div>
         </div>
-        {/* Plot row: sidebar + channel plots side by side; flex-1 so controls sit below */}
-        <div className="flex-1 min-h-0 flex flex-row">
+        {/* Plot row: sidebar + channel plots side by side; flex-1 so controls sit below.
+            No min-h-0 here on purpose — its min-height stays content-based so the row can
+            never shrink below the channel-area floor + x-axis + scrubber + controls. When the
+            pane gets shorter than that, the viewer overflows and the pane scrolls (see the
+            MIN_CHANNEL_AREA_HEIGHT floor below) rather than the fixed rows overlapping. */}
+        <div className="flex-1 flex flex-row">
           {/* Left sidebar: Channels controls centered in the available height, Montage pinned to the bottom-left corner */}
           <div className="shrink-0 flex flex-col px-1">
             <div className="flex-1 flex flex-row items-center">
@@ -673,8 +678,11 @@ export const EegViewer = ({
 
           {/* flex-col so the scroll area and fixed x-axis strip stack vertically */}
           <div className="flex-1 min-w-0 flex flex-col">
-            {/* relative wrapper: sized by flex layout, never by content */}
-            <div className="flex-1 min-h-0 relative">
+            {/* relative wrapper: sized by flex layout, never by content. minHeight floors the
+                channel-plot area so it stays viewable; once the pane is too short to honour
+                this floor, the whole viewer overflows into the pane's scroll container instead
+                of the plots collapsing to nothing. */}
+            <div className="flex-1 relative" style={{ minHeight: MIN_CHANNEL_AREA_HEIGHT }}>
               {/* containerRef is on the scroll div itself: absolute inset-0 fixes its size so
                 content can never inflate it. scrollbar-gutter:stable always reserves the scrollbar
                 lane so contentRect.width is stable and no horizontal scrollbar ever appears */}
