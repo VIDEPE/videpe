@@ -180,8 +180,15 @@ export const NiiViewer = ({
 
   const handleSettingChange = useCallback(
     (layerIndex, key, value) => {
+      // 'cal_range' carries both fractions as a [min, max] pair in one call — the Threshold
+      // slider's drag updates cal_min and cal_max together, and firing two separate
+      // onSettingChange('cal_min', ...) / ('cal_max', ...) calls back-to-back would race: the
+      // second call's nextLayerSettings would still be built from the layerSettings closure
+      // captured before the first call's setLayerSettings took effect, silently discarding it.
+      const layerUpdate =
+        key === 'cal_range' ? { cal_min: value[0], cal_max: value[1] } : { [key]: value };
       const nextLayerSettings = layerSettings.map((layerSetting, index) =>
-        index === layerIndex ? { ...layerSetting, [key]: value } : layerSetting
+        index === layerIndex ? { ...layerSetting, ...layerUpdate } : layerSetting
       );
       setLayerSettings(nextLayerSettings);
 
@@ -204,7 +211,7 @@ export const NiiViewer = ({
             mesh.opacity = value;
             nv.updateGLVolume();
           }
-        } else if (key === 'cal_min' || key === 'cal_max') {
+        } else if (key === 'cal_min' || key === 'cal_max' || key === 'cal_range') {
           // Unlike cal_min/cal_max on an NVImage, a connectome mesh's color range is only
           // read when its color buffers are rebuilt — mutating nodeMinColor/edgeMin etc.
           // alone has no visual effect until mesh.updateMesh(gl) recomputes them.
@@ -257,7 +264,7 @@ export const NiiViewer = ({
         nvVolume.colorbarVisible = value;
         nv.opts.isColorbar = nextLayerSettings.some((layerSetting) => layerSetting.showColorbar);
         nv.updateGLVolume();
-      } else if (key === 'cal_min' || key === 'cal_max') {
+      } else if (key === 'cal_min' || key === 'cal_max' || key === 'cal_range') {
         // value alone (a 0-1 fraction) isn't a real cal_min/cal_max — it has to be resolved
         // against this volume's own data range first (see getCalBounds above).
         const { boundMin, boundMax } = getCalBounds(layer, nvVolume);

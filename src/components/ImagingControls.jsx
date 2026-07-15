@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import * as Slider from '@radix-ui/react-slider';
 import { Eye, EyeOff, ChevronDown, ChevronUp, GripVertical } from 'lucide-react';
 import { DragDropProvider } from '@dnd-kit/react';
 import { useSortable } from '@dnd-kit/react/sortable';
@@ -103,6 +104,18 @@ function SortableSettingsCard({
         'cal_max',
         Math.max(Math.max(0, Math.min(100, Math.round(val))) / 100, settings.cal_min)
       );
+  };
+
+  // Radix's Slider handles the min/max clamp itself (thumbs can't cross), so unlike the number
+  // inputs above there's no manual clamping to do here — just forward both values and mirror
+  // them into the display strings. Sent as a single 'cal_range' update rather than two separate
+  // 'cal_min'/'cal_max' calls — NiiViewer's handleSettingChange applies each call against a
+  // layerSettings snapshot taken at call time, so two synchronous calls in a row would have the
+  // second one silently discard the first (see the 'cal_range' comment in NiiViewer.jsx).
+  const handleThresholdSliderChange = ([min, max]) => {
+    setCalMinStr(String(min));
+    setCalMaxStr(String(max));
+    onSettingChange(index, 'cal_range', [min / 100, max / 100]);
   };
 
   // Blur-time commit: forces a valid value and clamps against the sibling thumb, same as the
@@ -241,26 +254,26 @@ function SortableSettingsCard({
                   />
                   <span className="text-foreground pl-0.5 select-none pointer-events-none">%</span>
                 </div>
-                <input
-                  type="range"
+                <Slider.Root
+                  className="relative flex-1 min-w-0 h-4 flex touch-none select-none items-center"
                   min={0}
-                  max={Math.round(settings.cal_max * 100)}
-                  step={1}
-                  value={Math.round(settings.cal_min * 100)}
-                  onChange={handleCalMinChange}
-                  className="flex-1 min-w-0 cursor-pointer"
-                  aria-label={`${label} Threshold minimum slider`}
-                />
-                <input
-                  type="range"
-                  min={Math.round(settings.cal_min * 100)}
                   max={100}
                   step={1}
-                  value={Math.round(settings.cal_max * 100)}
-                  onChange={handleCalMaxChange}
-                  className="flex-1 min-w-0 cursor-pointer"
-                  aria-label={`${label} Threshold maximum slider`}
-                />
+                  value={[Math.round(settings.cal_min * 100), Math.round(settings.cal_max * 100)]}
+                  onValueChange={handleThresholdSliderChange}
+                >
+                  <Slider.Track className="relative h-1 grow rounded bg-border">
+                    <Slider.Range className="absolute h-full rounded bg-primary" />
+                  </Slider.Track>
+                  <Slider.Thumb
+                    className="block h-3 w-3 rounded-full bg-primary cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    aria-label={`${label} Threshold minimum slider`}
+                  />
+                  <Slider.Thumb
+                    className="block h-3 w-3 rounded-full bg-primary cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    aria-label={`${label} Threshold maximum slider`}
+                  />
+                </Slider.Root>
                 <div className="flex items-center">
                   <input
                     type="number"

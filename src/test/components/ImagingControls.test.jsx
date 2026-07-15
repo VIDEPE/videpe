@@ -262,20 +262,34 @@ describe('ImagingControls', () => {
       return { onSettingChange };
     };
 
-    it('min/max sliders and number inputs reflect current cal_min/cal_max as 0-100 values', async () => {
+    it('min/max sliders reflect current cal_min/cal_max as aria-valuenow (0-100)', async () => {
       await setup(makeSettings({ cal_min: 0.3, cal_max: 0.8 }));
-      expect(screen.getByLabelText('MRI Threshold minimum slider')).toHaveValue('30');
+      expect(screen.getByLabelText('MRI Threshold minimum slider')).toHaveAttribute(
+        'aria-valuenow',
+        '30'
+      );
       expect(screen.getByLabelText('MRI Threshold minimum')).toHaveValue(30);
-      expect(screen.getByLabelText('MRI Threshold maximum slider')).toHaveValue('80');
+      expect(screen.getByLabelText('MRI Threshold maximum slider')).toHaveAttribute(
+        'aria-valuenow',
+        '80'
+      );
       expect(screen.getByLabelText('MRI Threshold maximum')).toHaveValue(80);
     });
 
-    it('min slider change calls onSettingChange with a 0-1 fraction', async () => {
-      const { onSettingChange } = await setup(makeSettings({ cal_min: 0, cal_max: 1 }));
-      fireEvent.change(screen.getByLabelText('MRI Threshold minimum slider'), {
-        target: { value: '40' },
-      });
-      expect(onSettingChange).toHaveBeenCalledWith(0, 'cal_min', 0.4);
+    it('min slider arrow-key change calls onSettingChange once with both fractions as a cal_range pair', async () => {
+      const { onSettingChange } = await setup(makeSettings({ cal_min: 0.2, cal_max: 1 }));
+      const minThumb = screen.getByLabelText('MRI Threshold minimum slider');
+      minThumb.focus();
+      fireEvent.keyDown(minThumb, { key: 'ArrowRight' });
+      expect(onSettingChange).toHaveBeenCalledWith(0, 'cal_range', [0.21, 1]);
+    });
+
+    it('max slider arrow-key change calls onSettingChange once with both fractions as a cal_range pair', async () => {
+      const { onSettingChange } = await setup(makeSettings({ cal_min: 0, cal_max: 0.7 }));
+      const maxThumb = screen.getByLabelText('MRI Threshold maximum slider');
+      maxThumb.focus();
+      fireEvent.keyDown(maxThumb, { key: 'ArrowLeft' });
+      expect(onSettingChange).toHaveBeenCalledWith(0, 'cal_range', [0, 0.69]);
     });
 
     it('max number input change calls onSettingChange with a 0-1 fraction', async () => {
@@ -303,14 +317,30 @@ describe('ImagingControls', () => {
       expect(onSettingChange).toHaveBeenLastCalledWith(0, 'cal_min', 0.5);
     });
 
-    it('min slider max attribute tracks the current cal_max so it cannot be dragged past it', async () => {
-      await setup(makeSettings({ cal_min: 0.2, cal_max: 0.6 }));
-      expect(screen.getByLabelText('MRI Threshold minimum slider')).toHaveAttribute('max', '60');
+    it('the min thumb cannot be moved past the current cal_max (Radix prevents thumbs crossing)', async () => {
+      const { onSettingChange } = await setup(makeSettings({ cal_min: 0.2, cal_max: 0.21 }));
+      const minThumb = screen.getByLabelText('MRI Threshold minimum slider');
+      minThumb.focus();
+      fireEvent.keyDown(minThumb, { key: 'ArrowRight' });
+      fireEvent.keyDown(minThumb, { key: 'ArrowRight' });
+      fireEvent.keyDown(minThumb, { key: 'ArrowRight' });
+      const calMinValues = onSettingChange.mock.calls
+        .filter(([, key]) => key === 'cal_range')
+        .map(([, , [min]]) => min);
+      expect(Math.max(...calMinValues)).toBeLessThanOrEqual(0.21);
     });
 
-    it('max slider min attribute tracks the current cal_min so it cannot be dragged below it', async () => {
-      await setup(makeSettings({ cal_min: 0.2, cal_max: 0.6 }));
-      expect(screen.getByLabelText('MRI Threshold maximum slider')).toHaveAttribute('min', '20');
+    it('the max thumb cannot be moved below the current cal_min (Radix prevents thumbs crossing)', async () => {
+      const { onSettingChange } = await setup(makeSettings({ cal_min: 0.2, cal_max: 0.21 }));
+      const maxThumb = screen.getByLabelText('MRI Threshold maximum slider');
+      maxThumb.focus();
+      fireEvent.keyDown(maxThumb, { key: 'ArrowLeft' });
+      fireEvent.keyDown(maxThumb, { key: 'ArrowLeft' });
+      fireEvent.keyDown(maxThumb, { key: 'ArrowLeft' });
+      const calMaxValues = onSettingChange.mock.calls
+        .filter(([, key]) => key === 'cal_range')
+        .map(([, , [, max]]) => max);
+      expect(Math.min(...calMaxValues)).toBeGreaterThanOrEqual(0.2);
     });
 
     it('does not render Threshold controls for the intracranial electrode connectome layer', async () => {

@@ -468,14 +468,20 @@ describe('NiiViewer', () => {
   });
 
   describe('canvas aspect ratio layout', () => {
-    let resizeCallback;
+    // Not just NiiViewer's own canvas-size observer — Radix Slider's Thumb (used by the
+    // Threshold control) also constructs its own ResizeObserver to measure itself. Capture
+    // every instance and broadcast to all of them, rather than assuming there's only one.
+    let resizeCallbacks;
+    const resizeCallback = (entries) => resizeCallbacks.forEach((cb) => cb(entries));
 
     beforeEach(() => {
+      resizeCallbacks = [];
       global.ResizeObserver = class {
         constructor(cb) {
-          resizeCallback = cb;
+          resizeCallbacks.push(cb);
         }
         observe() {}
+        unobserve() {}
         disconnect() {}
       };
       // shouldAdvanceTime keeps real-time-driven helpers like waitFor working alongside fake timers
