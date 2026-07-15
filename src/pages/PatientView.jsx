@@ -152,6 +152,9 @@ export const PatientView = () => {
       if (!electrodes.length) return; // ignore empty or unparseable files
       setCustomElectrodes(electrodes);
       setCustomElecPosFileName(file.name.replace(/\.[^.]+$/, ''));
+      // Confirm the load — this dropzone shows no state of its own in compact mode, so
+      // without this the file appears to vanish and the user can't tell it was accepted.
+      toast.success(`Loaded ${electrodes.length} electrode positions from ${file.name}`);
     } catch (err) {
       toast.error(err.message);
     }
@@ -162,6 +165,9 @@ export const PatientView = () => {
       const parsedInverseSolution = await parseInverseSolutionFieldtrip(file);
       setInverseSolution(parsedInverseSolution);
       setInverseSolutionFileName(file.name.replace(/\.[^.]+$/, ''));
+      // Confirm the load — same reasoning as electrode positions above: the compact
+      // dropzone gives no visible feedback of its own that the file was accepted.
+      toast.success(`Loaded inverse solution from ${file.name}`);
       // ESI is only valid under a common average reference — force it and let the user
       // know why, rather than silently computing nonsensical source power.
       setMontage('average');

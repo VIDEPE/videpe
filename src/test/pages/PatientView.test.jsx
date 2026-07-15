@@ -668,6 +668,18 @@ describe('PatientView — inverse solution files', () => {
     });
   });
 
+  it('shows a success toast confirming a loaded inverse solution file', async () => {
+    toast.success.mockClear();
+    renderPatientView();
+    const file = makeFile('sub-19_meth-eloreta_desc-nonorm_inversefilters.mat');
+
+    await act(async () => {
+      await getEegOnFiles()([file]);
+    });
+
+    expect(toast.success).toHaveBeenCalledWith(expect.stringMatching(/inverse solution/i));
+  });
+
   it('processes both an EEG file and an inverse solution file dropped together', async () => {
     checkEegFiles.mockReturnValue({
       formatName: 'BrainVision',
