@@ -183,10 +183,12 @@ export const EegViewer = ({
   const Y_MIN = 10 ** -(Y_INPUT_MAX_LENGTH - 2); // 0.001 minimum range (with Y_INPUT_MAX_LENGTH char length) to prevent uPlot from breaking with a zero or negative y-range
 
   // Default to showing the full recording if it's shorter than 20s, otherwise start with a
-  // 20s window. Math.ceil is capped at tMax so a non-integer tMax (e.g. 6.01s) can't yield a
-  // window LARGER than the recording — that made the scrubber thumb wider than 100% and
-  // overflow to the right, dragging in a horizontal scrollbar.
-  const defaultWindowSize = tMax < 20 ? Math.min(tMax, Math.ceil(tMax)) : 20;
+  // 20s window. For a short recording, floor tMax to 1 decimal: this keeps the window ≤ tMax
+  // (a window LARGER than the recording made the scrubber thumb exceed 100% and overflow to
+  // the right, dragging in a horizontal scrollbar) AND matches the 1-decimal value the input
+  // snaps to on blur, so a non-integer tMax (e.g. 6.01171875s) shows a clean "6" not the full
+  // float. floor (not round) so rounding can never nudge it back above tMax.
+  const defaultWindowSize = tMax < 20 ? Math.floor(tMax * 10) / 10 : 20;
   const [windowSize, setWindowSize] = useState(defaultWindowSize); // seconds visible in the x-range, initialized to 20s or the full recording if shorter
   const [windowSizeStr, setWindowSizeStr] = useState(String(defaultWindowSize));
 
