@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Eye, EyeOff, ChevronDown, ChevronUp, GripVertical } from 'lucide-react';
 import { DragDropProvider } from '@dnd-kit/react';
 import { useSortable } from '@dnd-kit/react/sortable';
@@ -55,15 +55,56 @@ function SortableSettingsCard({
 
   // Local string state — allows typing a partial value (e.g. empty string) without breaking the numeric opacity
   const [opacityStr, setOpacityStr] = useState(() => String(Math.round(settings.opacity * 100)));
-  // Sync when opacity changes externally (e.g. slider drag, visibility toggle, data reset)
-  useEffect(() => {
-    setOpacityStr(String(Math.round(settings.opacity * 100)));
-  }, [settings.opacity]);
 
-  const updateOpacity = (raw) => {
+  // Shared by both the slider and the number field.
+  // Stays permissive (mirrors raw text, forwards only once parseable) for the number field's sake 
+  // CommitOpacity below is the backstop that normalizes whatever is in the number field once it loses focus.
+  const handleOpacityChange = (e) => {
+    setOpacityStr(e.target.value);
+    const val = Number(e.target.value);
+    if (e.target.value !== '' && !isNaN(val))
+      onSettingChange(index, 'opacity', Math.max(0, Math.min(100, Math.round(val))) / 100);
+  };
+
+  // Blur-time commit: unlike the typing handler above, this always forces a valid
+  // 0-100 value and snaps the display back, however invalid what's currently shown is.
+  const commitOpacity = (raw) => {
     const clamped = Math.max(0, Math.min(100, Math.round(Number(raw) || 0)));
     setOpacityStr(String(clamped));
     onSettingChange(index, 'opacity', clamped / 100);
+  };
+
+  // Local string state — allows typing a partial value (e.g. empty string) without breaking the numeric opacity
+  const [calMinStr, setCalMinStr] = useState(() => String(Math.round(settings.cal_min * 100)));
+  const [calMaxStr, setCalMaxStr] = useState(() => String(Math.round(settings.cal_max * 100)));
+
+  // Shared by both the slider and the number field.
+  // Stays permissive (mirrors raw text, forwards only once parseable) for the number field's sake 
+  // CommitOpacity below is the backstop that normalizes whatever is in the number field once it loses focus.
+  const handleCalMinChange = (e) => {
+    setCalMinStr(e.target.value);
+    const val = Number(e.target.value);
+    if (e.target.value !== '' && !isNaN(val))
+      onSettingChange(index, 'cal_min', Math.max(0, Math.min(100, Math.round(val))) / 100);
+  };
+  const handleCalMaxChange = (e) => {
+    setCalMaxStr(e.target.value);
+    const val = Number(e.target.value);
+    if (e.target.value !== '' && !isNaN(val))
+      onSettingChange(index, 'cal_max', Math.max(0, Math.min(100, Math.round(val))) / 100);
+  };
+
+  // Blur-time commit: unlike the typing handler above, this always forces a valid
+  // 0-100 value and snaps the display back, however invalid what's currently shown is.
+  const commitCalMin = (raw) => {
+    const clamped = Math.max(0, Math.min(100, Math.round(Number(raw) || 0)));
+    setCalMinStr(String(clamped));
+    onSettingChange(index, 'cal_min', clamped / 100);
+  };
+  const commitCalMax = (raw) => {
+    const clamped = Math.max(0, Math.min(100, Math.round(Number(raw) || 0)));
+    setCalMaxStr(String(clamped));
+    onSettingChange(index, 'cal_max', clamped / 100);
   };
 
   return (
@@ -136,14 +177,10 @@ function SortableSettingsCard({
               <input
                 type="range"
                 min={0}
-                max={1}
-                step={0.01}
-                value={settings.opacity}
-                onChange={(e) => {
-                  const val = parseFloat(e.target.value);
-                  setOpacityStr(String(Math.round(val * 100)));
-                  onSettingChange(index, 'opacity', val);
-                }}
+                max={100}
+                step={1}
+                value={Math.round(settings.opacity * 100)}
+                onChange={handleOpacityChange}
                 className="flex-1 min-w-0 cursor-pointer"
                 aria-label={`${label} opacity slider`}
               />
@@ -154,22 +191,60 @@ function SortableSettingsCard({
                   min={0}
                   max={100}
                   step={1}
-                  style={{ width: 'calc(3ch + 2rem)' }}
-                  onChange={(e) => {
-                    setOpacityStr(e.target.value);
-                    const val = Number(e.target.value);
-                    if (e.target.value !== '' && !isNaN(val))
-                      onSettingChange(
-                        index,
-                        'opacity',
-                        Math.max(0, Math.min(100, Math.round(val))) / 100
-                      );
-                  }}
-                  onBlur={() => updateOpacity(opacityStr)}
+                  style={{ width: 'calc(3ch + 1.5rem)' }}
+                  onChange={handleOpacityChange}
+                  onBlur={() => commitOpacity(opacityStr)}
                   className="text-center border border-border rounded px-1 py-0.5 text-xs bg-background text-foreground [appearance:textfield]"
                   aria-label={`${label} opacity`}
                 />
-                <span className="text-foreground select-none pointer-events-none">%</span>
+                <span className="text-foreground pl-0.5 select-none pointer-events-none">%</span>
+              </div>
+            </div>
+
+            {/* Threshold */}
+            <div className="flex items-center gap-3">
+              <span className="w-20 shrink-0 text-foreground select-none pointer-events-none">
+                Threshold
+              </span>
+              <div className="flex items-center">
+                 <input
+                  type="number"
+                  value={calMinStr}
+                  min={0}
+                  max={100}
+                  step={1}
+                  style={{ width: 'calc(3ch + 1.5rem)' }}
+                  onChange={handleCalMinChange}
+                  onBlur={() => commitCalMin(calMinStr)}
+                  className="text-center border border-border rounded px-1 py-0.5 text-xs bg-background text-foreground [appearance:textfield]"
+                  aria-label={`${label} Threshold minimum`}
+                />
+                <span className="text-foreground pl-0.5 select-none pointer-events-none">%</span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={1}
+                value={Math.round(settings.cal_min * 100)}
+                onChange={handleCalMinChange}
+                className="flex-1 min-w-0 cursor-pointer"
+                aria-label={`${label} Threshold minimum slider`}
+              />
+                 <div className="flex items-center">
+                 <input
+                  type="number"
+                  value={calMaxStr}
+                  min={0}
+                  max={100}
+                  step={1}
+                  style={{ width: 'calc(3ch + 1.5rem)' }}
+                  onChange={handleCalMaxChange}
+                  onBlur={() => commitCalMax(calMaxStr)}
+                  className="text-center border border-border rounded px-1 py-0.5 text-xs bg-background text-foreground [appearance:textfield]"
+                  aria-label={`${label} Threshold maximum`}
+                />
+                <span className="text-foreground pl-0.5 select-none pointer-events-none">%</span>
               </div>
             </div>
 
