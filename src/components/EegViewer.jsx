@@ -208,15 +208,10 @@ export const EegViewer = ({
         setStandard1005Matched(matchChannelsToPositions(channelNames, parsedElectrodes).matched);
         const detected = detectIsIntracranial(channelNames, parsedElectrodes) ? 'ieeg' : 'eeg';
         onRecordingTypeChange?.(detected);
-        toast(
-          detected === 'ieeg'
-            ? 'iEEG recording detected'
-            : 'EEG recording detected',
-          {
-            id: RECORDING_TYPE_TOAST_ID,
-            icon: '🔍',
-          }
-        );
+        toast(detected === 'ieeg' ? 'iEEG recording detected' : 'EEG recording detected', {
+          id: RECORDING_TYPE_TOAST_ID,
+          icon: '🔍',
+        });
       })
       .catch(() => {}); // silently ignore if file unavailable (e.g. in tests without the asset)
   }, [channelNames, onRecordingTypeChange]);

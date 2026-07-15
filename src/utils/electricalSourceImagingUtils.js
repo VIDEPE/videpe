@@ -14,10 +14,6 @@ import {
   matrixMul,
 } from '@/utils/arrayAndMatrixMathUtils';
 
-// Placeholder threshold for the ESI volume's cal_min (see convertSourcePowersToVolume) until
-// it becomes a user-adjustable slider.
-const VOLUME_CAL_MIN_FRACTION = 0.01;
-
 // ─── Grid structure ───────────────────────────────────────────────────────────
 //
 // Computed once, at parse time (see parseInverseSolutionFieldtrip.js) — none of these
@@ -286,14 +282,17 @@ export function buildSourceVolumeGrid(sourceVolumeIndices, sourcePowers, gridDim
   return sourceVolumeGrid;
 }
 
+// boundMin/boundMax are the outer limits of this layer's Threshold slider, not literal
+// cal_min/cal_max values — NiiViewer resolves a user-chosen 0-1 fraction against them (see
+// getCalBounds) before applying anything to NiiVue's node/edge color range.
 export function convertSourcePowersToConnectome(insideSourcePositions, sourcePowers) {
-  let calMax = 1e-9;
+  let boundMax = 1e-9;
   for (let i = 0; i < sourcePowers.length; i++) {
-    if (sourcePowers[i] > calMax) calMax = sourcePowers[i];
+    if (sourcePowers[i] > boundMax) boundMax = sourcePowers[i];
   }
   // Source power is always non-negative (squared magnitude) — 0 is a meaningful, fixed
   // floor for the color scale, not just the sample minimum.
-  const calMin = 0;
+  const boundMin = 0;
 
   const nodes = insideSourcePositions.map((pos, i) => ({
     name: `esi-src-${i}`,
@@ -301,7 +300,7 @@ export function convertSourcePowersToConnectome(insideSourcePositions, sourcePow
     y: pos[1],
     z: pos[2],
     colorValue: sourcePowers[i],
-    sizeValue: sourcePowers[i] / calMax, // 0 → invisible, 1 → full nodeScale size
+    sizeValue: sourcePowers[i] / boundMax, // 0 → invisible, 1 → full nodeScale size
   }));
 
   return {
@@ -311,8 +310,8 @@ export function convertSourcePowersToConnectome(insideSourcePositions, sourcePow
     kind: 'connectome',
     nodes,
     edges: [],
-    calMin,
-    calMax,
+    boundMin,
+    boundMax,
   };
 }
 
@@ -341,17 +340,16 @@ export function convertSourcePowersToVolume(
     sourceVolumeGrid
   ); // returns Uint8Array directly, no Promise;
 
-  let calMax = 1e-9;
+  let boundMax = 1e-9;
   for (let i = 0; i < sourcePowers.length; i++) {
-    if (sourcePowers[i] > calMax) calMax = sourcePowers[i];
+    if (sourcePowers[i] > boundMax) boundMax = sourcePowers[i];
   }
-  // Unlike the connectome (where calMin=0 is fine — it only feeds a color-mapping range),
-  // the volume's cal_min doubles as NiiVue's transparent-below-threshold cutoff: its
-  // ZERO_TO_MAX_TRANSPARENT_BELOW_MIN shader only ramps voxels toward transparent when
-  // cal_min > 0 (alpha *= (f/cal_min)²) — a literal 0 disables that entirely, leaving the
-  // whole volume opaque. A fixed fraction of calMax is a placeholder threshold until this
-  // becomes a user-adjustable slider.
-  const calMin = VOLUME_CAL_MIN_FRACTION * calMax;
+  // 0 is a meaningful, fixed floor — same as the connectome above. NiiVue's
+  // ZERO_TO_MAX_TRANSPARENT_BELOW_MIN shader only ramps voxels toward transparent when the
+  // applied cal_min > 0 (alpha *= (f/cal_min)²) — getInitialLayerSettings gives the ESI layer
+  // a small positive starting fraction of this bound for that reason, rather than this bound
+  // itself being non-zero.
+  const boundMin = 0;
 
   return {
     url: ESI_LAYER_URL,
@@ -360,8 +358,8 @@ export function convertSourcePowersToVolume(
     type: 'Electrical Source Imaging',
     kind: 'volume',
     edges: [],
-    calMin,
-    calMax,
+    boundMin,
+    boundMax,
   };
 }
 
