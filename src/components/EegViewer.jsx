@@ -1016,7 +1016,7 @@ export const EegViewer = ({
             if (elecFile) onElecPosFile?.(elecFile);
           }}
           accepted_formats=".elc,.tsv,.mat"
-          label="Browse / Drop electrode positions / inverse solution"
+          label="Browse or drop electrode positions / inverse solution"
           compact
           className="shrink-0 mb-1"
         >
