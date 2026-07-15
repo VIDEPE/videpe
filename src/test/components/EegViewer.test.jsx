@@ -102,7 +102,7 @@ beforeEach(() => {
   global.fetch = vi.fn().mockResolvedValue({ text: () => Promise.resolve(MOCK_ELC) });
 });
 
-const INITIAL_Y_SCALE = 10; // must match the yScale useState default in EegViewer
+const INITIAL_Y_SCALE = 0.15; // must match the yScale useState default in EegViewer
 const OVERDRAW = 2; // must match the OVERDRAW constant in EegViewer
 
 const channelNames = ['EEG1', 'EEG2', 'EEG3'];
