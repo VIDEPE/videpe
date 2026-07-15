@@ -11,6 +11,8 @@ const makeSettings = (overrides = {}) => ({
   colormap: 'gray',
   invert: false,
   showColorbar: false,
+  cal_min: 0,
+  cal_max: 1,
   ...overrides,
 });
 
@@ -155,9 +157,9 @@ describe('ImagingControls', () => {
       return { onSettingChange, onDeleteVolume };
     };
 
-    it('opacity slider reflects current opacity as a 0–1 value', async () => {
+    it('opacity slider reflects current opacity as a 0–100 value', async () => {
       await setup('MRI', makeSettings({ opacity: 0.6 }));
-      expect(screen.getByLabelText('MRI opacity slider')).toHaveValue('0.6');
+      expect(screen.getByLabelText('MRI opacity slider')).toHaveValue('60');
     });
 
     it('opacity number input reflects current opacity as a 0–100 integer', async () => {
@@ -165,9 +167,9 @@ describe('ImagingControls', () => {
       expect(screen.getByLabelText('MRI opacity')).toHaveValue(60);
     });
 
-    it('opacity slider change calls onSettingChange with 0–1 float value', async () => {
+    it('opacity slider change calls onSettingChange with a 0–1 float value', async () => {
       const { onSettingChange } = await setup('MRI', makeSettings({ opacity: 1.0 }));
-      fireEvent.change(screen.getByLabelText('MRI opacity slider'), { target: { value: '0.5' } });
+      fireEvent.change(screen.getByLabelText('MRI opacity slider'), { target: { value: '50' } });
       expect(onSettingChange).toHaveBeenCalledWith(0, 'opacity', 0.5);
     });
 
@@ -186,7 +188,7 @@ describe('ImagingControls', () => {
 
     it('opacity slider change updates the number input display', async () => {
       await setup('MRI', makeSettings({ opacity: 1.0 }));
-      fireEvent.change(screen.getByLabelText('MRI opacity slider'), { target: { value: '0.4' } });
+      fireEvent.change(screen.getByLabelText('MRI opacity slider'), { target: { value: '40' } });
       expect(screen.getByLabelText('MRI opacity')).toHaveValue(40);
     });
 
@@ -250,6 +252,104 @@ describe('ImagingControls', () => {
       await userEvent.click(screen.getByRole('button', { name: 'Close PET volume' }));
       // expect onDeleteVolume to be called with index 1
       expect(onDeleteVolume).toHaveBeenCalledWith(1);
+    });
+  });
+
+  describe('threshold', () => {
+    const setup = async (settings, onSettingChange = vi.fn()) => {
+      renderControls([makeVolume('MRI', '/mri.nii')], [settings], onSettingChange);
+      await userEvent.click(screen.getByRole('button', { name: 'Expand MRI controls' }));
+      return { onSettingChange };
+    };
+
+    it('min/max sliders and number inputs reflect current cal_min/cal_max as 0-100 values', async () => {
+      await setup(makeSettings({ cal_min: 0.3, cal_max: 0.8 }));
+      expect(screen.getByLabelText('MRI Threshold minimum slider')).toHaveValue('30');
+      expect(screen.getByLabelText('MRI Threshold minimum')).toHaveValue(30);
+      expect(screen.getByLabelText('MRI Threshold maximum slider')).toHaveValue('80');
+      expect(screen.getByLabelText('MRI Threshold maximum')).toHaveValue(80);
+    });
+
+    it('min slider change calls onSettingChange with a 0-1 fraction', async () => {
+      const { onSettingChange } = await setup(makeSettings({ cal_min: 0, cal_max: 1 }));
+      fireEvent.change(screen.getByLabelText('MRI Threshold minimum slider'), {
+        target: { value: '40' },
+      });
+      expect(onSettingChange).toHaveBeenCalledWith(0, 'cal_min', 0.4);
+    });
+
+    it('max number input change calls onSettingChange with a 0-1 fraction', async () => {
+      const { onSettingChange } = await setup(makeSettings({ cal_min: 0, cal_max: 1 }));
+      fireEvent.change(screen.getByLabelText('MRI Threshold maximum'), { target: { value: '70' } });
+      expect(onSettingChange).toHaveBeenCalledWith(0, 'cal_max', 0.7);
+    });
+
+    it('min number input clamps to the current cal_max rather than exceeding it', async () => {
+      const { onSettingChange } = await setup(makeSettings({ cal_min: 0.3, cal_max: 0.5 }));
+      fireEvent.change(screen.getByLabelText('MRI Threshold minimum'), { target: { value: '80' } });
+      expect(onSettingChange).toHaveBeenCalledWith(0, 'cal_min', 0.5);
+    });
+
+    it('max number input clamps to the current cal_min rather than going below it', async () => {
+      const { onSettingChange } = await setup(makeSettings({ cal_min: 0.4, cal_max: 0.7 }));
+      fireEvent.change(screen.getByLabelText('MRI Threshold maximum'), { target: { value: '10' } });
+      expect(onSettingChange).toHaveBeenCalledWith(0, 'cal_max', 0.4);
+    });
+
+    it('min number input blur clamps to the current cal_max', async () => {
+      const { onSettingChange } = await setup(makeSettings({ cal_min: 0.3, cal_max: 0.5 }));
+      fireEvent.change(screen.getByLabelText('MRI Threshold minimum'), { target: { value: '90' } });
+      fireEvent.blur(screen.getByLabelText('MRI Threshold minimum'));
+      expect(onSettingChange).toHaveBeenLastCalledWith(0, 'cal_min', 0.5);
+    });
+
+    it('min slider max attribute tracks the current cal_max so it cannot be dragged past it', async () => {
+      await setup(makeSettings({ cal_min: 0.2, cal_max: 0.6 }));
+      expect(screen.getByLabelText('MRI Threshold minimum slider')).toHaveAttribute('max', '60');
+    });
+
+    it('max slider min attribute tracks the current cal_min so it cannot be dragged below it', async () => {
+      await setup(makeSettings({ cal_min: 0.2, cal_max: 0.6 }));
+      expect(screen.getByLabelText('MRI Threshold maximum slider')).toHaveAttribute('min', '20');
+    });
+
+    it('does not render Threshold controls for the intracranial electrode connectome layer', async () => {
+      renderControls(
+        [
+          {
+            kind: 'connectome',
+            type: 'Intracranial',
+            subtype: 'Electrodes',
+            url: '__intracranial-electrodes__',
+          },
+        ],
+        [makeSettings()]
+      );
+      await userEvent.click(
+        screen.getByRole('button', { name: 'Expand Intracranial - Electrodes controls' })
+      );
+      expect(
+        screen.queryByLabelText('Intracranial - Electrodes Threshold minimum')
+      ).not.toBeInTheDocument();
+    });
+
+    it('renders Threshold controls for the ESI layer even in connectome mode', async () => {
+      renderControls(
+        [
+          {
+            kind: 'connectome',
+            type: 'Electrical Source Imaging',
+            url: '__esi-source-power__',
+          },
+        ],
+        [makeSettings()]
+      );
+      await userEvent.click(
+        screen.getByRole('button', { name: 'Expand Electrical Source Imaging controls' })
+      );
+      expect(
+        screen.getByLabelText('Electrical Source Imaging Threshold minimum')
+      ).toBeInTheDocument();
     });
   });
 

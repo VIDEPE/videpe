@@ -53,6 +53,8 @@ export const getInitialLayerSettings = (layers, startIndex = 0) =>
     invert: false,
     showColorbar: false,
     isEsiVolume: true,
+    cal_min: 0.01,
+    cal_max: 1,
   }));
 
 // Detects imaging modality from a filename using BIDS suffix first, then keyword fallback.

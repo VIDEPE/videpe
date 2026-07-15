@@ -57,7 +57,7 @@ function SortableSettingsCard({
   const [opacityStr, setOpacityStr] = useState(() => String(Math.round(settings.opacity * 100)));
 
   // Shared by both the slider and the number field.
-  // Stays permissive (mirrors raw text, forwards only once parseable) for the number field's sake 
+  // Stays permissive (mirrors raw text, forwards only once parseable) for the number field's sake
   // CommitOpacity below is the backstop that normalizes whatever is in the number field once it loses focus.
   const handleOpacityChange = (e) => {
     setOpacityStr(e.target.value);
@@ -74,37 +74,54 @@ function SortableSettingsCard({
     onSettingChange(index, 'opacity', clamped / 100);
   };
 
-  // Local string state — allows typing a partial value (e.g. empty string) without breaking the numeric opacity
+  // Local string state — allows typing a partial value (e.g. empty string) without breaking
+  // the numeric threshold. cal_min/cal_max are 0-1 fractions of this layer's own data range
+  // (see getCalBounds in NiiViewer.jsx), same "fraction, not absolute value" convention as
+  // opacity — just resolved against a different range once it reaches NiiVue.
   const [calMinStr, setCalMinStr] = useState(() => String(Math.round(settings.cal_min * 100)));
   const [calMaxStr, setCalMaxStr] = useState(() => String(Math.round(settings.cal_max * 100)));
 
-  // Shared by both the slider and the number field.
-  // Stays permissive (mirrors raw text, forwards only once parseable) for the number field's sake 
-  // CommitOpacity below is the backstop that normalizes whatever is in the number field once it loses focus.
+  // Same permissive-while-typing split as opacity above, plus one extra constraint: cal_min
+  // can never exceed cal_max (and vice versa). Clamping against the sibling thumb's current
+  // committed value — not just the raw 0-100 range — is what enforces that.
   const handleCalMinChange = (e) => {
     setCalMinStr(e.target.value);
     const val = Number(e.target.value);
     if (e.target.value !== '' && !isNaN(val))
-      onSettingChange(index, 'cal_min', Math.max(0, Math.min(100, Math.round(val))) / 100);
+      onSettingChange(
+        index,
+        'cal_min',
+        Math.min(Math.max(0, Math.min(100, Math.round(val))) / 100, settings.cal_max)
+      );
   };
   const handleCalMaxChange = (e) => {
     setCalMaxStr(e.target.value);
     const val = Number(e.target.value);
     if (e.target.value !== '' && !isNaN(val))
-      onSettingChange(index, 'cal_max', Math.max(0, Math.min(100, Math.round(val))) / 100);
+      onSettingChange(
+        index,
+        'cal_max',
+        Math.max(Math.max(0, Math.min(100, Math.round(val))) / 100, settings.cal_min)
+      );
   };
 
-  // Blur-time commit: unlike the typing handler above, this always forces a valid
-  // 0-100 value and snaps the display back, however invalid what's currently shown is.
+  // Blur-time commit: forces a valid value and clamps against the sibling thumb, same as the
+  // typing handlers above, then snaps the display back regardless of what was left in the box.
   const commitCalMin = (raw) => {
-    const clamped = Math.max(0, Math.min(100, Math.round(Number(raw) || 0)));
-    setCalMinStr(String(clamped));
-    onSettingChange(index, 'cal_min', clamped / 100);
+    const clamped = Math.min(
+      Math.max(0, Math.min(100, Math.round(Number(raw) || 0))) / 100,
+      settings.cal_max
+    );
+    setCalMinStr(String(Math.round(clamped * 100)));
+    onSettingChange(index, 'cal_min', clamped);
   };
   const commitCalMax = (raw) => {
-    const clamped = Math.max(0, Math.min(100, Math.round(Number(raw) || 0)));
-    setCalMaxStr(String(clamped));
-    onSettingChange(index, 'cal_max', clamped / 100);
+    const clamped = Math.max(
+      Math.max(0, Math.min(100, Math.round(Number(raw) || 0))) / 100,
+      settings.cal_min
+    );
+    setCalMaxStr(String(Math.round(clamped * 100)));
+    onSettingChange(index, 'cal_max', clamped);
   };
 
   return (
@@ -201,52 +218,66 @@ function SortableSettingsCard({
               </div>
             </div>
 
-            {/* Threshold */}
-            <div className="flex items-center gap-3">
-              <span className="w-20 shrink-0 text-foreground select-none pointer-events-none">
-                Threshold
-              </span>
-              <div className="flex items-center">
-                 <input
-                  type="number"
-                  value={calMinStr}
+            {/* Threshold — meaningful for image volumes and the ESI layer (in either mode,
+                since it colors its mesh from these same fractions), but not for the
+                intracranial electrode connectome, which has no user-adjustable range. */}
+            {(!isConnectome || isEsiLayer) && (
+              <div className="flex items-center gap-3">
+                <span className="w-20 shrink-0 text-foreground select-none pointer-events-none">
+                  Threshold
+                </span>
+                <div className="flex items-center">
+                  <input
+                    type="number"
+                    value={calMinStr}
+                    min={0}
+                    max={100}
+                    step={1}
+                    style={{ width: 'calc(3ch + 1.5rem)' }}
+                    onChange={handleCalMinChange}
+                    onBlur={() => commitCalMin(calMinStr)}
+                    className="text-center border border-border rounded px-1 py-0.5 text-xs bg-background text-foreground [appearance:textfield]"
+                    aria-label={`${label} Threshold minimum`}
+                  />
+                  <span className="text-foreground pl-0.5 select-none pointer-events-none">%</span>
+                </div>
+                <input
+                  type="range"
                   min={0}
-                  max={100}
+                  max={Math.round(settings.cal_max * 100)}
                   step={1}
-                  style={{ width: 'calc(3ch + 1.5rem)' }}
+                  value={Math.round(settings.cal_min * 100)}
                   onChange={handleCalMinChange}
-                  onBlur={() => commitCalMin(calMinStr)}
-                  className="text-center border border-border rounded px-1 py-0.5 text-xs bg-background text-foreground [appearance:textfield]"
-                  aria-label={`${label} Threshold minimum`}
+                  className="flex-1 min-w-0 cursor-pointer"
+                  aria-label={`${label} Threshold minimum slider`}
                 />
-                <span className="text-foreground pl-0.5 select-none pointer-events-none">%</span>
-              </div>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                step={1}
-                value={Math.round(settings.cal_min * 100)}
-                onChange={handleCalMinChange}
-                className="flex-1 min-w-0 cursor-pointer"
-                aria-label={`${label} Threshold minimum slider`}
-              />
-                 <div className="flex items-center">
-                 <input
-                  type="number"
-                  value={calMaxStr}
-                  min={0}
+                <input
+                  type="range"
+                  min={Math.round(settings.cal_min * 100)}
                   max={100}
                   step={1}
-                  style={{ width: 'calc(3ch + 1.5rem)' }}
+                  value={Math.round(settings.cal_max * 100)}
                   onChange={handleCalMaxChange}
-                  onBlur={() => commitCalMax(calMaxStr)}
-                  className="text-center border border-border rounded px-1 py-0.5 text-xs bg-background text-foreground [appearance:textfield]"
-                  aria-label={`${label} Threshold maximum`}
+                  className="flex-1 min-w-0 cursor-pointer"
+                  aria-label={`${label} Threshold maximum slider`}
                 />
-                <span className="text-foreground pl-0.5 select-none pointer-events-none">%</span>
+                <div className="flex items-center">
+                  <input
+                    type="number"
+                    value={calMaxStr}
+                    min={0}
+                    max={100}
+                    step={1}
+                    style={{ width: 'calc(3ch + 1.5rem)' }}
+                    onChange={handleCalMaxChange}
+                    onBlur={() => commitCalMax(calMaxStr)}
+                    className="text-center border border-border rounded px-1 py-0.5 text-xs bg-background text-foreground [appearance:textfield]"
+                    aria-label={`${label} Threshold maximum`}
+                  />
+                  <span className="text-foreground pl-0.5 select-none pointer-events-none">%</span>
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Colormap — not applicable to connectome layers, which colour themselves
                 via baked-in node/edge colormaps rather than a NiiVue volume colormap */}

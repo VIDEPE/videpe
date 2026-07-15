@@ -14,10 +14,6 @@ import {
   matrixMul,
 } from '@/utils/arrayAndMatrixMathUtils';
 
-// Placeholder threshold for the ESI volume's cal_min (see convertSourcePowersToVolume) until
-// it becomes a user-adjustable slider.
-const VOLUME_CAL_MIN_FRACTION = 0.01;
-
 // ─── Grid structure ───────────────────────────────────────────────────────────
 //
 // Computed once, at parse time (see parseInverseSolutionFieldtrip.js) — none of these
@@ -351,7 +347,7 @@ export function convertSourcePowersToVolume(
   // cal_min > 0 (alpha *= (f/cal_min)²) — a literal 0 disables that entirely, leaving the
   // whole volume opaque. A fixed fraction of calMax is a placeholder threshold until this
   // becomes a user-adjustable slider.
-  const calMin = VOLUME_CAL_MIN_FRACTION * calMax;
+  const calMin = 0;
 
   return {
     url: ESI_LAYER_URL,

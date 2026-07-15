@@ -21,6 +21,25 @@ import {
   EEG_NODE_NEG,
 } from '@/utils/eegColormaps';
 
+// layerSettings.cal_min/cal_max are 0-1 *fractions* of a layer's own data range (same
+// "fraction, not absolute value" convention opacity already uses), not literal NiiVue
+// cal_min/cal_max values — those depend on the specific volume/source-power data, so a
+// raw 0-1 slider value would be meaningless applied directly. This resolves a layer's
+// actual bounds so a fraction can be converted to a real value:
+//  - ESI layers: power is always non-negative and layer.calMax is the observed ceiling
+//    for the current click, so bounds are simply [0, layer.calMax].
+//  - Regular volumes: bounds come from NiiVue's own robust_min/robust_max (percentile-
+//    clipped range) on the loaded NVImage — global_min/global_max would let one outlier
+//    voxel blow out the whole scale.
+function getCalBounds(layer, nvVolume) {
+  if (layer.url === ESI_LAYER_URL) return { boundMin: 0, boundMax: layer.calMax };
+  return { boundMin: nvVolume?.robust_min ?? 0, boundMax: nvVolume?.robust_max ?? 1 };
+}
+
+function fractionToCalValue(fraction, boundMin, boundMax) {
+  return boundMin + fraction * (boundMax - boundMin);
+}
+
 // Loads only new image volumes into nv (existing ones stay) and applies all settings.
 // Connectome/mesh layers are excluded — they're tracked separately by the build effects.
 export async function syncVolumesAndApplySettings(nv, layers, layerSettings) {
@@ -41,6 +60,12 @@ export async function syncVolumesAndApplySettings(nv, layers, layerSettings) {
     nv.setOpacity(index, layerSetting.visible ? layerSetting.opacity : 0);
     if (layerSetting.invert) nvVolume.colormapInvert = true;
     nvVolume.colorbarVisible = layerSetting.showColorbar;
+    // Applied after setColormap, same requirement as the ESI volume build effect below:
+    // setColormap's internal updateGLVolume() re-triggers NiiVue's own cal_min/cal_max
+    // auto-scan, which would otherwise silently overwrite these right after they're set.
+    const { boundMin, boundMax } = getCalBounds(layers[index], nvVolume);
+    nvVolume.cal_min = fractionToCalValue(layerSetting.cal_min, boundMin, boundMax);
+    nvVolume.cal_max = fractionToCalValue(layerSetting.cal_max, boundMin, boundMax);
   });
   nv.opts.isColorbar = layerSettings.some((layerSetting) => layerSetting.showColorbar);
   // GL redraw to apply settings
@@ -180,6 +205,27 @@ export const NiiViewer = ({
             mesh.opacity = value;
             nv.updateGLVolume();
           }
+        } else if (key === 'cal_min' || key === 'cal_max') {
+          // Unlike cal_min/cal_max on an NVImage, a connectome mesh's color range is only
+          // read when its color buffers are rebuilt — mutating nodeMinColor/edgeMin etc.
+          // alone has no visual effect until mesh.updateMesh(gl) recomputes them.
+          const { boundMin, boundMax } = getCalBounds(layer);
+          const calMin = fractionToCalValue(
+            nextLayerSettings[layerIndex].cal_min,
+            boundMin,
+            boundMax
+          );
+          const calMax = fractionToCalValue(
+            nextLayerSettings[layerIndex].cal_max,
+            boundMin,
+            boundMax
+          );
+          mesh.nodeMinColor = calMin;
+          mesh.nodeMaxColor = calMax;
+          mesh.edgeMin = calMin;
+          mesh.edgeMax = calMax;
+          mesh.updateMesh(nv.gl);
+          nv.updateGLVolume();
         }
         // colormap/invert/showColorbar: ImagingControls doesn't render those controls for
         // this kind, so there's nothing to apply here.
@@ -211,6 +257,21 @@ export const NiiViewer = ({
       } else if (key === 'showColorbar') {
         nvVolume.colorbarVisible = value;
         nv.opts.isColorbar = nextLayerSettings.some((layerSetting) => layerSetting.showColorbar);
+        nv.updateGLVolume();
+      } else if (key === 'cal_min' || key === 'cal_max') {
+        // value alone (a 0-1 fraction) isn't a real cal_min/cal_max — it has to be resolved
+        // against this volume's own data range first (see getCalBounds above).
+        const { boundMin, boundMax } = getCalBounds(layer, nvVolume);
+        nvVolume.cal_min = fractionToCalValue(
+          nextLayerSettings[layerIndex].cal_min,
+          boundMin,
+          boundMax
+        );
+        nvVolume.cal_max = fractionToCalValue(
+          nextLayerSettings[layerIndex].cal_max,
+          boundMin,
+          boundMax
+        );
         nv.updateGLVolume();
       }
     },
@@ -603,17 +664,23 @@ export const NiiViewer = ({
 
       // Source power is always non-negative (squared magnitude) — use the positive colormap
       // for both slots; the negative colormap is never reached.
+      // cal_min/cal_max on `settings` are the user's chosen fractions of activeEsiLayer.calMax
+      // (see getCalBounds) — reapplying them here (rather than activeEsiLayer.calMin/calMax
+      // directly) means a user-set threshold survives into the next EEG click's new bound.
+      const { boundMin: esiBoundMin, boundMax: esiBoundMax } = getCalBounds(activeEsiLayer);
+      const esiCalMin = fractionToCalValue(settings.cal_min, esiBoundMin, esiBoundMax);
+      const esiCalMax = fractionToCalValue(settings.cal_max, esiBoundMin, esiBoundMax);
       const mesh = nv.loadConnectomeAsMesh({
         name: activeEsiLayer.name,
         nodeColormap: EEG_NODE_POS_KEY,
         nodeColormapNegative: EEG_NODE_POS_KEY, // unused — power is always ≥ 0
-        nodeMinColor: activeEsiLayer.calMin,
-        nodeMaxColor: activeEsiLayer.calMax,
+        nodeMinColor: esiCalMin,
+        nodeMaxColor: esiCalMax,
         nodeScale: 4,
         edgeColormap: EEG_NODE_POS_KEY,
         edgeColormapNegative: EEG_NODE_POS_KEY,
-        edgeMin: activeEsiLayer.calMin,
-        edgeMax: activeEsiLayer.calMax,
+        edgeMin: esiCalMin,
+        edgeMax: esiCalMax,
         edgeScale: 0.5,
         showLegend: false,
         colorbarVisible: false, // suppresses the colorbar entry NiiVue would otherwise add
@@ -642,9 +709,8 @@ export const NiiViewer = ({
           esiVolumeRef.current = nvVolume; // track it so the next change/removal can find it
 
           // nv.setColormap() calls updateGLVolume() internally, which re-triggers NiiVue's
-          // own cal_min/cal_max auto-scan — so cal_min/cal_max/colormapType MUST be set after
-          // this block, not before, or they get silently clobbered back to the auto-scanned
-          // values.
+          // own cal_min/cal_max auto-scan => cal_min/cal_max/colormapType MUST be set after
+          // this block, not before, or they get silently fall back to the auto-scanned values.
           nv.setOpacity(nvIndex, settings.visible ? settings.opacity : 0);
           nv.setColormap(nvVolume.id, settings.colormap);
           if (settings.invert) nvVolume.colormapInvert = true;
@@ -652,9 +718,13 @@ export const NiiViewer = ({
 
           // Fixed cal_min/cal_max (rather than NiiVue's auto-scan) keeps the color scale
           // consistent with connectome mode, and avoids a "% of voxels are zero" warning
-          // from the auto-scan seeing this grid's mostly-empty background.
-          nvVolume.cal_min = activeEsiLayer.calMin;
-          nvVolume.cal_max = activeEsiLayer.calMax;
+          // from the auto-scan seeing this grid's mostly-empty background. Resolved from the
+          // user's chosen fraction of activeEsiLayer.calMax, same as connectome mode above —
+          // so it survives into the next click's new bound instead of resetting.
+          const { boundMin: esiVolBoundMin, boundMax: esiVolBoundMax } =
+            getCalBounds(activeEsiLayer);
+          nvVolume.cal_min = fractionToCalValue(settings.cal_min, esiVolBoundMin, esiVolBoundMax);
+          nvVolume.cal_max = fractionToCalValue(settings.cal_max, esiVolBoundMin, esiVolBoundMax);
           // 2 = ZERO_TO_MAX_TRANSLUCENT_BELOW_MIN (COLORMAP_TYPE isn't a runtime export of
           // @niivue/niivue, only a TS-only enum). Voxels below cal_min get a hard alpha=0
           // cutoff in NiiVue's shader — unlike type 1's smooth (f/cal_min)² ramp, there's no
