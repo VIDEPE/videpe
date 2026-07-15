@@ -1592,7 +1592,9 @@ describe('EegViewer — persistent electrode position dropzone', () => {
   it('renders a dropzone for electrode positions and inverse solution even while the topography window is closed', async () => {
     await renderViewer();
     expect(screen.queryByTestId('eeg-topo-viewer')).toBeNull();
-    expect(screen.getByText("Browse / Drop electrode positions / inverse solution")).toBeInTheDocument();
+    expect(
+      screen.getByText('Browse / Drop electrode positions / inverse solution')
+    ).toBeInTheDocument();
   });
 
   it('calls onElecPosFile with the dropped .elc file', async () => {

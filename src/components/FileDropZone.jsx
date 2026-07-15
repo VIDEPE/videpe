@@ -44,7 +44,7 @@ export const FileDropZone = ({
       className={cn(
         'border-2 cursor-pointer transition-colors group', // group for linking hover styles to children (=<Upload> icon)
         compact
-          ? 'rounded-sm flex flex-row items-center gap-2 px-3 py-1.5 mx-1'
+          ? 'rounded-sm flex flex-row items-center gap-2 px-3 py-1.5 mx-1 overflow-hidden' // overflow-hidden clips the icon/label at the border so nothing bleeds past it when the panel is narrow
           : 'rounded-xl flex-1 flex flex-col items-center text-center justify-center gap-3 p-2',
         isDraggingOver
           ? 'border-solid border-primary bg-primary/10'
@@ -73,8 +73,13 @@ export const FileDropZone = ({
                   : 'text-[color-mix(in_srgb,var(--c-border),var(--c-foreground)_40%)]'
               )}
             />
-            {/* The label is the main instruction (e.g., "Drop additional files"). */}
-            <p className="text-xs font-medium text-foreground whitespace-nowrap">{label}</p>
+            {/* The label is the main instruction (e.g., "Drop additional files").
+                min-w-0 + truncate let it shrink and ellipsize within the centered area instead of
+                overflowing past the border / over the divider + LED labels when the panel is narrow.
+                title exposes the full text on hover so nothing is lost when it's truncated. */}
+            <p className="text-xs font-medium text-foreground min-w-0 truncate" title={label}>
+              {label}
+            </p>
           </div>
         </>
       ) : (
