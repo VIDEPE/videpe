@@ -298,26 +298,23 @@ export const PatientView = () => {
     );
     if (elecPosFiles.length > 0) {
       await handleElecPosFile(elecPosFiles[elecPosFiles.length - 1]); // keep only the last if multiple were dropped at once
-      toast(
-        'Multiple electrode position files loaded => using the latest.',
-        {
+      if (elecPosFiles.length > 1) {
+        toast('Multiple electrode position files loaded => using the latest.', {
           icon: '⚠️',
-        }
-      )
+        });
+      }
     }
     // Detect and handle inverse filter files
     const invFiltFiles = allFiles.filter((f) =>
       INV_SOLUTIONS_EXTENSIONS.some((ext) => f.name.toLowerCase().endsWith(ext))
-
     );
     if (invFiltFiles.length > 0) {
       await handleInverseSolutionFile(invFiltFiles[invFiltFiles.length - 1]); // keep only the last if multiple were dropped at once
-        toast(
-        'Multiple inverse solution files loaded => using the latest.',
-        {
+      if (invFiltFiles.length > 1) {
+        toast('Multiple inverse solution files loaded => using the latest.', {
           icon: '⚠️',
-        }
-      )
+        });
+      }
     }
 
     // Exclude electrode position and inverse filter files from EEG format detection — they are handled separately above. The remaining files are checked for EEG formats.
