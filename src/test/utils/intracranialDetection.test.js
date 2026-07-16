@@ -101,4 +101,19 @@ describe('detectIsIntracranial', () => {
   it('handles a single non-primed sEEG-shaped channel without crashing', () => {
     expect(detectIsIntracranial(['T1'], STANDARD_1005_FIXTURE)).toBe(true);
   });
+
+  it('returns false for a dense scalp net using one letter across all channels (e.g. EGI E1-E208)', () => {
+    const channelNames = Array.from({ length: 208 }, (_, i) => `E${i + 1}`);
+    expect(detectIsIntracranial(channelNames, STANDARD_1005_FIXTURE)).toBe(false);
+  });
+
+  it('returns false when a single group exceeds the plausible max contacts per electrode', () => {
+    const channelNames = Array.from({ length: 65 }, (_, i) => `G${i + 1}`);
+    expect(detectIsIntracranial(channelNames, STANDARD_1005_FIXTURE)).toBe(false);
+  });
+
+  it('still returns true for a group at the plausible max contact count (e.g. an 8x8 ECoG grid)', () => {
+    const channelNames = Array.from({ length: 64 }, (_, i) => `G${i + 1}`);
+    expect(detectIsIntracranial(channelNames, STANDARD_1005_FIXTURE)).toBe(true);
+  });
 });
