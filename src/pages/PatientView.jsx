@@ -152,38 +152,69 @@ export const PatientView = () => {
       if (!electrodes.length) return; // ignore empty or unparseable files
       setCustomElectrodes(electrodes);
       setCustomElecPosFileName(file.name.replace(/\.[^.]+$/, ''));
+      // Confirm the load — this dropzone shows no state of its own in compact mode, so
+      // without this the file appears to vanish and the user can't tell it was accepted.
+      toast.success(`Loaded ${electrodes.length} electrode positions from ${file.name}`);
     } catch (err) {
       toast.error(err.message);
     }
   }, []);
 
-  const handleInverseSolutionFile = useCallback(async (file) => {
-    try {
-      const parsedInverseSolution = await parseInverseSolutionFieldtrip(file);
-      setInverseSolution(parsedInverseSolution);
-      setInverseSolutionFileName(file.name.replace(/\.[^.]+$/, ''));
-      // ESI is only valid under a common average reference — force it and let the user
-      // know why, rather than silently computing nonsensical source power.
-      setMontage('average');
-      toast('Montage set to Average — required for Electrical Source Imaging');
-    } catch (err) {
-      toast.error(err.message);
-    }
-  }, []);
+  const handleInverseSolutionFile = useCallback(
+    async (file) => {
+      try {
+        const parsedInverseSolution = await parseInverseSolutionFieldtrip(file);
+        setInverseSolution(parsedInverseSolution);
+        setInverseSolutionFileName(file.name.replace(/\.[^.]+$/, ''));
+        // Confirm the load — same reasoning as electrode positions above: the compact
+        // dropzone gives no visible feedback of its own that the file was accepted.
+        // Forcing the Average montage (and warning about it) is handled by the effect
+        // below, which also covers the case of switching into EEG mode with a solution
+        // already loaded.
+        toast.success(`Loaded inverse solution from ${file.name}`);
 
-  // Montage is a controlled prop on EegViewer so it can be forced to 'average' above; this
-  // is the other direction — the user switching away from it while ESI is active.
-  const handleMontageChange = useCallback(
-    (newMontage) => {
-      setMontage(newMontage);
-      if (newMontage !== 'average' && inverseSolution) {
-        toast('Electrical Source Imaging requires the Average montage — layer hidden', {
-          icon: '⚠️',
-        });
+        // ESI only applies to scalp EEG — the file is still stored (and will be picked up
+        // automatically by the force-Average effect below once the user switches back to
+        // EEG mode), but tell them it has no effect right now rather than let them wonder
+        // why nothing happened.
+        if (recordingType === 'ieeg') {
+          toast(
+            'Electrical Source Imaging is not available for iEEG — will apply once you switch to EEG mode',
+            {
+              icon: '⚠️',
+            }
+          );
+        }
+      } catch (err) {
+        toast.error(err.message);
       }
     },
-    [inverseSolution]
+    [recordingType]
   );
+
+  // Holds the latest montage so the ESI-forcing effect below can read it without listing
+  // montage as a dependency — otherwise the effect would re-run and undo a deliberate
+  // switch away from Average the moment the user made it.
+  const montageRef = useRef(montage);
+  montageRef.current = montage;
+
+  // Electrical Source Imaging is only valid for scalp EEG under a common-average reference.
+  // Whenever an inverse solution is present in EEG mode, force the Average montage and tell
+  // the user why. Keyed on the two transitions that can make ESI applicable — an inverse
+  // solution being (re)loaded, or the recording type switching to EEG — so:
+  //   • loading a solution in iEEG mode neither forces nor warns (ESI doesn't apply there),
+  //   • later switching to EEG re-applies it,
+  //   • and it's not keyed on montage, so a deliberate switch away from Average isn't undone.
+  // Fixed toast id collapses StrictMode's double-invoke (and any rapid re-trigger) into one.
+  useEffect(() => {
+    if (!inverseSolution || recordingType !== 'eeg') return;
+    if (montageRef.current === 'average') return; // already Average — repeating the warning is just noise
+    setMontage('average');
+    toast('Montage set to Average — required for Electrical Source Imaging', {
+      icon: '⚠️',
+      id: 'esi-force-average-montage',
+    });
+  }, [inverseSolution, recordingType]);
 
   // Derives the Neuroimaging pane's connectome layer from the EEG state lifted out of
   // EegViewer — null until there's an intracranial recording with at least one
@@ -198,6 +229,26 @@ export const PatientView = () => {
       montage === 'average' ? electricalSourceImaging(inverseSolution, channelSnapshot) : null,
     [inverseSolution, channelSnapshot, montage]
   ); // ESI source power — { sourcePowerConnectomes, sourcePowerVolume } | null | [] — only valid under the Average montage
+
+  // Montage is a controlled prop on EegViewer so it can be forced to 'average' above
+  // when adding an inverse solution file.
+  // This is the other direction — the user switching away from it while ESI is active. Warns
+  // only when doing so actually hides a layer that was visible: not merely whenever an
+  // inverse solution happens to be loaded. That excludes iEEG mode (ESI never applies
+  // there) and EEG mode before the first channel click (no channelSnapshot yet, so no
+  // layer has ever been computed) — in both cases esiLayer is already falsy, so nothing
+  // is being hidden and the warning would be misleading.
+  const handleMontageChange = useCallback(
+    (newMontage) => {
+      setMontage(newMontage);
+      if (newMontage !== 'average' && esiLayer) {
+        toast('Electrical Source Imaging requires the Average montage — layer hidden', {
+          icon: '⚠️',
+        });
+      }
+    },
+    [esiLayer]
+  );
 
   // when both these flags are true, then the two plots can be synchronised
   const [niiNvReady, setNiiNvReady] = useState(false); // flag when the NiiViewer canvas is initialised
