@@ -335,6 +335,62 @@ describe('PatientView — EEG file accumulation', () => {
   });
 });
 
+describe('PatientView — EEG dropzone rejects unsupported files', () => {
+  beforeEach(() => {
+    FileDropZone.mockClear();
+    toast.error.mockClear();
+    checkEegFiles.mockClear();
+    checkEegFiles.mockReturnValue({
+      formatName: null,
+      complete: false,
+      missing: null,
+      warning: null,
+    });
+  });
+
+  it('toasts an error and never calls checkEegFiles when only an imaging file is dropped', async () => {
+    renderPatientView();
+
+    await act(async () => {
+      await getEegOnFiles()([makeFile('sub-01_T1w.nii')]);
+    });
+
+    expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('sub-01_T1w.nii'));
+    expect(checkEegFiles).not.toHaveBeenCalled();
+  });
+
+  it('does not hold an imaging file as a pending EEG file', async () => {
+    renderPatientView();
+
+    await act(async () => {
+      await getEegOnFiles()([makeFile('sub-01_T1w.nii')]);
+    });
+
+    const eegDropZoneProps = FileDropZone.mock.calls
+      .filter(([p]) => p.label === 'Drop EEG files')
+      .at(-1)[0];
+    expect(eegDropZoneProps.pendingFiles).toEqual([]);
+  });
+
+  it('rejects an imaging file dropped alongside a valid partial EEG file, without including it in the pending set', async () => {
+    checkEegFiles.mockReturnValue({
+      formatName: 'BrainVision',
+      complete: false,
+      missing: ['.eeg'],
+      warning: null,
+    });
+    renderPatientView();
+
+    await act(async () => {
+      await getEegOnFiles()([makeFile('sub01.vhdr'), makeFile('sub-01_T1w.nii')]);
+    });
+
+    expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('sub-01_T1w.nii'));
+    const checkedFiles = checkEegFiles.mock.lastCall[0];
+    expect(checkedFiles.map((f) => f.name)).not.toContain('sub-01_T1w.nii');
+  });
+});
+
 describe('PatientView — demo loading', () => {
   beforeEach(() => {
     FileDropZone.mockClear();

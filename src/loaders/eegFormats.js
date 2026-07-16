@@ -11,7 +11,7 @@ const baseName = (filename) => filename.slice(0, filename.lastIndexOf('.'));
 
 // EEG_FORMATS is an array of supported EEG formats. Each format has:
 // - name: a human-readable name for the format
-// - description: a list of the supported file types for this format
+// - extensions: file extensions recognized as belonging to this format
 // - partialDetect(files): true if any of the format's files are present (used for accumulation UX)
 // - validate(files): returns { complete, missing[], warning } — complete only when all files present and names match
 // - load(files): loads the EEG data from the given files and returns a recording provider
@@ -19,7 +19,7 @@ const baseName = (filename) => filename.slice(0, filename.lastIndexOf('.'));
 const EEG_FORMATS = [
   {
     name: 'BrainVision',
-    description: '.vhdr + .eeg',
+    extensions: ['.vhdr', '.eeg'],
     partialDetect: (files) =>
       files.some((f) => {
         const name = f.name.toLowerCase();
@@ -48,6 +48,11 @@ const EEG_FORMATS = [
   // Future EEG formats: add an entry here.
 ];
 
+// Extensions recognized by any supported EEG recording format — used to reject files
+// that don't belong in the EEG panel at all (e.g. imaging volumes) before they're held
+// as pending, rather than relying solely on partialDetect after the fact.
+export const EEG_FORMAT_EXTENSIONS = EEG_FORMATS.flatMap((f) => f.extensions);
+
 // Checks files against all known formats, including partial matches.
 // Returns { formatName, complete, missing[], warning } — formatName is null if unrecognized.
 export function checkEegFiles(files) {
@@ -62,7 +67,7 @@ export function detectAndLoadEEG(files) {
   const format = EEG_FORMATS.find((f) => f.validate(files).complete);
   // if no format matches, throw an error listing the supported formats
   if (!format) {
-    const supported = EEG_FORMATS.map((f) => `${f.name} (${f.description})`).join(', ');
+    const supported = EEG_FORMATS.map((f) => `${f.name} (${f.extensions.join(' + ')})`).join(', ');
     throw new Error(`Unrecognized EEG format. Supported: ${supported}`);
   }
   // if a format is found, use its load function to load the data
