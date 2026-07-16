@@ -57,7 +57,7 @@ const FEATURES = [
     icon: Brain,
     label: 'Neuroimaging',
     description:
-      'Overlay MRI, PET, and SPECT in full 3D and fine-tune each layer — opacity, colormap, order.',
+      'Overlay MRI, PET, SPECT and meshes in full 3D and fine-tune each layer — opacity, colormap, order.',
     anchor: '#feature-neuroimaging',
   },
   {
@@ -67,7 +67,7 @@ const FEATURES = [
       <>
         Curious?
         <br />
-        Try a full EEG + MRI/PET/SPECT dataset in one click — no files of your own needed.
+        Try a full EEG (inc. electrode position & inverse solution) + MRI dataset in one click — no files of your own needed.
       </>
     ),
     anchor: '#feature-demo',
