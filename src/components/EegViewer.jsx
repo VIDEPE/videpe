@@ -121,7 +121,9 @@ const StatusLed = ({ label, fileName, disabled = false, autoMatched = false, aut
   const title = disabled
     ? `${label} is not applicable for iEEG recordings`
     : isActive
-      ? fileName
+      ? autoTitle
+        ? `Custom: ${fileName}`
+        : fileName
       : isAuto
         ? autoTitle
         : `No ${label.toLowerCase()} loaded`;

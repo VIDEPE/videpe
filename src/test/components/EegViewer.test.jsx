@@ -1681,7 +1681,7 @@ describe('EegViewer — persistent electrode position dropzone', () => {
       await Promise.resolve();
     });
 
-    expect(screen.getByTitle('my_positions')).toBeInTheDocument();
+    expect(screen.getByTitle('Custom: my_positions')).toBeInTheDocument();
     expect(screen.getByTitle('No inverse solution loaded')).toBeInTheDocument();
   });
 
