@@ -422,14 +422,24 @@ describe('ImagingControls', () => {
       ).toBeInTheDocument();
     });
 
-    it('still renders the visibility toggle and drag handle in the header for a connectome-kind layer', () => {
+    it('still renders the visibility toggle in the header for a connectome-kind layer', () => {
       renderControls([makeIntracranialLayer()], [makeSettings()]);
 
       expect(
         screen.getByRole('button', { name: 'Hide Intracranial - Electrodes' })
       ).toBeInTheDocument();
+    });
+
+    it('does not render a drag handle for a connectome-kind layer, showing a fixed indicator instead', () => {
+      renderControls([makeIntracranialLayer()], [makeSettings()]);
+
+      // Connectomes have no meaningful z-order in the 3D scene, so they aren't reorderable —
+      // the grab handle is replaced by a "fixed in place" indicator.
       expect(
-        screen.getByLabelText('Drag to reorder Intracranial - Electrodes')
+        screen.queryByLabelText('Drag to reorder Intracranial - Electrodes')
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByLabelText('Intracranial - Electrodes is fixed and cannot be reordered')
       ).toBeInTheDocument();
     });
 
@@ -440,6 +450,28 @@ describe('ImagingControls', () => {
       expect(screen.getByLabelText('MRI colormap')).toBeInTheDocument();
       expect(screen.getByRole('switch', { name: 'Invert MRI colormap' })).toBeInTheDocument();
       expect(screen.getByRole('switch', { name: 'Show MRI colorbar' })).toBeInTheDocument();
+    });
+  });
+
+  describe('reorderability', () => {
+    it('renders a drag handle for an image-volume layer', () => {
+      renderControls([makeVolume('MRI', '/mri.nii')], [makeSettings()]);
+      expect(screen.getByLabelText('Drag to reorder MRI')).toBeInTheDocument();
+      expect(
+        screen.queryByLabelText('MRI is fixed and cannot be reordered')
+      ).not.toBeInTheDocument();
+    });
+
+    it('does not render a drag handle for a mesh layer, showing a fixed indicator instead', () => {
+      renderControls(
+        [{ type: 'Mesh', subtype: 'cortex', url: 'blob:cortex', kind: 'mesh' }],
+        [makeSettings()]
+      );
+      // Meshes render as 3D surfaces with no z-order, so they aren't reorderable.
+      expect(screen.queryByLabelText('Drag to reorder Mesh - cortex')).not.toBeInTheDocument();
+      expect(
+        screen.getByLabelText('Mesh - cortex is fixed and cannot be reordered')
+      ).toBeInTheDocument();
     });
   });
 });

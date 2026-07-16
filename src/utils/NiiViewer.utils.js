@@ -1,3 +1,5 @@
+import { isMeshExt } from '@niivue/niivue';
+
 const MRI_BIDS_SUFFIXES = new Set([
   'T1w',
   'T2w',
@@ -35,15 +37,18 @@ export const INTRACRANIAL_CONNECTOME_URL = '__intracranial-electrodes__';
 // Same sentinel-URL pattern for the ESI source-power connectome/volume layer.
 export const ESI_LAYER_URL = '__esi-source-power__';
 
-// Returns an array of display settings, one per layer (image volume, connectome, or
-// other mesh). Colormap is derived from layer.type via TYPE_COLORMAP_DEFAULTS — layers
-// themselves do not carry a colormap field.
-// url mirrors the owning layer's url so settings entries carry their own identity —
-// letting effects filter/locate a specific layer's settings (e.g. the connectome's) by
-// url instead of by array position, which is fragile when orderedLayers/layerSettings
-// are updated independently by more than one effect.
-// startIndex is the position of layers[0] among all loaded layers — pass the count of
-// already-loaded layers when appending so only the very first layer overall gets full opacity.
+// True for layers backed by an entry in nv.volumes (not connectomes/meshes, which live in
+// nv.meshes). Used to index into nv.volumes and to decide reorderability: only volumes are
+// reorderable, since meshes/connectomes have no z-order and are pinned to the bottom. The ESI
+// layer follows its current kind — 'volume' in Volume mode, 'connectome' in Connectome mode.
+export const isImageVolumeLayer = (layer) => layer.kind !== 'connectome' && layer.kind !== 'mesh';
+
+// Returns default display settings, one per layer. Colormap is derived from layer.type
+// (layers carry no colormap field). Each entry mirrors its layer's url so effects can locate
+// a specific layer's settings by url rather than array position, which is fragile when
+// orderedLayers/layerSettings are updated independently. startIndex is layers[0]'s position
+// among all loaded layers — pass the already-loaded count when appending so only the very
+// first layer overall gets full opacity.
 export const getInitialLayerSettings = (layers, startIndex = 0) =>
   layers.map((layer, index) => ({
     url: layer.url,
@@ -87,10 +92,32 @@ export const detectVolumeType = (filename) => {
   return { type: nameWithoutExtension, subtype: null };
 };
 
+// Strips the extension(s) from a filename for use as a mesh layer's subtype — mirrors
+// detectVolumeType's nameWithoutExtension so a mesh card reads e.g. "Mesh - cortex".
+const nameWithoutExtension = (filename) => {
+  const dotIndex = filename.indexOf('.');
+  return dotIndex === -1 ? filename : filename.slice(0, dotIndex);
+};
+
 export const filesToLayers = (files) =>
-  // Convert a FileList (from input or drag-and-drop) to an array of layer objects with { url, name, type, subtype }.
+  // Convert a FileList (from input or drag-and-drop) to an array of layer objects with
+  // { url, name, type, subtype } for image volumes, plus { kind: 'mesh' } for surface meshes.
   Array.from(files).map((f) => {
     // NiiVue calls fetch(url) internally, so a blob: URL is needed — a plain filename would resolve as a relative HTTP request
+    const url = URL.createObjectURL(f);
+    // Surface meshes (GIFTI/PLY/OBJ/STL/…) are rendered as 3D meshes, not sliceable volumes,
+    // so they take a different load path in NiiViewer (nv.addMeshesFromUrl vs nv.loadVolumes).
+    // Tag them with kind: 'mesh' here so both drop entry points can route them correctly.
+    // isMeshExt is NiiVue's own extension check, so this list stays in sync with what it can parse.
+    if (isMeshExt(f.name)) {
+      return {
+        url,
+        name: f.name,
+        type: 'Mesh',
+        subtype: nameWithoutExtension(f.name),
+        kind: 'mesh',
+      };
+    }
     const { type, subtype } = detectVolumeType(f.name);
-    return { url: URL.createObjectURL(f), name: f.name, type, subtype };
+    return { url, name: f.name, type, subtype };
   });
