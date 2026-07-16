@@ -312,8 +312,7 @@ export const PatientView = () => {
       (f) => !elecPosFiles.includes(f) && !invFiltFiles.includes(f)
     );
     // Anything left whose extension doesn't belong to a supported EEG format (e.g. an
-    // imaging volume meant for the Neuroimaging panel) is rejected outright, rather than
-    // being held as a pending EEG file just because it happened to be dropped here.
+    // imaging volume meant for the Neuroimaging panel) is rejected outright
     const eegFiles = remainingFiles.filter((f) =>
       EEG_FORMAT_EXTENSIONS.some((ext) => f.name.toLowerCase().endsWith(ext))
     );
