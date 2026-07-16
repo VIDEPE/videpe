@@ -16,6 +16,7 @@ import {
   checkEegFiles,
   ELEC_POS_EXTENSIONS,
   INV_SOLUTIONS_EXTENSIONS,
+  EEG_FORMAT_EXTENSIONS,
 } from '../loaders/eegFormats';
 import { parseElectrodePositionFile } from '../loaders/parseElectrodePositionFile';
 import { parseInverseSolutionFieldtrip } from '../loaders/parseInverseSolutionFieldtrip';
@@ -307,9 +308,25 @@ export const PatientView = () => {
     }
 
     // Exclude electrode position and inverse filter files from EEG format detection — they are handled separately above. The remaining files are checked for EEG formats.
-    const eegFiles = allFiles.filter((f) => !elecPosFiles.includes(f) && !invFiltFiles.includes(f));
+    const remainingFiles = allFiles.filter(
+      (f) => !elecPosFiles.includes(f) && !invFiltFiles.includes(f)
+    );
+    // Anything left whose extension doesn't belong to a supported EEG format (e.g. an
+    // imaging volume meant for the Neuroimaging panel) is rejected outright, rather than
+    // being held as a pending EEG file just because it happened to be dropped here.
+    const eegFiles = remainingFiles.filter((f) =>
+      EEG_FORMAT_EXTENSIONS.some((ext) => f.name.toLowerCase().endsWith(ext))
+    );
+    const unsupportedFiles = remainingFiles.filter((f) => !eegFiles.includes(f));
+    if (unsupportedFiles.length > 0) {
+      toast.error(
+        `Unsupported file${unsupportedFiles.length > 1 ? 's' : ''}: ${unsupportedFiles
+          .map((f) => f.name)
+          .join(', ')}\nDrop imaging files in the Neuroimaging panel instead.`
+      );
+    }
 
-    if (eegFiles.length === 0) return; // pure electrode-position/inv-filter drop — nothing else to do
+    if (eegFiles.length === 0) return; // pure electrode-position/inv-filter/unsupported drop — nothing else to do
 
     // Merge pending with new files
     const merged = [...pendingEegFiles, ...eegFiles];

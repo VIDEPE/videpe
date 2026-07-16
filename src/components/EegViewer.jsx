@@ -1014,6 +1014,24 @@ export const EegViewer = ({
               ELEC_POS_EXTENSIONS.some((ext) => f.name.toLowerCase().endsWith(ext))
             );
             if (elecFile) onElecPosFile?.(elecFile);
+
+            // Anything that isn't an electrode-position or inverse-solution file (e.g. an
+            // imaging volume meant for the Neuroimaging panel) would otherwise be silently
+            // swallowed here — surface it instead of leaving the user to wonder why
+            // nothing happened.
+            const recognizedExtensions = [...ELEC_POS_EXTENSIONS, ...INV_SOLUTIONS_EXTENSIONS];
+            const unsupported = all.filter(
+              (f) => !recognizedExtensions.some((ext) => f.name.toLowerCase().endsWith(ext))
+            );
+            if (unsupported.length > 0) {
+              toast.error(
+                `Unsupported file${unsupported.length > 1 ? 's' : ''}: ${unsupported
+                  .map((f) => f.name)
+                  .join(
+                    ', '
+                  )}\nExpected electrode positions (.elc, .tsv) or an inverse solution (.mat).`
+              );
+            }
           }}
           accepted_formats=".elc,.tsv,.mat"
           label="Browse or drop electrode positions / inverse solution"

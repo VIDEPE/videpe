@@ -68,6 +68,7 @@ vi.mock('react-hot-toast', () => {
   const toastFn = vi.fn();
   toastFn.loading = vi.fn();
   toastFn.success = vi.fn();
+  toastFn.error = vi.fn();
   toastFn.dismiss = vi.fn();
   return { default: toastFn };
 });
@@ -1732,5 +1733,38 @@ describe('EegViewer — persistent electrode position dropzone', () => {
 
     expect(onElecPosFile).toHaveBeenCalledWith(elcFile);
     expect(onInverseSolutionFile).toHaveBeenCalledWith(matFile);
+  });
+
+  it('rejects an imaging file with an error toast instead of silently dropping it', async () => {
+    const { default: toast } = await import('react-hot-toast');
+    toast.error.mockClear();
+    const onElecPosFile = vi.fn();
+    const onInverseSolutionFile = vi.fn();
+    const provider = makeProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        onElecPosFile={onElecPosFile}
+        onInverseSolutionFile={onInverseSolutionFile}
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // fireEvent.drop (not userEvent.upload) — drag-and-drop bypasses the input's `accept`
+    // filter the way a real OS drag does, so this exercises the actual rejection logic
+    // rather than the browser's own file-picker filtering.
+    const niiFile = new File(['binary'], 'sub-01_T1w.nii');
+    const zone = screen
+      .getByText('Browse or drop electrode positions / inverse solution')
+      .closest('div[class]');
+    fireEvent.drop(zone, { dataTransfer: { files: [niiFile] } });
+
+    expect(onElecPosFile).not.toHaveBeenCalled();
+    expect(onInverseSolutionFile).not.toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('sub-01_T1w.nii'));
   });
 });
