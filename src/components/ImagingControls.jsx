@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import * as Slider from '@radix-ui/react-slider';
-import { Eye, EyeOff, ChevronDown, ChevronUp, GripVertical } from 'lucide-react';
+import { Eye, EyeOff, ChevronDown, ChevronUp, GripVertical, Lock } from 'lucide-react';
 import { DragDropProvider } from '@dnd-kit/react';
 import { useSortable } from '@dnd-kit/react/sortable';
 import { X } from 'lucide-react';
-import { ESI_LAYER_URL } from '@/utils/NiiViewer.utils';
+import { ESI_LAYER_URL, isImageVolumeLayer } from '@/utils/NiiViewer.utils';
 
 const COLORMAP_OPTIONS = [
   { value: 'gray', label: 'Grayscale' },
@@ -42,7 +42,16 @@ function SortableSettingsCard({
   onSettingChange,
   onDeleteLayer,
 }) {
-  const { ref, handleRef, isDragging } = useSortable({ id: layer.url, index });
+  // Only image volumes are reorderable — meshes and connectomes render as 3D objects with no
+  // z-order relative to the 2D slices, so reordering them has no visual effect. Disable the
+  // sortable for those (and swap the grab handle for a fixed indicator below) so the card
+  // doesn't advertise a drag it can't honour. They're also pinned to the bottom of the list.
+  const isReorderable = isImageVolumeLayer(layer);
+  const { ref, handleRef, isDragging } = useSortable({
+    id: layer.url,
+    index,
+    disabled: !isReorderable,
+  });
   // Label is either "type - subtype" (e.g. "MRI - T1") or just "type" if no subtype, or "Layer {index}" as a fallback if no type
   const label = layer.type
     ? layer.type + (layer.subtype ? ` - ${layer.subtype}` : '')
@@ -158,17 +167,29 @@ function SortableSettingsCard({
     >
       {/* Always-visible header row */}
       <div className="flex items-center gap-1.5 px-2 py-1">
-        {/* Drag handle — span rather than SVG (icon) so it can be focusable and gives a reliable pointer-event target */}
-        <span
-          ref={handleRef}
-          className="cursor-grab active:cursor-grabbing touch-none shrink-0"
-          aria-label={`Drag to reorder ${label}`}
-        >
-          <GripVertical
-            size={16}
-            className="text-border hover:text-secondary active:text-primary"
-          />
-        </span>
+        {/* Drag handle for reorderable (image-volume) layers — span rather than SVG (icon) so
+            it can be focusable and gives a reliable pointer-event target. Fixed layers
+            (meshes/connectomes) show a lock instead, at the same size so cards stay aligned. */}
+        {isReorderable ? (
+          <span
+            ref={handleRef}
+            className="cursor-grab active:cursor-grabbing touch-none shrink-0"
+            aria-label={`Drag to reorder ${label}`}
+          >
+            <GripVertical
+              size={16}
+              className="text-border hover:text-secondary active:text-primary"
+            />
+          </span>
+        ) : (
+          <span
+            className="cursor-not-allowed touch-none shrink-0"
+            aria-label={`${label} is fixed and cannot be reordered`}
+            title={`${label} is fixed in place — meshes and connectomes can't be reordered`}
+          >
+            <Lock size={14} className="text-border" />
+          </span>
+        )}
 
         <span className="flex-1 text-sm font-medium text-heading truncate">
           {layer.type ?? `Layer ${index + 1}`}

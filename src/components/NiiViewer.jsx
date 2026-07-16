@@ -9,6 +9,7 @@ const MIN_CANVAS_HEIGHT = 350; // px — matches the canvas row's original fixed
 import {
   getInitialLayerSettings,
   filesToLayers,
+  isImageVolumeLayer,
   INTRACRANIAL_CONNECTOME_URL,
   ESI_LAYER_URL,
 } from '../utils/NiiViewer.utils';
@@ -38,12 +39,6 @@ function getCalBounds(layer, nvVolume) {
 function fractionToCalValue(fraction, boundMin, boundMax) {
   return boundMin + fraction * (boundMax - boundMin);
 }
-
-// An "image volume" layer is one backed by an entry in nv.volumes — i.e. neither a connectome
-// nor a file-loaded surface mesh. Both of those live in nv.meshes instead and are tracked
-// separately (connectomes by their build effects, file meshes by fileMeshesRef), so anything
-// that indexes into nv.volumes must count only image-volume layers.
-const isImageVolumeLayer = (layer) => layer.kind !== 'connectome' && layer.kind !== 'mesh';
 
 // Loads only new image volumes into nv (existing ones stay) and applies all settings.
 // Connectome/mesh layers are excluded — they're tracked separately by the build effects.
@@ -658,6 +653,28 @@ export const NiiViewer = ({
 
     loadAndSync();
   }, [layers]);
+
+  // ─── Effects: card ordering ─────────────────────────────────────────────────
+
+  // Keep image volumes (reorderable) above meshes/connectomes (fixed) in the card list, so
+  // the fixed layers cluster at the bottom — they have no meaningful z-order in the 3D scene
+  // and aren't draggable, and grouping them out of the reorderable volumes makes that clear.
+  // Runs whenever orderedLayers changes (a mesh dropped, a connectome merged in, or the ESI
+  // layer flipping between volume/connectome kind) and re-sorts if needed. The partition is
+  // stable, so each group's relative order is preserved — critically, the image volumes keep
+  // their order, so the user's reordering and the image→nv.volumes index mapping both survive.
+  // Bails when already sorted so it doesn't loop.
+  useEffect(() => {
+    const order = orderedLayers.map((_, i) => i);
+    order.sort(
+      (a, b) =>
+        Number(!isImageVolumeLayer(orderedLayers[a])) -
+        Number(!isImageVolumeLayer(orderedLayers[b]))
+    );
+    if (order.every((originalIndex, i) => originalIndex === i)) return; // already volumes-first
+    setOrderedLayers(order.map((i) => orderedLayers[i]));
+    setLayerSettings((prev) => order.map((i) => prev[i]));
+  }, [orderedLayers]);
 
   // ─── Effects: intracranial electrode layer ──────────────────────────────────
 

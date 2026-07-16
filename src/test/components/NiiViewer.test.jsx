@@ -1524,5 +1524,72 @@ describe('NiiViewer', () => {
       expect(screen.getByRole('button', { name: 'Axial view' })).toBeDisabled();
       expect(screen.getByRole('button', { name: '3D view' })).toBeEnabled();
     });
+
+    it('pins a mesh card below an image-volume card regardless of load order', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const meshLayer = {
+        url: 'blob:cortex',
+        name: 'cortex.gii',
+        type: 'Mesh',
+        subtype: 'cortex',
+        kind: 'mesh',
+      };
+      // Mesh listed first in the layers prop — it should still render below the MRI card.
+      render(<NiiViewer nvRef={nvRef} layers={[meshLayer, { type: 'MRI', url: '/mri.nii' }]} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      const mriLabel = screen.getByText('MRI');
+      const meshLabel = screen.getByText('Mesh');
+      // MRI must come before Mesh in DOM order (fixed layers sink to the bottom).
+      expect(
+        mriLabel.compareDocumentPosition(meshLabel) & Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
+    });
+
+    it('moves a newly dropped image volume above an existing mesh card', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const meshLayer = {
+        url: 'blob:cortex',
+        name: 'cortex.gii',
+        type: 'Mesh',
+        subtype: 'cortex',
+        kind: 'mesh',
+      };
+      render(<NiiViewer nvRef={nvRef} layers={[meshLayer]} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      // Drop an MRI after the mesh is already present — it appends at the end, then the
+      // pin-to-bottom normalization should lift it above the fixed mesh card.
+      const input = document.querySelector('input[type="file"]');
+      await userEvent.upload(input, new File(['data'], 'brain_T1w.nii.gz'));
+      await waitFor(() => expect(screen.getByText('MRI')).toBeInTheDocument());
+
+      const mriLabel = screen.getByText('MRI');
+      const meshLabel = screen.getByText('Mesh');
+      expect(
+        mriLabel.compareDocumentPosition(meshLabel) & Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
+    });
+
+    it('pins a connectome card below an image-volume card', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      render(
+        <NiiViewer
+          nvRef={nvRef}
+          layers={[{ type: 'MRI', url: '/mri.nii' }]}
+          intracranialLayer={makeIntracranialLayer()}
+        />
+      );
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      const mriLabel = screen.getByText('MRI');
+      const connectomeLabel = screen.getByText('Intracranial');
+      expect(
+        mriLabel.compareDocumentPosition(connectomeLabel) & Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
+    });
   });
 });

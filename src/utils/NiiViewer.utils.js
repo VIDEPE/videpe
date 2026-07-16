@@ -37,15 +37,18 @@ export const INTRACRANIAL_CONNECTOME_URL = '__intracranial-electrodes__';
 // Same sentinel-URL pattern for the ESI source-power connectome/volume layer.
 export const ESI_LAYER_URL = '__esi-source-power__';
 
-// Returns an array of display settings, one per layer (image volume, connectome, or
-// other mesh). Colormap is derived from layer.type via TYPE_COLORMAP_DEFAULTS — layers
-// themselves do not carry a colormap field.
-// url mirrors the owning layer's url so settings entries carry their own identity —
-// letting effects filter/locate a specific layer's settings (e.g. the connectome's) by
-// url instead of by array position, which is fragile when orderedLayers/layerSettings
-// are updated independently by more than one effect.
-// startIndex is the position of layers[0] among all loaded layers — pass the count of
-// already-loaded layers when appending so only the very first layer overall gets full opacity.
+// True for layers backed by an entry in nv.volumes (not connectomes/meshes, which live in
+// nv.meshes). Used to index into nv.volumes and to decide reorderability: only volumes are
+// reorderable, since meshes/connectomes have no z-order and are pinned to the bottom. The ESI
+// layer follows its current kind — 'volume' in Volume mode, 'connectome' in Connectome mode.
+export const isImageVolumeLayer = (layer) => layer.kind !== 'connectome' && layer.kind !== 'mesh';
+
+// Returns default display settings, one per layer. Colormap is derived from layer.type
+// (layers carry no colormap field). Each entry mirrors its layer's url so effects can locate
+// a specific layer's settings by url rather than array position, which is fragile when
+// orderedLayers/layerSettings are updated independently. startIndex is layers[0]'s position
+// among all loaded layers — pass the already-loaded count when appending so only the very
+// first layer overall gets full opacity.
 export const getInitialLayerSettings = (layers, startIndex = 0) =>
   layers.map((layer, index) => ({
     url: layer.url,
