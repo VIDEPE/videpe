@@ -620,6 +620,47 @@ describe('PatientView — electrode position files', () => {
     expect(toast.success).toHaveBeenCalledWith(expect.stringMatching(/electrode position/i));
   });
 
+  it('does not warn about multiple files when only one electrode position file is dropped', async () => {
+    toast.mockClear();
+    renderPatientView();
+    const file = new File([MINIMAL_TSV], 'positions.tsv');
+
+    await act(async () => {
+      await getEegOnFiles()([file]);
+    });
+
+    expect(toast).not.toHaveBeenCalledWith(expect.stringMatching(/multiple/i), expect.anything());
+  });
+
+  it('keeps only the latest electrode position file and warns when multiple are dropped together', async () => {
+    checkEegFiles.mockReturnValue({
+      formatName: 'BrainVision',
+      complete: true,
+      missing: [],
+      warning: null,
+    });
+    detectAndLoadEEG.mockResolvedValue({ channelNames: ['B1'], fs: 1, tMax: 1, getChunk: vi.fn() });
+    renderPatientView();
+    await act(async () => {
+      await getEegOnFiles()([makeFile('sub01.vhdr'), makeFile('sub01.eeg')]);
+    });
+    toast.mockClear();
+
+    const secondTsv = `name\tx\ty\tz\nT1\t2\t2\t2\n`;
+    await act(async () => {
+      await getEegOnFiles()([
+        new File([MINIMAL_TSV], 'positions1.tsv'),
+        new File([secondTsv], 'positions2.tsv'),
+      ]);
+    });
+
+    expect(EegViewer.mock.lastCall[0].customElecPosFileName).toBe('positions2');
+    expect(toast).toHaveBeenCalledWith(
+      expect.stringMatching(/multiple/i),
+      expect.objectContaining({ icon: '⚠️' })
+    );
+  });
+
   // EegViewer only mounts once an EEG recording is loaded, so these tests load one first —
   // otherwise there is no rendered component whose props could ever surface customElectrodes.
   it('passes parsed customElectrodes and the filename down to EegViewer', async () => {
@@ -780,6 +821,53 @@ describe('PatientView — inverse solution files', () => {
     expect(toast.success).toHaveBeenCalledWith(expect.stringMatching(/inverse solution/i));
   });
 
+  it('does not warn about multiple files when only one inverse solution file is dropped', async () => {
+    toast.mockClear();
+    renderPatientView();
+    const file = makeFile('sub-19_meth-eloreta_desc-nonorm_inversefilters.mat');
+
+    await act(async () => {
+      await getEegOnFiles()([file]);
+    });
+
+    expect(toast).not.toHaveBeenCalledWith(expect.stringMatching(/multiple/i), expect.anything());
+  });
+
+  it('keeps only the latest inverse solution file and warns when multiple are dropped together', async () => {
+    checkEegFiles.mockReturnValue({
+      formatName: 'BrainVision',
+      complete: true,
+      missing: [],
+      warning: null,
+    });
+    detectAndLoadEEG.mockResolvedValue({
+      channelNames: ['1', '2'],
+      fs: 256,
+      tMax: 10,
+      getChunk: vi.fn(),
+    });
+    renderPatientView();
+    await act(async () => {
+      await getEegOnFiles()([makeFile('sub01.vhdr'), makeFile('sub01.eeg')]);
+    });
+    toast.mockClear();
+
+    await act(async () => {
+      await getEegOnFiles()([
+        makeFile('sub-19_meth-eloreta_desc-nonorm_inversefilters.mat'),
+        makeFile('sub-20_meth-eloreta_desc-nonorm_inversefilters.mat'),
+      ]);
+    });
+
+    expect(screen.getByTestId('eeg-inverse-solution-filename')).toHaveTextContent(
+      'sub-20_meth-eloreta_desc-nonorm_inversefilters'
+    );
+    expect(toast).toHaveBeenCalledWith(
+      expect.stringMatching(/multiple/i),
+      expect.objectContaining({ icon: '⚠️' })
+    );
+  });
+
   it('processes both an EEG file and an inverse solution file dropped together', async () => {
     checkEegFiles.mockReturnValue({
       formatName: 'BrainVision',
@@ -856,6 +944,60 @@ describe('PatientView — ESI requires the Average montage', () => {
   it('forces the montage to Average and shows an alert toast when an inverse solution file is loaded', async () => {
     renderPatientView();
     await loadEegAndInverseSolution();
+
+    expect(screen.getByTestId('eeg-montage').textContent).toBe('average');
+    expect(toast).toHaveBeenCalledWith(
+      expect.stringMatching(/average/i),
+      expect.objectContaining({ icon: '⚠️' })
+    );
+  });
+
+  it('does not force the montage to Average when an inverse solution is dropped before any EEG recording is loaded', async () => {
+    checkEegFiles.mockReturnValue({
+      formatName: null,
+      complete: false,
+      missing: null,
+      warning: null,
+    });
+    renderPatientView();
+
+    // recordingType can't be known yet — no EEG recording (and thus no EegViewer
+    // auto-detection) exists — so forcing Average here would be premature.
+    await act(async () => {
+      await getEegOnFiles()([makeFile('sub-19_inversefilters.mat')]);
+    });
+
+    expect(toast).not.toHaveBeenCalledWith(expect.stringMatching(/average/i), expect.anything());
+  });
+
+  it('forces the montage to Average once an EEG recording loads after the inverse solution was already dropped', async () => {
+    checkEegFiles.mockReturnValue({
+      formatName: null,
+      complete: false,
+      missing: null,
+      warning: null,
+    });
+    renderPatientView();
+    await act(async () => {
+      await getEegOnFiles()([makeFile('sub-19_inversefilters.mat')]);
+    });
+    toast.mockClear();
+
+    checkEegFiles.mockReturnValue({
+      formatName: 'BrainVision',
+      complete: true,
+      missing: [],
+      warning: null,
+    });
+    detectAndLoadEEG.mockResolvedValue({
+      channelNames: ['1', '2'],
+      fs: 256,
+      tMax: 10,
+      getChunk: vi.fn(),
+    });
+    await act(async () => {
+      await getEegOnFiles()([makeFile('sub01.vhdr'), makeFile('sub01.eeg')]);
+    });
 
     expect(screen.getByTestId('eeg-montage').textContent).toBe('average');
     expect(toast).toHaveBeenCalledWith(
