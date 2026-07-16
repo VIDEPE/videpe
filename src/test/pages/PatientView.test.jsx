@@ -57,6 +57,7 @@ vi.mock('@/components/EegViewer', () => ({
       montage,
       onMontageChange,
       onRecordingTypeChange,
+      onInverseSolutionFile,
     }) => (
       <div data-testid="eeg-viewer">
         <span data-testid="eeg-custom-electrodes-count">{customElectrodes?.length ?? 0}</span>
@@ -122,6 +123,18 @@ vi.mock('@/components/EegViewer', () => ({
           onClick={() => onRecordingTypeChange?.('eeg')}
         >
           set-recording-eeg
+        </button>
+        {/* Simulates dropping a file on EegViewer's own persistent dropzone — unlike the
+            initial "Drop EEG files" dropzone (which unmounts once EEG is loaded, freezing
+            its onFiles closure), this prop is passed fresh on every PatientView re-render,
+            so it's the only way to exercise recordingType-dependent behaviour in
+            onInverseSolutionFile after the recording type has been toggled post-load. */}
+        <button
+          type="button"
+          data-testid="trigger-inverse-solution-file"
+          onClick={() => onInverseSolutionFile?.(new File([''], 'sub-19_inversefilters.mat'))}
+        >
+          trigger-inverse-solution-file
         </button>
       </div>
     )
@@ -853,6 +866,39 @@ describe('PatientView — ESI requires the Average montage', () => {
 
     expect(screen.getByTestId('eeg-montage').textContent).toBe('none');
     expect(toast).not.toHaveBeenCalledWith(expect.stringMatching(/average/i), expect.anything());
+  });
+
+  it('warns that ESI is not applicable when an inverse solution is loaded in iEEG mode', async () => {
+    checkEegFiles.mockReturnValue({
+      formatName: 'BrainVision',
+      complete: true,
+      missing: [],
+      warning: null,
+    });
+    detectAndLoadEEG.mockResolvedValue({
+      channelNames: ['1', '2'],
+      fs: 256,
+      tMax: 10,
+      getChunk: vi.fn(),
+    });
+    renderPatientView();
+    await act(async () => {
+      await getEegOnFiles()([makeFile('sub01.vhdr'), makeFile('sub01.eeg')]);
+    });
+    await userEvent.click(screen.getByTestId('set-recording-ieeg'));
+    toast.mockClear();
+
+    // Routed through EegViewer's own persistent dropzone callback (not getEegOnFiles,
+    // whose closure is frozen from before EEG loaded and would still see the stale
+    // pre-toggle recordingType).
+    await act(async () => {
+      await userEvent.click(screen.getByTestId('trigger-inverse-solution-file'));
+    });
+
+    expect(toast).toHaveBeenCalledWith(
+      expect.stringMatching(/iEEG/i),
+      expect.objectContaining({ icon: '⚠️' })
+    );
   });
 
   it('forces Average and warns when switching to EEG mode with an inverse solution already loaded', async () => {

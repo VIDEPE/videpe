@@ -160,21 +160,37 @@ export const PatientView = () => {
     }
   }, []);
 
-  const handleInverseSolutionFile = useCallback(async (file) => {
-    try {
-      const parsedInverseSolution = await parseInverseSolutionFieldtrip(file);
-      setInverseSolution(parsedInverseSolution);
-      setInverseSolutionFileName(file.name.replace(/\.[^.]+$/, ''));
-      // Confirm the load — same reasoning as electrode positions above: the compact
-      // dropzone gives no visible feedback of its own that the file was accepted.
-      // Forcing the Average montage (and warning about it) is handled by the effect
-      // below, which also covers the case of switching into EEG mode with a solution
-      // already loaded.
-      toast.success(`Loaded inverse solution from ${file.name}`);
-    } catch (err) {
-      toast.error(err.message);
-    }
-  }, []);
+  const handleInverseSolutionFile = useCallback(
+    async (file) => {
+      try {
+        const parsedInverseSolution = await parseInverseSolutionFieldtrip(file);
+        setInverseSolution(parsedInverseSolution);
+        setInverseSolutionFileName(file.name.replace(/\.[^.]+$/, ''));
+        // Confirm the load — same reasoning as electrode positions above: the compact
+        // dropzone gives no visible feedback of its own that the file was accepted.
+        // Forcing the Average montage (and warning about it) is handled by the effect
+        // below, which also covers the case of switching into EEG mode with a solution
+        // already loaded.
+        toast.success(`Loaded inverse solution from ${file.name}`);
+
+        // ESI only applies to scalp EEG — the file is still stored (and will be picked up
+        // automatically by the force-Average effect below once the user switches back to
+        // EEG mode), but tell them it has no effect right now rather than let them wonder
+        // why nothing happened.
+        if (recordingType === 'ieeg') {
+          toast(
+            'Electrical Source Imaging is not available for iEEG — will apply once you switch to EEG mode',
+            {
+              icon: '⚠️',
+            }
+          );
+        }
+      } catch (err) {
+        toast.error(err.message);
+      }
+    },
+    [recordingType]
+  );
 
   // Holds the latest montage so the ESI-forcing effect below can read it without listing
   // montage as a dependency — otherwise the effect would re-run and undo a deliberate
