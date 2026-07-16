@@ -536,6 +536,18 @@ describe('PatientView — electrode position files', () => {
     });
   });
 
+  it('shows a success toast confirming a loaded electrode position file', async () => {
+    toast.success.mockClear();
+    renderPatientView();
+    const file = new File([MINIMAL_TSV], 'positions.tsv');
+
+    await act(async () => {
+      await getEegOnFiles()([file]);
+    });
+
+    expect(toast.success).toHaveBeenCalledWith(expect.stringMatching(/electrode position/i));
+  });
+
   // EegViewer only mounts once an EEG recording is loaded, so these tests load one first —
   // otherwise there is no rendered component whose props could ever surface customElectrodes.
   it('passes parsed customElectrodes and the filename down to EegViewer', async () => {
