@@ -28,7 +28,7 @@ import { detectIsIntracranial } from '@/utils/intracranialDetection';
 import { EegTopoViewer } from '@/components/EegTopoViewer';
 import { FileDropZone } from '@/components/FileDropZone';
 
-const MIN_STANDARD_MATCH_RATIO_FOR_LED = 0.5; // below this, the standard_1005 template match is too sparse to call "known" positions — status LED stays red instead of auto-matched blue
+const MIN_STANDARD_MATCH_COUNT_FOR_LED = 19; // below this limit (=>classic 10-20 system's electrode count), the standard_1005 template match is too sparse for a usable topography — status LED stays red instead of auto-matched blue
 const EEG_LOADING_TOAST_ID = 'eeg-buffer-loading'; // fixed id so the loading/success toasts update in place rather than stacking
 const RECORDING_TYPE_TOAST_ID = 'eeg-recording-type-detected'; // fixed id so re-detection updates the toast in place instead of stacking
 const Y_AXIS_WIDTH = 60; // px for the y-axis area (channel name + tick space) — must match x-axis strip left padding
@@ -84,37 +84,43 @@ const buildChannelOptions = ({
 // is loaded — overlaps the persistent dropzone's clickable area, since that dropzone shows
 // no state of its own in compact mode. title carries the filename/reason on hover.
 //   • green  — a user file is loaded
-//   • blue   — no user file, but the built-in standard_1005 template matched positions
-//   • red    — nothing loaded or matched
+//   • blue   — no user file, but the built-in standard_1005 template matched enough
+//              positions to be usable
+//   • red    — nothing loaded, or a match too sparse to be usable (title still reports
+//              the count, so a poor match isn't indistinguishable from no match at all)
 //   • grey   — disabled: this file type doesn't apply to the current recording mode
 //              (e.g. inverse solution in iEEG) — greyed rather than removed so the layout
 //              doesn't jump and a loaded-but-unused file doesn't just disappear
-const StatusLed = ({ label, fileName, disabled = false, autoMatched = false, autoTitle }) => {
+// autoTitle, when provided, always describes the template match (regardless of quality —
+// see autoGood); its absence (e.g. for Inverse Solution, which has no template concept)
+// falls back to a plain "not loaded" title.
+const StatusLed = ({ label, fileName, disabled = false, autoGood = false, autoTitle }) => {
   // isDarkMode is the one source of truth that actually reflects the app's theme toggle.
   const { isDarkMode } = useTheme();
   const isActive = Boolean(fileName);
-  const isAuto = !isActive && autoMatched;
+  const hasAutoInfo = !isActive && autoTitle != null;
+  const isAutoGood = hasAutoInfo && autoGood;
   const dotColor = disabled
     ? 'bg-foreground/20'
     : isActive
       ? isDarkMode
         ? 'bg-green-400'
         : 'bg-green-500'
-      : isAuto
+      : isAutoGood
         ? isDarkMode
           ? 'bg-blue-400'
           : 'bg-blue-500'
         : isDarkMode
           ? 'bg-red-400/70'
           : 'bg-red-500/70';
-  // Subtle glow only when on (custom file) or auto-matched — off (red) stays a flat dot
+  // Subtle glow only when on (custom file) or a good auto-match — off (red) stays a flat dot
   const glow = disabled
     ? 'none'
     : isActive
       ? isDarkMode
         ? '0 0 4px 1px rgba(74,222,128,0.7)'
         : '0 0 4px 1px rgba(34,197,94,0.7)'
-      : isAuto
+      : isAutoGood
         ? isDarkMode
           ? '0 0 4px 1px rgba(96,165,250,0.7)'
           : '0 0 4px 1px rgba(59,130,246,0.7)'
@@ -122,10 +128,10 @@ const StatusLed = ({ label, fileName, disabled = false, autoMatched = false, aut
   const title = disabled
     ? `${label} is not applicable for iEEG recordings`
     : isActive
-      ? autoTitle
+      ? autoTitle != null
         ? `Custom: ${fileName}`
         : fileName
-      : isAuto
+      : hasAutoInfo
         ? autoTitle
         : `No ${label.toLowerCase()} loaded`;
   return (
@@ -310,10 +316,8 @@ export const EegViewer = ({
   // Gates the status LED's auto-matched (blue) state — a technically non-empty match can
   // still be too sparse (e.g. one shared label like "Cz" out of 200+ channels) to call
   // positions "known".
-  const standardMatchRatio =
-    channelNames.length > 0 ? standard1005Matched.length / channelNames.length : 0;
   const isStandardMatchGoodForLed =
-    isStandardElectrodes && standardMatchRatio >= MIN_STANDARD_MATCH_RATIO_FOR_LED;
+    isStandardElectrodes && standard1005Matched.length >= MIN_STANDARD_MATCH_COUNT_FOR_LED;
 
   // Apply the selected montage once, shared by the channel plots and the topography snapshot
   const montagedChannels = useMemo(() => {
@@ -1065,8 +1069,14 @@ export const EegViewer = ({
             <StatusLed
               label="Electrode Position"
               fileName={customElecPosFileName}
-              autoMatched={isStandardMatchGoodForLed}
-              autoTitle={`Using standard_1005 template (${standard1005Matched.length}/${channelNames.length} channels matched)`}
+              autoGood={isStandardMatchGoodForLed}
+              autoTitle={
+                // Undefined in iEEG mode — standard_1005 never applies there, so there's
+                // no template match to report (and no "Custom:" disambiguation needed).
+                !isIntracranial
+                  ? `Using standard_1005 template (${standard1005Matched.length}/${channelNames.length} channels matched)`
+                  : undefined
+              }
             />
             <StatusLed
               label="Inverse Solution"
