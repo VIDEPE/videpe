@@ -135,6 +135,9 @@ export const NiiViewer = ({
   esiLayer = null, // same pattern — ESI source power connectome/volume layer
   onViewReady,
   onNiiNvReady,
+  onHasContentChange, // reports orderedLayers.length > 0 — lets the parent see layers
+  // dropped into this component's own dropzone, which never touch the layers/
+  // intracranialLayer/esiLayer props, so it doesn't wrongly unmount this viewer when those go empty/null together.
   isFullscreen = false,
 }) => {
   // ─── State ─────────────────────────────────────────────────────────────────
@@ -422,6 +425,12 @@ export const NiiViewer = ({
     setActiveSliceType(SLICE_TYPE.RENDER);
     nvRef.current?.setSliceType(SLICE_TYPE.RENDER);
   }, [hasImageVolumes, nvRef]);
+
+  // Reports whether this viewer currently holds any layers at all — see onHasContentChange
+  // above for why the parent needs this instead of inferring it from its own props.
+  useEffect(() => {
+    onHasContentChange?.(orderedLayers.length > 0);
+  }, [orderedLayers, onHasContentChange]);
 
   // ─── Effects: canvas setup ───────────────────────────────────────────────────
 
