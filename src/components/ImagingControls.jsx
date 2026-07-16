@@ -51,6 +51,13 @@ function SortableSettingsCard({
   // node/edge colormap, not a NiiVue volume colormap — the intensity colormap dropdown,
   // invert toggle, and colorbar toggle don't apply to them.
   const isConnectome = layer.kind === 'connectome';
+  // File-loaded surface meshes (GIFTI/PLY/OBJ/…) render with their own vertex colors and
+  // have no NiiVue volume colormap or intensity range either, so — like connectomes — they
+  // expose only opacity/visibility, not the colormap/threshold/invert/colorbar controls.
+  const isMesh = layer.kind === 'mesh';
+  // Whether this layer has an adjustable intensity range and colormap (image volumes do;
+  // connectomes and meshes don't).
+  const hasIntensityControls = !isConnectome && !isMesh;
   // ESI layers have their own toggle for ESI Volume / ESI Connectome
   const isEsiLayer = layer.url === ESI_LAYER_URL;
 
@@ -246,8 +253,9 @@ function SortableSettingsCard({
 
             {/* Threshold — meaningful for image volumes and the ESI layer (in either mode,
                 since it colors its mesh from these same fractions), but not for the
-                intracranial electrode connectome, which has no user-adjustable range. */}
-            {(!isConnectome || isEsiLayer) && (
+                intracranial electrode connectome or file-loaded meshes, which have no
+                user-adjustable range. */}
+            {(hasIntensityControls || isEsiLayer) && (
               <div className="flex items-center gap-3">
                 <span className="w-20 shrink-0 text-foreground select-none pointer-events-none">
                   Threshold
@@ -305,9 +313,9 @@ function SortableSettingsCard({
               </div>
             )}
 
-            {/* Colormap — not applicable to connectome layers, which colour themselves
-                via baked-in node/edge colormaps rather than a NiiVue volume colormap */}
-            {!isConnectome && (
+            {/* Colormap — not applicable to connectome or mesh layers, which colour themselves
+                via baked-in node/edge/vertex colors rather than a NiiVue volume colormap */}
+            {hasIntensityControls && (
               <div className="flex items-center gap-3">
                 <span className="w-20 shrink-0 text-foreground select-none pointer-events-none">
                   Colormap
@@ -339,8 +347,8 @@ function SortableSettingsCard({
                   />
                 </div>
               )}
-              {/* Invert / Show colorbar — also not applicable to connectome layers */}
-              {!isConnectome && (
+              {/* Invert / Show colorbar — also not applicable to connectome or mesh layers */}
+              {hasIntensityControls && (
                 <>
                   <div className="w-1/2 flex items-center gap-2.5">
                     <span className="text-foreground select-none pointer-events-none">Invert</span>

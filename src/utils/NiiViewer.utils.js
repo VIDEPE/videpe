@@ -1,3 +1,5 @@
+import { isMeshExt } from '@niivue/niivue';
+
 const MRI_BIDS_SUFFIXES = new Set([
   'T1w',
   'T2w',
@@ -87,10 +89,32 @@ export const detectVolumeType = (filename) => {
   return { type: nameWithoutExtension, subtype: null };
 };
 
+// Strips the extension(s) from a filename for use as a mesh layer's subtype — mirrors
+// detectVolumeType's nameWithoutExtension so a mesh card reads e.g. "Mesh - cortex".
+const nameWithoutExtension = (filename) => {
+  const dotIndex = filename.indexOf('.');
+  return dotIndex === -1 ? filename : filename.slice(0, dotIndex);
+};
+
 export const filesToLayers = (files) =>
-  // Convert a FileList (from input or drag-and-drop) to an array of layer objects with { url, name, type, subtype }.
+  // Convert a FileList (from input or drag-and-drop) to an array of layer objects with
+  // { url, name, type, subtype } for image volumes, plus { kind: 'mesh' } for surface meshes.
   Array.from(files).map((f) => {
     // NiiVue calls fetch(url) internally, so a blob: URL is needed — a plain filename would resolve as a relative HTTP request
+    const url = URL.createObjectURL(f);
+    // Surface meshes (GIFTI/PLY/OBJ/STL/…) are rendered as 3D meshes, not sliceable volumes,
+    // so they take a different load path in NiiViewer (nv.addMeshesFromUrl vs nv.loadVolumes).
+    // Tag them with kind: 'mesh' here so both drop entry points can route them correctly.
+    // isMeshExt is NiiVue's own extension check, so this list stays in sync with what it can parse.
+    if (isMeshExt(f.name)) {
+      return {
+        url,
+        name: f.name,
+        type: 'Mesh',
+        subtype: nameWithoutExtension(f.name),
+        kind: 'mesh',
+      };
+    }
     const { type, subtype } = detectVolumeType(f.name);
-    return { url: URL.createObjectURL(f), name: f.name, type, subtype };
+    return { url, name: f.name, type, subtype };
   });

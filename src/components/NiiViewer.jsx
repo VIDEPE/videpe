@@ -39,6 +39,12 @@ function fractionToCalValue(fraction, boundMin, boundMax) {
   return boundMin + fraction * (boundMax - boundMin);
 }
 
+// An "image volume" layer is one backed by an entry in nv.volumes — i.e. neither a connectome
+// nor a file-loaded surface mesh. Both of those live in nv.meshes instead and are tracked
+// separately (connectomes by their build effects, file meshes by fileMeshesRef), so anything
+// that indexes into nv.volumes must count only image-volume layers.
+const isImageVolumeLayer = (layer) => layer.kind !== 'connectome' && layer.kind !== 'mesh';
+
 // Loads only new image volumes into nv (existing ones stay) and applies all settings.
 // Connectome/mesh layers are excluded — they're tracked separately by the build effects.
 export async function syncVolumesAndApplySettings(nv, layers, layerSettings) {
@@ -68,6 +74,37 @@ export async function syncVolumesAndApplySettings(nv, layers, layerSettings) {
   });
   nv.opts.isColorbar = layerSettings.some((layerSetting) => layerSetting.showColorbar);
   // GL redraw to apply settings
+  nv.updateGLVolume();
+}
+
+// Loads only new surface meshes into nv (existing ones stay) and applies their opacity/
+// visibility. meshMap tracks the file meshes already in the scene, keyed by their layer url —
+// unlike volumes, nv.meshes can't be indexed positionally because it also holds connectome
+// meshes built by the ESI/intracranial effects, so a url→mesh map is what distinguishes
+// "already loaded" file meshes from new ones. Meshes carry no colormap/threshold controls
+// (they render with their own baked-in vertex colors), so only opacity/visibility apply.
+export async function syncMeshesAndApplySettings(nv, meshLayers, meshLayerSettings, meshMap) {
+  if (meshLayers.length === 0) return; // nothing to load or redraw for
+
+  const newLayers = meshLayers.filter((layer) => !meshMap.has(layer.url));
+  if (newLayers.length > 0) {
+    // name (with its extension) is essential: the blob: url alone has no extension for NiiVue
+    // to detect the mesh format from, so it's forwarded alongside the url.
+    const addedMeshes = await nv.addMeshesFromUrl(
+      newLayers.map((layer) => ({ url: layer.url, name: layer.name }))
+    );
+    // addMeshesFromUrl returns the created meshes in input order — record each by its layer url.
+    newLayers.forEach((layer, i) => meshMap.set(layer.url, addedMeshes[i]));
+  }
+
+  // Apply visibility/opacity to every file mesh (0 opacity is how a hidden mesh is
+  // represented, same convention as image volumes and connectome meshes).
+  meshLayers.forEach((layer, index) => {
+    const mesh = meshMap.get(layer.url);
+    if (!mesh) return;
+    const setting = meshLayerSettings[index];
+    mesh.opacity = setting.visible ? setting.opacity : 0;
+  });
   nv.updateGLVolume();
 }
 
@@ -155,6 +192,7 @@ export const NiiViewer = ({
   const loadingLayersRef = useRef(null); // guards nv.loadVolumes against StrictMode double-invoke
   const opacityRafRef = useRef(null); // rAF id — cancelled on each drag so only the latest value redraws
   const canvasSizeTimeoutRef = useRef(null); // debounce timeout for canvas size updates
+  const fileMeshesRef = useRef(new Map()); // url → NVMesh for surface meshes loaded from files; keyed by url since nv.meshes also holds connectome meshes
   const intracranialMeshRef = useRef(null); // current intracranial connectome mesh in the scene
   const lastIntracranialLayerRef = useRef(null); // guards against rebuilding on unrelated re-renders
   const esiMeshRef = useRef(null); // current ESI connectome mesh in the scene (connectome mode)
@@ -163,8 +201,10 @@ export const NiiViewer = ({
 
   // ─── Derived values ─────────────────────────────────────────────────────────
   // Derived from orderedLayers (not `layers`) to also catch files dropped into this
-  // component's own zone, which never touches the `layers` prop.
-  const hasImageVolumes = orderedLayers.some((l) => l.kind !== 'connectome');
+  // component's own zone, which never touches the `layers` prop. Meshes and connectomes are
+  // both excluded — neither has 2D slices, so a mesh-only scene is 3D-only just like a
+  // connectome-only one.
+  const hasImageVolumes = orderedLayers.some(isImageVolumeLayer);
   // Connectome/Volume toggle state for the ESI layer — read by both ESI effects below.
   const isEsiVolumeMode = layerSettings.find((s) => s.url === ESI_LAYER_URL)?.isEsiVolume;
   const sliceTypeOptions = [
@@ -241,12 +281,29 @@ export const NiiViewer = ({
         return;
       }
 
+      // File-loaded surface meshes live in nv.meshes (tracked by fileMeshesRef), not
+      // nv.volumes — like connectomes, they only expose opacity/visibility, applied to the
+      // mesh object directly rather than via nv.setOpacity (which indexes into nv.volumes).
+      if (layer.kind === 'mesh') {
+        const mesh = fileMeshesRef.current.get(layer.url);
+        if (!mesh) return;
+        if (key === 'visible') {
+          mesh.opacity = value ? nextLayerSettings[layerIndex].opacity : 0;
+          nv.updateGLVolume();
+        } else if (key === 'opacity') {
+          if (nextLayerSettings[layerIndex].visible) {
+            mesh.opacity = value;
+            nv.updateGLVolume();
+          }
+        }
+        // colormap/threshold/invert/showColorbar: not rendered for meshes, nothing to apply.
+        return;
+      }
+
       // Map layerIndex (position in the combined orderedLayers list) to its index in
-      // nv.volumes by counting only the preceding image-kind entries — the connectome
-      // layer, if present, occupies a slot in orderedLayers but not in nv.volumes.
-      const nvIndex = orderedLayers
-        .slice(0, layerIndex)
-        .filter((l) => l.kind !== 'connectome').length;
+      // nv.volumes by counting only the preceding image-volume entries — connectome and
+      // mesh layers occupy a slot in orderedLayers but not in nv.volumes.
+      const nvIndex = orderedLayers.slice(0, layerIndex).filter(isImageVolumeLayer).length;
       const nvVolume = nv.volumes[nvIndex];
       if (!nvVolume) return;
 
@@ -297,13 +354,22 @@ export const NiiViewer = ({
     const allLayerSettings = [...layerSettings, ...newLayerSettings];
     setOrderedLayers(allLayers);
     setLayerSettings(allLayerSettings);
-    // Strip connectome layers — syncVolumesAndApplySettings only handles nv.volumes (image files)
-    const imageLayers = allLayers.filter((l) => l.kind !== 'connectome');
-    const imageLayerSettings = allLayerSettings.filter(
-      (_, i) => allLayers[i].kind !== 'connectome'
-    );
+    // Image volumes and surface meshes take separate NiiVue load paths (nv.loadVolumes vs
+    // nv.addMeshesFromUrl); connectomes are handled by their own effects and excluded from both.
+    const imageLayers = allLayers.filter(isImageVolumeLayer);
+    const imageLayerSettings = allLayerSettings.filter((_, i) => isImageVolumeLayer(allLayers[i]));
+    const meshLayers = allLayers.filter((l) => l.kind === 'mesh');
+    const meshLayerSettings = allLayerSettings.filter((_, i) => allLayers[i].kind === 'mesh');
     try {
-      await syncVolumesAndApplySettings(nvRef.current, imageLayers, imageLayerSettings);
+      await Promise.all([
+        syncVolumesAndApplySettings(nvRef.current, imageLayers, imageLayerSettings),
+        syncMeshesAndApplySettings(
+          nvRef.current,
+          meshLayers,
+          meshLayerSettings,
+          fileMeshesRef.current
+        ),
+      ]);
     } catch (loadError) {
       toast.error(`Failed to load image: ${loadError.message}`);
     } finally {
@@ -331,14 +397,14 @@ export const NiiViewer = ({
       setOrderedLayers(newOrderedLayers);
       setLayerSettings(newLayerSettings);
 
-      // A connectome layer has no slot in nv.volumes at all, and reordering a mesh
+      // Connectome and mesh layers have no slot in nv.volumes at all, and reordering a mesh
       // relative to volumes has no rendering effect anyway (3D meshes vs. 2D slice
       // compositing have no shared z-order) — only move the NVImage when an actual
       // image volume was dragged.
       const movedLayer = orderedLayers[event.operation.source.initialIndex];
-      if (movedLayer?.kind !== 'connectome') {
-        const imagesBefore = orderedLayers.filter((l) => l.kind !== 'connectome');
-        const imagesAfter = newOrderedLayers.filter((l) => l.kind !== 'connectome');
+      if (movedLayer && isImageVolumeLayer(movedLayer)) {
+        const imagesBefore = orderedLayers.filter(isImageVolumeLayer);
+        const imagesAfter = newOrderedLayers.filter(isImageVolumeLayer);
         const fromIndex = imagesBefore.indexOf(movedLayer);
         const toIndex = imagesAfter.indexOf(movedLayer);
         setIsLoading(true);
@@ -367,8 +433,15 @@ export const NiiViewer = ({
         // Note: PatientView keeps re-deriving intracranialLayer from live EEG state, so this
         // card reappears on the next voltage update unless that upstream state also clears —
         // acceptable for now, not a locked-in requirement to support a persistent dismissal.
+      } else if (layer?.kind === 'mesh') {
+        // File meshes live in nv.meshes, tracked by fileMeshesRef — drop it from both.
+        const mesh = fileMeshesRef.current.get(layer.url);
+        if (mesh) {
+          nv.removeMesh(mesh);
+          fileMeshesRef.current.delete(layer.url);
+        }
       } else {
-        const nvIndex = orderedLayers.slice(0, index).filter((l) => l.kind !== 'connectome').length;
+        const nvIndex = orderedLayers.slice(0, index).filter(isImageVolumeLayer).length;
         nv.removeVolumeByIndex(nvIndex);
         // The ESI volume (volume mode) is a non-connectome layer too — clear its ref so the
         // ESI build effect doesn't try to remove an already-gone NVImage on its next rebuild.
@@ -487,6 +560,7 @@ export const NiiViewer = ({
       if (!nv) return;
       while (nv.volumes.length > 0) nv.removeVolumeByIndex(0);
       (nv.meshes ?? []).slice().forEach((mesh) => nv.removeMesh(mesh));
+      fileMeshesRef.current.clear(); // drop tracked file meshes so they aren't re-applied on remount
     };
   }, [nvRef]);
 
@@ -499,13 +573,21 @@ export const NiiViewer = ({
   useEffect(() => {
     if (!layers.length) {
       loadingLayersRef.current = null; // reset so the next non-empty load can proceed
-      // No image volumes — clear any stale ones from nv and remove their ImagingControls cards.
-      // Connectome cards (identified by sentinel URL) are left alone.
+      // No image volumes or meshes from the layers prop — clear any stale ones from nv and
+      // remove their ImagingControls cards. Connectome cards/meshes (identified by sentinel
+      // URL, managed by their own effects) are left alone.
       const nv = nvRef.current;
+      let needsRedraw = false;
       if (nv?.volumes.length) {
         while (nv.volumes.length > 0) nv.removeVolumeByIndex(0);
-        nv.updateGLVolume();
+        needsRedraw = true;
       }
+      if (nv && fileMeshesRef.current.size > 0) {
+        fileMeshesRef.current.forEach((mesh) => nv.removeMesh(mesh));
+        fileMeshesRef.current.clear();
+        needsRedraw = true;
+      }
+      if (needsRedraw) nv.updateGLVolume();
       setOrderedLayers((prev) => prev.filter((layer) => layer.kind === 'connectome'));
       setLayerSettings((prev) =>
         prev.filter(
@@ -523,9 +605,24 @@ export const NiiViewer = ({
     setOrderedLayers(layers);
     setIsLoading(true);
 
+    // Image volumes and surface meshes take separate NiiVue load paths — split by kind so
+    // each goes to the right loader. Settings stay index-aligned with their filtered layers.
+    const imageLayers = layers.filter(isImageVolumeLayer);
+    const imageLayerSettings = initialLayerSettings.filter((_, i) => isImageVolumeLayer(layers[i]));
+    const meshLayers = layers.filter((l) => l.kind === 'mesh');
+    const meshLayerSettings = initialLayerSettings.filter((_, i) => layers[i].kind === 'mesh');
+
     const loadAndSync = async () => {
       try {
-        await syncVolumesAndApplySettings(nvRef.current, layers, initialLayerSettings);
+        await Promise.all([
+          syncVolumesAndApplySettings(nvRef.current, imageLayers, imageLayerSettings),
+          syncMeshesAndApplySettings(
+            nvRef.current,
+            meshLayers,
+            meshLayerSettings,
+            fileMeshesRef.current
+          ),
+        ]);
         if (loadingLayersRef.current !== layers) return; // superseded by a newer load
         setIsLoading(false);
         onViewReady?.();
