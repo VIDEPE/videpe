@@ -27,13 +27,17 @@ import { matchChannelsToPositions } from '@/utils/eegTopographyUtils';
 import { detectIsIntracranial } from '@/utils/intracranialDetection';
 import { EegTopoViewer } from '@/components/EegTopoViewer';
 import { FileDropZone } from '@/components/FileDropZone';
+import { StatusLed } from '@/components/StatusLed';
 
+const MIN_STANDARD_MATCH_COUNT_FOR_LED = 19; // below this limit (=>classic 10-20 system's electrode count), the standard_1005 template match is too sparse for a usable topography — status LED stays red instead of auto-matched blue
+const MIN_CUSTOM_MATCH_RATIO_FOR_LED = 0.9; // a user-supplied position file should cover nearly every channel — below this, the LED turns amber rather than green, since it likely doesn't match this recording. 90% (not 100%) tolerates the odd non-scalp channel (ECG/EOG/trigger) a position file has no reason to cover.
 const EEG_LOADING_TOAST_ID = 'eeg-buffer-loading'; // fixed id so the loading/success toasts update in place rather than stacking
 const RECORDING_TYPE_TOAST_ID = 'eeg-recording-type-detected'; // fixed id so re-detection updates the toast in place instead of stacking
 const Y_AXIS_WIDTH = 60; // px for the y-axis area (channel name + tick space) — must match x-axis strip left padding
 const PLOT_RIGHT_PAD = 20; // px right padding — must match in both channel plots and x-axis strip so ticks align
 const OVERDRAW = 2; // canvas height multiplier — peaks bleed ±50% into adjacent lanes instead of clipping
 const MIN_PLOT_HEIGHT = 12; // minimum px per channel lane — prevents uPlot from collapsing at high channel counts
+const MIN_CHANNEL_AREA_HEIGHT = 120; // px floor for the channel-plot scroll area. Below this the whole viewer overflows and the pane's scroll container takes over (mirrors NiiViewer's MIN_CANVAS_HEIGHT) instead of letting the x-axis/scrubber/controls/dropzone overlap
 const ICON_SIZE = 22; // default size for lucide icons in the controls, used to compute input widths
 const INPUT_MIN_CH = 3; // minimum input width in ch units
 const INPUT_EXTRA_CH = 3; // extra ch of breathing room beyond the value's character length
@@ -86,6 +90,7 @@ export const EegViewer = ({
   onTopoNvReady,
   customElectrodes = [], // [{label,x,y,z}] — owned by PatientView, loaded from a user-supplied .elc/.tsv file
   customElecPosFileName = null,
+  inverseSolutionFileName = null, // filename (no extension) of the loaded inverse-solution file — owned by PatientView, passed down
   onElecPosFile,
   onInverseSolutionFile,
   onIntracranialSnapshotChange,
@@ -126,7 +131,13 @@ export const EegViewer = ({
   const Y_MAX = 10 ** Y_INPUT_MAX_LENGTH - 1; // 99999 — derived from Y_INPUT_MAX_LENGTH so both stay in sync
   const Y_MIN = 10 ** -(Y_INPUT_MAX_LENGTH - 2); // 0.001 minimum range (with Y_INPUT_MAX_LENGTH char length) to prevent uPlot from breaking with a zero or negative y-range
 
-  const defaultWindowSize = tMax < 20 ? Math.ceil(tMax) : 20; // default to showing the full recording if it's shorter than 20s, otherwise start with a 20s window
+  // Default to showing the full recording if it's shorter than 20s, otherwise start with a
+  // 20s window. For a short recording, floor tMax to 1 decimal: this keeps the window ≤ tMax
+  // (a window LARGER than the recording made the scrubber thumb exceed 100% and overflow to
+  // the right, dragging in a horizontal scrollbar) AND matches the 1-decimal value the input
+  // snaps to on blur, so a non-integer tMax (e.g. 6.01171875s) shows a clean "6" not the full
+  // float. floor (not round) so rounding can never nudge it back above tMax.
+  const defaultWindowSize = tMax < 20 ? Math.floor(tMax * 10) / 10 : 20;
   const [windowSize, setWindowSize] = useState(defaultWindowSize); // seconds visible in the x-range, initialized to 20s or the full recording if shorter
   const [windowSizeStr, setWindowSizeStr] = useState(String(defaultWindowSize));
 
@@ -137,7 +148,7 @@ export const EegViewer = ({
     String(defaultShiftTimeStepSize)
   );
 
-  const defaultYScale = 10;
+  const defaultYScale = 0.15;
   const [yScale, setYScale] = useState(defaultYScale); // y-axis half-range in µV; all channels share this
   const [yScaleStr, setYScaleStr] = useState(String(defaultYScale)); // separate state for the input string to allow temporary invalid states (e.g. empty string while editing) without breaking the numeric yScale used for plotting
   const [isDragging, setIsDragging] = useState(false); // true while the scrubber thumb is being dragged, so it stays highlighted
@@ -208,15 +219,10 @@ export const EegViewer = ({
         setStandard1005Matched(matchChannelsToPositions(channelNames, parsedElectrodes).matched);
         const detected = detectIsIntracranial(channelNames, parsedElectrodes) ? 'ieeg' : 'eeg';
         onRecordingTypeChange?.(detected);
-        toast(
-          detected === 'ieeg'
-            ? 'iEEG recording detected'
-            : 'EEG recording detected',
-          {
-            id: RECORDING_TYPE_TOAST_ID,
-            icon: '🔍',
-          }
-        );
+        toast(detected === 'ieeg' ? 'iEEG recording detected' : 'EEG recording detected', {
+          id: RECORDING_TYPE_TOAST_ID,
+          icon: '🔍',
+        });
       })
       .catch(() => {}); // silently ignore if file unavailable (e.g. in tests without the asset)
   }, [channelNames, onRecordingTypeChange]);
@@ -237,6 +243,29 @@ export const EegViewer = ({
   const electrodes = usingCustom ? customElectrodes : standard1005Electrodes;
   const matched = usingCustom ? customMatched : standard1005Matched;
   const isStandardElectrodes = !isIntracranial && customElectrodes.length === 0;
+  // Gates the status LED's auto-matched (blue) state — a technically non-empty match can
+  // still be too sparse (e.g. one shared label like "Cz" out of 200+ channels) to call
+  // positions "known".
+  const isStandardMatchGoodForLed =
+    isStandardElectrodes && standard1005Matched.length >= MIN_STANDARD_MATCH_COUNT_FOR_LED;
+
+  // Electrode Position status LED — matchCount/totalCount are shown regardless of quality
+  // (isGoodMatch just picks the color). A custom file's match is judged against
+  // customMatched even in iEEG mode (no standard-template fallback there, but a custom
+  // file's own match quality is still meaningful); the standard-template count only
+  // applies in EEG mode, since standard_1005 doesn't apply to iEEG at all.
+  const hasCustomElecPos = Boolean(customElecPosFileName);
+  const electrodePositionMatchCount = hasCustomElecPos
+    ? customMatched.length
+    : !isIntracranial
+      ? standard1005Matched.length
+      : undefined;
+  const electrodePositionTotalCount =
+    hasCustomElecPos || !isIntracranial ? channelNames.length : undefined;
+  const isElectrodePositionMatchGoodForLed = hasCustomElecPos
+    ? channelNames.length > 0 &&
+      customMatched.length / channelNames.length >= MIN_CUSTOM_MATCH_RATIO_FOR_LED
+    : isStandardMatchGoodForLed;
 
   // Apply the selected montage once, shared by the channel plots and the topography snapshot
   const montagedChannels = useMemo(() => {
@@ -511,7 +540,7 @@ export const EegViewer = ({
             Uses a custom hover tooltip instead of the native title attribute, since native
             tooltips have a long built-in show delay — long enough that clicking the icon (to
             focus the viewer) often fired before the tooltip ever appeared. */}
-        <div className="absolute bottom-10 right-2 z-20 group/tip">
+        <div className="absolute bottom-12 right-2 z-20 group/tip">
           <div className="text-foreground/40 hover:text-foreground/80 group-focus/viewer:text-secondary transition-colors cursor-help">
             <Keyboard size={18} />
           </div>
@@ -543,8 +572,12 @@ export const EegViewer = ({
             </div>
           </div>
         </div>
-        {/* Plot row: sidebar + channel plots side by side; flex-1 so controls sit below */}
-        <div className="flex-1 min-h-0 flex flex-row">
+        {/* Plot row: sidebar + channel plots side by side; flex-1 so controls sit below.
+            No min-h-0 here on purpose — its min-height stays content-based so the row can
+            never shrink below the channel-area floor + x-axis + scrubber + controls. When the
+            pane gets shorter than that, the viewer overflows and the pane scrolls (see the
+            MIN_CHANNEL_AREA_HEIGHT floor below) rather than the fixed rows overlapping. */}
+        <div className="flex-1 flex flex-row">
           {/* Left sidebar: Channels controls centered in the available height, Montage pinned to the bottom-left corner */}
           <div className="shrink-0 flex flex-col px-1">
             <div className="flex-1 flex flex-row items-center">
@@ -616,8 +649,11 @@ export const EegViewer = ({
 
           {/* flex-col so the scroll area and fixed x-axis strip stack vertically */}
           <div className="flex-1 min-w-0 flex flex-col">
-            {/* relative wrapper: sized by flex layout, never by content */}
-            <div className="flex-1 min-h-0 relative">
+            {/* relative wrapper: sized by flex layout, never by content. minHeight floors the
+                channel-plot area so it stays viewable; once the pane is too short to honour
+                this floor, the whole viewer overflows into the pane's scroll container instead
+                of the plots collapsing to nothing. */}
+            <div className="flex-1 relative" style={{ minHeight: MIN_CHANNEL_AREA_HEIGHT }}>
               {/* containerRef is on the scroll div itself: absolute inset-0 fixes its size so
                 content can never inflate it. scrollbar-gutter:stable always reserves the scrollbar
                 lane so contentRect.width is stable and no horizontal scrollbar ever appears */}
@@ -747,12 +783,15 @@ export const EegViewer = ({
                     );
                   }}
                 >
-                  {/* Timeline thumb */}
+                  {/* Timeline thumb. left/width are clamped so the thumb can never extend past
+                      the track's right edge — decimal-rounding in updateWindowSize can leave
+                      windowSize a hair above tMax, which would otherwise push the thumb past
+                      100% and overflow the panel (horizontal scrollbar / misaligned scrubber). */}
                   <div
                     data-testid="timeline-thumb"
                     style={{
-                      left: `${(startTime / tMax) * 100}%`,
-                      width: `${(windowSize / tMax) * 100}%`,
+                      left: `${Math.max(0, Math.min(100, (startTime / tMax) * 100))}%`,
+                      width: `${Math.min(100 - (startTime / tMax) * 100, (windowSize / tMax) * 100)}%`,
                     }}
                     className={`absolute inset-y-0 cursor-grab active:cursor-grabbing ${isDragging ? 'bg-primary' : 'bg-border hover:bg-foreground'}`}
                     onMouseDown={(e) => startDrag(e, 'move')}
@@ -946,12 +985,49 @@ export const EegViewer = ({
               ELEC_POS_EXTENSIONS.some((ext) => f.name.toLowerCase().endsWith(ext))
             );
             if (elecFile) onElecPosFile?.(elecFile);
+
+            // Anything that isn't an electrode-position or inverse-solution file (e.g. an
+            // imaging volume meant for the Neuroimaging panel) would otherwise be silently
+            // swallowed here — surface it instead of leaving the user to wonder why
+            // nothing happened.
+            const recognizedExtensions = [...ELEC_POS_EXTENSIONS, ...INV_SOLUTIONS_EXTENSIONS];
+            const unsupported = all.filter(
+              (f) => !recognizedExtensions.some((ext) => f.name.toLowerCase().endsWith(ext))
+            );
+            if (unsupported.length > 0) {
+              toast.error(
+                `Unsupported file${unsupported.length > 1 ? 's' : ''}: ${unsupported
+                  .map((f) => f.name)
+                  .join(
+                    ', '
+                  )}\nExpected electrode positions (.elc, .tsv) or an inverse solution (.mat).`
+              );
+            }
           }}
           accepted_formats=".elc,.tsv,.mat"
-          label="Drop electrode positions / inverse solution"
+          label="Browse or drop electrode positions / inverse solution"
           compact
-          className="shrink-0"
-        />
+          className="shrink-0 mb-1"
+        >
+          {/* Makes it clear whether a custom electrode-position/inverse-solution file is
+              currently active, rather than leaving the user to guess from the dropzone alone
+              (which shows no state of its own in compact mode). shrink-0 keeps this block at
+              its natural size instead of being squeezed as the panel is resized narrower. */}
+          <div className="flex flex-col items-start gap-1 pr-2 mr-1 border-r border-border/50 text-[10px] text-foreground/60 shrink-0">
+            <StatusLed
+              label="Electrode Position"
+              fileName={customElecPosFileName}
+              matchCount={electrodePositionMatchCount}
+              totalCount={electrodePositionTotalCount}
+              isGoodMatch={isElectrodePositionMatchGoodForLed}
+            />
+            <StatusLed
+              label="Inverse Solution"
+              fileName={inverseSolutionFileName}
+              disabled={isIntracranial}
+            />
+          </div>
+        </FileDropZone>
       </div>
 
       {/* Floating topography viewer — position:fixed so it overlays the whole page */}

@@ -255,11 +255,11 @@ export const AboutPage = () => {
                   className="text-sm mt-2 flex flex-col gap-1 list-disc list-inside"
                   style={{ color: 'var(--c-foreground)' }}
                 >
-                  <li>Supports NIfTI (.nii, .nii.gz), MGH/MGZ, GIFTI, PLY, OBJ</li>
-                  <li>Multi-layer support for MRI, PET, and SPECT in one view</li>
                   <li>
-                    Per-layer opacity, colormap (grayscale, viridis, magma, mako), inversion, and
-                    colorbar
+                    Multi-layer support for MRI, PET, SPECT and meshes in one view. Supports NIfTI (.nii, .nii.gz), MGH/MGZ, GIFTI, PLY, OBJ
+                  </li>
+                  <li>
+                    Per-layer opacity, colormap, colorbar, inversion and threshold controls
                   </li>
                   <li>
                     Drag-to-reorder layers, with a modality subtype label shown on each volume

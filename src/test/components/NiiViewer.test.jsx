@@ -2,8 +2,53 @@ import { StrictMode } from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { getInitialLayerSettings, detectVolumeType } from '@/utils/NiiViewer.utils';
-import { NiiViewer, syncVolumesAndApplySettings } from '@/components/NiiViewer';
+import { getInitialLayerSettings, detectVolumeType, filesToLayers } from '@/utils/NiiViewer.utils';
+import {
+  NiiViewer,
+  syncVolumesAndApplySettings,
+  syncMeshesAndApplySettings,
+} from '@/components/NiiViewer';
+
+// Mirrors the real @niivue/niivue MESH_EXTENSIONS list closely enough to exercise
+// isMeshExt's actual extension-based routing without pulling in the real package.
+const MOCK_MESH_EXTENSIONS = [
+  'ASC',
+  'BYU',
+  'DFS',
+  'FSM',
+  'PIAL',
+  'ORIG',
+  'INFLATED',
+  'SMOOTHWM',
+  'SPHERE',
+  'WHITE',
+  'G',
+  'GEO',
+  'GII',
+  'ICO',
+  'MZ3',
+  'NV',
+  'OBJ',
+  'OFF',
+  'PLY',
+  'SRF',
+  'STL',
+  'TCK',
+  'TRACT',
+  'TRI',
+  'TRK',
+  'TT',
+  'TRX',
+  'VTK',
+  'WRL',
+  'X3D',
+  'JCON',
+  'JSON',
+];
+function mockIsMeshExt(name) {
+  const match = /\.([^.]+)$/.exec(name);
+  return match ? MOCK_MESH_EXTENSIONS.includes(match[1].toUpperCase()) : false;
+}
 
 const SLICE_TYPE_OPTIONS = [
   { ariaLabel: 'Axial view', key: 'AXIAL' },
@@ -66,6 +111,13 @@ vi.mock('@niivue/niivue', () => ({
         // mirrors what real NiiVue does — drops the mesh from the existing ones
         instance.meshes = instance.meshes.filter((m) => m !== mesh);
       }),
+      // Real NiiVue fetches each url, parses it into an NVMesh, calls addMesh for each one,
+      // and returns the created mesh objects — mirror the observable parts of that.
+      addMeshesFromUrl: vi.fn().mockImplementation(async function (meshItems) {
+        const addedMeshes = meshItems.map((item) => ({ ...item, opacity: 1, visible: true }));
+        instance.meshes = [...instance.meshes, ...addedMeshes];
+        return addedMeshes;
+      }),
       updateGLVolume: vi.fn(),
       setSliceType: vi.fn(),
       setMultiplanarLayout: vi.fn(),
@@ -86,6 +138,7 @@ vi.mock('@niivue/niivue', () => ({
     MULTIPLANAR: 3,
     RENDER: 4,
   },
+  isMeshExt: vi.fn(mockIsMeshExt),
 }));
 
 describe('syncVolumesAndApplySettings', () => {
@@ -247,6 +300,94 @@ describe('syncVolumesAndApplySettings', () => {
   });
 });
 
+describe('syncMeshesAndApplySettings', () => {
+  const makeMeshLayer = (url, name) => ({ url, name, kind: 'mesh' });
+  const makeMeshSetting = (overrides = {}) => ({ visible: true, opacity: 0.6, ...overrides });
+
+  let nv;
+  beforeEach(() => {
+    nv = {
+      meshes: [],
+      // Mirrors the real API: fetches/parses each url, adds the mesh to nv.meshes, returns
+      // the created mesh objects in the same order as the input list.
+      addMeshesFromUrl: vi.fn().mockImplementation(async (items) => {
+        const added = items.map((item) => ({ ...item, opacity: 1, visible: true }));
+        nv.meshes = [...nv.meshes, ...added];
+        return added;
+      }),
+      updateGLVolume: vi.fn(),
+    };
+  });
+
+  it('loads new mesh layers via addMeshesFromUrl, forwarding url and name', async () => {
+    const layer = makeMeshLayer('blob:cortex', 'cortex.gii');
+    await syncMeshesAndApplySettings(nv, [layer], [makeMeshSetting()], new Map());
+    // name (with its extension) is essential — the blob: url alone has no extension for
+    // NiiVue to detect the mesh format from.
+    expect(nv.addMeshesFromUrl).toHaveBeenCalledWith([{ url: 'blob:cortex', name: 'cortex.gii' }]);
+  });
+
+  it('records loaded meshes in the provided map keyed by layer url', async () => {
+    const map = new Map();
+    await syncMeshesAndApplySettings(
+      nv,
+      [makeMeshLayer('blob:cortex', 'cortex.gii')],
+      [makeMeshSetting()],
+      map
+    );
+    expect(map.get('blob:cortex')).toBeDefined();
+  });
+
+  it('does not reload a mesh already tracked in the map', async () => {
+    const map = new Map([['blob:cortex', { opacity: 1 }]]);
+    await syncMeshesAndApplySettings(
+      nv,
+      [makeMeshLayer('blob:cortex', 'cortex.gii')],
+      [makeMeshSetting()],
+      map
+    );
+    expect(nv.addMeshesFromUrl).not.toHaveBeenCalled();
+  });
+
+  it('applies the settings opacity to a visible mesh', async () => {
+    const map = new Map();
+    await syncMeshesAndApplySettings(
+      nv,
+      [makeMeshLayer('blob:cortex', 'cortex.gii')],
+      [makeMeshSetting({ opacity: 0.4 })],
+      map
+    );
+    expect(map.get('blob:cortex').opacity).toBe(0.4);
+  });
+
+  it('sets mesh opacity to 0 when the layer is hidden', async () => {
+    const map = new Map();
+    await syncMeshesAndApplySettings(
+      nv,
+      [makeMeshLayer('blob:cortex', 'cortex.gii')],
+      [makeMeshSetting({ visible: false, opacity: 0.6 })],
+      map
+    );
+    expect(map.get('blob:cortex').opacity).toBe(0);
+  });
+
+  it('calls updateGLVolume after loading meshes', async () => {
+    await syncMeshesAndApplySettings(
+      nv,
+      [makeMeshLayer('blob:c', 'c.gii')],
+      [makeMeshSetting()],
+      new Map()
+    );
+    expect(nv.updateGLVolume).toHaveBeenCalled();
+  });
+
+  it('does nothing when there are no mesh layers', async () => {
+    await syncMeshesAndApplySettings(nv, [], [], new Map());
+    expect(nv.addMeshesFromUrl).not.toHaveBeenCalled();
+    expect(nv.updateGLVolume).not.toHaveBeenCalled();
+  });
+});
+
 describe('detectVolumeType', () => {
   describe('BIDS suffix detection', () => {
     it('detects T1w in .nii as MRI with nameWithoutExtension as subtype', () => {
@@ -328,6 +469,45 @@ describe('detectVolumeType', () => {
     it('uses the full name without extension when no _ separator is present', () => {
       expect(detectVolumeType('brainmask.nii.gz')).toEqual({ type: 'brainmask', subtype: null });
     });
+  });
+});
+
+describe('filesToLayers', () => {
+  const makeFile = (name) => new File(['data'], name);
+
+  it('tags a GIFTI file as a mesh layer', () => {
+    const [layer] = filesToLayers([makeFile('cortex.gii')]);
+    expect(layer.kind).toBe('mesh');
+    expect(layer.type).toBe('Mesh');
+    expect(layer.subtype).toBe('cortex');
+  });
+
+  it('tags a PLY file as a mesh layer', () => {
+    const [layer] = filesToLayers([makeFile('skull.ply')]);
+    expect(layer.kind).toBe('mesh');
+  });
+
+  it('tags an OBJ file as a mesh layer', () => {
+    const [layer] = filesToLayers([makeFile('head.obj')]);
+    expect(layer.kind).toBe('mesh');
+  });
+
+  it('assigns a blob url to a mesh layer, same as an image volume layer', () => {
+    const [layer] = filesToLayers([makeFile('cortex.gii')]);
+    expect(layer.url).toMatch(/^blob:/);
+    expect(layer.name).toBe('cortex.gii');
+  });
+
+  it('does not tag a NIfTI file as a mesh layer', () => {
+    const [layer] = filesToLayers([makeFile('brain_T1w.nii.gz')]);
+    expect(layer.kind).toBeUndefined();
+    expect(layer.type).toBe('MRI');
+  });
+
+  it('handles a mix of image volumes and mesh files in the same drop', () => {
+    const layers = filesToLayers([makeFile('brain_T1w.nii.gz'), makeFile('cortex.gii')]);
+    expect(layers[0].kind).toBeUndefined();
+    expect(layers[1].kind).toBe('mesh');
   });
 });
 
@@ -451,6 +631,36 @@ describe('NiiViewer', () => {
       );
     });
 
+    it('does not leave a settings card when a layer passed via the layers prop fails to load', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      Niivue.mockImplementationOnce(function () {
+        return {
+          attachToCanvas: vi.fn(),
+          loadVolumes: vi.fn().mockRejectedValue(new Error('Image type not supported')),
+          setOpacity: vi.fn(),
+          setColormap: vi.fn(),
+          addColormap: vi.fn(),
+          updateGLVolume: vi.fn(),
+          setSliceType: vi.fn(),
+          setMultiplanarLayout: vi.fn(),
+          setCornerOrientationText: vi.fn(),
+          opts: { isColorbar: false, multiplanarShowRender: null, multiplanarEqualSize: true },
+          sliceTypeMultiplanar: 1,
+          volumes: [],
+        };
+      });
+
+      const nvRef = { current: new Niivue() };
+      const { default: toast } = await import('react-hot-toast');
+      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'MRI', url: '/mri.nii' }]} />);
+
+      await waitFor(() =>
+        expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/failed to load image/i))
+      );
+      // The card must not linger for a volume that never actually loaded.
+      expect(screen.queryByText('MRI')).not.toBeInTheDocument();
+    });
+
     it('calls nv.setColormap when the colormap setting changes', async () => {
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
@@ -468,14 +678,20 @@ describe('NiiViewer', () => {
   });
 
   describe('canvas aspect ratio layout', () => {
-    let resizeCallback;
+    // Not just NiiViewer's own canvas-size observer — Radix Slider's Thumb (used by the
+    // Threshold control) also constructs its own ResizeObserver to measure itself. Capture
+    // every instance and broadcast to all of them, rather than assuming there's only one.
+    let resizeCallbacks;
+    const resizeCallback = (entries) => resizeCallbacks.forEach((cb) => cb(entries));
 
     beforeEach(() => {
+      resizeCallbacks = [];
       global.ResizeObserver = class {
         constructor(cb) {
-          resizeCallback = cb;
+          resizeCallbacks.push(cb);
         }
         observe() {}
+        unobserve() {}
         disconnect() {}
       };
       // shouldAdvanceTime keeps real-time-driven helpers like waitFor working alongside fake timers
@@ -760,6 +976,68 @@ describe('NiiViewer', () => {
       // Both cards are present — the new volume alongside the untouched connectome.
       expect(screen.getByRole('button', { name: 'Expand scan controls' })).toBeInTheDocument();
       expect(screen.getByText('Intracranial')).toBeInTheDocument();
+    });
+
+    it('does not leave a settings card when a dropped volume fails to load', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const { default: toast } = await import('react-hot-toast');
+      render(<NiiViewer nvRef={nvRef} layers={[]} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      // Simulate NiiVue rejecting an unsupported file (e.g. "Image type not supported").
+      nvRef.current.loadVolumes.mockRejectedValueOnce(new Error('Image type not supported'));
+
+      const input = document.querySelector('input[type="file"]');
+      await userEvent.upload(input, new File(['data'], 'notes.txt'));
+
+      await waitFor(() =>
+        expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/failed to load/i))
+      );
+      // The optimistically-added card for the failed file must be rolled back, not left behind.
+      expect(screen.queryByText('notes')).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole('button', { name: /Expand notes controls/i })
+      ).not.toBeInTheDocument();
+    });
+
+    it('keeps already-loaded cards when a newly dropped file fails to load', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const { default: toast } = await import('react-hot-toast');
+      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'MRI', url: '/mri.nii' }]} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      // The append path uses addVolumesFromUrl (nv already has a volume) — reject that.
+      nvRef.current.addVolumesFromUrl.mockRejectedValueOnce(new Error('Image type not supported'));
+
+      const input = document.querySelector('input[type="file"]');
+      await userEvent.upload(input, new File(['data'], 'notes.txt'));
+
+      await waitFor(() =>
+        expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/failed to load/i))
+      );
+      // The pre-existing MRI card survives; only the failed file's card is dropped.
+      expect(screen.getByText('MRI')).toBeInTheDocument();
+      expect(screen.queryByText('notes')).not.toBeInTheDocument();
+    });
+
+    it('does not leave a settings card when a dropped mesh fails to load', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const { default: toast } = await import('react-hot-toast');
+      render(<NiiViewer nvRef={nvRef} layers={[]} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      nvRef.current.addMeshesFromUrl.mockRejectedValueOnce(new Error('Mesh type not supported'));
+
+      const input = document.querySelector('input[type="file"]');
+      await userEvent.upload(input, new File(['data'], 'corrupt.gii'));
+
+      await waitFor(() =>
+        expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/failed to load/i))
+      );
+      expect(screen.queryByText('Mesh')).not.toBeInTheDocument();
     });
   });
 
@@ -1104,6 +1382,214 @@ describe('NiiViewer', () => {
 
       expect(screen.getByRole('button', { name: 'Expand scan controls' })).toBeInTheDocument();
       expect(screen.getByText('Intracranial')).toBeInTheDocument();
+    });
+  });
+
+  describe('mesh layers (loaded from files)', () => {
+    it('loads a mesh passed via the layers prop through addMeshesFromUrl, not loadVolumes', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const meshLayer = {
+        url: 'blob:cortex',
+        name: 'cortex.gii',
+        type: 'Mesh',
+        subtype: 'cortex',
+        kind: 'mesh',
+      };
+      render(<NiiViewer nvRef={nvRef} layers={[meshLayer]} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      const nv = nvRef.current;
+      expect(nv.addMeshesFromUrl).toHaveBeenCalledWith([
+        { url: 'blob:cortex', name: 'cortex.gii' },
+      ]);
+      expect(nv.loadVolumes).not.toHaveBeenCalled();
+    });
+
+    it('loads a mesh dropped into the internal drop zone via addMeshesFromUrl', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      render(<NiiViewer nvRef={nvRef} layers={[]} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      const nv = nvRef.current;
+      const input = document.querySelector('input[type="file"]');
+      await userEvent.upload(input, new File(['data'], 'cortex.gii'));
+      await waitFor(() => expect(nv.addMeshesFromUrl).toHaveBeenCalled());
+
+      // The blob: url is generated at drop time, so assert on the forwarded name instead.
+      expect(nv.addMeshesFromUrl.mock.calls.at(-1)[0][0].name).toBe('cortex.gii');
+    });
+
+    it('renders a card for the mesh layer in ImagingControls', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const meshLayer = {
+        url: 'blob:cortex',
+        name: 'cortex.gii',
+        type: 'Mesh',
+        subtype: 'cortex',
+        kind: 'mesh',
+      };
+      render(<NiiViewer nvRef={nvRef} layers={[meshLayer]} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      expect(screen.getByText('Mesh')).toBeInTheDocument();
+      expect(screen.getByText('- cortex')).toBeInTheDocument();
+    });
+
+    it('never passes a mesh through nv.loadVolumes even when loaded alongside an image volume', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const mriLayer = { type: 'MRI', url: '/mri.nii' };
+      const meshLayer = {
+        url: 'blob:cortex',
+        name: 'cortex.gii',
+        type: 'Mesh',
+        subtype: 'cortex',
+        kind: 'mesh',
+      };
+      render(<NiiViewer nvRef={nvRef} layers={[mriLayer, meshLayer]} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      const nv = nvRef.current;
+      const loadedUrls = nv.loadVolumes.mock.calls[0][0].map((l) => l.url);
+      expect(loadedUrls).toEqual(['/mri.nii']);
+      expect(nv.addMeshesFromUrl).toHaveBeenCalled();
+    });
+
+    it('toggling the mesh card visibility sets mesh.opacity directly, not nv.setOpacity', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const meshLayer = {
+        url: 'blob:cortex',
+        name: 'cortex.gii',
+        type: 'Mesh',
+        subtype: 'cortex',
+        kind: 'mesh',
+      };
+      render(<NiiViewer nvRef={nvRef} layers={[meshLayer]} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      const nv = nvRef.current;
+      const mesh = nv.addMeshesFromUrl.mock.results.at(-1).value;
+      const addedMesh = (await mesh)[0];
+      nv.setOpacity.mockClear();
+
+      await userEvent.click(screen.getByRole('button', { name: 'Hide Mesh - cortex' }));
+
+      expect(addedMesh.opacity).toBe(0);
+      expect(nv.setOpacity).not.toHaveBeenCalled();
+    });
+
+    it('deleting a mesh card calls nv.removeMesh, not nv.removeVolumeByIndex', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const meshLayer = {
+        url: 'blob:cortex',
+        name: 'cortex.gii',
+        type: 'Mesh',
+        subtype: 'cortex',
+        kind: 'mesh',
+      };
+      render(<NiiViewer nvRef={nvRef} layers={[meshLayer]} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      const nv = nvRef.current;
+      const addedMesh = (await nv.addMeshesFromUrl.mock.results.at(-1).value)[0];
+      nv.removeVolumeByIndex.mockClear();
+
+      await userEvent.click(screen.getByRole('button', { name: 'Expand Mesh - cortex controls' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Close Mesh - cortex volume' }));
+
+      expect(nv.removeMesh).toHaveBeenCalledWith(addedMesh);
+      expect(nv.removeVolumeByIndex).not.toHaveBeenCalled();
+      expect(screen.queryByText('- cortex')).not.toBeInTheDocument();
+    });
+
+    it('keeps the 2D slice buttons disabled for a mesh-only scene (no image volume)', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const meshLayer = {
+        url: 'blob:cortex',
+        name: 'cortex.gii',
+        type: 'Mesh',
+        subtype: 'cortex',
+        kind: 'mesh',
+      };
+      render(<NiiViewer nvRef={nvRef} layers={[meshLayer]} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      // A mesh has no 2D slices, so — like a connectome-only scene — only 3D is available.
+      expect(screen.getByRole('button', { name: 'Axial view' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: '3D view' })).toBeEnabled();
+    });
+
+    it('pins a mesh card below an image-volume card regardless of load order', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const meshLayer = {
+        url: 'blob:cortex',
+        name: 'cortex.gii',
+        type: 'Mesh',
+        subtype: 'cortex',
+        kind: 'mesh',
+      };
+      // Mesh listed first in the layers prop — it should still render below the MRI card.
+      render(<NiiViewer nvRef={nvRef} layers={[meshLayer, { type: 'MRI', url: '/mri.nii' }]} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      const mriLabel = screen.getByText('MRI');
+      const meshLabel = screen.getByText('Mesh');
+      // MRI must come before Mesh in DOM order (fixed layers sink to the bottom).
+      expect(
+        mriLabel.compareDocumentPosition(meshLabel) & Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
+    });
+
+    it('moves a newly dropped image volume above an existing mesh card', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const meshLayer = {
+        url: 'blob:cortex',
+        name: 'cortex.gii',
+        type: 'Mesh',
+        subtype: 'cortex',
+        kind: 'mesh',
+      };
+      render(<NiiViewer nvRef={nvRef} layers={[meshLayer]} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      // Drop an MRI after the mesh is already present — it appends at the end, then the
+      // pin-to-bottom normalization should lift it above the fixed mesh card.
+      const input = document.querySelector('input[type="file"]');
+      await userEvent.upload(input, new File(['data'], 'brain_T1w.nii.gz'));
+      await waitFor(() => expect(screen.getByText('MRI')).toBeInTheDocument());
+
+      const mriLabel = screen.getByText('MRI');
+      const meshLabel = screen.getByText('Mesh');
+      expect(
+        mriLabel.compareDocumentPosition(meshLabel) & Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
+    });
+
+    it('pins a connectome card below an image-volume card', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      render(
+        <NiiViewer
+          nvRef={nvRef}
+          layers={[{ type: 'MRI', url: '/mri.nii' }]}
+          intracranialLayer={makeIntracranialLayer()}
+        />
+      );
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      const mriLabel = screen.getByText('MRI');
+      const connectomeLabel = screen.getByText('Intracranial');
+      expect(
+        mriLabel.compareDocumentPosition(connectomeLabel) & Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
     });
   });
 });

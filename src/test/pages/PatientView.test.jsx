@@ -51,14 +51,18 @@ vi.mock('@/components/EegViewer', () => ({
     ({
       customElectrodes,
       customElecPosFileName,
+      inverseSolutionFileName,
       onIntracranialSnapshotChange,
       onChannelSnapshotChange,
       montage,
       onMontageChange,
+      onRecordingTypeChange,
+      onInverseSolutionFile,
     }) => (
       <div data-testid="eeg-viewer">
         <span data-testid="eeg-custom-electrodes-count">{customElectrodes?.length ?? 0}</span>
         <span data-testid="eeg-custom-filename">{customElecPosFileName ?? ''}</span>
+        <span data-testid="eeg-inverse-solution-filename">{inverseSolutionFileName ?? ''}</span>
         <span data-testid="eeg-montage">{montage}</span>
         {/* Simulates EegViewer reporting live intracranial electrode/voltage state, the way it
           would after detecting an intracranial recording and matching a position file. */}
@@ -105,12 +109,64 @@ vi.mock('@/components/EegViewer', () => ({
         >
           set-montage-average
         </button>
+        {/* Simulates the EEG/iEEG recording-type toggle in the panel title */}
+        <button
+          type="button"
+          data-testid="set-recording-ieeg"
+          onClick={() => onRecordingTypeChange?.('ieeg')}
+        >
+          set-recording-ieeg
+        </button>
+        <button
+          type="button"
+          data-testid="set-recording-eeg"
+          onClick={() => onRecordingTypeChange?.('eeg')}
+        >
+          set-recording-eeg
+        </button>
+        {/* Simulates dropping a file on EegViewer's own persistent dropzone — unlike the
+            initial "Drop EEG files" dropzone (which unmounts once EEG is loaded, freezing
+            its onFiles closure), this prop is passed fresh on every PatientView re-render,
+            so it's the only way to exercise recordingType-dependent behaviour in
+            onInverseSolutionFile after the recording type has been toggled post-load. */}
+        <button
+          type="button"
+          data-testid="trigger-inverse-solution-file"
+          onClick={() => onInverseSolutionFile?.(new File([''], 'sub-19_inversefilters.mat'))}
+        >
+          trigger-inverse-solution-file
+        </button>
+        {/* Simulates EegViewer reporting the loss of intracranial data on switching to EEG
+            mode (isIntracranial: false) — mirrors how real auto-detection would report it,
+            as opposed to trigger-intracranial-change above which only ever reports true. */}
+        <button
+          type="button"
+          data-testid="trigger-intracranial-clear"
+          onClick={() =>
+            onIntracranialSnapshotChange?.({ isIntracranial: false, matched: [], voltages: [] })
+          }
+        >
+          trigger-intracranial-clear
+        </button>
       </div>
     )
   ),
 }));
 vi.mock('@/components/NiiViewer', () => ({
-  NiiViewer: vi.fn(() => <div data-testid="nii-viewer" />),
+  NiiViewer: vi.fn(({ onHasContentChange }) => (
+    <div data-testid="nii-viewer">
+      {/* Simulates NiiViewer reporting that it holds layers loaded straight into its own
+          internal dropzone — layers PatientView has no other visibility into (they never
+          touch the `layers`/intracranialLayer/esiLayer props). */}
+      <button
+        type="button"
+        data-testid="trigger-nii-has-content"
+        onClick={() => onHasContentChange?.(true)}
+      >
+        trigger-nii-has-content
+      </button>
+    </div>
+  )),
 }));
 vi.mock('@/components/FileDropZone', () => ({ FileDropZone: vi.fn(() => null) }));
 
@@ -304,16 +360,102 @@ describe('PatientView — EEG file accumulation', () => {
   });
 });
 
-describe('PatientView — demo loading', () => {
+describe('PatientView — EEG dropzone rejects unsupported files', () => {
   beforeEach(() => {
     FileDropZone.mockClear();
-    NiiViewer.mockClear();
+    toast.error.mockClear();
+    checkEegFiles.mockClear();
     checkEegFiles.mockReturnValue({
       formatName: null,
       complete: false,
       missing: null,
       warning: null,
     });
+  });
+
+  it('toasts an error and never calls checkEegFiles when only an imaging file is dropped', async () => {
+    renderPatientView();
+
+    await act(async () => {
+      await getEegOnFiles()([makeFile('sub-01_T1w.nii')]);
+    });
+
+    expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('sub-01_T1w.nii'));
+    expect(checkEegFiles).not.toHaveBeenCalled();
+  });
+
+  it('does not hold an imaging file as a pending EEG file', async () => {
+    renderPatientView();
+
+    await act(async () => {
+      await getEegOnFiles()([makeFile('sub-01_T1w.nii')]);
+    });
+
+    const eegDropZoneProps = FileDropZone.mock.calls
+      .filter(([p]) => p.label === 'Drop EEG files')
+      .at(-1)[0];
+    expect(eegDropZoneProps.pendingFiles).toEqual([]);
+  });
+
+  it('rejects an imaging file dropped alongside a valid partial EEG file, without including it in the pending set', async () => {
+    checkEegFiles.mockReturnValue({
+      formatName: 'BrainVision',
+      complete: false,
+      missing: ['.eeg'],
+      warning: null,
+    });
+    renderPatientView();
+
+    await act(async () => {
+      await getEegOnFiles()([makeFile('sub01.vhdr'), makeFile('sub-01_T1w.nii')]);
+    });
+
+    expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('sub-01_T1w.nii'));
+    const checkedFiles = checkEegFiles.mock.lastCall[0];
+    expect(checkedFiles.map((f) => f.name)).not.toContain('sub-01_T1w.nii');
+  });
+});
+
+describe('PatientView — demo loading', () => {
+  beforeEach(() => {
+    FileDropZone.mockClear();
+    NiiViewer.mockClear();
+    EegViewer.mockClear();
+    parseInverseSolutionFieldtrip.mockClear();
+    checkEegFiles.mockReturnValue({
+      formatName: null,
+      complete: false,
+      missing: null,
+      warning: null,
+    });
+    // Demo electrode positions/inverse solution are fetched by URL and wrapped as Files —
+    // stub fetch so that path exercises the same parsers a manual file drop would.
+    global.fetch = vi.fn((url) =>
+      Promise.resolve({
+        ok: true,
+        blob: () =>
+          Promise.resolve(
+            new Blob([url.endsWith('.tsv') ? MINIMAL_TSV : 'irrelevant — mat parser is mocked'])
+          ),
+      })
+    );
+  });
+
+  it('loads demo electrode positions and inverse solution, forwarding them to EegViewer', async () => {
+    renderPatientView();
+    fireEvent.click(screen.getByRole('button', { name: /load demo/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('eeg-custom-electrodes-count')).toHaveTextContent('2');
+      // Montage is forced to 'average' by an effect, one render after inverseSolution
+      // commits — it must be polled inside the same waitFor, not asserted right after,
+      // since that extra render isn't guaranteed to have happened yet.
+      expect(screen.getByTestId('eeg-montage')).toHaveTextContent('average');
+    });
+    expect(screen.getByTestId('eeg-custom-filename')).toHaveTextContent('sub-synth_electrodes');
+    expect(parseInverseSolutionFieldtrip).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'sub-synth_desc-unitnoiselcmv_inversefilters.mat' })
+    );
   });
 
   it('passes demo volumes with correct type and subtype to NiiViewer', async () => {
@@ -330,9 +472,9 @@ describe('PatientView — demo loading', () => {
     });
 
     const layers = NiiViewer.mock.lastCall[0].layers;
-    expect(layers[0]).toMatchObject({ type: 'MRI', subtype: 'patT1' });
-    expect(layers[1]).toMatchObject({ type: 'PET', subtype: 'pat_PET_aligned' });
-    expect(layers[2]).toMatchObject({ type: 'SPECT', subtype: 'pat_siscom_17-13' });
+    expect(layers[0]).toMatchObject({ type: 'MRI', subtype: 'sub-synth_T1w' });
+    expect(layers[1]).toMatchObject({ type: 'sub-synth_label-WM_dseg', subtype: null });
+    expect(layers[2]).toMatchObject({ type: 'sub-synth_label-CSF_dseg', subtype: null });
   });
 
   it('renders both EegViewer and NiiViewer once demo data is loaded', async () => {
@@ -457,6 +599,13 @@ describe('PatientView — electrode position files', () => {
     expect(eegDropZoneProps.accepted_formats).toContain('.tsv');
   });
 
+  it('mentions electrode positions and inverse solution files in the initial dropzone description', () => {
+    renderPatientView();
+    const eegDropZoneProps = FileDropZone.mock.calls.find(([p]) => p.label === 'Drop EEG files')[0];
+    expect(eegDropZoneProps.description).toMatch(/electrode positions/i);
+    expect(eegDropZoneProps.description).toMatch(/inverse solution/i);
+  });
+
   it('routes a dropped .tsv file to electrode position parsing instead of EEG accumulation', async () => {
     renderPatientView();
     const file = new File([MINIMAL_TSV], 'positions.tsv');
@@ -466,6 +615,75 @@ describe('PatientView — electrode position files', () => {
     });
 
     expect(checkEegFiles).not.toHaveBeenCalled(); // pure position-file drop never reaches EEG accumulation
+  });
+
+  it('confirms a dropped electrode position file even before any EEG recording is loaded', async () => {
+    renderPatientView();
+    const file = new File([MINIMAL_TSV], 'positions.tsv');
+
+    await act(async () => {
+      await getEegOnFiles()([file]);
+    });
+
+    const eegDropZoneProps = FileDropZone.mock.calls
+      .filter(([p]) => p.label === 'Drop EEG files')
+      .at(-1)[0];
+    expect(eegDropZoneProps.pendingFiles).toContainEqual({
+      name: 'Electrode positions: positions',
+    });
+  });
+
+  it('shows a success toast confirming a loaded electrode position file', async () => {
+    toast.success.mockClear();
+    renderPatientView();
+    const file = new File([MINIMAL_TSV], 'positions.tsv');
+
+    await act(async () => {
+      await getEegOnFiles()([file]);
+    });
+
+    expect(toast.success).toHaveBeenCalledWith(expect.stringMatching(/electrode position/i));
+  });
+
+  it('does not warn about multiple files when only one electrode position file is dropped', async () => {
+    toast.mockClear();
+    renderPatientView();
+    const file = new File([MINIMAL_TSV], 'positions.tsv');
+
+    await act(async () => {
+      await getEegOnFiles()([file]);
+    });
+
+    expect(toast).not.toHaveBeenCalledWith(expect.stringMatching(/multiple/i), expect.anything());
+  });
+
+  it('keeps only the latest electrode position file and warns when multiple are dropped together', async () => {
+    checkEegFiles.mockReturnValue({
+      formatName: 'BrainVision',
+      complete: true,
+      missing: [],
+      warning: null,
+    });
+    detectAndLoadEEG.mockResolvedValue({ channelNames: ['B1'], fs: 1, tMax: 1, getChunk: vi.fn() });
+    renderPatientView();
+    await act(async () => {
+      await getEegOnFiles()([makeFile('sub01.vhdr'), makeFile('sub01.eeg')]);
+    });
+    toast.mockClear();
+
+    const secondTsv = `name\tx\ty\tz\nT1\t2\t2\t2\n`;
+    await act(async () => {
+      await getEegOnFiles()([
+        new File([MINIMAL_TSV], 'positions1.tsv'),
+        new File([secondTsv], 'positions2.tsv'),
+      ]);
+    });
+
+    expect(EegViewer.mock.lastCall[0].customElecPosFileName).toBe('positions2');
+    expect(toast).toHaveBeenCalledWith(
+      expect.stringMatching(/multiple/i),
+      expect.objectContaining({ icon: '⚠️' })
+    );
   });
 
   // EegViewer only mounts once an EEG recording is loaded, so these tests load one first —
@@ -600,6 +818,81 @@ describe('PatientView — inverse solution files', () => {
     expect(checkEegFiles).not.toHaveBeenCalled();
   });
 
+  it('confirms a dropped inverse solution file even before any EEG recording is loaded', async () => {
+    renderPatientView();
+    const file = makeFile('sub-19_meth-eloreta_desc-nonorm_inversefilters.mat');
+
+    await act(async () => {
+      await getEegOnFiles()([file]);
+    });
+
+    const eegDropZoneProps = FileDropZone.mock.calls
+      .filter(([p]) => p.label === 'Drop EEG files')
+      .at(-1)[0];
+    expect(eegDropZoneProps.pendingFiles).toContainEqual({
+      name: 'Inverse solution: sub-19_meth-eloreta_desc-nonorm_inversefilters',
+    });
+  });
+
+  it('shows a success toast confirming a loaded inverse solution file', async () => {
+    toast.success.mockClear();
+    renderPatientView();
+    const file = makeFile('sub-19_meth-eloreta_desc-nonorm_inversefilters.mat');
+
+    await act(async () => {
+      await getEegOnFiles()([file]);
+    });
+
+    expect(toast.success).toHaveBeenCalledWith(expect.stringMatching(/inverse solution/i));
+  });
+
+  it('does not warn about multiple files when only one inverse solution file is dropped', async () => {
+    toast.mockClear();
+    renderPatientView();
+    const file = makeFile('sub-19_meth-eloreta_desc-nonorm_inversefilters.mat');
+
+    await act(async () => {
+      await getEegOnFiles()([file]);
+    });
+
+    expect(toast).not.toHaveBeenCalledWith(expect.stringMatching(/multiple/i), expect.anything());
+  });
+
+  it('keeps only the latest inverse solution file and warns when multiple are dropped together', async () => {
+    checkEegFiles.mockReturnValue({
+      formatName: 'BrainVision',
+      complete: true,
+      missing: [],
+      warning: null,
+    });
+    detectAndLoadEEG.mockResolvedValue({
+      channelNames: ['1', '2'],
+      fs: 256,
+      tMax: 10,
+      getChunk: vi.fn(),
+    });
+    renderPatientView();
+    await act(async () => {
+      await getEegOnFiles()([makeFile('sub01.vhdr'), makeFile('sub01.eeg')]);
+    });
+    toast.mockClear();
+
+    await act(async () => {
+      await getEegOnFiles()([
+        makeFile('sub-19_meth-eloreta_desc-nonorm_inversefilters.mat'),
+        makeFile('sub-20_meth-eloreta_desc-nonorm_inversefilters.mat'),
+      ]);
+    });
+
+    expect(screen.getByTestId('eeg-inverse-solution-filename')).toHaveTextContent(
+      'sub-20_meth-eloreta_desc-nonorm_inversefilters'
+    );
+    expect(toast).toHaveBeenCalledWith(
+      expect.stringMatching(/multiple/i),
+      expect.objectContaining({ icon: '⚠️' })
+    );
+  });
+
   it('processes both an EEG file and an inverse solution file dropped together', async () => {
     checkEegFiles.mockReturnValue({
       formatName: 'BrainVision',
@@ -625,6 +918,9 @@ describe('PatientView — inverse solution files', () => {
 
     expect(screen.getByTestId('eeg-viewer')).toBeInTheDocument();
     expect(parseInverseSolutionFieldtrip).toHaveBeenCalled();
+    expect(screen.getByTestId('eeg-inverse-solution-filename')).toHaveTextContent(
+      'sub-19_inversefilters'
+    );
   });
 });
 
@@ -670,12 +966,197 @@ describe('PatientView — ESI requires the Average montage', () => {
     });
   });
 
-  it('forces the montage to Average and shows a toast when an inverse solution file is loaded', async () => {
+  it('forces the montage to Average and shows an alert toast when an inverse solution file is loaded', async () => {
     renderPatientView();
     await loadEegAndInverseSolution();
 
     expect(screen.getByTestId('eeg-montage').textContent).toBe('average');
-    expect(toast).toHaveBeenCalledWith(expect.stringMatching(/average/i));
+    expect(toast).toHaveBeenCalledWith(
+      expect.stringMatching(/average/i),
+      expect.objectContaining({ icon: '⚠️' })
+    );
+  });
+
+  it('does not force the montage to Average when an inverse solution is dropped before any EEG recording is loaded', async () => {
+    checkEegFiles.mockReturnValue({
+      formatName: null,
+      complete: false,
+      missing: null,
+      warning: null,
+    });
+    renderPatientView();
+
+    // recordingType can't be known yet — no EEG recording (and thus no EegViewer
+    // auto-detection) exists — so forcing Average here would be premature.
+    await act(async () => {
+      await getEegOnFiles()([makeFile('sub-19_inversefilters.mat')]);
+    });
+
+    expect(toast).not.toHaveBeenCalledWith(expect.stringMatching(/average/i), expect.anything());
+  });
+
+  it('forces the montage to Average once an EEG recording loads after the inverse solution was already dropped', async () => {
+    checkEegFiles.mockReturnValue({
+      formatName: null,
+      complete: false,
+      missing: null,
+      warning: null,
+    });
+    renderPatientView();
+    await act(async () => {
+      await getEegOnFiles()([makeFile('sub-19_inversefilters.mat')]);
+    });
+    toast.mockClear();
+
+    checkEegFiles.mockReturnValue({
+      formatName: 'BrainVision',
+      complete: true,
+      missing: [],
+      warning: null,
+    });
+    detectAndLoadEEG.mockResolvedValue({
+      channelNames: ['1', '2'],
+      fs: 256,
+      tMax: 10,
+      getChunk: vi.fn(),
+    });
+    await act(async () => {
+      await getEegOnFiles()([makeFile('sub01.vhdr'), makeFile('sub01.eeg')]);
+    });
+
+    expect(screen.getByTestId('eeg-montage').textContent).toBe('average');
+    expect(toast).toHaveBeenCalledWith(
+      expect.stringMatching(/average/i),
+      expect.objectContaining({ icon: '⚠️' })
+    );
+  });
+
+  it('does not re-toast the Average-montage warning when the montage is already Average', async () => {
+    checkEegFiles.mockReturnValue({
+      formatName: 'BrainVision',
+      complete: true,
+      missing: [],
+      warning: null,
+    });
+    detectAndLoadEEG.mockResolvedValue({
+      channelNames: ['1', '2'],
+      fs: 256,
+      tMax: 10,
+      getChunk: vi.fn(),
+    });
+    renderPatientView();
+    await act(async () => {
+      await getEegOnFiles()([makeFile('sub01.vhdr'), makeFile('sub01.eeg')]);
+    });
+    // User sets Average manually before any inverse solution is loaded
+    await userEvent.click(screen.getByTestId('set-montage-average'));
+    expect(screen.getByTestId('eeg-montage').textContent).toBe('average'); // sanity: montage is Average before the drop
+    toast.mockClear();
+
+    // Loading the inverse solution should not repeat the warning — montage is already Average
+    await act(async () => {
+      await getEegOnFiles()([makeFile('sub-19_inversefilters.mat')]);
+    });
+
+    expect(screen.getByTestId('eeg-montage').textContent).toBe('average');
+    expect(toast).not.toHaveBeenCalledWith(expect.stringMatching(/average/i), expect.anything());
+  });
+
+  it('does not force Average or warn when an inverse solution is loaded in iEEG mode', async () => {
+    checkEegFiles.mockReturnValue({
+      formatName: 'BrainVision',
+      complete: true,
+      missing: [],
+      warning: null,
+    });
+    detectAndLoadEEG.mockResolvedValue({
+      channelNames: ['1', '2'],
+      fs: 256,
+      tMax: 10,
+      getChunk: vi.fn(),
+    });
+    renderPatientView();
+    await act(async () => {
+      await getEegOnFiles()([makeFile('sub01.vhdr'), makeFile('sub01.eeg')]);
+    });
+    await userEvent.click(screen.getByTestId('set-recording-ieeg'));
+    toast.mockClear();
+
+    // ESI has no meaning for intracranial recordings — loading a solution must not touch the montage
+    await act(async () => {
+      await getEegOnFiles()([makeFile('sub-19_inversefilters.mat')]);
+    });
+
+    expect(screen.getByTestId('eeg-montage').textContent).toBe('none');
+    expect(toast).not.toHaveBeenCalledWith(expect.stringMatching(/average/i), expect.anything());
+  });
+
+  it('warns that ESI is not applicable when an inverse solution is loaded in iEEG mode', async () => {
+    checkEegFiles.mockReturnValue({
+      formatName: 'BrainVision',
+      complete: true,
+      missing: [],
+      warning: null,
+    });
+    detectAndLoadEEG.mockResolvedValue({
+      channelNames: ['1', '2'],
+      fs: 256,
+      tMax: 10,
+      getChunk: vi.fn(),
+    });
+    renderPatientView();
+    await act(async () => {
+      await getEegOnFiles()([makeFile('sub01.vhdr'), makeFile('sub01.eeg')]);
+    });
+    await userEvent.click(screen.getByTestId('set-recording-ieeg'));
+    toast.mockClear();
+
+    // Routed through EegViewer's own persistent dropzone callback (not getEegOnFiles,
+    // whose closure is frozen from before EEG loaded and would still see the stale
+    // pre-toggle recordingType).
+    await act(async () => {
+      await userEvent.click(screen.getByTestId('trigger-inverse-solution-file'));
+    });
+
+    expect(toast).toHaveBeenCalledWith(
+      expect.stringMatching(/iEEG/i),
+      expect.objectContaining({ icon: '⚠️' })
+    );
+  });
+
+  it('forces Average and warns when switching to EEG mode with an inverse solution already loaded', async () => {
+    checkEegFiles.mockReturnValue({
+      formatName: 'BrainVision',
+      complete: true,
+      missing: [],
+      warning: null,
+    });
+    detectAndLoadEEG.mockResolvedValue({
+      channelNames: ['1', '2'],
+      fs: 256,
+      tMax: 10,
+      getChunk: vi.fn(),
+    });
+    renderPatientView();
+    await act(async () => {
+      await getEegOnFiles()([makeFile('sub01.vhdr'), makeFile('sub01.eeg')]);
+    });
+    // Load the inverse solution while in iEEG mode — montage stays untouched
+    await userEvent.click(screen.getByTestId('set-recording-ieeg'));
+    await act(async () => {
+      await getEegOnFiles()([makeFile('sub-19_inversefilters.mat')]);
+    });
+    expect(screen.getByTestId('eeg-montage').textContent).toBe('none');
+    toast.mockClear();
+
+    // Switching to EEG makes ESI applicable — now it should force Average and warn
+    await userEvent.click(screen.getByTestId('set-recording-eeg'));
+
+    expect(screen.getByTestId('eeg-montage').textContent).toBe('average');
+    expect(toast).toHaveBeenCalledWith(
+      expect.stringMatching(/average/i),
+      expect.objectContaining({ icon: '⚠️' })
+    );
   });
 
   it('hides the ESI layer and toasts when the montage is switched away from Average', async () => {
@@ -754,6 +1235,27 @@ describe('PatientView — intracranial connectome layer', () => {
 
     expect(screen.getByTestId('nii-viewer')).toBeInTheDocument();
     expect(NiiViewer.mock.lastCall[0].intracranialLayer).toMatchObject({ kind: 'connectome' });
+  });
+
+  it('keeps NiiViewer mounted (and its other layers intact) when switching out of iEEG mode drops the connectome layer', async () => {
+    renderPatientView();
+    await act(async () => {
+      await getEegOnFiles()([makeFile('sub01.vhdr'), makeFile('sub01.eeg')]);
+    });
+    await userEvent.click(screen.getByTestId('trigger-intracranial-change'));
+    expect(screen.getByTestId('nii-viewer')).toBeInTheDocument();
+
+    // User drops a volume straight into NiiViewer's own dropzone — PatientView's `layers`
+    // state never sees it, so intracranialLayer/esiLayer/layers.length are the only signal
+    // it has, unless NiiViewer itself reports that it now holds content.
+    await userEvent.click(screen.getByTestId('trigger-nii-has-content'));
+
+    // Switching to EEG mode drops the connectome layer — this must not unmount NiiViewer
+    // and discard the volume dropped above, only the connectome layer should go away.
+    await userEvent.click(screen.getByTestId('trigger-intracranial-clear'));
+
+    expect(screen.getByTestId('nii-viewer')).toBeInTheDocument();
+    expect(NiiViewer.mock.lastCall[0].intracranialLayer).toBeNull();
   });
 
   it('clears the connectome layer on reset', async () => {

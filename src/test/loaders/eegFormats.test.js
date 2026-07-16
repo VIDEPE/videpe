@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { checkEegFiles, detectAndLoadEEG } from '@/loaders/eegFormats';
+import { checkEegFiles, detectAndLoadEEG, EEG_FORMAT_EXTENSIONS } from '@/loaders/eegFormats';
 
 vi.mock('@/loaders/loadBrainVisionEEG', () => ({
   loadBrainVisionEEG: vi.fn(),
@@ -63,6 +63,19 @@ describe('checkEegFiles', () => {
     const result = checkEegFiles([makeFile('Sub01.vhdr'), makeFile('sub01.eeg')]);
     expect(result.complete).toBe(false);
     expect(result.warning).toBeTruthy();
+  });
+});
+
+describe('EEG_FORMAT_EXTENSIONS', () => {
+  it('lists the extensions recognized by supported EEG formats, e.g. BrainVision', () => {
+    expect(EEG_FORMAT_EXTENSIONS).toContain('.vhdr');
+    expect(EEG_FORMAT_EXTENSIONS).toContain('.eeg');
+  });
+
+  it('does not include imaging or electrode-position/inverse-solution extensions', () => {
+    expect(EEG_FORMAT_EXTENSIONS).not.toContain('.nii');
+    expect(EEG_FORMAT_EXTENSIONS).not.toContain('.elc');
+    expect(EEG_FORMAT_EXTENSIONS).not.toContain('.mat');
   });
 });
 

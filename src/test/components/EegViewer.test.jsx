@@ -68,6 +68,7 @@ vi.mock('react-hot-toast', () => {
   const toastFn = vi.fn();
   toastFn.loading = vi.fn();
   toastFn.success = vi.fn();
+  toastFn.error = vi.fn();
   toastFn.dismiss = vi.fn();
   return { default: toastFn };
 });
@@ -102,7 +103,7 @@ beforeEach(() => {
   global.fetch = vi.fn().mockResolvedValue({ text: () => Promise.resolve(MOCK_ELC) });
 });
 
-const INITIAL_Y_SCALE = 10; // must match the yScale useState default in EegViewer
+const INITIAL_Y_SCALE = 0.15; // must match the yScale useState default in EegViewer
 const OVERDRAW = 2; // must match the OVERDRAW constant in EegViewer
 
 const channelNames = ['EEG1', 'EEG2', 'EEG3'];
@@ -770,6 +771,25 @@ describe('EegViewer — timeline scrubber', () => {
     expect(thumb().style.left).toBe('0%');
     // windowSize=20, tMax=30 → 66.67%
     expect(parseFloat(thumb().style.width)).toBeCloseTo(66.67, 1);
+  });
+
+  it('never lets the thumb exceed 100% for a short, non-integer tMax (no horizontal overflow)', async () => {
+    // Regression: defaultWindowSize used Math.ceil(tMax), so a non-integer tMax like
+    // 6.01171875 (as the synthetic demo recording has) yielded windowSize=7 > tMax, making
+    // the thumb wider than the track and overflowing the panel to the right.
+    await renderViewer(makeProvider(6.01171875));
+    expect(parseFloat(thumb().style.left)).toBe(0);
+    // Full recording shown, but the thumb spans at most the whole track — never more.
+    expect(parseFloat(thumb().style.width)).toBeLessThanOrEqual(100);
+    expect(parseFloat(thumb().style.width)).toBeGreaterThan(99);
+  });
+
+  it('initialises the window size input to a clean 1-decimal value for a non-integer tMax', async () => {
+    // Regression: the default was the raw tMax float (6.01171875…), overflowing the input's
+    // char limit until a blur snapped it to 6. Floor-to-1-decimal makes it clean from the start.
+    await renderViewer(makeProvider(6.01171875));
+    const input = screen.getByRole('spinbutton', { name: /window size/i });
+    expect(input).toHaveValue(6);
   });
 
   it('clicking the bar jumps start time to the clicked position', async () => {
@@ -1573,7 +1593,9 @@ describe('EegViewer — persistent electrode position dropzone', () => {
   it('renders a dropzone for electrode positions and inverse solution even while the topography window is closed', async () => {
     await renderViewer();
     expect(screen.queryByTestId('eeg-topo-viewer')).toBeNull();
-    expect(screen.getByText('Drop electrode positions / inverse solution')).toBeInTheDocument();
+    expect(
+      screen.getByText('Browse or drop electrode positions / inverse solution')
+    ).toBeInTheDocument();
   });
 
   it('calls onElecPosFile with the dropped .elc file', async () => {
@@ -1620,6 +1642,230 @@ describe('EegViewer — persistent electrode position dropzone', () => {
     expect(onInverseSolutionFile).toHaveBeenCalledWith(file);
   });
 
+  // StatusLed's own props→color/title mapping is unit-tested directly in
+  // StatusLed.test.jsx. These tests are a different axis: do they verify EegViewer computes
+  // the right matchCount/totalCount/isGoodMatch for a given channel/template scenario —
+  // color is kept as the observable proof that the MIN_STANDARD_MATCH_COUNT_FOR_LED
+  // threshold was actually crossed (or not), not just that a number was rendered.
+  it('shows the electrode position LED with the standard_1005 match count, colored red, when the match is below the minimum threshold', async () => {
+    await renderViewer();
+
+    expect(screen.getByText('Electrode Position')).toBeInTheDocument();
+    // MOCK_ELC matches 2 of the 3 test channel names — well under the 19 required for a
+    // usable topography, so the count is shown but the LED reads red, not blue.
+    const led = screen.getByTitle('Using standard_1005 template (2/3 channels matched)');
+    expect(led).toBeInTheDocument();
+    expect(led.querySelector('span')).toHaveClass('bg-red-500/70');
+    expect(screen.getByText('Inverse Solution')).toBeInTheDocument();
+    expect(screen.getByTitle('No inverse solution loaded')).toBeInTheDocument();
+  });
+
+  it('shows the electrode position LED with a 0-match count, colored red, when the standard template matches no channels', async () => {
+    global.fetch = vi.fn().mockResolvedValue({ text: () => Promise.resolve(MOCK_ELC) });
+    const provider = makeProvider();
+    provider.channelNames = ['NoMatch1', 'NoMatch2'];
+    render(<EegViewer provider={provider} channelNames={provider.channelNames} />);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const led = screen.getByTitle('Using standard_1005 template (0/2 channels matched)');
+    expect(led).toBeInTheDocument();
+    expect(led.querySelector('span')).toHaveClass('bg-red-500/70');
+  });
+
+  // Real high-density recordings (e.g. the demo dataset) can share only a handful of
+  // labels (like "Cz") with the standard_1005 template out of 200+ channels — a
+  // technically non-empty match too sparse to be a usable topography.
+  it('shows the electrode position LED as not auto-matched (red) when only a small minority of channels match the standard template', async () => {
+    global.fetch = vi.fn().mockResolvedValue({ text: () => Promise.resolve(MOCK_ELC) });
+    const provider = makeProvider();
+    provider.channelNames = ['Cz', 'X1', 'X2']; // MOCK_ELC only matches "Cz" — 1/3, and 1 < 19
+    render(<EegViewer provider={provider} channelNames={provider.channelNames} />);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const led = screen.getByTitle('Using standard_1005 template (1/3 channels matched)');
+    expect(led).toBeInTheDocument();
+    expect(led.querySelector('span')).toHaveClass('bg-red-500/70');
+  });
+
+  it('shows the electrode position LED as auto-matched (blue) when the standard template match meets the minimum threshold', async () => {
+    const manyChannelNames = Array.from({ length: 19 }, (_, i) => `E${i + 1}`);
+    const manyMatchElc = [
+      'ReferenceLabel avg',
+      'UnitPosition mm',
+      `NumberPositions= ${manyChannelNames.length}`,
+      'Positions',
+      ...manyChannelNames.map(() => '0.0 0.0 0.0'),
+      'Labels',
+      ...manyChannelNames,
+      '',
+    ].join('\n');
+    global.fetch = vi.fn().mockResolvedValue({ text: () => Promise.resolve(manyMatchElc) });
+    const provider = {
+      channelNames: manyChannelNames,
+      fs: 1,
+      tMax: TMAX,
+      getChunk: vi.fn(async (start, end) => {
+        const indices = TIMESTAMPS.map((_, i) => i).filter(
+          (i) => TIMESTAMPS[i] >= start && TIMESTAMPS[i] <= end
+        );
+        return {
+          timestamps: Float32Array.from(indices.map((i) => TIMESTAMPS[i])),
+          channels: manyChannelNames.map(() => Float32Array.from(indices.map(() => 0))),
+        };
+      }),
+    };
+    render(<EegViewer provider={provider} channelNames={provider.channelNames} />);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const led = screen.getByTitle('Using standard_1005 template (19/19 channels matched)');
+    expect(led).toBeInTheDocument();
+    expect(led.querySelector('span')).toHaveClass('bg-blue-500');
+  });
+
+  it('shows the electrode position filename in the status LED once customElecPosFileName is provided', async () => {
+    const provider = makeProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        customElecPosFileName="my_positions"
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // customElectrodes isn't passed here, so the match count is 0/3 — this test only
+    // verifies the filename surfaces in the title, not match quality (see the dedicated
+    // amber/green match-quality tests below).
+    expect(screen.getByTitle('Custom: my_positions (0/3 channels matched)')).toBeInTheDocument();
+    expect(screen.getByTitle('No inverse solution loaded')).toBeInTheDocument();
+  });
+
+  it('shows the electrode position LED as green when a custom file matches at least 90% of channels', async () => {
+    const provider = makeProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        customElecPosFileName="my_positions"
+        customElectrodes={[
+          { label: 'EEG1', x: 0, y: 0, z: 0 },
+          { label: 'EEG2', x: 1, y: 1, z: 1 },
+          { label: 'EEG3', x: 2, y: 2, z: 2 },
+        ]}
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const led = screen.getByTitle('Custom: my_positions (3/3 channels matched)');
+    expect(led).toBeInTheDocument();
+    expect(led.querySelector('span')).toHaveClass('bg-green-500');
+  });
+
+  it('shows the electrode position LED as amber when a custom file matches fewer than 90% of channels — likely the wrong file', async () => {
+    const provider = makeProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        customElecPosFileName="my_positions"
+        customElectrodes={[{ label: 'EEG1', x: 0, y: 0, z: 0 }]}
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const led = screen.getByTitle('Custom: my_positions (1/3 channels matched)');
+    expect(led).toBeInTheDocument();
+    expect(led.querySelector('span')).toHaveClass('bg-amber-500');
+  });
+
+  it('shows the electrode position LED match count for a custom file even in iEEG mode, where the standard template never applies', async () => {
+    const provider = makeIntracranialProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        recordingType="ieeg"
+        customElecPosFileName="my_positions"
+        customElectrodes={[
+          { label: 'B1', x: 0, y: 0, z: 0 },
+          { label: 'B2', x: 1, y: 1, z: 1 },
+        ]}
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // 2/3 intracranial channels matched — below the 90% custom-match bar, so amber.
+    const led = screen.getByTitle('Custom: my_positions (2/3 channels matched)');
+    expect(led).toBeInTheDocument();
+    expect(led.querySelector('span')).toHaveClass('bg-amber-500');
+  });
+
+  it('shows the inverse solution filename in the status LED once inverseSolutionFileName is provided', async () => {
+    const provider = makeProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        inverseSolutionFileName="my_inverse_solution"
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Inverse Solution has no match-count concept — loaded must mean green, not amber.
+    const led = screen.getByTitle('my_inverse_solution');
+    expect(led).toBeInTheDocument();
+    expect(led.querySelector('span')).toHaveClass('bg-green-500');
+    expect(
+      screen.getByTitle('Using standard_1005 template (2/3 channels matched)')
+    ).toBeInTheDocument();
+  });
+
+  it('greys out the inverse solution LED in iEEG mode, even with a file loaded', async () => {
+    const provider = makeIntracranialProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        recordingType="ieeg"
+        inverseSolutionFileName="my_inverse_solution"
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(
+      screen.getByTitle('Inverse Solution is not applicable for iEEG recordings')
+    ).toBeInTheDocument();
+    // Electrode position stays fully active/relevant in iEEG mode.
+    expect(screen.queryByTitle(/electrode position is not applicable/i)).not.toBeInTheDocument();
+  });
+
   it('routes .elc and .mat to their respective handlers when dropped together', async () => {
     const onElecPosFile = vi.fn();
     const onInverseSolutionFile = vi.fn();
@@ -1644,5 +1890,38 @@ describe('EegViewer — persistent electrode position dropzone', () => {
 
     expect(onElecPosFile).toHaveBeenCalledWith(elcFile);
     expect(onInverseSolutionFile).toHaveBeenCalledWith(matFile);
+  });
+
+  it('rejects an imaging file with an error toast instead of silently dropping it', async () => {
+    const { default: toast } = await import('react-hot-toast');
+    toast.error.mockClear();
+    const onElecPosFile = vi.fn();
+    const onInverseSolutionFile = vi.fn();
+    const provider = makeProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        onElecPosFile={onElecPosFile}
+        onInverseSolutionFile={onInverseSolutionFile}
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // fireEvent.drop (not userEvent.upload) — drag-and-drop bypasses the input's `accept`
+    // filter the way a real OS drag does, so this exercises the actual rejection logic
+    // rather than the browser's own file-picker filtering.
+    const niiFile = new File(['binary'], 'sub-01_T1w.nii');
+    const zone = screen
+      .getByText('Browse or drop electrode positions / inverse solution')
+      .closest('div[class]');
+    fireEvent.drop(zone, { dataTransfer: { files: [niiFile] } });
+
+    expect(onElecPosFile).not.toHaveBeenCalled();
+    expect(onInverseSolutionFile).not.toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('sub-01_T1w.nii'));
   });
 });
