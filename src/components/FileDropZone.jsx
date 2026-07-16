@@ -11,6 +11,7 @@ export const FileDropZone = ({
   hint,
   className,
   compact = false,
+  children, // extra content rendered alongside the label — currently only used in compact mode (e.g. status LEDs)
 }) => {
   const inputRef = useRef(null);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
@@ -43,7 +44,7 @@ export const FileDropZone = ({
       className={cn(
         'border-2 cursor-pointer transition-colors group', // group for linking hover styles to children (=<Upload> icon)
         compact
-          ? 'rounded-sm flex flex-row items-center justify-center gap-2 px-3 py-1.5 mx-1'
+          ? 'rounded-sm flex flex-row items-center gap-2 px-3 py-1.5 mx-1 overflow-hidden' // overflow-hidden clips the icon/label at the border so nothing bleeds past it when the panel is narrow
           : 'rounded-xl flex-1 flex flex-col items-center text-center justify-center gap-3 p-2',
         isDraggingOver
           ? 'border-solid border-primary bg-primary/10'
@@ -59,16 +60,27 @@ export const FileDropZone = ({
     >
       {compact ? (
         <>
-          <Upload
-            className={cn(
-              'h-4 w-4 shrink-0 group-hover:text-primary transition-colors',
-              isDraggingOver
-                ? 'text-primary'
-                : 'text-[color-mix(in_srgb,var(--c-border),var(--c-foreground)_40%)]'
-            )}
-          />
-          {/* The label is the main instruction (e.g., "Drop additional files"). */}
-          <p className="text-xs font-medium text-foreground">{label}</p>
+          {/* children (e.g. status LEDs) stay pinned to the left at their natural size —
+              wrapping the icon+label in their own centered flex-1 keeps them centered in
+              the remaining space instead of being centered together with children. */}
+          {children}
+          <div className="flex-1 min-w-0 flex items-center justify-center gap-2">
+            <Upload
+              className={cn(
+                'h-4 w-4 shrink-0 group-hover:text-primary transition-colors',
+                isDraggingOver
+                  ? 'text-primary'
+                  : 'text-[color-mix(in_srgb,var(--c-border),var(--c-foreground)_40%)]'
+              )}
+            />
+            {/* The label is the main instruction (e.g., "Drop additional files").
+                min-w-0 + truncate let it shrink and ellipsize within the centered area instead of
+                overflowing past the border / over the divider + LED labels when the panel is narrow.
+                title exposes the full text on hover so nothing is lost when it's truncated. */}
+            <p className="text-xs font-medium text-foreground min-w-0 truncate" title={label}>
+              {label}
+            </p>
+          </div>
         </>
       ) : (
         <>
@@ -80,13 +92,15 @@ export const FileDropZone = ({
                 : 'text-[color-mix(in_srgb,var(--c-border),var(--c-foreground)_40%)]'
             )}
           />
-          {/* The label is the main instruction (e.g., "Drop EEG files"). */}
-          <p className="text-sm font-medium text-foreground">{label}</p>
-          {/* The description provides format details (e.g., "BrainVision: .vhdr + .eeg").*/}
-          <p className="text-xs text-foreground/50">{description}</p>
+          {/* The label is the main instruction (e.g., "Drop EEG files").
+              whitespace-pre-wrap lets callers use '\n' and '\t' while still wrapping long lines. */}
+          <p className="text-sm font-medium text-foreground whitespace-pre-wrap">{label}</p>
+          {/* The description provides format details (e.g., "BrainVision: .vhdr + .eeg").
+              whitespace-pre-wrap lets callers use '\n' and '\t' while still wrapping long lines. */}
+          <p className="text-xs text-foreground/50 whitespace-pre-wrap">{description}</p>
           {/* If there are pending files that are not yet complete, show them here with a checkmark. */}
           {hasPending && (
-            <div className="flex flex-col items-center gap-1">
+            <div className="flex flex-col items-left gap-1">
               {pendingFiles.map((f) => (
                 <span
                   key={f.name}

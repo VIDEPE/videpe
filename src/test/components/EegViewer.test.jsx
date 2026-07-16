@@ -772,6 +772,25 @@ describe('EegViewer — timeline scrubber', () => {
     expect(parseFloat(thumb().style.width)).toBeCloseTo(66.67, 1);
   });
 
+  it('never lets the thumb exceed 100% for a short, non-integer tMax (no horizontal overflow)', async () => {
+    // Regression: defaultWindowSize used Math.ceil(tMax), so a non-integer tMax like
+    // 6.01171875 (as the synthetic demo recording has) yielded windowSize=7 > tMax, making
+    // the thumb wider than the track and overflowing the panel to the right.
+    await renderViewer(makeProvider(6.01171875));
+    expect(parseFloat(thumb().style.left)).toBe(0);
+    // Full recording shown, but the thumb spans at most the whole track — never more.
+    expect(parseFloat(thumb().style.width)).toBeLessThanOrEqual(100);
+    expect(parseFloat(thumb().style.width)).toBeGreaterThan(99);
+  });
+
+  it('initialises the window size input to a clean 1-decimal value for a non-integer tMax', async () => {
+    // Regression: the default was the raw tMax float (6.01171875…), overflowing the input's
+    // char limit until a blur snapped it to 6. Floor-to-1-decimal makes it clean from the start.
+    await renderViewer(makeProvider(6.01171875));
+    const input = screen.getByRole('spinbutton', { name: /window size/i });
+    expect(input).toHaveValue(6);
+  });
+
   it('clicking the bar jumps start time to the clicked position', async () => {
     await renderViewer();
     vi.spyOn(scrubber(), 'getBoundingClientRect').mockReturnValue({
@@ -1573,7 +1592,9 @@ describe('EegViewer — persistent electrode position dropzone', () => {
   it('renders a dropzone for electrode positions and inverse solution even while the topography window is closed', async () => {
     await renderViewer();
     expect(screen.queryByTestId('eeg-topo-viewer')).toBeNull();
-    expect(screen.getByText('Drop electrode positions / inverse solution')).toBeInTheDocument();
+    expect(
+      screen.getByText('Browse or drop electrode positions / inverse solution')
+    ).toBeInTheDocument();
   });
 
   it('calls onElecPosFile with the dropped .elc file', async () => {
@@ -1618,6 +1639,73 @@ describe('EegViewer — persistent electrode position dropzone', () => {
     await userEvent.upload(input, file);
 
     expect(onInverseSolutionFile).toHaveBeenCalledWith(file);
+  });
+
+  it('shows both status LEDs as "not loaded" when neither file is present', async () => {
+    await renderViewer();
+
+    expect(screen.getByText('Electrode Position')).toBeInTheDocument();
+    expect(screen.getByTitle('No electrode position loaded')).toBeInTheDocument();
+    expect(screen.getByText('Inverse Solution')).toBeInTheDocument();
+    expect(screen.getByTitle('No inverse solution loaded')).toBeInTheDocument();
+  });
+
+  it('shows the electrode position filename in the status LED once customElecPosFileName is provided', async () => {
+    const provider = makeProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        customElecPosFileName="my_positions"
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(screen.getByTitle('my_positions')).toBeInTheDocument();
+    expect(screen.getByTitle('No inverse solution loaded')).toBeInTheDocument();
+  });
+
+  it('shows the inverse solution filename in the status LED once inverseSolutionFileName is provided', async () => {
+    const provider = makeProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        inverseSolutionFileName="my_inverse_solution"
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(screen.getByTitle('my_inverse_solution')).toBeInTheDocument();
+    expect(screen.getByTitle('No electrode position loaded')).toBeInTheDocument();
+  });
+
+  it('greys out the inverse solution LED in iEEG mode, even with a file loaded', async () => {
+    const provider = makeIntracranialProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        recordingType="ieeg"
+        inverseSolutionFileName="my_inverse_solution"
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(
+      screen.getByTitle('Inverse Solution is not applicable for iEEG recordings')
+    ).toBeInTheDocument();
+    // Electrode position stays fully active/relevant in iEEG mode.
+    expect(screen.queryByTitle(/electrode position is not applicable/i)).not.toBeInTheDocument();
   });
 
   it('routes .elc and .mat to their respective handlers when dropped together', async () => {

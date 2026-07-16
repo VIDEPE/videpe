@@ -34,6 +34,7 @@ const Y_AXIS_WIDTH = 60; // px for the y-axis area (channel name + tick space) �
 const PLOT_RIGHT_PAD = 20; // px right padding — must match in both channel plots and x-axis strip so ticks align
 const OVERDRAW = 2; // canvas height multiplier — peaks bleed ±50% into adjacent lanes instead of clipping
 const MIN_PLOT_HEIGHT = 12; // minimum px per channel lane — prevents uPlot from collapsing at high channel counts
+const MIN_CHANNEL_AREA_HEIGHT = 120; // px floor for the channel-plot scroll area. Below this the whole viewer overflows and the pane's scroll container takes over (mirrors NiiViewer's MIN_CANVAS_HEIGHT) instead of letting the x-axis/scrubber/controls/dropzone overlap
 const ICON_SIZE = 22; // default size for lucide icons in the controls, used to compute input widths
 const INPUT_MIN_CH = 3; // minimum input width in ch units
 const INPUT_EXTRA_CH = 3; // extra ch of breathing room beyond the value's character length
@@ -78,6 +79,61 @@ const buildChannelOptions = ({
   };
 };
 
+// Red/green LED-style indicator for whether an optional file (electrode positions,
+// inverse solution) is currently loaded — sits under the persistent dropzone since that
+// dropzone shows no state of its own in compact mode. title carries the filename so it's
+// discoverable on hover without permanently taking up space.
+// disabled greys the LED out for a file type that doesn't apply to the current recording
+// mode (e.g. inverse solution / ESI has no meaning for intracranial recordings) — greyed
+// rather than removed so the layout doesn't jump when the user flips the EEG/iEEG toggle,
+// and so a file that's still loaded (just unused right now) doesn't just disappear.
+const StatusLed = ({ label, fileName, disabled = false }) => {
+  // isDarkMode (not Tailwind's dark: variant) since dark: tracks the OS-level
+  // prefers-color-scheme media query, not this app's manually-toggled .dark class —
+  // isDarkMode is the one source of truth that actually reflects the app's theme toggle.
+  const { isDarkMode } = useTheme();
+  const isActive = Boolean(fileName);
+  const dotColor = disabled
+    ? 'bg-foreground/20'
+    : isActive
+      ? isDarkMode
+        ? 'bg-green-400'
+        : 'bg-green-500'
+      : isDarkMode
+        ? 'bg-red-400/70'
+        : 'bg-red-500/70';
+  // Subtle glow only when on — off (red) stays a flat dot, matching "attention only when
+  // something needs it" (an always-on glow on both states would just be visual noise).
+  // Kept in style (not a shadow-[...] class) so the rgb values stay directly readable here.
+  const glow =
+    isActive && !disabled
+      ? isDarkMode
+        ? '0 0 4px 1px rgba(74,222,128,0.7)'
+        : '0 0 4px 1px rgba(34,197,94,0.7)'
+      : 'none';
+  const title = disabled
+    ? `${label} is not applicable for iEEG recordings`
+    : isActive
+      ? fileName
+      : `No ${label.toLowerCase()} loaded`;
+  return (
+    <span
+      className={cn(
+        'flex items-center gap-1.5 leading-none shrink-0 whitespace-nowrap',
+        disabled && (isDarkMode ? 'text-foreground/20' : 'text-foreground/40')
+      )}
+      title={title}
+    >
+      <span
+        className={cn('h-2 w-2 rounded-full shrink-0', dotColor)}
+        style={{ boxShadow: glow }}
+        aria-hidden="true"
+      />
+      {label}
+    </span>
+  );
+};
+
 export const EegViewer = ({
   nvRef_eegtopo,
   provider,
@@ -86,6 +142,7 @@ export const EegViewer = ({
   onTopoNvReady,
   customElectrodes = [], // [{label,x,y,z}] — owned by PatientView, loaded from a user-supplied .elc/.tsv file
   customElecPosFileName = null,
+  inverseSolutionFileName = null, // filename (no extension) of the loaded inverse-solution file — owned by PatientView, passed down
   onElecPosFile,
   onInverseSolutionFile,
   onIntracranialSnapshotChange,
@@ -126,7 +183,13 @@ export const EegViewer = ({
   const Y_MAX = 10 ** Y_INPUT_MAX_LENGTH - 1; // 99999 — derived from Y_INPUT_MAX_LENGTH so both stay in sync
   const Y_MIN = 10 ** -(Y_INPUT_MAX_LENGTH - 2); // 0.001 minimum range (with Y_INPUT_MAX_LENGTH char length) to prevent uPlot from breaking with a zero or negative y-range
 
-  const defaultWindowSize = tMax < 20 ? Math.ceil(tMax) : 20; // default to showing the full recording if it's shorter than 20s, otherwise start with a 20s window
+  // Default to showing the full recording if it's shorter than 20s, otherwise start with a
+  // 20s window. For a short recording, floor tMax to 1 decimal: this keeps the window ≤ tMax
+  // (a window LARGER than the recording made the scrubber thumb exceed 100% and overflow to
+  // the right, dragging in a horizontal scrollbar) AND matches the 1-decimal value the input
+  // snaps to on blur, so a non-integer tMax (e.g. 6.01171875s) shows a clean "6" not the full
+  // float. floor (not round) so rounding can never nudge it back above tMax.
+  const defaultWindowSize = tMax < 20 ? Math.floor(tMax * 10) / 10 : 20;
   const [windowSize, setWindowSize] = useState(defaultWindowSize); // seconds visible in the x-range, initialized to 20s or the full recording if shorter
   const [windowSizeStr, setWindowSizeStr] = useState(String(defaultWindowSize));
 
@@ -506,7 +569,7 @@ export const EegViewer = ({
             Uses a custom hover tooltip instead of the native title attribute, since native
             tooltips have a long built-in show delay — long enough that clicking the icon (to
             focus the viewer) often fired before the tooltip ever appeared. */}
-        <div className="absolute bottom-10 right-2 z-20 group/tip">
+        <div className="absolute bottom-12 right-2 z-20 group/tip">
           <div className="text-foreground/40 hover:text-foreground/80 group-focus/viewer:text-secondary transition-colors cursor-help">
             <Keyboard size={18} />
           </div>
@@ -538,8 +601,12 @@ export const EegViewer = ({
             </div>
           </div>
         </div>
-        {/* Plot row: sidebar + channel plots side by side; flex-1 so controls sit below */}
-        <div className="flex-1 min-h-0 flex flex-row">
+        {/* Plot row: sidebar + channel plots side by side; flex-1 so controls sit below.
+            No min-h-0 here on purpose — its min-height stays content-based so the row can
+            never shrink below the channel-area floor + x-axis + scrubber + controls. When the
+            pane gets shorter than that, the viewer overflows and the pane scrolls (see the
+            MIN_CHANNEL_AREA_HEIGHT floor below) rather than the fixed rows overlapping. */}
+        <div className="flex-1 flex flex-row">
           {/* Left sidebar: Channels controls centered in the available height, Montage pinned to the bottom-left corner */}
           <div className="shrink-0 flex flex-col px-1">
             <div className="flex-1 flex flex-row items-center">
@@ -611,8 +678,11 @@ export const EegViewer = ({
 
           {/* flex-col so the scroll area and fixed x-axis strip stack vertically */}
           <div className="flex-1 min-w-0 flex flex-col">
-            {/* relative wrapper: sized by flex layout, never by content */}
-            <div className="flex-1 min-h-0 relative">
+            {/* relative wrapper: sized by flex layout, never by content. minHeight floors the
+                channel-plot area so it stays viewable; once the pane is too short to honour
+                this floor, the whole viewer overflows into the pane's scroll container instead
+                of the plots collapsing to nothing. */}
+            <div className="flex-1 relative" style={{ minHeight: MIN_CHANNEL_AREA_HEIGHT }}>
               {/* containerRef is on the scroll div itself: absolute inset-0 fixes its size so
                 content can never inflate it. scrollbar-gutter:stable always reserves the scrollbar
                 lane so contentRect.width is stable and no horizontal scrollbar ever appears */}
@@ -742,12 +812,15 @@ export const EegViewer = ({
                     );
                   }}
                 >
-                  {/* Timeline thumb */}
+                  {/* Timeline thumb. left/width are clamped so the thumb can never extend past
+                      the track's right edge — decimal-rounding in updateWindowSize can leave
+                      windowSize a hair above tMax, which would otherwise push the thumb past
+                      100% and overflow the panel (horizontal scrollbar / misaligned scrubber). */}
                   <div
                     data-testid="timeline-thumb"
                     style={{
-                      left: `${(startTime / tMax) * 100}%`,
-                      width: `${(windowSize / tMax) * 100}%`,
+                      left: `${Math.max(0, Math.min(100, (startTime / tMax) * 100))}%`,
+                      width: `${Math.min(100 - (startTime / tMax) * 100, (windowSize / tMax) * 100)}%`,
                     }}
                     className={`absolute inset-y-0 cursor-grab active:cursor-grabbing ${isDragging ? 'bg-primary' : 'bg-border hover:bg-foreground'}`}
                     onMouseDown={(e) => startDrag(e, 'move')}
@@ -943,10 +1016,23 @@ export const EegViewer = ({
             if (elecFile) onElecPosFile?.(elecFile);
           }}
           accepted_formats=".elc,.tsv,.mat"
-          label="Drop electrode positions / inverse solution"
+          label="Browse or drop electrode positions / inverse solution"
           compact
-          className="shrink-0"
-        />
+          className="shrink-0 mb-1"
+        >
+          {/* Makes it clear whether a custom electrode-position/inverse-solution file is
+              currently active, rather than leaving the user to guess from the dropzone alone
+              (which shows no state of its own in compact mode). shrink-0 keeps this block at
+              its natural size instead of being squeezed as the panel is resized narrower. */}
+          <div className="flex flex-col items-start gap-1 pr-2 mr-1 border-r border-border/50 text-[10px] text-foreground/60 shrink-0">
+            <StatusLed label="Electrode Position" fileName={customElecPosFileName} />
+            <StatusLed
+              label="Inverse Solution"
+              fileName={inverseSolutionFileName}
+              disabled={isIntracranial}
+            />
+          </div>
+        </FileDropZone>
       </div>
 
       {/* Floating topography viewer — position:fixed so it overlays the whole page */}

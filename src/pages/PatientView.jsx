@@ -99,7 +99,6 @@ const EEGTypeToggle = ({ recordingType, onChange }) => {
   );
 };
 
-
 // Electrode position files are routed to handleElecPosFile instead of the EEG-format
 // accumulation logic below, regardless of which dropzone/button they came in through.
 
@@ -140,6 +139,7 @@ export const PatientView = () => {
   // title's click handler uses, then reads the resulting value back down as a prop.
   const [recordingType, setRecordingType] = useState('eeg');
   const [inverseSolution, setInverseSolution] = useState(null);
+  const [inverseSolutionFileName, setInverseSolutionFileName] = useState(null);
   const [channelSnapshot, setChannelSnapshot] = useState(null); // { isIntracranial, channelNames, voltages } lifted from EegViewer on each click
   // 'none' | 'average' | 'median' — owned here (not EegViewer) because ESI requires the
   // Average montage: loading an inverse solution forces this to 'average', and switching
@@ -161,6 +161,7 @@ export const PatientView = () => {
     try {
       const parsedInverseSolution = await parseInverseSolutionFieldtrip(file);
       setInverseSolution(parsedInverseSolution);
+      setInverseSolutionFileName(file.name.replace(/\.[^.]+$/, ''));
       // ESI is only valid under a common average reference — force it and let the user
       // know why, rather than silently computing nonsensical source power.
       setMontage('average');
@@ -364,6 +365,7 @@ export const PatientView = () => {
     setCustomElecPosFileName(null);
     setIntracranialSnapshot(null);
     setInverseSolution(null);
+    setInverseSolutionFileName(null);
     setChannelSnapshot(null);
     setRecordingType('eeg');
     setMontage('none');
@@ -378,6 +380,7 @@ export const PatientView = () => {
     setRecordingType('eeg');
     setIntracranialSnapshot(null);
     setInverseSolution(null);
+    setInverseSolutionFileName(null);
     setChannelSnapshot(null);
     setMontage('none');
   };
@@ -463,6 +466,7 @@ export const PatientView = () => {
               onTopoNvReady={handleTopoNvReady} // topo canvas ready
               customElectrodes={customElectrodes}
               customElecPosFileName={customElecPosFileName}
+              inverseSolutionFileName={inverseSolutionFileName}
               recordingType={recordingType}
               onRecordingTypeChange={setRecordingType}
               montage={montage}
@@ -477,9 +481,20 @@ export const PatientView = () => {
               <FileDropZone
                 onFiles={handleEegFiles}
                 accepted_formats=".vhdr,.eeg,.elc,.tsv,.mat"
-                label="Drop EEG files"
-                description="BrainVision: .vhdr + .eeg (+ optional .elc/.tsv electrode positions)"
-                pendingFiles={pendingEegFiles}
+                label={'Drop EEG files'}
+                description={
+                  '\tBrainVision EEG:\t\t\t.vhdr + .eeg\nElectrode Positions:\t\t.elc + .tsv\n\t\tInverse Solution:\t\t\t.mat (FieldTrip)'
+                }
+                // Registered electrode-position/inverse-solution files ride along in the same checkmark list as pending EEG files.
+                pendingFiles={[
+                  ...pendingEegFiles.map((f) => ({ name: `EEG Recording: ${f.name}` })),
+                  ...(customElecPosFileName
+                    ? [{ name: `Electrode positions: ${customElecPosFileName}` }]
+                    : []),
+                  ...(inverseSolutionFileName
+                    ? [{ name: `Inverse solution: ${inverseSolutionFileName}` }]
+                    : []),
+                ]}
                 hint={eegHint}
                 className="h-full min-h-48"
               />
