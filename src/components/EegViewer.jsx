@@ -27,6 +27,7 @@ import { matchChannelsToPositions } from '@/utils/eegTopographyUtils';
 import { detectIsIntracranial } from '@/utils/intracranialDetection';
 import { EegTopoViewer } from '@/components/EegTopoViewer';
 import { FileDropZone } from '@/components/FileDropZone';
+import { StatusLed } from '@/components/StatusLed';
 
 const MIN_STANDARD_MATCH_COUNT_FOR_LED = 19; // below this limit (=>classic 10-20 system's electrode count), the standard_1005 template match is too sparse for a usable topography — status LED stays red instead of auto-matched blue
 const MIN_CUSTOM_MATCH_RATIO_FOR_LED = 0.9; // a user-supplied position file should cover nearly every channel — below this, the LED turns amber rather than green, since it likely doesn't match this recording. 90% (not 100%) tolerates the odd non-scalp channel (ECG/EOG/trigger) a position file has no reason to cover.
@@ -79,99 +80,6 @@ const buildChannelOptions = ({
     legend: { show: false },
     padding: [0, PLOT_RIGHT_PAD, 0, Y_AXIS_WIDTH], // left padding replaces the hidden y-axis size; 0 top/bottom so overdraw areas aren't consumed by padding
   };
-};
-
-// LED-style indicator for whether an optional file (electrode positions, inverse solution)
-// is loaded — overlaps the persistent dropzone's clickable area, since that dropzone shows
-// no state of its own in compact mode. title carries the filename/count/reason on hover.
-//   • green  — a user file is loaded and matches most of the recording's channels
-//   • amber  — a user file is loaded, but too few channels matched — likely the wrong file
-//   • blue   — no user file, but the built-in standard_1005 template matched enough
-//              positions to be usable
-//   • red    — nothing loaded, or a match too sparse to be usable (title still reports
-//              the count, so a poor match isn't indistinguishable from no match at all)
-//   • grey   — disabled: this file type doesn't apply to the current recording mode
-//              (e.g. inverse solution in iEEG) — greyed rather than removed so the layout
-//              doesn't jump and a loaded-but-unused file doesn't just disappear
-// matchCount/totalCount, when both provided, mean this LED type has a "channels matched"
-// concept — the count is always shown (regardless of quality — see isGoodMatch); their
-// absence (e.g. for Inverse Solution, which has no such concept) falls back to a plain
-// "not loaded" title.
-const StatusLed = ({
-  label,
-  fileName,
-  disabled = false,
-  matchCount,
-  totalCount,
-  isGoodMatch = false,
-}) => {
-  // isDarkMode is the one source of truth that actually reflects the app's theme toggle.
-  const { isDarkMode } = useTheme();
-  const isActive = Boolean(fileName);
-  const hasMatchInfo = matchCount != null && totalCount != null;
-  // Match quality only demotes green→amber for LEDs that carry a matchCount (Electrode
-  // Position) — LEDs with no such concept (e.g. Inverse Solution) have nothing to distrust,
-  // so isGoodMatch's unset default (false) must not fall through to amber for them.
-  const isActiveGood = !hasMatchInfo || isGoodMatch;
-  const dotColor = disabled
-    ? 'bg-foreground/20'
-    : isActive
-      ? isActiveGood
-        ? isDarkMode
-          ? 'bg-green-400'
-          : 'bg-green-500'
-        : isDarkMode
-          ? 'bg-amber-400'
-          : 'bg-amber-500'
-      : hasMatchInfo && isGoodMatch
-        ? isDarkMode
-          ? 'bg-blue-400'
-          : 'bg-blue-500'
-        : isDarkMode
-          ? 'bg-red-400/70'
-          : 'bg-red-500/70';
-  // Subtle glow only when on (green/amber) or a good auto-match (blue) — off (red) stays a flat dot
-  const glow = disabled
-    ? 'none'
-    : isActive
-      ? isActiveGood
-        ? isDarkMode
-          ? '0 0 4px 1px rgba(74,222,128,0.7)'
-          : '0 0 4px 1px rgba(34,197,94,0.7)'
-        : isDarkMode
-          ? '0 0 4px 1px rgba(251,191,36,0.7)'
-          : '0 0 4px 1px rgba(245,158,11,0.7)'
-      : hasMatchInfo && isGoodMatch
-        ? isDarkMode
-          ? '0 0 4px 1px rgba(96,165,250,0.7)'
-          : '0 0 4px 1px rgba(59,130,246,0.7)'
-        : 'none';
-  const matchSuffix = hasMatchInfo ? ` (${matchCount}/${totalCount} channels matched)` : '';
-  const title = disabled
-    ? `${label} is not applicable for iEEG recordings`
-    : isActive
-      ? hasMatchInfo
-        ? `Custom: ${fileName}${matchSuffix}`
-        : fileName
-      : hasMatchInfo
-        ? `Using standard_1005 template${matchSuffix}`
-        : `No ${label.toLowerCase()} loaded`;
-  return (
-    <span
-      className={cn(
-        'flex items-center gap-1.5 leading-none shrink-0 whitespace-nowrap',
-        disabled && (isDarkMode ? 'text-foreground/20' : 'text-foreground/40')
-      )}
-      title={title}
-    >
-      <span
-        className={cn('h-2 w-2 rounded-full shrink-0', dotColor)}
-        style={{ boxShadow: glow }}
-        aria-hidden="true"
-      />
-      {label}
-    </span>
-  );
 };
 
 export const EegViewer = ({
