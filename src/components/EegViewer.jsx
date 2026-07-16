@@ -28,6 +28,7 @@ import { detectIsIntracranial } from '@/utils/intracranialDetection';
 import { EegTopoViewer } from '@/components/EegTopoViewer';
 import { FileDropZone } from '@/components/FileDropZone';
 
+const MIN_STANDARD_MATCH_RATIO_FOR_LED = 0.5; // below this, the standard_1005 template match is too sparse to call "known" positions — status LED stays red instead of auto-matched blue
 const EEG_LOADING_TOAST_ID = 'eeg-buffer-loading'; // fixed id so the loading/success toasts update in place rather than stacking
 const RECORDING_TYPE_TOAST_ID = 'eeg-recording-type-detected'; // fixed id so re-detection updates the toast in place instead of stacking
 const Y_AXIS_WIDTH = 60; // px for the y-axis area (channel name + tick space) — must match x-axis strip left padding
@@ -306,6 +307,13 @@ export const EegViewer = ({
   const electrodes = usingCustom ? customElectrodes : standard1005Electrodes;
   const matched = usingCustom ? customMatched : standard1005Matched;
   const isStandardElectrodes = !isIntracranial && customElectrodes.length === 0;
+  // Gates the status LED's auto-matched (blue) state — a technically non-empty match can
+  // still be too sparse (e.g. one shared label like "Cz" out of 200+ channels) to call
+  // positions "known".
+  const standardMatchRatio =
+    channelNames.length > 0 ? standard1005Matched.length / channelNames.length : 0;
+  const isStandardMatchGoodForLed =
+    isStandardElectrodes && standardMatchRatio >= MIN_STANDARD_MATCH_RATIO_FOR_LED;
 
   // Apply the selected montage once, shared by the channel plots and the topography snapshot
   const montagedChannels = useMemo(() => {
@@ -1057,7 +1065,7 @@ export const EegViewer = ({
             <StatusLed
               label="Electrode Position"
               fileName={customElecPosFileName}
-              autoMatched={isStandardElectrodes && standard1005Matched.length > 0}
+              autoMatched={isStandardMatchGoodForLed}
               autoTitle={`Using standard_1005 template (${standard1005Matched.length}/${channelNames.length} channels matched)`}
             />
             <StatusLed

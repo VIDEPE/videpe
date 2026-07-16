@@ -1667,6 +1667,23 @@ describe('EegViewer — persistent electrode position dropzone', () => {
     expect(screen.getByTitle('No electrode position loaded')).toBeInTheDocument();
   });
 
+  // Mirrors real high-density recordings (e.g. the demo dataset), where the standard_1005
+  // template happens to share only a handful of labels (like "Cz") with 200+ channel names —
+  // a technically non-empty match that's too sparse to call "known" positions.
+  it('shows the electrode position LED as "not loaded", not auto-matched, when only a small minority of channels match the standard template', async () => {
+    global.fetch = vi.fn().mockResolvedValue({ text: () => Promise.resolve(MOCK_ELC) });
+    const provider = makeProvider();
+    provider.channelNames = ['Cz', 'X1', 'X2']; // MOCK_ELC only matches "Cz" — 1/3 ≈ 33%
+    render(<EegViewer provider={provider} channelNames={provider.channelNames} />);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(screen.getByTitle('No electrode position loaded')).toBeInTheDocument();
+    expect(screen.queryByTitle(/standard_1005/i)).not.toBeInTheDocument();
+  });
+
   it('shows the electrode position filename in the status LED once customElecPosFileName is provided', async () => {
     const provider = makeProvider();
     render(
