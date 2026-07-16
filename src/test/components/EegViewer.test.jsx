@@ -1740,8 +1740,80 @@ describe('EegViewer — persistent electrode position dropzone', () => {
       await Promise.resolve();
     });
 
-    expect(screen.getByTitle('Custom: my_positions')).toBeInTheDocument();
+    // customElectrodes isn't passed here, so the match count is 0/3 — this test only
+    // verifies the filename surfaces in the title, not match quality (see the dedicated
+    // amber/green match-quality tests below).
+    expect(screen.getByTitle('Custom: my_positions (0/3 channels matched)')).toBeInTheDocument();
     expect(screen.getByTitle('No inverse solution loaded')).toBeInTheDocument();
+  });
+
+  it('shows the electrode position LED as green when a custom file matches at least 90% of channels', async () => {
+    const provider = makeProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        customElecPosFileName="my_positions"
+        customElectrodes={[
+          { label: 'EEG1', x: 0, y: 0, z: 0 },
+          { label: 'EEG2', x: 1, y: 1, z: 1 },
+          { label: 'EEG3', x: 2, y: 2, z: 2 },
+        ]}
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const led = screen.getByTitle('Custom: my_positions (3/3 channels matched)');
+    expect(led).toBeInTheDocument();
+    expect(led.querySelector('span')).toHaveClass('bg-green-500');
+  });
+
+  it('shows the electrode position LED as amber when a custom file matches fewer than 90% of channels — likely the wrong file', async () => {
+    const provider = makeProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        customElecPosFileName="my_positions"
+        customElectrodes={[{ label: 'EEG1', x: 0, y: 0, z: 0 }]}
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const led = screen.getByTitle('Custom: my_positions (1/3 channels matched)');
+    expect(led).toBeInTheDocument();
+    expect(led.querySelector('span')).toHaveClass('bg-amber-500');
+  });
+
+  it('shows the electrode position LED match count for a custom file even in iEEG mode, where the standard template never applies', async () => {
+    const provider = makeIntracranialProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        recordingType="ieeg"
+        customElecPosFileName="my_positions"
+        customElectrodes={[
+          { label: 'B1', x: 0, y: 0, z: 0 },
+          { label: 'B2', x: 1, y: 1, z: 1 },
+        ]}
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // 2/3 intracranial channels matched — below the 90% custom-match bar, so amber.
+    const led = screen.getByTitle('Custom: my_positions (2/3 channels matched)');
+    expect(led).toBeInTheDocument();
+    expect(led.querySelector('span')).toHaveClass('bg-amber-500');
   });
 
   it('shows the inverse solution filename in the status LED once inverseSolutionFileName is provided', async () => {
@@ -1758,7 +1830,10 @@ describe('EegViewer — persistent electrode position dropzone', () => {
       await Promise.resolve();
     });
 
-    expect(screen.getByTitle('my_inverse_solution')).toBeInTheDocument();
+    // Inverse Solution has no match-count concept — loaded must mean green, not amber.
+    const led = screen.getByTitle('my_inverse_solution');
+    expect(led).toBeInTheDocument();
+    expect(led.querySelector('span')).toHaveClass('bg-green-500');
     expect(
       screen.getByTitle('Using standard_1005 template (2/3 channels matched)')
     ).toBeInTheDocument();
