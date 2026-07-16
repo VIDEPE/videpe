@@ -176,20 +176,6 @@ export const PatientView = () => {
     }
   }, []);
 
-  // Montage is a controlled prop on EegViewer so it can be forced to 'average' below; this
-  // is the other direction — the user switching away from it while ESI is active.
-  const handleMontageChange = useCallback(
-    (newMontage) => {
-      setMontage(newMontage);
-      if (newMontage !== 'average' && inverseSolution ) {
-        toast('Electrical Source Imaging requires the Average montage — layer hidden', {
-          icon: '⚠️',
-        });
-      }
-    },
-    [inverseSolution]
-  );
-
   // Holds the latest montage so the ESI-forcing effect below can read it without listing
   // montage as a dependency — otherwise the effect would re-run and undo a deliberate
   // switch away from Average the moment the user made it.
@@ -227,6 +213,26 @@ export const PatientView = () => {
       montage === 'average' ? electricalSourceImaging(inverseSolution, channelSnapshot) : null,
     [inverseSolution, channelSnapshot, montage]
   ); // ESI source power — { sourcePowerConnectomes, sourcePowerVolume } | null | [] — only valid under the Average montage
+
+  // Montage is a controlled prop on EegViewer so it can be forced to 'average' above
+  // when adding an inverse solution file.
+  // This is the other direction — the user switching away from it while ESI is active. Warns
+  // only when doing so actually hides a layer that was visible: not merely whenever an
+  // inverse solution happens to be loaded. That excludes iEEG mode (ESI never applies
+  // there) and EEG mode before the first channel click (no channelSnapshot yet, so no
+  // layer has ever been computed) — in both cases esiLayer is already falsy, so nothing
+  // is being hidden and the warning would be misleading.
+  const handleMontageChange = useCallback(
+    (newMontage) => {
+      setMontage(newMontage);
+      if (newMontage !== 'average' && esiLayer) {
+        toast('Electrical Source Imaging requires the Average montage — layer hidden', {
+          icon: '⚠️',
+        });
+      }
+    },
+    [esiLayer]
+  );
 
   // when both these flags are true, then the two plots can be synchronised
   const [niiNvReady, setNiiNvReady] = useState(false); // flag when the NiiViewer canvas is initialised

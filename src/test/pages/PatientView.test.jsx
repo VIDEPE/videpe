@@ -353,9 +353,12 @@ describe('PatientView — demo loading', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('eeg-custom-electrodes-count')).toHaveTextContent('2');
+      // Montage is forced to 'average' by an effect, one render after inverseSolution
+      // commits — it must be polled inside the same waitFor, not asserted right after,
+      // since that extra render isn't guaranteed to have happened yet.
+      expect(screen.getByTestId('eeg-montage')).toHaveTextContent('average');
     });
     expect(screen.getByTestId('eeg-custom-filename')).toHaveTextContent('sub-synth_electrodes');
-    expect(screen.getByTestId('eeg-montage')).toHaveTextContent('average');
     expect(parseInverseSolutionFieldtrip).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'sub-synth_desc-unitnoiselcmv_inversefilters.mat' })
     );
