@@ -117,6 +117,10 @@ export const PatientView = () => {
 
   const [eeg, setEeg] = useState(null); // recording provider: { channelNames, fs, tMax, getChunk }
   const [layers, setLayers] = useState([]); // image volumes/meshes loaded from files
+  // Whether NiiViewer holds layers dropped into its own internal dropzone — those never
+  // touch `layers` above, so this prevents wrongly unmounting NiiViewer (and discarding
+  // them) when e.g. switching out of iEEG mode clears intracranialLayer.
+  const [niiHasOwnContent, setNiiHasOwnContent] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isDemoloading, setIsDemoloading] = useState(false);
   const eegReadyResolveRef = useRef(null); // set before demo load; EegViewer calls it when charts are ready
@@ -434,6 +438,7 @@ export const PatientView = () => {
   const handleReset = () => {
     setEeg(null);
     setLayers([]);
+    setNiiHasOwnContent(false);
     setPendingEegFiles([]);
     setEegHint(null);
     setCustomElectrodes([]);
@@ -462,6 +467,7 @@ export const PatientView = () => {
 
   const handleNiiReset = () => {
     setLayers([]);
+    setNiiHasOwnContent(false);
   };
 
   return (
@@ -528,7 +534,9 @@ export const PatientView = () => {
         rightLabel={<span className={PANEL_TITLE_CLASS}>Neuroimaging</span>}
         onLeftReset={eeg || pendingEegFiles.length > 0 ? handleEegReset : undefined}
         onRightReset={
-          layers.length > 0 || intracranialLayer || esiLayer ? handleNiiReset : undefined
+          layers.length > 0 || intracranialLayer || esiLayer || niiHasOwnContent
+            ? handleNiiReset
+            : undefined
         }
         onMaximizeChange={setMaximizedPanel}
         left={
@@ -577,12 +585,13 @@ export const PatientView = () => {
           )
         }
         right={
-          layers.length > 0 || intracranialLayer || esiLayer ? (
+          layers.length > 0 || intracranialLayer || esiLayer || niiHasOwnContent ? (
             <NiiViewer
               nvRef={nvRef_niiviewer}
               layers={layers}
               intracranialLayer={intracranialLayer}
               esiLayer={esiLayer}
+              onHasContentChange={setNiiHasOwnContent}
               isFullscreen={maximizedPanel === 'right'}
               onViewReady={() => niiReadyResolveRef.current?.()}
               onNiiNvReady={() => setNiiNvReady(true)}

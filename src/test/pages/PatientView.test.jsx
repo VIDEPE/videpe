@@ -136,12 +136,37 @@ vi.mock('@/components/EegViewer', () => ({
         >
           trigger-inverse-solution-file
         </button>
+        {/* Simulates EegViewer reporting the loss of intracranial data on switching to EEG
+            mode (isIntracranial: false) — mirrors how real auto-detection would report it,
+            as opposed to trigger-intracranial-change above which only ever reports true. */}
+        <button
+          type="button"
+          data-testid="trigger-intracranial-clear"
+          onClick={() =>
+            onIntracranialSnapshotChange?.({ isIntracranial: false, matched: [], voltages: [] })
+          }
+        >
+          trigger-intracranial-clear
+        </button>
       </div>
     )
   ),
 }));
 vi.mock('@/components/NiiViewer', () => ({
-  NiiViewer: vi.fn(() => <div data-testid="nii-viewer" />),
+  NiiViewer: vi.fn(({ onHasContentChange }) => (
+    <div data-testid="nii-viewer">
+      {/* Simulates NiiViewer reporting that it holds layers loaded straight into its own
+          internal dropzone — layers PatientView has no other visibility into (they never
+          touch the `layers`/intracranialLayer/esiLayer props). */}
+      <button
+        type="button"
+        data-testid="trigger-nii-has-content"
+        onClick={() => onHasContentChange?.(true)}
+      >
+        trigger-nii-has-content
+      </button>
+    </div>
+  )),
 }));
 vi.mock('@/components/FileDropZone', () => ({ FileDropZone: vi.fn(() => null) }));
 
@@ -1210,6 +1235,27 @@ describe('PatientView — intracranial connectome layer', () => {
 
     expect(screen.getByTestId('nii-viewer')).toBeInTheDocument();
     expect(NiiViewer.mock.lastCall[0].intracranialLayer).toMatchObject({ kind: 'connectome' });
+  });
+
+  it('keeps NiiViewer mounted (and its other layers intact) when switching out of iEEG mode drops the connectome layer', async () => {
+    renderPatientView();
+    await act(async () => {
+      await getEegOnFiles()([makeFile('sub01.vhdr'), makeFile('sub01.eeg')]);
+    });
+    await userEvent.click(screen.getByTestId('trigger-intracranial-change'));
+    expect(screen.getByTestId('nii-viewer')).toBeInTheDocument();
+
+    // User drops a volume straight into NiiViewer's own dropzone — PatientView's `layers`
+    // state never sees it, so intracranialLayer/esiLayer/layers.length are the only signal
+    // it has, unless NiiViewer itself reports that it now holds content.
+    await userEvent.click(screen.getByTestId('trigger-nii-has-content'));
+
+    // Switching to EEG mode drops the connectome layer — this must not unmount NiiViewer
+    // and discard the volume dropped above, only the connectome layer should go away.
+    await userEvent.click(screen.getByTestId('trigger-intracranial-clear'));
+
+    expect(screen.getByTestId('nii-viewer')).toBeInTheDocument();
+    expect(NiiViewer.mock.lastCall[0].intracranialLayer).toBeNull();
   });
 
   it('clears the connectome layer on reset', async () => {
