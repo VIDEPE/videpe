@@ -79,43 +79,52 @@ const buildChannelOptions = ({
   };
 };
 
-// Red/green LED-style indicator for whether an optional file (electrode positions,
-// inverse solution) is currently loaded — sits under the persistent dropzone since that
-// dropzone shows no state of its own in compact mode. title carries the filename so it's
-// discoverable on hover without permanently taking up space.
-// disabled greys the LED out for a file type that doesn't apply to the current recording
-// mode (e.g. inverse solution / ESI has no meaning for intracranial recordings) — greyed
-// rather than removed so the layout doesn't jump when the user flips the EEG/iEEG toggle,
-// and so a file that's still loaded (just unused right now) doesn't just disappear.
-const StatusLed = ({ label, fileName, disabled = false }) => {
-  // isDarkMode (not Tailwind's dark: variant) since dark: tracks the OS-level
-  // prefers-color-scheme media query, not this app's manually-toggled .dark class —
+// LED-style indicator for whether an optional file (electrode positions, inverse solution)
+// is loaded — overlaps the persistent dropzone's clickable area, since that dropzone shows
+// no state of its own in compact mode. title carries the filename/reason on hover.
+//   • green  — a user file is loaded
+//   • blue   — no user file, but the built-in standard_1005 template matched positions
+//   • red    — nothing loaded or matched
+//   • grey   — disabled: this file type doesn't apply to the current recording mode
+//              (e.g. inverse solution in iEEG) — greyed rather than removed so the layout
+//              doesn't jump and a loaded-but-unused file doesn't just disappear
+const StatusLed = ({ label, fileName, disabled = false, autoMatched = false, autoTitle }) => {
   // isDarkMode is the one source of truth that actually reflects the app's theme toggle.
   const { isDarkMode } = useTheme();
   const isActive = Boolean(fileName);
+  const isAuto = !isActive && autoMatched;
   const dotColor = disabled
     ? 'bg-foreground/20'
     : isActive
       ? isDarkMode
         ? 'bg-green-400'
         : 'bg-green-500'
-      : isDarkMode
-        ? 'bg-red-400/70'
-        : 'bg-red-500/70';
-  // Subtle glow only when on — off (red) stays a flat dot, matching "attention only when
-  // something needs it" (an always-on glow on both states would just be visual noise).
-  // Kept in style (not a shadow-[...] class) so the rgb values stay directly readable here.
-  const glow =
-    isActive && !disabled
+      : isAuto
+        ? isDarkMode
+          ? 'bg-blue-400'
+          : 'bg-blue-500'
+        : isDarkMode
+          ? 'bg-red-400/70'
+          : 'bg-red-500/70';
+  // Subtle glow only when on (custom file) or auto-matched — off (red) stays a flat dot
+  const glow = disabled
+    ? 'none'
+    : isActive
       ? isDarkMode
         ? '0 0 4px 1px rgba(74,222,128,0.7)'
         : '0 0 4px 1px rgba(34,197,94,0.7)'
-      : 'none';
+      : isAuto
+        ? isDarkMode
+          ? '0 0 4px 1px rgba(96,165,250,0.7)'
+          : '0 0 4px 1px rgba(59,130,246,0.7)'
+        : 'none';
   const title = disabled
     ? `${label} is not applicable for iEEG recordings`
     : isActive
       ? fileName
-      : `No ${label.toLowerCase()} loaded`;
+      : isAuto
+        ? autoTitle
+        : `No ${label.toLowerCase()} loaded`;
   return (
     <span
       className={cn(
@@ -1043,7 +1052,12 @@ export const EegViewer = ({
               (which shows no state of its own in compact mode). shrink-0 keeps this block at
               its natural size instead of being squeezed as the panel is resized narrower. */}
           <div className="flex flex-col items-start gap-1 pr-2 mr-1 border-r border-border/50 text-[10px] text-foreground/60 shrink-0">
-            <StatusLed label="Electrode Position" fileName={customElecPosFileName} />
+            <StatusLed
+              label="Electrode Position"
+              fileName={customElecPosFileName}
+              autoMatched={isStandardElectrodes && standard1005Matched.length > 0}
+              autoTitle={`Using standard_1005 template (${standard1005Matched.length}/${channelNames.length} channels matched)`}
+            />
             <StatusLed
               label="Inverse Solution"
               fileName={inverseSolutionFileName}

@@ -1642,13 +1642,29 @@ describe('EegViewer — persistent electrode position dropzone', () => {
     expect(onInverseSolutionFile).toHaveBeenCalledWith(file);
   });
 
-  it('shows both status LEDs as "not loaded" when neither file is present', async () => {
+  it('shows the electrode position LED as auto-matched via the standard template, and the inverse solution LED as "not loaded", when no custom files are present', async () => {
     await renderViewer();
 
     expect(screen.getByText('Electrode Position')).toBeInTheDocument();
-    expect(screen.getByTitle('No electrode position loaded')).toBeInTheDocument();
+    // MOCK_ELC matches 2 of the 3 test channel names — see standard1005Matched.
+    expect(
+      screen.getByTitle('Using standard_1005 template (2/3 channels matched)')
+    ).toBeInTheDocument();
     expect(screen.getByText('Inverse Solution')).toBeInTheDocument();
     expect(screen.getByTitle('No inverse solution loaded')).toBeInTheDocument();
+  });
+
+  it('shows the electrode position LED as "not loaded" when the standard template matches no channels', async () => {
+    global.fetch = vi.fn().mockResolvedValue({ text: () => Promise.resolve(MOCK_ELC) });
+    const provider = makeProvider();
+    provider.channelNames = ['NoMatch1', 'NoMatch2'];
+    render(<EegViewer provider={provider} channelNames={provider.channelNames} />);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(screen.getByTitle('No electrode position loaded')).toBeInTheDocument();
   });
 
   it('shows the electrode position filename in the status LED once customElecPosFileName is provided', async () => {
@@ -1684,7 +1700,9 @@ describe('EegViewer — persistent electrode position dropzone', () => {
     });
 
     expect(screen.getByTitle('my_inverse_solution')).toBeInTheDocument();
-    expect(screen.getByTitle('No electrode position loaded')).toBeInTheDocument();
+    expect(
+      screen.getByTitle('Using standard_1005 template (2/3 channels matched)')
+    ).toBeInTheDocument();
   });
 
   it('greys out the inverse solution LED in iEEG mode, even with a file loaded', async () => {
