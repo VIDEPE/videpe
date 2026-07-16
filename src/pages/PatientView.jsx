@@ -167,22 +167,21 @@ export const PatientView = () => {
       setInverseSolutionFileName(file.name.replace(/\.[^.]+$/, ''));
       // Confirm the load — same reasoning as electrode positions above: the compact
       // dropzone gives no visible feedback of its own that the file was accepted.
+      // Forcing the Average montage (and warning about it) is handled by the effect
+      // below, which also covers the case of switching into EEG mode with a solution
+      // already loaded.
       toast.success(`Loaded inverse solution from ${file.name}`);
-      // ESI is only valid under a common average reference — force it and let the user
-      // know why, rather than silently computing nonsensical source power.
-      setMontage('average');
-      toast('Montage set to Average — required for Electrical Source Imaging');
     } catch (err) {
       toast.error(err.message);
     }
   }, []);
 
-  // Montage is a controlled prop on EegViewer so it can be forced to 'average' above; this
+  // Montage is a controlled prop on EegViewer so it can be forced to 'average' below; this
   // is the other direction — the user switching away from it while ESI is active.
   const handleMontageChange = useCallback(
     (newMontage) => {
       setMontage(newMontage);
-      if (newMontage !== 'average' && inverseSolution) {
+      if (newMontage !== 'average' && inverseSolution ) {
         toast('Electrical Source Imaging requires the Average montage — layer hidden', {
           icon: '⚠️',
         });
@@ -190,6 +189,30 @@ export const PatientView = () => {
     },
     [inverseSolution]
   );
+
+  // Holds the latest montage so the ESI-forcing effect below can read it without listing
+  // montage as a dependency — otherwise the effect would re-run and undo a deliberate
+  // switch away from Average the moment the user made it.
+  const montageRef = useRef(montage);
+  montageRef.current = montage;
+
+  // Electrical Source Imaging is only valid for scalp EEG under a common-average reference.
+  // Whenever an inverse solution is present in EEG mode, force the Average montage and tell
+  // the user why. Keyed on the two transitions that can make ESI applicable — an inverse
+  // solution being (re)loaded, or the recording type switching to EEG — so:
+  //   • loading a solution in iEEG mode neither forces nor warns (ESI doesn't apply there),
+  //   • later switching to EEG re-applies it,
+  //   • and it's not keyed on montage, so a deliberate switch away from Average isn't undone.
+  // Fixed toast id collapses StrictMode's double-invoke (and any rapid re-trigger) into one.
+  useEffect(() => {
+    if (!inverseSolution || recordingType !== 'eeg') return;
+    if (montageRef.current === 'average') return; // already Average — repeating the warning is just noise
+    setMontage('average');
+    toast('Montage set to Average — required for Electrical Source Imaging', {
+      icon: '⚠️',
+      id: 'esi-force-average-montage',
+    });
+  }, [inverseSolution, recordingType]);
 
   // Derives the Neuroimaging pane's connectome layer from the EEG state lifted out of
   // EegViewer — null until there's an intracranial recording with at least one

@@ -56,6 +56,7 @@ vi.mock('@/components/EegViewer', () => ({
       onChannelSnapshotChange,
       montage,
       onMontageChange,
+      onRecordingTypeChange,
     }) => (
       <div data-testid="eeg-viewer">
         <span data-testid="eeg-custom-electrodes-count">{customElectrodes?.length ?? 0}</span>
@@ -106,6 +107,21 @@ vi.mock('@/components/EegViewer', () => ({
           onClick={() => onMontageChange?.('average')}
         >
           set-montage-average
+        </button>
+        {/* Simulates the EEG/iEEG recording-type toggle in the panel title */}
+        <button
+          type="button"
+          data-testid="set-recording-ieeg"
+          onClick={() => onRecordingTypeChange?.('ieeg')}
+        >
+          set-recording-ieeg
+        </button>
+        <button
+          type="button"
+          data-testid="set-recording-eeg"
+          onClick={() => onRecordingTypeChange?.('eeg')}
+        >
+          set-recording-eeg
         </button>
       </div>
     )
@@ -753,12 +769,110 @@ describe('PatientView — ESI requires the Average montage', () => {
     });
   });
 
-  it('forces the montage to Average and shows a toast when an inverse solution file is loaded', async () => {
+  it('forces the montage to Average and shows an alert toast when an inverse solution file is loaded', async () => {
     renderPatientView();
     await loadEegAndInverseSolution();
 
     expect(screen.getByTestId('eeg-montage').textContent).toBe('average');
-    expect(toast).toHaveBeenCalledWith(expect.stringMatching(/average/i));
+    expect(toast).toHaveBeenCalledWith(
+      expect.stringMatching(/average/i),
+      expect.objectContaining({ icon: '⚠️' })
+    );
+  });
+
+  it('does not re-toast the Average-montage warning when the montage is already Average', async () => {
+    checkEegFiles.mockReturnValue({
+      formatName: 'BrainVision',
+      complete: true,
+      missing: [],
+      warning: null,
+    });
+    detectAndLoadEEG.mockResolvedValue({
+      channelNames: ['1', '2'],
+      fs: 256,
+      tMax: 10,
+      getChunk: vi.fn(),
+    });
+    renderPatientView();
+    await act(async () => {
+      await getEegOnFiles()([makeFile('sub01.vhdr'), makeFile('sub01.eeg')]);
+    });
+    // User sets Average manually before any inverse solution is loaded
+    await userEvent.click(screen.getByTestId('set-montage-average'));
+    expect(screen.getByTestId('eeg-montage').textContent).toBe('average'); // sanity: montage is Average before the drop
+    toast.mockClear();
+
+    // Loading the inverse solution should not repeat the warning — montage is already Average
+    await act(async () => {
+      await getEegOnFiles()([makeFile('sub-19_inversefilters.mat')]);
+    });
+
+    expect(screen.getByTestId('eeg-montage').textContent).toBe('average');
+    expect(toast).not.toHaveBeenCalledWith(expect.stringMatching(/average/i), expect.anything());
+  });
+
+  it('does not force Average or warn when an inverse solution is loaded in iEEG mode', async () => {
+    checkEegFiles.mockReturnValue({
+      formatName: 'BrainVision',
+      complete: true,
+      missing: [],
+      warning: null,
+    });
+    detectAndLoadEEG.mockResolvedValue({
+      channelNames: ['1', '2'],
+      fs: 256,
+      tMax: 10,
+      getChunk: vi.fn(),
+    });
+    renderPatientView();
+    await act(async () => {
+      await getEegOnFiles()([makeFile('sub01.vhdr'), makeFile('sub01.eeg')]);
+    });
+    await userEvent.click(screen.getByTestId('set-recording-ieeg'));
+    toast.mockClear();
+
+    // ESI has no meaning for intracranial recordings — loading a solution must not touch the montage
+    await act(async () => {
+      await getEegOnFiles()([makeFile('sub-19_inversefilters.mat')]);
+    });
+
+    expect(screen.getByTestId('eeg-montage').textContent).toBe('none');
+    expect(toast).not.toHaveBeenCalledWith(expect.stringMatching(/average/i), expect.anything());
+  });
+
+  it('forces Average and warns when switching to EEG mode with an inverse solution already loaded', async () => {
+    checkEegFiles.mockReturnValue({
+      formatName: 'BrainVision',
+      complete: true,
+      missing: [],
+      warning: null,
+    });
+    detectAndLoadEEG.mockResolvedValue({
+      channelNames: ['1', '2'],
+      fs: 256,
+      tMax: 10,
+      getChunk: vi.fn(),
+    });
+    renderPatientView();
+    await act(async () => {
+      await getEegOnFiles()([makeFile('sub01.vhdr'), makeFile('sub01.eeg')]);
+    });
+    // Load the inverse solution while in iEEG mode — montage stays untouched
+    await userEvent.click(screen.getByTestId('set-recording-ieeg'));
+    await act(async () => {
+      await getEegOnFiles()([makeFile('sub-19_inversefilters.mat')]);
+    });
+    expect(screen.getByTestId('eeg-montage').textContent).toBe('none');
+    toast.mockClear();
+
+    // Switching to EEG makes ESI applicable — now it should force Average and warn
+    await userEvent.click(screen.getByTestId('set-recording-eeg'));
+
+    expect(screen.getByTestId('eeg-montage').textContent).toBe('average');
+    expect(toast).toHaveBeenCalledWith(
+      expect.stringMatching(/average/i),
+      expect.objectContaining({ icon: '⚠️' })
+    );
   });
 
   it('hides the ESI layer and toasts when the montage is switched away from Average', async () => {
