@@ -1642,6 +1642,11 @@ describe('EegViewer — persistent electrode position dropzone', () => {
     expect(onInverseSolutionFile).toHaveBeenCalledWith(file);
   });
 
+  // StatusLed's own props→color/title mapping is unit-tested directly in
+  // StatusLed.test.jsx. These tests are a different axis: do they verify EegViewer computes
+  // the right matchCount/totalCount/isGoodMatch for a given channel/template scenario —
+  // color is kept as the observable proof that the MIN_STANDARD_MATCH_COUNT_FOR_LED
+  // threshold was actually crossed (or not), not just that a number was rendered.
   it('shows the electrode position LED with the standard_1005 match count, colored red, when the match is below the minimum threshold', async () => {
     await renderViewer();
 
