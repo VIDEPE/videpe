@@ -360,21 +360,35 @@ export const NiiViewer = ({
     const imageLayerSettings = allLayerSettings.filter((_, i) => isImageVolumeLayer(allLayers[i]));
     const meshLayers = allLayers.filter((l) => l.kind === 'mesh');
     const meshLayerSettings = allLayerSettings.filter((_, i) => allLayers[i].kind === 'mesh');
-    try {
-      await Promise.all([
-        syncVolumesAndApplySettings(nvRef.current, imageLayers, imageLayerSettings),
-        syncMeshesAndApplySettings(
-          nvRef.current,
-          meshLayers,
-          meshLayerSettings,
-          fileMeshesRef.current
-        ),
-      ]);
-    } catch (loadError) {
-      toast.error(`Failed to load image: ${loadError.message}`);
-    } finally {
-      requestAnimationFrame(() => setIsLoading(false)); // wait one frame before clearing spinner
+
+    // Load volumes and meshes independently (allSettled, not all) so one category failing
+    // doesn't discard the other. Each NiiVue loader is all-or-nothing — it adds nothing to
+    // the scene if any file in its batch fails — so on failure nv needs no cleanup; we only
+    // roll back the optimistically-added cards for that category's newly-dropped files, by
+    // url, leaving already-loaded layers untouched.
+    const [volumeResult, meshResult] = await Promise.allSettled([
+      syncVolumesAndApplySettings(nvRef.current, imageLayers, imageLayerSettings),
+      syncMeshesAndApplySettings(
+        nvRef.current,
+        meshLayers,
+        meshLayerSettings,
+        fileMeshesRef.current
+      ),
+    ]);
+
+    const failedUrls = new Set();
+    if (volumeResult.status === 'rejected')
+      newLayers.filter(isImageVolumeLayer).forEach((l) => failedUrls.add(l.url));
+    if (meshResult.status === 'rejected')
+      newLayers.filter((l) => l.kind === 'mesh').forEach((l) => failedUrls.add(l.url));
+
+    if (failedUrls.size > 0) {
+      setOrderedLayers((prev) => prev.filter((l) => !failedUrls.has(l.url)));
+      setLayerSettings((prev) => prev.filter((s) => !failedUrls.has(s.url)));
+      const reason = volumeResult.reason ?? meshResult.reason;
+      toast.error(`Failed to load image: ${reason.message}`);
     }
+    requestAnimationFrame(() => setIsLoading(false)); // wait one frame before clearing spinner
   };
 
   const handleReorder = useCallback(
@@ -613,24 +627,33 @@ export const NiiViewer = ({
     const meshLayerSettings = initialLayerSettings.filter((_, i) => layers[i].kind === 'mesh');
 
     const loadAndSync = async () => {
-      try {
-        await Promise.all([
-          syncVolumesAndApplySettings(nvRef.current, imageLayers, imageLayerSettings),
-          syncMeshesAndApplySettings(
-            nvRef.current,
-            meshLayers,
-            meshLayerSettings,
-            fileMeshesRef.current
-          ),
-        ]);
-        if (loadingLayersRef.current !== layers) return; // superseded by a newer load
-        setIsLoading(false);
+      // allSettled (not all) so a failing category doesn't abort the other. Each NiiVue
+      // loader is all-or-nothing, so on failure nv needs no cleanup — we just drop the
+      // failed category's cards (by url) so nothing lingers for a file that never loaded.
+      const [volumeResult, meshResult] = await Promise.allSettled([
+        syncVolumesAndApplySettings(nvRef.current, imageLayers, imageLayerSettings),
+        syncMeshesAndApplySettings(
+          nvRef.current,
+          meshLayers,
+          meshLayerSettings,
+          fileMeshesRef.current
+        ),
+      ]);
+      if (loadingLayersRef.current !== layers) return; // superseded by a newer load
+
+      const failedUrls = new Set();
+      if (volumeResult.status === 'rejected') imageLayers.forEach((l) => failedUrls.add(l.url));
+      if (meshResult.status === 'rejected') meshLayers.forEach((l) => failedUrls.add(l.url));
+
+      if (failedUrls.size > 0) {
+        setOrderedLayers((prev) => prev.filter((l) => !failedUrls.has(l.url)));
+        setLayerSettings((prev) => prev.filter((s) => !failedUrls.has(s.url)));
+        const reason = volumeResult.reason ?? meshResult.reason;
+        toast.error(`Failed to load image: ${reason.message}`);
+      } else {
         onViewReady?.();
-      } catch (loadError) {
-        if (loadingLayersRef.current !== layers) return;
-        toast.error(`Failed to load image: ${loadError.message}`);
-        setIsLoading(false);
       }
+      setIsLoading(false);
     };
 
     loadAndSync();

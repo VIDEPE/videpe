@@ -631,6 +631,36 @@ describe('NiiViewer', () => {
       );
     });
 
+    it('does not leave a settings card when a layer passed via the layers prop fails to load', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      Niivue.mockImplementationOnce(function () {
+        return {
+          attachToCanvas: vi.fn(),
+          loadVolumes: vi.fn().mockRejectedValue(new Error('Image type not supported')),
+          setOpacity: vi.fn(),
+          setColormap: vi.fn(),
+          addColormap: vi.fn(),
+          updateGLVolume: vi.fn(),
+          setSliceType: vi.fn(),
+          setMultiplanarLayout: vi.fn(),
+          setCornerOrientationText: vi.fn(),
+          opts: { isColorbar: false, multiplanarShowRender: null, multiplanarEqualSize: true },
+          sliceTypeMultiplanar: 1,
+          volumes: [],
+        };
+      });
+
+      const nvRef = { current: new Niivue() };
+      const { default: toast } = await import('react-hot-toast');
+      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'MRI', url: '/mri.nii' }]} />);
+
+      await waitFor(() =>
+        expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/failed to load image/i))
+      );
+      // The card must not linger for a volume that never actually loaded.
+      expect(screen.queryByText('MRI')).not.toBeInTheDocument();
+    });
+
     it('calls nv.setColormap when the colormap setting changes', async () => {
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
@@ -946,6 +976,68 @@ describe('NiiViewer', () => {
       // Both cards are present — the new volume alongside the untouched connectome.
       expect(screen.getByRole('button', { name: 'Expand scan controls' })).toBeInTheDocument();
       expect(screen.getByText('Intracranial')).toBeInTheDocument();
+    });
+
+    it('does not leave a settings card when a dropped volume fails to load', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const { default: toast } = await import('react-hot-toast');
+      render(<NiiViewer nvRef={nvRef} layers={[]} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      // Simulate NiiVue rejecting an unsupported file (e.g. "Image type not supported").
+      nvRef.current.loadVolumes.mockRejectedValueOnce(new Error('Image type not supported'));
+
+      const input = document.querySelector('input[type="file"]');
+      await userEvent.upload(input, new File(['data'], 'notes.txt'));
+
+      await waitFor(() =>
+        expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/failed to load/i))
+      );
+      // The optimistically-added card for the failed file must be rolled back, not left behind.
+      expect(screen.queryByText('notes')).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole('button', { name: /Expand notes controls/i })
+      ).not.toBeInTheDocument();
+    });
+
+    it('keeps already-loaded cards when a newly dropped file fails to load', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const { default: toast } = await import('react-hot-toast');
+      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'MRI', url: '/mri.nii' }]} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      // The append path uses addVolumesFromUrl (nv already has a volume) — reject that.
+      nvRef.current.addVolumesFromUrl.mockRejectedValueOnce(new Error('Image type not supported'));
+
+      const input = document.querySelector('input[type="file"]');
+      await userEvent.upload(input, new File(['data'], 'notes.txt'));
+
+      await waitFor(() =>
+        expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/failed to load/i))
+      );
+      // The pre-existing MRI card survives; only the failed file's card is dropped.
+      expect(screen.getByText('MRI')).toBeInTheDocument();
+      expect(screen.queryByText('notes')).not.toBeInTheDocument();
+    });
+
+    it('does not leave a settings card when a dropped mesh fails to load', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const { default: toast } = await import('react-hot-toast');
+      render(<NiiViewer nvRef={nvRef} layers={[]} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      nvRef.current.addMeshesFromUrl.mockRejectedValueOnce(new Error('Mesh type not supported'));
+
+      const input = document.querySelector('input[type="file"]');
+      await userEvent.upload(input, new File(['data'], 'corrupt.gii'));
+
+      await waitFor(() =>
+        expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/failed to load/i))
+      );
+      expect(screen.queryByText('Mesh')).not.toBeInTheDocument();
     });
   });
 
