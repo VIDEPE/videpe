@@ -1420,55 +1420,10 @@ describe('EegViewer — recording type detection', () => {
     toast.mockClear();
   });
 
-  it('reports the detected recording type via onRecordingTypeChange for scalp-shaped channel names', async () => {
-    const onRecordingTypeChange = vi.fn();
-    const provider = makeProvider();
-    render(
-      <EegViewer
-        provider={provider}
-        channelNames={provider.channelNames}
-        onRecordingTypeChange={onRecordingTypeChange}
-      />
-    );
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(onRecordingTypeChange).toHaveBeenCalledWith('eeg');
-  });
-
-  it('shows a toast naming the detected recording type once detection resolves', async () => {
-    const { default: toast } = await import('react-hot-toast');
-    await renderViewer();
-    expect(toast).toHaveBeenCalledWith('EEG recording detected', {
-      id: expect.any(String),
-      icon: '🔍',
-    });
-  });
-
-  it('reports iEEG via onRecordingTypeChange and toasts accordingly for intracranial-shaped channel names', async () => {
-    const { default: toast } = await import('react-hot-toast');
-    const onRecordingTypeChange = vi.fn();
-    const provider = makeIntracranialProvider();
-    render(
-      <EegViewer
-        provider={provider}
-        channelNames={provider.channelNames}
-        onRecordingTypeChange={onRecordingTypeChange}
-      />
-    );
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(onRecordingTypeChange).toHaveBeenCalledWith('ieeg');
-    expect(toast).toHaveBeenCalledWith('iEEG recording detected', {
-      id: expect.any(String),
-      icon: '🔍',
-    });
-  });
+  // Detection logic itself (onRecordingTypeChange + toast for both scalp and intracranial
+  // channel shapes) is unit-tested directly in useElectrodeMatching.test.js. The tests below
+  // only cover what that hook test can't: how EegViewer wires the resulting isIntracranial
+  // state into its children (EegTopoViewer).
 
   it('keeps matched empty for an intracranial recordingType with no custom positions, even though standard_1005 was fetched', async () => {
     const provider = makeIntracranialProvider();
