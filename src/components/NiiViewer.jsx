@@ -1,6 +1,6 @@
-import { useRef, useEffect, useState, useCallback } from 'react';
+import { useRef, useState, useCallback, useEffect } from 'react';
 import { cn } from '../utils/utils';
-import { SHOW_RENDER, MULTIPLANAR_TYPE, SLICE_TYPE } from '@niivue/niivue';
+import { SLICE_TYPE } from '@niivue/niivue';
 import { move } from '@dnd-kit/helpers';
 import toast from 'react-hot-toast';
 
@@ -10,154 +10,129 @@ import {
   getInitialLayerSettings,
   filesToLayers,
   isImageVolumeLayer,
-  INTRACRANIAL_CONNECTOME_URL,
+  getCalBounds,
+  fractionToCalValue,
+  syncVolumesAndApplySettings,
+  syncMeshesAndApplySettings,
   ESI_LAYER_URL,
 } from '../utils/NiiViewer.utils';
 import { ImagingControls } from './ImagingControls';
 import { FileDropZone } from '../components/FileDropZone';
-import {
-  EEG_NODE_POS_KEY,
-  EEG_NODE_POS,
-  EEG_NODE_NEG_KEY,
-  EEG_NODE_NEG,
-} from '@/utils/eegColormaps';
+import { useCanvasAutoLayout } from '@/hooks/useCanvasAutoLayout';
+import { useCanvasRowResize } from '@/hooks/useCanvasRowResize';
+import { useNiiVueLifecycle } from '@/hooks/useNiiVueLifecycle';
+import { useLoadingToast } from '@/hooks/useLoadingToast';
+import { useLayerLoader } from '@/hooks/useLayerLoader';
+import { useIntracranialConnectome } from '@/hooks/useIntracranialConnectome';
+import { useEsiLayer } from '@/hooks/useEsiLayer';
 
-// NiiVue cal_min/cal_max values depend on the specific volume/source-power data values, so a
-// percentile 0-1 slider value would be meaningless applied directly. getCalBounds() resolves a layer's
-// actual bounds so a fraction can be converted to a real value:
-//  - ESI layers: boundMin/boundMax come straight off the layer (see
-//    convertSourcePowersToConnectome/convertSourcePowersToVolume) — power is always
-//    non-negative and boundMax is the observed ceiling for the current click.
-//  - Regular volumes: bounds come from NiiVue's own robust_min/robust_max (percentile-
-//    clipped range) on the loaded NVImage — global_min/global_max would let one outlier
-//    voxel blow out the whole scale.
-function getCalBounds(layer, nvVolume) {
-  if (layer.url === ESI_LAYER_URL) return { boundMin: layer.boundMin, boundMax: layer.boundMax };
-  return { boundMin: nvVolume?.robust_min ?? 0, boundMax: nvVolume?.robust_max ?? 1 };
+// Re-exported so existing imports (e.g. NiiViewer.test.jsx) keep working — the implementations
+// now live in NiiViewer.utils.js since useLayerLoader needs them too.
+export { syncVolumesAndApplySettings, syncMeshesAndApplySettings };
+
+// ─── handleSettingChange dispatch helpers ──────────────────────────────────────
+// Connectome layers (intracranial electrodes / ESI connectome mode) aren't in nv.volumes at
+// all — they're a mesh, built/tracked by useIntracranialConnectome/useEsiLayer — so settings
+// are applied to the mesh object directly instead of through nv.setOpacity/setColormap.
+function applyConnectomeSettingChange({
+  layer,
+  key,
+  value,
+  settings,
+  nv,
+  esiMeshRef,
+  intracranialMeshRef,
+}) {
+  const mesh = layer.url === ESI_LAYER_URL ? esiMeshRef.current : intracranialMeshRef.current;
+  if (!mesh) return;
+
+  if (key === 'visible') {
+    mesh.opacity = value ? settings.opacity : 0;
+    nv.updateGLVolume();
+  } else if (key === 'opacity') {
+    if (settings.visible) {
+      mesh.opacity = value;
+      nv.updateGLVolume();
+    }
+  } else if (key === 'cal_min' || key === 'cal_max' || key === 'cal_range') {
+    // Unlike cal_min/cal_max on an NVImage, a connectome mesh's color range is only read when
+    // its color buffers are rebuilt — mutating nodeMinColor/edgeMin etc. alone has no visual
+    // effect until mesh.updateMesh(gl) recomputes them.
+    const { boundMin, boundMax } = getCalBounds(layer);
+    const calMin = fractionToCalValue(settings.cal_min, boundMin, boundMax);
+    const calMax = fractionToCalValue(settings.cal_max, boundMin, boundMax);
+    mesh.nodeMinColor = calMin;
+    mesh.nodeMaxColor = calMax;
+    mesh.edgeMin = calMin;
+    mesh.edgeMax = calMax;
+    mesh.updateMesh(nv.gl);
+    nv.updateGLVolume();
+  }
+  // colormap/invert/showColorbar: ImagingControls doesn't render those controls for this
+  // kind, so there's nothing to apply here.
 }
 
-function fractionToCalValue(fraction, boundMin, boundMax) {
-  return boundMin + fraction * (boundMax - boundMin);
-}
+// File-loaded surface meshes live in nv.meshes (tracked by fileMeshesRef), not nv.volumes —
+// like connectomes, they only expose opacity/visibility; colormap/threshold/invert/showColorbar
+// aren't rendered for this kind, so there's nothing to apply for those.
+function applyFileMeshSettingChange({ layer, key, value, settings, nv, fileMeshesRef }) {
+  const mesh = fileMeshesRef.current.get(layer.url);
+  if (!mesh) return;
 
-// Loads only new image volumes into nv (existing ones stay) and applies all settings.
-// Connectome/mesh layers are excluded — they're tracked separately by the build effects.
-export async function syncVolumesAndApplySettings(nv, layers, layerSettings) {
-  const indexOffset = nv.volumes.length; // Volumes before this index are already loaded into nv.
-  const newLayers = layers.slice(indexOffset);
-  if (newLayers.length > 0) {
-    if (indexOffset === 0) {
-      await nv.loadVolumes(newLayers);
-    } else {
-      await nv.addVolumesFromUrl(newLayers);
+  if (key === 'visible') {
+    mesh.opacity = value ? settings.opacity : 0;
+    nv.updateGLVolume();
+  } else if (key === 'opacity') {
+    if (settings.visible) {
+      mesh.opacity = value;
+      nv.updateGLVolume();
     }
   }
-
-  // nv.volumes now matches layers 1:1, so settings can be applied by index directly.
-  layerSettings.forEach((layerSetting, index) => {
-    const nvVolume = nv.volumes[index];
-    nv.setColormap(nvVolume.id, layerSetting.colormap);
-    nv.setOpacity(index, layerSetting.visible ? layerSetting.opacity : 0);
-    if (layerSetting.invert) nvVolume.colormapInvert = true;
-    nvVolume.colorbarVisible = layerSetting.showColorbar;
-    // Applied after setColormap, same requirement as the ESI volume build effect below:
-    // setColormap's internal updateGLVolume() re-triggers NiiVue's own cal_min/cal_max
-    // auto-scan, which would otherwise silently overwrite these right after they're set.
-    const { boundMin, boundMax } = getCalBounds(layers[index], nvVolume);
-    nvVolume.cal_min = fractionToCalValue(layerSetting.cal_min, boundMin, boundMax);
-    nvVolume.cal_max = fractionToCalValue(layerSetting.cal_max, boundMin, boundMax);
-  });
-  nv.opts.isColorbar = layerSettings.some((layerSetting) => layerSetting.showColorbar);
-  // GL redraw to apply settings
-  nv.updateGLVolume();
 }
 
-// Loads only new surface meshes into nv (existing ones stay) and applies their opacity/
-// visibility. meshMap tracks the file meshes already in the scene, keyed by their layer url —
-// unlike volumes, nv.meshes can't be indexed positionally because it also holds connectome
-// meshes built by the ESI/intracranial effects, so a url→mesh map is what distinguishes
-// "already loaded" file meshes from new ones. Meshes carry no colormap/threshold controls
-// (they render with their own baked-in vertex colors), so only opacity/visibility apply.
-export async function syncMeshesAndApplySettings(nv, meshLayers, meshLayerSettings, meshMap) {
-  if (meshLayers.length === 0) return; // nothing to load or redraw for
+// Image volumes are the default case — mapped from their position in orderedLayers to their
+// index in nv.volumes by counting only the preceding image-volume entries (connectome and
+// mesh layers occupy a slot in orderedLayers but not in nv.volumes).
+function applyVolumeSettingChange({
+  layer,
+  layerIndex,
+  orderedLayers,
+  key,
+  value,
+  settings,
+  nextLayerSettings,
+  nv,
+  opacityRafRef,
+}) {
+  const nvIndex = orderedLayers.slice(0, layerIndex).filter(isImageVolumeLayer).length;
+  const nvVolume = nv.volumes[nvIndex];
+  if (!nvVolume) return;
 
-  const newLayers = meshLayers.filter((layer) => !meshMap.has(layer.url));
-  if (newLayers.length > 0) {
-    // name (with its extension) is essential: the blob: url alone has no extension for NiiVue
-    // to detect the mesh format from, so it's forwarded alongside the url.
-    const addedMeshes = await nv.addMeshesFromUrl(
-      newLayers.map((layer) => ({ url: layer.url, name: layer.name }))
-    );
-    // addMeshesFromUrl returns the created meshes in input order — record each by its layer url.
-    newLayers.forEach((layer, i) => meshMap.set(layer.url, addedMeshes[i]));
+  if (key === 'visible') {
+    nv.setOpacity(nvIndex, value ? settings.opacity : 0);
+  } else if (key === 'opacity') {
+    // Throttle to one GL redraw per frame — cancels any pending rAF so only the latest drag value redraws
+    if (settings.visible) {
+      if (opacityRafRef.current) cancelAnimationFrame(opacityRafRef.current);
+      opacityRafRef.current = requestAnimationFrame(() => nv.setOpacity(nvIndex, value));
+    }
+  } else if (key === 'colormap') {
+    nv.setColormap(nvVolume.id, value);
+  } else if (key === 'invert') {
+    nvVolume.colormapInvert = value;
+    nv.updateGLVolume();
+  } else if (key === 'showColorbar') {
+    nvVolume.colorbarVisible = value;
+    nv.opts.isColorbar = nextLayerSettings.some((layerSetting) => layerSetting.showColorbar);
+    nv.updateGLVolume();
+  } else if (key === 'cal_min' || key === 'cal_max' || key === 'cal_range') {
+    // value alone (a 0-1 fraction) isn't a real cal_min/cal_max — it has to be resolved
+    // against this volume's own data range first (see getCalBounds above).
+    const { boundMin, boundMax } = getCalBounds(layer, nvVolume);
+    nvVolume.cal_min = fractionToCalValue(settings.cal_min, boundMin, boundMax);
+    nvVolume.cal_max = fractionToCalValue(settings.cal_max, boundMin, boundMax);
+    nv.updateGLVolume();
   }
-
-  // Apply visibility/opacity to every file mesh (0 opacity is how a hidden mesh is
-  // represented, same convention as image volumes and connectome meshes).
-  meshLayers.forEach((layer, index) => {
-    const mesh = meshMap.get(layer.url);
-    if (!mesh) return;
-    const setting = meshLayerSettings[index];
-    mesh.opacity = setting.visible ? setting.opacity : 0;
-  });
-  nv.updateGLVolume();
-}
-
-// Pure updater functions for merging a connectome layer into orderedLayers/layerSettings
-// by its sentinel URL. Used by both the intracranialLayer and esiLayer merge effects.
-// Five possible cases, based on whether `layer` is present and whether an entry
-// already exists at `sentinelUrl`:
-//   no layer   + not present  → no-op
-//   no layer   + present      → remove it
-//   has layer  + not present  → append it
-//   has layer  + present, same object      → no-op (data unchanged)
-//   has layer  + present, different object → replace it in place
-function makeLayerMergeUpdater(layer, sentinelUrl) {
-  return (prevLayers) => {
-    const existingIndex = prevLayers.findIndex((l) => l.url === sentinelUrl);
-    const alreadyPresent = existingIndex !== -1;
-
-    if (!layer) {
-      // Nothing to show — remove the existing entry, or leave the array as-is if there wasn't one.
-      return alreadyPresent ? prevLayers.filter((_, i) => i !== existingIndex) : prevLayers;
-    }
-
-    if (!alreadyPresent) {
-      // First appearance — append as a new layer.
-      return [...prevLayers, layer];
-    }
-
-    if (prevLayers[existingIndex] === layer) {
-      // Same object reference — data hasn't changed, avoid an unnecessary update.
-      return prevLayers;
-    }
-
-    // Data changed — replace the existing entry in place, preserving its position.
-    const next = prevLayers.slice();
-    next[existingIndex] = layer;
-    return next;
-  };
-}
-
-function makeSettingsMergeUpdater(layer, sentinelUrl) {
-  return (prevSettings) => {
-    const existingIndex = prevSettings.findIndex((s) => s.url === sentinelUrl);
-    const alreadyPresent = existingIndex !== -1;
-
-    if (!layer) {
-      // Nothing to show — remove its settings entry, or leave the array as-is if there wasn't one.
-      return alreadyPresent ? prevSettings.filter((_, i) => i !== existingIndex) : prevSettings;
-    }
-
-    if (alreadyPresent) {
-      // Already has a settings entry — a data-only refresh (e.g. new sourcePowers) never touches
-      // user-chosen settings like opacity/visibility, so leave it untouched.
-      return prevSettings;
-    }
-
-    // First appearance — seed default settings for it.
-    return [...prevSettings, ...getInitialLayerSettings([layer], prevSettings.length)];
-  };
 }
 
 export const NiiViewer = ({
@@ -176,23 +151,11 @@ export const NiiViewer = ({
   const [layerSettings, setLayerSettings] = useState(() => getInitialLayerSettings(layers));
   const [orderedLayers, setOrderedLayers] = useState(layers); // mirrors `layers` + any merged connectome layers; user-reorderable
   const [isLoading, setIsLoading] = useState(true);
-  const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   const [activeSliceType, setActiveSliceType] = useState(SLICE_TYPE.MULTIPLANAR);
 
   // ─── Refs ───────────────────────────────────────────────────────────────────
-  const canvas = useRef();
-  const canvasContainerRef = useRef();
-  const canvasRowRef = useRef(); // min-height dragged by the resize handle below
-  const canvasReadyRef = useRef(false); // guards attachToCanvas against StrictMode double-invoke
-  const loadingLayersRef = useRef(null); // guards nv.loadVolumes against StrictMode double-invoke
   const opacityRafRef = useRef(null); // rAF id — cancelled on each drag so only the latest value redraws
-  const canvasSizeTimeoutRef = useRef(null); // debounce timeout for canvas size updates
   const fileMeshesRef = useRef(new Map()); // url → NVMesh for surface meshes loaded from files; keyed by url since nv.meshes also holds connectome meshes
-  const intracranialMeshRef = useRef(null); // current intracranial connectome mesh in the scene
-  const lastIntracranialLayerRef = useRef(null); // guards against rebuilding on unrelated re-renders
-  const esiMeshRef = useRef(null); // current ESI connectome mesh in the scene (connectome mode)
-  const esiVolumeRef = useRef(null); // current ESI NVImage volume in the scene (volume mode) — mutually exclusive with esiMeshRef
-  const lastEsiLayerRef = useRef(null); // guards against rebuilding on unrelated re-renders — tracks whichever of the two is active
 
   // ─── Derived values ─────────────────────────────────────────────────────────
   // Derived from orderedLayers (not `layers`) to also catch files dropped into this
@@ -210,12 +173,64 @@ export const NiiViewer = ({
     { sliceType: SLICE_TYPE.RENDER, label: '3D', buttonLabel: '3D' },
   ];
 
+  // ─── Hooks: canvas + NiiVue lifecycle ────────────────────────────────────────
+  // Tracks the canvas container's size and switches nv between AUTO/GRID multiplanar layout.
+  const { canvasContainerRef } = useCanvasAutoLayout({ nvRef });
+  // Drag-to-resize for the canvas row's min-height.
+  const { canvasRowRef, handleCanvasResizeStart } = useCanvasRowResize(MIN_CANVAS_HEIGHT);
+  // Attaches the shared NiiVue instance to the canvas on mount, and clears it on unmount.
+  const { canvasRef } = useNiiVueLifecycle({
+    nvRef,
+    hasImageVolumes,
+    activeSliceType,
+    onNiiNvReady,
+    fileMeshesRef,
+  });
+  // Loading/success toast tracking isLoading.
+  useLoadingToast(isLoading, NII_LOADING_TOAST_ID);
+
+  // ─── Hooks: layer loading/syncing ────────────────────────────────────────────
+  // Loads image volumes/meshes into nv whenever the `layers` prop changes.
+  useLayerLoader({
+    layers,
+    nvRef,
+    fileMeshesRef,
+    setOrderedLayers,
+    setLayerSettings,
+    setIsLoading,
+    onViewReady,
+  });
+  // Merges the intracranial electrode connectome into the card list and builds/rebuilds its mesh.
+  const { intracranialMeshRef, clearIntracranialMesh } = useIntracranialConnectome({
+    intracranialLayer,
+    nvRef,
+    orderedLayers,
+    layerSettings,
+    setOrderedLayers,
+    setLayerSettings,
+  });
+  // Merges the ESI source-power layer into the card list and builds/rebuilds its mesh or volume.
+  const { esiMeshRef, clearEsiMesh, clearEsiVolume } = useEsiLayer({
+    esiLayer,
+    isEsiVolumeMode,
+    nvRef,
+    orderedLayers,
+    layerSettings,
+    setOrderedLayers,
+    setLayerSettings,
+  });
+
   // ─── Handlers ───────────────────────────────────────────────────────────────
+  // Switches the active 2D/3D slice view and syncs it to nv.
   const handleSliceTypeChange = (sliceType) => {
     setActiveSliceType(sliceType);
     nvRef.current?.setSliceType(sliceType);
   };
 
+  // Applies a single ImagingControls setting change (opacity/colormap/threshold/etc.). Always
+  // updates React state first, then dispatches to the right nv-mutation helper by layer kind —
+  // volumes/meshes/connectomes each live in a different part of nv and support a different
+  // subset of settings (see the three apply*SettingChange helpers above).
   const handleSettingChange = useCallback(
     (layerIndex, key, value) => {
       // 'cal_range' carries both fractions as a [min, max] pair in one call — the Threshold
@@ -234,111 +249,38 @@ export const NiiViewer = ({
       const nv = nvRef.current;
       const layer = orderedLayers[layerIndex];
       if (!layer) return;
+      const settings = nextLayerSettings[layerIndex]; // this layer's own settings, post-update
 
-      // Connectome layers aren't in nv.volumes at all (they're a mesh, built/tracked
-      // separately above) — update the mesh object directly instead of going through
-      // nv.setOpacity/setColormap, which index into nv.volumes.
       if (layer.kind === 'connectome') {
-        const mesh = layer.url === ESI_LAYER_URL ? esiMeshRef.current : intracranialMeshRef.current;
-        if (!mesh) return;
-        if (key === 'visible') {
-          mesh.opacity = value ? nextLayerSettings[layerIndex].opacity : 0;
-          nv.updateGLVolume();
-        } else if (key === 'opacity') {
-          if (nextLayerSettings[layerIndex].visible) {
-            mesh.opacity = value;
-            nv.updateGLVolume();
-          }
-        } else if (key === 'cal_min' || key === 'cal_max' || key === 'cal_range') {
-          // Unlike cal_min/cal_max on an NVImage, a connectome mesh's color range is only
-          // read when its color buffers are rebuilt — mutating nodeMinColor/edgeMin etc.
-          // alone has no visual effect until mesh.updateMesh(gl) recomputes them.
-          const { boundMin, boundMax } = getCalBounds(layer);
-          const calMin = fractionToCalValue(
-            nextLayerSettings[layerIndex].cal_min,
-            boundMin,
-            boundMax
-          );
-          const calMax = fractionToCalValue(
-            nextLayerSettings[layerIndex].cal_max,
-            boundMin,
-            boundMax
-          );
-          mesh.nodeMinColor = calMin;
-          mesh.nodeMaxColor = calMax;
-          mesh.edgeMin = calMin;
-          mesh.edgeMax = calMax;
-          mesh.updateMesh(nv.gl);
-          nv.updateGLVolume();
-        }
-        // colormap/invert/showColorbar: ImagingControls doesn't render those controls for
-        // this kind, so there's nothing to apply here.
-        return;
-      }
-
-      // File-loaded surface meshes live in nv.meshes (tracked by fileMeshesRef), not
-      // nv.volumes — like connectomes, they only expose opacity/visibility, applied to the
-      // mesh object directly rather than via nv.setOpacity (which indexes into nv.volumes).
-      if (layer.kind === 'mesh') {
-        const mesh = fileMeshesRef.current.get(layer.url);
-        if (!mesh) return;
-        if (key === 'visible') {
-          mesh.opacity = value ? nextLayerSettings[layerIndex].opacity : 0;
-          nv.updateGLVolume();
-        } else if (key === 'opacity') {
-          if (nextLayerSettings[layerIndex].visible) {
-            mesh.opacity = value;
-            nv.updateGLVolume();
-          }
-        }
-        // colormap/threshold/invert/showColorbar: not rendered for meshes, nothing to apply.
-        return;
-      }
-
-      // Map layerIndex (position in the combined orderedLayers list) to its index in
-      // nv.volumes by counting only the preceding image-volume entries — connectome and
-      // mesh layers occupy a slot in orderedLayers but not in nv.volumes.
-      const nvIndex = orderedLayers.slice(0, layerIndex).filter(isImageVolumeLayer).length;
-      const nvVolume = nv.volumes[nvIndex];
-      if (!nvVolume) return;
-
-      if (key === 'visible') {
-        nv.setOpacity(nvIndex, value ? nextLayerSettings[layerIndex].opacity : 0);
-      } else if (key === 'opacity') {
-        // Throttle to one GL redraw per frame — cancels any pending rAF so only the latest drag value redraws
-        if (nextLayerSettings[layerIndex].visible) {
-          if (opacityRafRef.current) cancelAnimationFrame(opacityRafRef.current);
-          opacityRafRef.current = requestAnimationFrame(() => nv.setOpacity(nvIndex, value));
-        }
-      } else if (key === 'colormap') {
-        nv.setColormap(nvVolume.id, value);
-      } else if (key === 'invert') {
-        nvVolume.colormapInvert = value;
-        nv.updateGLVolume();
-      } else if (key === 'showColorbar') {
-        nvVolume.colorbarVisible = value;
-        nv.opts.isColorbar = nextLayerSettings.some((layerSetting) => layerSetting.showColorbar);
-        nv.updateGLVolume();
-      } else if (key === 'cal_min' || key === 'cal_max' || key === 'cal_range') {
-        // value alone (a 0-1 fraction) isn't a real cal_min/cal_max — it has to be resolved
-        // against this volume's own data range first (see getCalBounds above).
-        const { boundMin, boundMax } = getCalBounds(layer, nvVolume);
-        nvVolume.cal_min = fractionToCalValue(
-          nextLayerSettings[layerIndex].cal_min,
-          boundMin,
-          boundMax
-        );
-        nvVolume.cal_max = fractionToCalValue(
-          nextLayerSettings[layerIndex].cal_max,
-          boundMin,
-          boundMax
-        );
-        nv.updateGLVolume();
+        applyConnectomeSettingChange({
+          layer,
+          key,
+          value,
+          settings,
+          nv,
+          esiMeshRef,
+          intracranialMeshRef,
+        });
+      } else if (layer.kind === 'mesh') {
+        applyFileMeshSettingChange({ layer, key, value, settings, nv, fileMeshesRef });
+      } else {
+        applyVolumeSettingChange({
+          layer,
+          layerIndex,
+          orderedLayers,
+          key,
+          value,
+          settings,
+          nextLayerSettings,
+          nv,
+          opacityRafRef,
+        });
       }
     },
-    [layerSettings, orderedLayers]
+    [layerSettings, orderedLayers, nvRef, esiMeshRef, intracranialMeshRef]
   );
 
+  // Loads files dropped into this component's own drop zone, appending them alongside whatever's already loaded.
   const handleNiiFiles = async (files) => {
     if (!nvRef.current) return;
     setIsLoading(true);
@@ -386,6 +328,7 @@ export const NiiViewer = ({
     requestAnimationFrame(() => setIsLoading(false)); // wait one frame before clearing spinner
   };
 
+  // Reorders orderedLayers/layerSettings after a card drag, and moves the matching NVImage in nv if an image volume was moved.
   const handleReorder = useCallback(
     (event) => {
       if (!nvRef.current) return; // Guard clause — if NiiVue isn't initialized yet, we can't reorder
@@ -423,9 +366,10 @@ export const NiiViewer = ({
         requestAnimationFrame(() => setIsLoading(false));
       }
     },
-    [orderedLayers, layerSettings]
+    [orderedLayers, layerSettings, nvRef]
   );
 
+  // Removes a layer's card and its underlying nv volume/mesh, dispatching by kind.
   const handleDeleteLayer = useCallback(
     (index) => {
       if (!nvRef.current) return; // Guard clause — if NiiVue isn't initialized yet, we can't delete
@@ -433,11 +377,15 @@ export const NiiViewer = ({
       const layer = orderedLayers[index];
 
       if (layer?.kind === 'connectome') {
-        // Dispatch to the right mesh ref by URL — each connectome layer tracks its own mesh
-        const meshRef = layer.url === ESI_LAYER_URL ? esiMeshRef : intracranialMeshRef;
+        // Dispatch to the right mesh ref/clear-fn pair by URL — each connectome layer tracks
+        // its own mesh, owned by its own hook (mutating `.current` directly isn't allowed
+        // from outside that hook, hence the clear* functions).
+        const isEsi = layer.url === ESI_LAYER_URL;
+        const meshRef = isEsi ? esiMeshRef : intracranialMeshRef;
+        const clearMesh = isEsi ? clearEsiMesh : clearIntracranialMesh;
         if (meshRef.current) {
           nv.removeMesh(meshRef.current);
-          meshRef.current = null;
+          clearMesh();
         }
         // Note: PatientView keeps re-deriving intracranialLayer from live EEG state, so this
         // card reappears on the next voltage update unless that upstream state also clears —
@@ -454,56 +402,34 @@ export const NiiViewer = ({
         nv.removeVolumeByIndex(nvIndex);
         // The ESI volume (volume mode) is a non-connectome layer too — clear its ref so the
         // ESI build effect doesn't try to remove an already-gone NVImage on its next rebuild.
-        if (layer?.url === ESI_LAYER_URL) esiVolumeRef.current = null;
+        if (layer?.url === ESI_LAYER_URL) clearEsiVolume();
       }
       setOrderedLayers(orderedLayers.filter((_, i) => i !== index));
       setLayerSettings(layerSettings.filter((_, i) => i !== index));
     },
-    [orderedLayers, layerSettings]
+    [
+      orderedLayers,
+      layerSettings,
+      nvRef,
+      esiMeshRef,
+      intracranialMeshRef,
+      clearEsiMesh,
+      clearEsiVolume,
+      clearIntracranialMesh,
+    ]
   );
 
-  // Drag to raise the canvas row's min-height, pushing the volume list into scroll.
-  // Writes to DOM directly (not React state) to avoid re-rendering on every drag frame.
-  const handleCanvasResizeStart = useCallback((e) => {
-    e.preventDefault();
-    const row = canvasRowRef.current;
-    if (!row) return;
-    const startY = e.clientY;
-    const startHeight = row.getBoundingClientRect().height;
-
-    const onMove = (moveEvent) => {
-      const nextHeight = Math.max(MIN_CANVAS_HEIGHT, startHeight + (moveEvent.clientY - startY));
-      row.style.minHeight = `${nextHeight}px`;
-    };
-    const onUp = () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-    };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-  }, []);
-
   // ─── Effects: UI ────────────────────────────────────────────────────────────
-
-  // Loading toast — self-contained so NiiViewer reports its own status regardless of where it's embedded.
-  useEffect(() => {
-    if (isLoading) {
-      toast.loading('Loading imaging data…', { id: NII_LOADING_TOAST_ID });
-    } else {
-      toast.success('Imaging data loaded!', { id: NII_LOADING_TOAST_ID });
-    }
-  }, [isLoading]);
-
-  // Dismiss the toast if the viewer unmounts mid-load.
-  useEffect(() => {
-    return () => toast.dismiss(NII_LOADING_TOAST_ID);
-  }, []);
 
   // Force 3D view when there are no image volumes — connectome-only scenes have no slices.
   // Only acts on the "no volumes" side: firing on re-appearance races with an in-flight
   // nv.loadVolumes() and can leave the spinner stuck.
   useEffect(() => {
     if (hasImageVolumes) return;
+    // nv is never told to switch back to 2D when volumes reappear (deliberately, per above),
+    // so activeSliceType has to be committed here rather than derived at render — otherwise the
+    // buttons' pressed-state would drift out of sync with what nv is actually showing.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setActiveSliceType(SLICE_TYPE.RENDER);
     nvRef.current?.setSliceType(SLICE_TYPE.RENDER);
   }, [hasImageVolumes, nvRef]);
@@ -513,146 +439,6 @@ export const NiiViewer = ({
   useEffect(() => {
     onHasContentChange?.(orderedLayers.length > 0);
   }, [orderedLayers, onHasContentChange]);
-
-  // ─── Effects: canvas setup ───────────────────────────────────────────────────
-
-  // Track canvas container dimensions; debounced to avoid thrashing during resize transitions.
-  useEffect(() => {
-    const canvasContainer = canvasContainerRef.current;
-    if (!canvasContainer) return;
-    const canvasSizeObserver = new ResizeObserver(([entry]) => {
-      const { width, height } = entry.contentRect;
-      if (canvasSizeTimeoutRef.current) clearTimeout(canvasSizeTimeoutRef.current);
-      canvasSizeTimeoutRef.current = setTimeout(() => setCanvasSize({ width, height }), 150);
-    });
-    canvasSizeObserver.observe(canvasContainer);
-    return () => {
-      canvasSizeObserver.disconnect();
-      if (canvasSizeTimeoutRef.current) clearTimeout(canvasSizeTimeoutRef.current);
-    };
-  }, []);
-
-  // Switch between AUTO (panels in a row) and GRID (2×2) based on aspect ratio.
-  useEffect(() => {
-    if (!nvRef.current) return;
-    const isWide = canvasSize.height > 0 && canvasSize.width >= 1.75 * canvasSize.height;
-    nvRef.current.setMultiplanarLayout(isWide ? MULTIPLANAR_TYPE.AUTO : MULTIPLANAR_TYPE.GRID);
-  }, [canvasSize]);
-
-  // Attach NiiVue to the canvas once on mount. canvasReadyRef guards against StrictMode's
-  // double-invoke — a second attachToCanvas would reinitialise WebGL, wiping all volumes.
-  useEffect(() => {
-    if (!nvRef.current || canvasReadyRef.current) return;
-    canvasReadyRef.current = true;
-    const nv = nvRef.current;
-    nv.opts.multiplanarShowRender = SHOW_RENDER.ALWAYS;
-    nv.setMultiplanarLayout(MULTIPLANAR_TYPE.GRID);
-    nv.opts.multiplanarEqualSize = false;
-    nv.setCornerOrientationText(false);
-    // Registered here (rather than where the connectome mesh is built) so they exist
-    // before the connectome-build effect can ever run on this instance.
-    nv.addColormap(EEG_NODE_POS_KEY, EEG_NODE_POS);
-    nv.addColormap(EEG_NODE_NEG_KEY, EEG_NODE_NEG);
-    nv.attachToCanvas(canvas.current);
-    // Sync slice type on mount — nv is long-lived and may have been left in RENDER from
-    // a previous connectome-only phase. Later changes go through handleSliceTypeChange.
-    nv.setSliceType(hasImageVolumes ? activeSliceType : SLICE_TYPE.RENDER);
-    onNiiNvReady?.();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // nv is long-lived and reused across remounts — clear volumes/meshes on unmount so they
-  // don't silently reappear (as ghost layers with no ImagingControls card) on the next mount.
-  useEffect(() => {
-    return () => {
-      const nv = nvRef.current;
-      if (!nv) return;
-      while (nv.volumes.length > 0) nv.removeVolumeByIndex(0);
-      (nv.meshes ?? []).slice().forEach((mesh) => nv.removeMesh(mesh));
-      fileMeshesRef.current.clear(); // drop tracked file meshes so they aren't re-applied on remount
-    };
-  }, [nvRef]);
-
-  // ─── Effects: image volume loading ──────────────────────────────────────────
-
-  // Load image volumes when the layers prop changes. loadingLayersRef has two guards:
-  // (1) same reference at the top → StrictMode double-invoke, bail before touching nv;
-  // (2) stale reference in the async callback → a newer load superseded this one, don't update state.
-  // Connectome layers are intentionally excluded from deps — their own merge effects handle them.
-  useEffect(() => {
-    if (!layers.length) {
-      loadingLayersRef.current = null; // reset so the next non-empty load can proceed
-      // No image volumes or meshes from the layers prop — clear any stale ones from nv and
-      // remove their ImagingControls cards. Connectome cards/meshes (identified by sentinel
-      // URL, managed by their own effects) are left alone.
-      const nv = nvRef.current;
-      let needsRedraw = false;
-      if (nv?.volumes.length) {
-        while (nv.volumes.length > 0) nv.removeVolumeByIndex(0);
-        needsRedraw = true;
-      }
-      if (nv && fileMeshesRef.current.size > 0) {
-        fileMeshesRef.current.forEach((mesh) => nv.removeMesh(mesh));
-        fileMeshesRef.current.clear();
-        needsRedraw = true;
-      }
-      if (needsRedraw) nv.updateGLVolume();
-      setOrderedLayers((prev) => prev.filter((layer) => layer.kind === 'connectome'));
-      setLayerSettings((prev) =>
-        prev.filter(
-          (setting) => setting.url === INTRACRANIAL_CONNECTOME_URL || setting.url === ESI_LAYER_URL
-        )
-      );
-      setIsLoading(false);
-      return;
-    }
-    if (loadingLayersRef.current === layers) return; // StrictMode: already loading these layers
-    loadingLayersRef.current = layers;
-
-    const initialLayerSettings = getInitialLayerSettings(layers);
-    setLayerSettings(initialLayerSettings);
-    setOrderedLayers(layers);
-    setIsLoading(true);
-
-    // Image volumes and surface meshes take separate NiiVue load paths — split by kind so
-    // each goes to the right loader. Settings stay index-aligned with their filtered layers.
-    const imageLayers = layers.filter(isImageVolumeLayer);
-    const imageLayerSettings = initialLayerSettings.filter((_, i) => isImageVolumeLayer(layers[i]));
-    const meshLayers = layers.filter((l) => l.kind === 'mesh');
-    const meshLayerSettings = initialLayerSettings.filter((_, i) => layers[i].kind === 'mesh');
-
-    const loadAndSync = async () => {
-      // allSettled (not all) so a failing category doesn't abort the other. Each NiiVue
-      // loader is all-or-nothing, so on failure nv needs no cleanup — we just drop the
-      // failed category's cards (by url) so nothing lingers for a file that never loaded.
-      const [volumeResult, meshResult] = await Promise.allSettled([
-        syncVolumesAndApplySettings(nvRef.current, imageLayers, imageLayerSettings),
-        syncMeshesAndApplySettings(
-          nvRef.current,
-          meshLayers,
-          meshLayerSettings,
-          fileMeshesRef.current
-        ),
-      ]);
-      if (loadingLayersRef.current !== layers) return; // superseded by a newer load
-
-      const failedUrls = new Set();
-      if (volumeResult.status === 'rejected') imageLayers.forEach((l) => failedUrls.add(l.url));
-      if (meshResult.status === 'rejected') meshLayers.forEach((l) => failedUrls.add(l.url));
-
-      if (failedUrls.size > 0) {
-        setOrderedLayers((prev) => prev.filter((l) => !failedUrls.has(l.url)));
-        setLayerSettings((prev) => prev.filter((s) => !failedUrls.has(s.url)));
-        const reason = volumeResult.reason ?? meshResult.reason;
-        toast.error(`Failed to load image: ${reason.message}`);
-      } else {
-        onViewReady?.();
-      }
-      setIsLoading(false);
-    };
-
-    loadAndSync();
-  }, [layers]);
 
   // ─── Effects: card ordering ─────────────────────────────────────────────────
 
@@ -671,227 +457,14 @@ export const NiiViewer = ({
         Number(!isImageVolumeLayer(orderedLayers[a])) -
         Number(!isImageVolumeLayer(orderedLayers[b]))
     );
-    if (order.every((originalIndex, i) => originalIndex === i)) return; // already volumes-first
+    if (order.every((originalIndex, i) => originalIndex === i)) return; // already volumes-first — bails before setState, so this only ever commits one corrective render per actual reorder, never loops
+    // orderedLayers is read positionally elsewhere (nv.volumes index mapping in
+    // handleSettingChange/handleDeleteLayer, the layer hooks), so it must be the committed
+    // source of truth — a derived-at-render sorted copy would desync from those index lookups.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setOrderedLayers(order.map((i) => orderedLayers[i]));
     setLayerSettings((prev) => order.map((i) => prev[i]));
   }, [orderedLayers]);
-
-  // ─── Effects: intracranial electrode layer ──────────────────────────────────
-
-  // Merges intracranialLayer into orderedLayers/layerSettings by its sentinel URL so it
-  // appears in the ImagingControls card list without disturbing other layers' settings on
-  // every voltage-driven refresh. Two independent setState calls (not nested) — nesting
-  // caused StrictMode's double-invoke to append the settings entry twice, misaligning
-  // the arrays and crashing handleNiiFiles. Each updater is idempotent on its own.
-  useEffect(() => {
-    setOrderedLayers(makeLayerMergeUpdater(intracranialLayer, INTRACRANIAL_CONNECTOME_URL));
-    setLayerSettings(makeSettingsMergeUpdater(intracranialLayer, INTRACRANIAL_CONNECTOME_URL));
-  }, [intracranialLayer]);
-
-  // Builds/rebuilds/removes the actual NiiVue connectome mesh whenever intracranialLayer's
-  // data changes. Rebuilt wholesale on every change rather than mutated in place — mirrors
-  // how EegTopoViewer rebuilds its own mesh on every topoTimepoint click.
-  useEffect(() => {
-    const nv = nvRef.current; // guard clause — nothing to do before NiiVue has attached to a canvas
-    if (!nv) return;
-
-    if (!intracranialLayer) {
-      // No connectome to show anymore (e.g. positions/EEG cleared) — tear down the existing mesh, if any.
-      if (intracranialMeshRef.current) {
-        nv.removeMesh(intracranialMeshRef.current); // drop it from the 3D scene
-        intracranialMeshRef.current = null; // nothing left to track
-        lastIntracranialLayerRef.current = null; // so a future re-add isn't mistaken for "unchanged"
-        nv.updateGLVolume(); // redraw without it
-      }
-      return;
-    }
-
-    if (intracranialLayer === lastIntracranialLayerRef.current) return; // unrelated re-render (e.g. another layer's settings changed)
-    lastIntracranialLayerRef.current = intracranialLayer; // remember what this rebuild is based on
-
-    if (intracranialMeshRef.current) nv.removeMesh(intracranialMeshRef.current); // drop the stale mesh before building its replacement
-
-    // Build the new connectome mesh in memory — not yet added to the scene.
-    const mesh = nv.loadConnectomeAsMesh({
-      name: intracranialLayer.name,
-      nodeColormap: EEG_NODE_POS_KEY,
-      nodeColormapNegative: EEG_NODE_NEG_KEY,
-      nodeMinColor: 0,
-      nodeMaxColor: intracranialLayer.calMax,
-      nodeScale: 4,
-      edgeColormap: EEG_NODE_POS_KEY,
-      edgeColormapNegative: EEG_NODE_NEG_KEY,
-      edgeMin: 0,
-      edgeMax: intracranialLayer.calMax,
-      edgeScale: 0.5,
-      showLegend: false,
-      colorbarVisible: false, // suppresses the node+edge colorbar entries NiiVue would otherwise add for a populated `edges` array
-      nodes: intracranialLayer.nodes,
-      edges: intracranialLayer.edges,
-    });
-
-    // Apply whatever opacity/visibility is already set for this layer (preserved across
-    // data refreshes by the sync effect above); fall back to the same default that effect
-    // would compute if it hasn't run yet this render pass (e.g. the connectome's first
-    // appearance, before orderedLayers/layerSettings have caught up).
-    const existingIndex = orderedLayers.findIndex((l) => l.url === INTRACRANIAL_CONNECTOME_URL); // its current position in the card list, if it has one yet
-    const settings =
-      layerSettings[existingIndex] ?? // its existing settings, preserved across this rebuild
-      getInitialLayerSettings([intracranialLayer], orderedLayers.length)[0]; // or computed fresh on first appearance
-    mesh.opacity = settings.visible ? settings.opacity : 0; // 0 opacity is how a hidden mesh is represented, same convention as image volumes
-
-    nv.addMesh(mesh); // actually add it to the 3D scene
-    intracranialMeshRef.current = mesh; // track it so the next change/removal can find it
-    nv.updateGLVolume(); // redraw with the new mesh visible
-  }, [intracranialLayer, orderedLayers, layerSettings, nvRef]);
-
-  // ─── Effects: ESI source power layer ────────────────────────────────────────
-
-  // Merges the separately-tracked esiLayer prop into orderedLayers/layerSettings — same
-  // pattern as the intracranialLayer merge effect above, keyed on ESI_LAYER_URL.
-  useEffect(() => {
-    const activeEsiLayer = esiLayer
-      ? isEsiVolumeMode
-        ? esiLayer.sourcePowerVolume
-        : esiLayer.sourcePowerConnectomes
-      : esiLayer;
-
-    // Add/replace/remove the ESI entry in orderedLayers to match activeEsiLayer
-    setOrderedLayers(makeLayerMergeUpdater(activeEsiLayer, ESI_LAYER_URL));
-    // Add/remove its settings entry (visible/opacity/isEsiVolume/etc.); leaves an existing entry untouched
-    setLayerSettings(makeSettingsMergeUpdater(activeEsiLayer, ESI_LAYER_URL));
-  }, [esiLayer, isEsiVolumeMode]);
-
-  // Builds/rebuilds/removes the ESI source-power mesh (connectome mode) or NVImage volume
-  // (volume mode) whenever esiLayer's data or the Connectome/Volume toggle changes. Same
-  // rebuild-on-change pattern as the intracranialLayer build effect above, but branches
-  // between the two NiiVue object kinds depending on which one activeEsiLayer resolves to.
-  useEffect(() => {
-    const nv = nvRef.current; // guard — nothing to do before NiiVue has attached to a canvas
-    if (!nv) return;
-
-    const activeEsiLayer = esiLayer
-      ? isEsiVolumeMode
-        ? esiLayer.sourcePowerVolume
-        : esiLayer.sourcePowerConnectomes
-      : esiLayer;
-
-    if (!activeEsiLayer) {
-      // Nothing to show (e.g. no inverse solution loaded, iEEG mode, or empty flatSourceFilters)
-      // — tear down whichever of mesh/volume is currently in the scene, if either actually is.
-      const hadMesh = esiMeshRef.current;
-      const hadVolume = esiVolumeRef.current;
-      if (hadMesh) {
-        nv.removeMesh(esiMeshRef.current); // drop it from the 3D scene
-        esiMeshRef.current = null; // nothing left to track
-      }
-      if (hadVolume) {
-        const staleIndex = nv.volumes.indexOf(esiVolumeRef.current);
-        if (staleIndex !== -1) nv.removeVolumeByIndex(staleIndex);
-        esiVolumeRef.current = null; // nothing left to track
-      }
-      lastEsiLayerRef.current = null; // so a future re-add isn't mistaken for "unchanged"
-      if (hadMesh || hadVolume) nv.updateGLVolume(); // redraw only if something was actually removed
-      return;
-    }
-
-    if (activeEsiLayer === lastEsiLayerRef.current) return; // unrelated re-render — data/mode hasn't changed
-    lastEsiLayerRef.current = activeEsiLayer; // remember what this rebuild is based on
-
-    // Apply whatever opacity/visibility is already set for this layer (preserved across
-    // data refreshes by the sync effect above); fall back to the default on first appearance.
-    const existingIndex = orderedLayers.findIndex((l) => l.url === ESI_LAYER_URL);
-    const settings =
-      layerSettings[existingIndex] ?? // existing settings, preserved across this rebuild
-      getInitialLayerSettings([activeEsiLayer], orderedLayers.length)[0]; // fresh defaults on first appearance
-
-    if (activeEsiLayer.kind === 'connectome') {
-      // Connectome mode — drop any leftover volume from a previous volume-mode rebuild first.
-      if (esiVolumeRef.current) {
-        const staleIndex = nv.volumes.indexOf(esiVolumeRef.current);
-        if (staleIndex !== -1) nv.removeVolumeByIndex(staleIndex);
-        esiVolumeRef.current = null;
-      }
-      if (esiMeshRef.current) nv.removeMesh(esiMeshRef.current); // drop the stale mesh before building its replacement
-
-      // Source power is always non-negative (squared magnitude) — use the positive colormap
-      // for both slots; the negative colormap is never reached.
-      // cal_min/cal_max on `settings` are the user's chosen fractions of this layer's own
-      // boundMin/boundMax (see getCalBounds) — resolving them fresh here means a user-set
-      // threshold survives into the next EEG click's new bound instead of resetting.
-      const { boundMin: esiBoundMin, boundMax: esiBoundMax } = getCalBounds(activeEsiLayer);
-      const esiCalMin = fractionToCalValue(settings.cal_min, esiBoundMin, esiBoundMax);
-      const esiCalMax = fractionToCalValue(settings.cal_max, esiBoundMin, esiBoundMax);
-      const mesh = nv.loadConnectomeAsMesh({
-        name: activeEsiLayer.name,
-        nodeColormap: EEG_NODE_POS_KEY,
-        nodeColormapNegative: EEG_NODE_POS_KEY, // unused — power is always ≥ 0
-        nodeMinColor: esiCalMin,
-        nodeMaxColor: esiCalMax,
-        nodeScale: 4,
-        edgeColormap: EEG_NODE_POS_KEY,
-        edgeColormapNegative: EEG_NODE_POS_KEY,
-        edgeMin: esiCalMin,
-        edgeMax: esiCalMax,
-        edgeScale: 0.5,
-        showLegend: false,
-        colorbarVisible: false, // suppresses the colorbar entry NiiVue would otherwise add
-        nodes: activeEsiLayer.nodes,
-        edges: activeEsiLayer.edges, // always [] for ESI — source points have no connecting structure
-      });
-      mesh.opacity = settings.visible ? settings.opacity : 0;
-
-      nv.addMesh(mesh); // actually add it to the 3D scene
-      esiMeshRef.current = mesh; // track it so the next change/removal can find it
-      nv.updateGLVolume(); // redraw with the new mesh visible
-    } else {
-      // Volume mode — drop any leftover mesh from a previous connectome-mode rebuild first.
-      if (esiMeshRef.current) {
-        nv.removeMesh(esiMeshRef.current);
-        esiMeshRef.current = null;
-      }
-      const staleVolume = esiVolumeRef.current; // remove after the new one lands, not before
-
-      // activeEsiLayer.bytes is the raw NIfTI-1 Uint8Array (from NVImage.createNiftiArray) —
-      // NVImage.loadFromUrl accepts raw bytes directly as `url`, same as a real file's blob URL.
-      nv.addVolumesFromUrl([{ url: activeEsiLayer.bytes, name: activeEsiLayer.name }])
-        .then(() => {
-          const nvIndex = nv.volumes.length - 1; // just-appended volume is always last
-          const nvVolume = nv.volumes[nvIndex];
-          esiVolumeRef.current = nvVolume; // track it so the next change/removal can find it
-
-          // nv.setColormap() calls updateGLVolume() internally, which re-triggers NiiVue's
-          // own cal_min/cal_max auto-scan => cal_min/cal_max/colormapType MUST be set after
-          // this block, not before, or they get silently fall back to the auto-scanned values.
-          nv.setOpacity(nvIndex, settings.visible ? settings.opacity : 0);
-          nv.setColormap(nvVolume.id, settings.colormap);
-          if (settings.invert) nvVolume.colormapInvert = true;
-          nvVolume.colorbarVisible = settings.showColorbar;
-
-          // Fixed cal_min/cal_max (rather than NiiVue's auto-scan) keeps the color scale
-          // consistent with connectome mode, and avoids a "% of voxels are zero" warning
-          // from the auto-scan seeing this grid's mostly-empty background. Resolved from the
-          // user's chosen fraction of this layer's own boundMin/boundMax, same as connectome
-          // mode above — so it survives into the next click's new bound instead of resetting.
-          const { boundMin: esiVolBoundMin, boundMax: esiVolBoundMax } =
-            getCalBounds(activeEsiLayer);
-          nvVolume.cal_min = fractionToCalValue(settings.cal_min, esiVolBoundMin, esiVolBoundMax);
-          nvVolume.cal_max = fractionToCalValue(settings.cal_max, esiVolBoundMin, esiVolBoundMax);
-          // 2 = ZERO_TO_MAX_TRANSLUCENT_BELOW_MIN (COLORMAP_TYPE isn't a runtime export of
-          // @niivue/niivue, only a TS-only enum). Voxels below cal_min get a hard alpha=0
-          // cutoff in NiiVue's shader — unlike type 1's smooth (f/cal_min)² ramp, there's no
-          // continuous scaling near-zero values can land on unpredictably.
-          nvVolume.colormapType = 1;
-
-          if (staleVolume) {
-            const staleIndex = nv.volumes.indexOf(staleVolume);
-            if (staleIndex !== -1) nv.removeVolumeByIndex(staleIndex);
-          }
-          nv.updateGLVolume(); // redraw with the new volume visible
-        })
-        .catch((err) => console.error('ESI volume failed to load', err));
-    }
-  }, [esiLayer, orderedLayers, layerSettings, nvRef]);
 
   // ─── Render ─────────────────────────────────────────────────────────────────
 
@@ -932,7 +505,7 @@ export const NiiViewer = ({
               <div className="h-10 w-10 animate-spin rounded-full border-4 border-border border-t-primary" />
             </div>
           )}
-          <canvas ref={canvas} className="absolute inset-0" />
+          <canvas ref={canvasRef} className="absolute inset-0" />
         </div>
         <div className="">
           <div
@@ -969,8 +542,8 @@ export const NiiViewer = ({
         </div>
       </div>
 
-      {/* Resize handle — drag down to grow canvas past flex size, drag up to shrink back. 
-          Once it reaches the row's natural flex size, further upward dragging has no effect, 
+      {/* Resize handle — drag down to grow canvas past flex size, drag up to shrink back.
+          Once it reaches the row's natural flex size, further upward dragging has no effect,
           since min-height never shrinks a flex item below what it'd render at anyway. See handleCanvasResizeStart*/}
       <div
         data-testid="nii-canvas-resize-handle"

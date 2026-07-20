@@ -712,7 +712,10 @@ describe('NiiViewer', () => {
       return nv;
     };
 
-    it('switches to AUTO layout when canvas width is at least 2× the height', async () => {
+    // The aspect-ratio/debounce math itself (AUTO vs GRID thresholds, rapid-resize debouncing)
+    // is unit-tested directly in useCanvasAutoLayout.test.jsx. This smoke test only confirms
+    // NiiViewer actually wires a real canvas resize through to nv.setMultiplanarLayout.
+    it('wires canvas container resizes through to nv.setMultiplanarLayout', async () => {
       const { MULTIPLANAR_TYPE } = await import('@niivue/niivue');
       const nv = await setup();
 
@@ -722,35 +725,6 @@ describe('NiiViewer', () => {
       });
 
       expect(nv.setMultiplanarLayout).toHaveBeenCalledWith(MULTIPLANAR_TYPE.AUTO);
-    });
-
-    it('uses GRID layout when canvas width is less than 2× the height', async () => {
-      const { MULTIPLANAR_TYPE } = await import('@niivue/niivue');
-      const nv = await setup();
-
-      act(() => {
-        resizeCallback([{ contentRect: { width: 400, height: 300 } }]);
-        vi.advanceTimersByTime(150); // flush the resize-size debounce
-      });
-
-      expect(nv.setMultiplanarLayout).toHaveBeenCalledWith(MULTIPLANAR_TYPE.GRID);
-    });
-
-    it('switches back to GRID when canvas becomes narrow again', async () => {
-      const { MULTIPLANAR_TYPE } = await import('@niivue/niivue');
-      const nv = await setup();
-
-      act(() => {
-        resizeCallback([{ contentRect: { width: 800, height: 200 } }]);
-        vi.advanceTimersByTime(150); // flush the resize-size debounce
-      });
-      nv.setMultiplanarLayout.mockClear();
-      act(() => {
-        resizeCallback([{ contentRect: { width: 400, height: 300 } }]);
-        vi.advanceTimersByTime(150); // flush the resize-size debounce
-      });
-
-      expect(nv.setMultiplanarLayout).toHaveBeenCalledWith(MULTIPLANAR_TYPE.GRID);
     });
   });
 
@@ -1090,8 +1064,6 @@ describe('NiiViewer', () => {
   });
 
   describe('canvas resize handle', () => {
-    const MIN_CANVAS_HEIGHT = 350;
-
     const setup = async () => {
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
@@ -1106,41 +1078,17 @@ describe('NiiViewer', () => {
       expect(screen.getByTestId('nii-canvas-resize-handle')).toBeInTheDocument();
     });
 
-    it('raises the canvas row min-height when the handle is dragged down', async () => {
+    // The drag/clamp math itself (raise/lower, floor clamping, stopping after mouseup) is
+    // unit-tested directly in useCanvasRowResize.test.jsx. This smoke test only confirms
+    // NiiViewer actually wires a real drag on its own resize handle through to the row's
+    // min-height, with its own MIN_CANVAS_HEIGHT floor.
+    it('wires drags on its own resize handle through to the canvas row min-height', async () => {
       const row = await setup();
       fireEvent.mouseDown(screen.getByTestId('nii-canvas-resize-handle'), { clientY: 0 });
       fireEvent.mouseMove(window, { clientY: 150 });
       fireEvent.mouseUp(window);
 
       expect(row.style.minHeight).toBe('550px'); // 400 (starting height) + 150 (drag delta)
-    });
-
-    it('lowers the canvas row min-height when the handle is dragged up', async () => {
-      const row = await setup();
-      fireEvent.mouseDown(screen.getByTestId('nii-canvas-resize-handle'), { clientY: 0 });
-      fireEvent.mouseMove(window, { clientY: -50 });
-      fireEvent.mouseUp(window);
-
-      expect(row.style.minHeight).toBe('350px'); // 400 (starting height) - 50 (drag delta)
-    });
-
-    it('clamps at the 350px floor instead of shrinking further', async () => {
-      const row = await setup();
-      fireEvent.mouseDown(screen.getByTestId('nii-canvas-resize-handle'), { clientY: 0 });
-      fireEvent.mouseMove(window, { clientY: -2000 }); // drag far past any reasonable minimum
-      fireEvent.mouseUp(window);
-
-      expect(row.style.minHeight).toBe(`${MIN_CANVAS_HEIGHT}px`);
-    });
-
-    it('stops responding to mouse movement once the drag ends', async () => {
-      const row = await setup();
-      fireEvent.mouseDown(screen.getByTestId('nii-canvas-resize-handle'), { clientY: 0 });
-      fireEvent.mouseMove(window, { clientY: 100 });
-      fireEvent.mouseUp(window);
-      fireEvent.mouseMove(window, { clientY: 500 }); // should be ignored — drag already ended
-
-      expect(row.style.minHeight).toBe('500px');
     });
   });
 

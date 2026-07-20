@@ -92,12 +92,154 @@ export const detectVolumeType = (filename) => {
   return { type: nameWithoutExtension, subtype: null };
 };
 
+// NiiVue cal_min/cal_max values depend on the specific volume/source-power data values, so a
+// percentile 0-1 slider value would be meaningless applied directly. getCalBounds() resolves a layer's
+// actual bounds so a fraction can be converted to a real value:
+//  - ESI layers: boundMin/boundMax come straight off the layer (see
+//    convertSourcePowersToConnectome/convertSourcePowersToVolume) — power is always
+//    non-negative and boundMax is the observed ceiling for the current click.
+//  - Regular volumes: bounds come from NiiVue's own robust_min/robust_max (percentile-
+//    clipped range) on the loaded NVImage — global_min/global_max would let one outlier
+//    voxel blow out the whole scale.
+export function getCalBounds(layer, nvVolume) {
+  if (layer.url === ESI_LAYER_URL) return { boundMin: layer.boundMin, boundMax: layer.boundMax };
+  return { boundMin: nvVolume?.robust_min ?? 0, boundMax: nvVolume?.robust_max ?? 1 };
+}
+
+// Converts a 0-1 Threshold-slider fraction into a real cal_min/cal_max value within [boundMin, boundMax].
+export function fractionToCalValue(fraction, boundMin, boundMax) {
+  return boundMin + fraction * (boundMax - boundMin);
+}
+
+// Loads only new image volumes into nv (existing ones stay) and applies all settings.
+// Connectome/mesh layers are excluded — they're tracked separately by the build effects.
+export async function syncVolumesAndApplySettings(nv, layers, layerSettings) {
+  const indexOffset = nv.volumes.length; // Volumes before this index are already loaded into nv.
+  const newLayers = layers.slice(indexOffset);
+  if (newLayers.length > 0) {
+    if (indexOffset === 0) {
+      await nv.loadVolumes(newLayers);
+    } else {
+      await nv.addVolumesFromUrl(newLayers);
+    }
+  }
+
+  // nv.volumes now matches layers 1:1, so settings can be applied by index directly.
+  layerSettings.forEach((layerSetting, index) => {
+    const nvVolume = nv.volumes[index];
+    nv.setColormap(nvVolume.id, layerSetting.colormap);
+    nv.setOpacity(index, layerSetting.visible ? layerSetting.opacity : 0);
+    if (layerSetting.invert) nvVolume.colormapInvert = true;
+    nvVolume.colorbarVisible = layerSetting.showColorbar;
+    // Applied after setColormap, same requirement as the ESI volume build effect below:
+    // setColormap's internal updateGLVolume() re-triggers NiiVue's own cal_min/cal_max
+    // auto-scan, which would otherwise silently overwrite these right after they're set.
+    const { boundMin, boundMax } = getCalBounds(layers[index], nvVolume);
+    nvVolume.cal_min = fractionToCalValue(layerSetting.cal_min, boundMin, boundMax);
+    nvVolume.cal_max = fractionToCalValue(layerSetting.cal_max, boundMin, boundMax);
+  });
+  nv.opts.isColorbar = layerSettings.some((layerSetting) => layerSetting.showColorbar);
+  // GL redraw to apply settings
+  nv.updateGLVolume();
+}
+
+// Loads only new surface meshes into nv (existing ones stay) and applies their opacity/
+// visibility. meshMap tracks the file meshes already in the scene, keyed by their layer url —
+// unlike volumes, nv.meshes can't be indexed positionally because it also holds connectome
+// meshes built by the ESI/intracranial effects, so a url→mesh map is what distinguishes
+// "already loaded" file meshes from new ones. Meshes carry no colormap/threshold controls
+// (they render with their own baked-in vertex colors), so only opacity/visibility apply.
+export async function syncMeshesAndApplySettings(nv, meshLayers, meshLayerSettings, meshMap) {
+  if (meshLayers.length === 0) return; // nothing to load or redraw for
+
+  const newLayers = meshLayers.filter((layer) => !meshMap.has(layer.url));
+  if (newLayers.length > 0) {
+    // name (with its extension) is essential: the blob: url alone has no extension for NiiVue
+    // to detect the mesh format from, so it's forwarded alongside the url.
+    const addedMeshes = await nv.addMeshesFromUrl(
+      newLayers.map((layer) => ({ url: layer.url, name: layer.name }))
+    );
+    // addMeshesFromUrl returns the created meshes in input order — record each by its layer url.
+    newLayers.forEach((layer, i) => meshMap.set(layer.url, addedMeshes[i]));
+  }
+
+  // Apply visibility/opacity to every file mesh (0 opacity is how a hidden mesh is
+  // represented, same convention as image volumes and connectome meshes).
+  meshLayers.forEach((layer, index) => {
+    const mesh = meshMap.get(layer.url);
+    if (!mesh) return;
+    const setting = meshLayerSettings[index];
+    mesh.opacity = setting.visible ? setting.opacity : 0;
+  });
+  nv.updateGLVolume();
+}
+
 // Strips the extension(s) from a filename for use as a mesh layer's subtype — mirrors
 // detectVolumeType's nameWithoutExtension so a mesh card reads e.g. "Mesh - cortex".
 const nameWithoutExtension = (filename) => {
   const dotIndex = filename.indexOf('.');
   return dotIndex === -1 ? filename : filename.slice(0, dotIndex);
 };
+
+// Pure updater functions for merging a connectome layer into orderedLayers/layerSettings
+// by its sentinel URL. Used by both the intracranial and ESI connectome hooks. Five possible
+// cases, based on whether `layer` is present and whether an entry already exists at `sentinelUrl`:
+//   no layer   + not present  → no-op
+//   no layer   + present      → remove it
+//   has layer  + not present  → append it
+//   has layer  + present, same object      → no-op (data unchanged)
+//   has layer  + present, different object → replace it in place
+export function makeLayerMergeUpdater(layer, sentinelUrl) {
+  return (prevLayers) => {
+    const existingIndex = prevLayers.findIndex((l) => l.url === sentinelUrl);
+    const alreadyPresent = existingIndex !== -1;
+
+    if (!layer) {
+      // Nothing to show — remove the existing entry, or leave the array as-is if there wasn't one.
+      return alreadyPresent ? prevLayers.filter((_, i) => i !== existingIndex) : prevLayers;
+    }
+
+    if (!alreadyPresent) {
+      // First appearance — append as a new layer.
+      return [...prevLayers, layer];
+    }
+
+    if (prevLayers[existingIndex] === layer) {
+      // Same object reference — data hasn't changed, avoid an unnecessary update.
+      return prevLayers;
+    }
+
+    // Data changed — replace the existing entry in place, preserving its position.
+    const next = prevLayers.slice();
+    next[existingIndex] = layer;
+    return next;
+  };
+}
+
+// Same merge-by-sentinel-URL logic as makeLayerMergeUpdater, but for the parallel layerSettings
+// array — kept as a separate function since "present" here means "has a settings entry", and a
+// data-only refresh (layer present in both) must leave the user's existing settings untouched
+// rather than overwrite them.
+export function makeSettingsMergeUpdater(layer, sentinelUrl) {
+  return (prevSettings) => {
+    const existingIndex = prevSettings.findIndex((s) => s.url === sentinelUrl);
+    const alreadyPresent = existingIndex !== -1;
+
+    if (!layer) {
+      // Nothing to show — remove its settings entry, or leave the array as-is if there wasn't one.
+      return alreadyPresent ? prevSettings.filter((_, i) => i !== existingIndex) : prevSettings;
+    }
+
+    if (alreadyPresent) {
+      // Already has a settings entry — a data-only refresh (e.g. new sourcePowers) never touches
+      // user-chosen settings like opacity/visibility, so leave it untouched.
+      return prevSettings;
+    }
+
+    // First appearance — seed default settings for it.
+    return [...prevSettings, ...getInitialLayerSettings([layer], prevSettings.length)];
+  };
+}
 
 export const filesToLayers = (files) =>
   // Convert a FileList (from input or drag-and-drop) to an array of layer objects with
