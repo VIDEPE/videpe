@@ -109,11 +109,16 @@ export const PatientView = () => {
   // EegTopoViewer's setup effect can then list it as a dependency without re-running on
   // every PatientView re-render.
   const handleTopoNvReady = useCallback(() => setTopoNvReady(true), []);
-  // Whether each panel's NiiVue canvas currently has something to draw — the cross-panel
-  // rotation sync below must stay off while either side is empty, since NiiVue's sync()
-  // unconditionally calls drawScene() on the linked instance every frame, which throws (and
-  // aborts the *other* panel's own repaint too) if that instance has no volumes/meshes.
+  // Whether each panel's NiiVue canvas currently has a 3D scene with a usable spatial extent
+  // — the cross-panel rotation sync below must stay off unless BOTH do, since NiiVue's sync()
+  // calls createOnLocationChange() on the linked instance every frame, which throws
+  // (toFixed(Infinity)) when that instance's scene extent is zero. That happens for an empty
+  // scene AND for a connectome-only scene (intracranial electrodes / ESI in connectome mode),
+  // so "has a volume or mesh" — not merely "has any layer" — is the right condition here.
+  // EegTopoViewer always builds a real convex-hull surface mesh, so topoHasContent already
+  // implies a usable extent; NiiViewer reports its own via onHas3DExtentChange.
   const [topoHasContent, setTopoHasContent] = useState(false); // reported by EegViewer/EegTopoViewer
+  const [niiHas3DExtent, setNiiHas3DExtent] = useState(false); // reported by NiiViewer
 
   // Lazy ref init — created once, never replaced. A cleanup-based useEffect would let
   // StrictMode's remount cycle recreate this and break NiiViewer's canvasReadyRef guard.
@@ -134,23 +139,27 @@ export const PatientView = () => {
     });
   }
 
-  // Once both viewers are ready, mirror 3D camera movement between them in both directions
-  // so rotating/zooming one view updates the other — but only while both sides actually
-  // have something loaded. Re-runs whenever content appears/disappears on either side (not
-  // just once at mount) so e.g. closing the topo window or clearing all imaging layers
-  // un-links the panels instead of leaving a stale link to a now-empty NiiVue instance.
+  // Once both viewers are ready, mirror 3D camera movement between them in both directions so
+  // rotating/zooming one view updates the other — but only while BOTH sides have a 3D scene
+  // with a usable spatial extent (a volume or mesh), never a connectome-only or empty scene
+  // (see niiHas3DExtent/topoHasContent above for why). Re-runs whenever that changes on either
+  // side (not just once at mount), so e.g. closing the topo window, or resetting the imaging
+  // panel down to just an ESI connectome, un-links the panels instead of leaving a stale link
+  // to a now-degenerate NiiVue instance whose sync() would crash the still-focused panel.
   useEffect(() => {
     if (!niiNvReady || !topoNvReady) return;
     const nvNii = nvRef_niiviewer.current;
     const nvTopo = nvRef_eegtopo.current;
-    if (niiViewerHasContent && topoHasContent) {
+    // niiViewerHasContent guards against a stale niiHas3DExtent after NiiViewer unmounts — its
+    // reporting effect can't fire `false` on unmount, but this prop-derived flag goes false then.
+    if (niiViewerHasContent && niiHas3DExtent && topoHasContent) {
       nvNii.broadcastTo([nvTopo], { '2d': false, '3d': true });
       nvTopo.broadcastTo([nvNii], { '2d': false, '3d': true });
     } else {
       nvNii.broadcastTo([]);
       nvTopo.broadcastTo([]);
     }
-  }, [niiNvReady, topoNvReady, niiViewerHasContent, topoHasContent]);
+  }, [niiNvReady, topoNvReady, niiViewerHasContent, niiHas3DExtent, topoHasContent]);
 
   // Handler for when imaging files are dropped or selected. It reads the files as ArrayBuffers and prepares them for visualization, updating state accordingly.
   // NiiViewer shows its own loading/success toast once mounted, so this just sets layers and surfaces errors.
@@ -325,6 +334,7 @@ export const PatientView = () => {
               intracranialLayer={intracranialLayer}
               esiLayer={esiLayer}
               onHasContentChange={setNiiHasOwnContent}
+              onHas3DExtentChange={setNiiHas3DExtent}
               isFullscreen={maximizedPanel === 'right'}
               onViewReady={() => niiReadyResolveRef.current?.()}
               onNiiNvReady={() => setNiiNvReady(true)}

@@ -145,6 +145,7 @@ export const NiiViewer = ({
   onHasContentChange, // reports orderedLayers.length > 0 — lets the parent see layers
   // dropped into this component's own dropzone, which never touch the layers/
   // intracranialLayer/esiLayer props, so it doesn't wrongly unmount this viewer when those go empty/null together.
+  onHas3DExtentChange, // reports whether the scene has a volume/mesh (non-connectome) — gates the cross-panel rotation sync; see the effect below
   isFullscreen = false,
 }) => {
   // ─── State ─────────────────────────────────────────────────────────────────
@@ -439,6 +440,16 @@ export const NiiViewer = ({
   useEffect(() => {
     onHasContentChange?.(orderedLayers.length > 0);
   }, [orderedLayers, onHasContentChange]);
+
+  // Reports whether the 3D scene has a usable spatial extent — i.e. at least one image
+  // volume or surface mesh. A connectome-only scene (intracranial electrodes and/or the ESI
+  // layer in connectome mode) leaves NiiVue's scene extent at zero, which makes its per-frame
+  // sync() crash (createOnLocationChange → toFixed(Infinity)) if another instance is broadcast-
+  // linked to it. PatientView uses this to keep the cross-panel rotation link off whenever this
+  // viewer holds nothing but connectomes — see the sync effect in PatientView.
+  useEffect(() => {
+    onHas3DExtentChange?.(orderedLayers.some((layer) => layer.kind !== 'connectome'));
+  }, [orderedLayers, onHas3DExtentChange]);
 
   // ─── Effects: card ordering ─────────────────────────────────────────────────
 

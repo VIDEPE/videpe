@@ -177,7 +177,7 @@ vi.mock('@/components/EegViewer', () => ({
   ),
 }));
 vi.mock('@/components/NiiViewer', () => ({
-  NiiViewer: vi.fn(({ onHasContentChange, onNiiNvReady }) => (
+  NiiViewer: vi.fn(({ onHasContentChange, onHas3DExtentChange, onNiiNvReady }) => (
     <div data-testid="nii-viewer">
       {/* Simulates NiiViewer reporting that it holds layers loaded straight into its own
           internal dropzone — layers PatientView has no other visibility into (they never
@@ -192,6 +192,23 @@ vi.mock('@/components/NiiViewer', () => ({
       {/* Simulates NiiViewer's NiiVue canvas attaching */}
       <button type="button" data-testid="trigger-nii-nv-ready" onClick={() => onNiiNvReady?.()}>
         trigger-nii-nv-ready
+      </button>
+      {/* Simulates NiiViewer reporting whether its 3D scene has a usable spatial extent —
+          true once a volume/mesh is present, false when only connectome layers remain (e.g.
+          after resetting the imaging panel down to just an ESI connectome). */}
+      <button
+        type="button"
+        data-testid="trigger-nii-has-3d-extent"
+        onClick={() => onHas3DExtentChange?.(true)}
+      >
+        trigger-nii-has-3d-extent
+      </button>
+      <button
+        type="button"
+        data-testid="trigger-nii-no-3d-extent"
+        onClick={() => onHas3DExtentChange?.(false)}
+      >
+        trigger-nii-no-3d-extent
       </button>
     </div>
   )),
@@ -1316,10 +1333,12 @@ describe('PatientView — intracranial connectome layer', () => {
 });
 
 // Regression tests for the "can't rotate 3D view after removing the linked 3D render" bug:
-// NiiVue's sync() unconditionally calls drawScene() on the linked instance every frame, which
-// throws (and aborts the *other* panel's own repaint too) if that instance has no volumes/
-// meshes loaded. PatientView must only keep the cross-panel broadcastTo() link active while
-// both NiiVue canvases have actual content, and re-evaluate that whenever content changes.
+// NiiVue's sync() runs every frame while dragging and calls createOnLocationChange() on the
+// broadcast-linked instance, which throws (toFixed(Infinity), aborting the still-focused
+// panel's own repaint too) when that instance's 3D scene has zero spatial extent — an empty
+// scene OR a connectome-only one (intracranial electrodes / ESI in connectome mode). So the
+// cross-panel link must only be active while BOTH sides have a volume-or-mesh scene, and be
+// re-evaluated whenever that changes on either side.
 describe('PatientView — cross-panel 3D rotation sync', () => {
   beforeEach(() => {
     FileDropZone.mockClear();
@@ -1350,11 +1369,23 @@ describe('PatientView — cross-panel 3D rotation sync', () => {
     return { nvNii, nvTopo };
   };
 
+  // Both canvases ready + both scenes report a usable extent — the fully-linked state the
+  // other tests start from.
+  const makeBothReadyAndLinked = async () => {
+    const { nvNii, nvTopo } = await setupBothPanelsWithContent();
+    await userEvent.click(screen.getByTestId('trigger-nii-nv-ready'));
+    await userEvent.click(screen.getByTestId('trigger-topo-nv-ready'));
+    await userEvent.click(screen.getByTestId('trigger-nii-has-3d-extent'));
+    await userEvent.click(screen.getByTestId('trigger-topo-has-content'));
+    return { nvNii, nvTopo };
+  };
+
   it('does not link when both canvases are ready but the topo panel has no content yet', async () => {
     const { nvNii, nvTopo } = await setupBothPanelsWithContent();
 
     await userEvent.click(screen.getByTestId('trigger-nii-nv-ready'));
     await userEvent.click(screen.getByTestId('trigger-topo-nv-ready'));
+    await userEvent.click(screen.getByTestId('trigger-nii-has-3d-extent'));
     // topoHasContent never triggered — e.g. the topo window is open but no electrode
     // position file has been loaded, so its NiiVue canvas is still a genuinely empty scene.
     // The effect still runs (both canvases are ready) but must leave both sides unlinked
@@ -1364,26 +1395,45 @@ describe('PatientView — cross-panel 3D rotation sync', () => {
     expect(nvTopo.broadcastTo).toHaveBeenLastCalledWith([]);
   });
 
-  it('links the two panels once both canvases are ready and both have content', async () => {
+  it('does not link when the imaging panel holds only a connectome (zero-extent scene) even though the topo panel has content', async () => {
     const { nvNii, nvTopo } = await setupBothPanelsWithContent();
 
     await userEvent.click(screen.getByTestId('trigger-nii-nv-ready'));
     await userEvent.click(screen.getByTestId('trigger-topo-nv-ready'));
     await userEvent.click(screen.getByTestId('trigger-topo-has-content'));
+    // niiHas3DExtent never triggered — the imaging scene is connectome-only (e.g. an ESI
+    // connectome with no volume), whose zero extent would crash NiiVue's per-frame sync.
+
+    expect(nvNii.broadcastTo).toHaveBeenLastCalledWith([]);
+    expect(nvTopo.broadcastTo).toHaveBeenLastCalledWith([]);
+  });
+
+  it('links the two panels once both canvases are ready and both have a volume/mesh scene', async () => {
+    const { nvNii, nvTopo } = await makeBothReadyAndLinked();
 
     expect(nvNii.broadcastTo).toHaveBeenLastCalledWith([nvTopo], { '2d': false, '3d': true });
     expect(nvTopo.broadcastTo).toHaveBeenLastCalledWith([nvNii], { '2d': false, '3d': true });
   });
 
-  it('unlinks both panels the moment one side loses its content, instead of leaving a stale link to a now-empty NiiVue instance', async () => {
-    const { nvNii, nvTopo } = await setupBothPanelsWithContent();
-    await userEvent.click(screen.getByTestId('trigger-nii-nv-ready'));
-    await userEvent.click(screen.getByTestId('trigger-topo-nv-ready'));
-    await userEvent.click(screen.getByTestId('trigger-topo-has-content'));
+  it('unlinks both panels when the topo window is closed, instead of leaving a stale link to a now-empty NiiVue instance', async () => {
+    const { nvNii, nvTopo } = await makeBothReadyAndLinked();
     expect(nvNii.broadcastTo).toHaveBeenLastCalledWith([nvTopo], { '2d': false, '3d': true });
 
     // e.g. the user closes the floating topography window, or its electrode mesh is cleared
     await userEvent.click(screen.getByTestId('trigger-topo-no-content'));
+
+    expect(nvNii.broadcastTo).toHaveBeenLastCalledWith([]);
+    expect(nvTopo.broadcastTo).toHaveBeenLastCalledWith([]);
+  });
+
+  it('unlinks both panels when the imaging panel is reset down to a connectome-only (zero-extent) scene', async () => {
+    const { nvNii, nvTopo } = await makeBothReadyAndLinked();
+    expect(nvNii.broadcastTo).toHaveBeenLastCalledWith([nvTopo], { '2d': false, '3d': true });
+
+    // Reproduces the reported crash: after resetting the imaging panel, only the ESI
+    // connectome remains — a zero-extent scene whose sync() would otherwise crash the
+    // still-focused (topo) panel mid-rotation.
+    await userEvent.click(screen.getByTestId('trigger-nii-no-3d-extent'));
 
     expect(nvNii.broadcastTo).toHaveBeenLastCalledWith([]);
     expect(nvTopo.broadcastTo).toHaveBeenLastCalledWith([]);
