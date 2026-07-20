@@ -426,6 +426,10 @@ export const NiiViewer = ({
   // nv.loadVolumes() and can leave the spinner stuck.
   useEffect(() => {
     if (hasImageVolumes) return;
+    // nv is never told to switch back to 2D when volumes reappear (deliberately, per above),
+    // so activeSliceType has to be committed here rather than derived at render — otherwise the
+    // buttons' pressed-state would drift out of sync with what nv is actually showing.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setActiveSliceType(SLICE_TYPE.RENDER);
     nvRef.current?.setSliceType(SLICE_TYPE.RENDER);
   }, [hasImageVolumes, nvRef]);
@@ -453,7 +457,11 @@ export const NiiViewer = ({
         Number(!isImageVolumeLayer(orderedLayers[a])) -
         Number(!isImageVolumeLayer(orderedLayers[b]))
     );
-    if (order.every((originalIndex, i) => originalIndex === i)) return; // already volumes-first
+    if (order.every((originalIndex, i) => originalIndex === i)) return; // already volumes-first — bails before setState, so this only ever commits one corrective render per actual reorder, never loops
+    // orderedLayers is read positionally elsewhere (nv.volumes index mapping in
+    // handleSettingChange/handleDeleteLayer, the layer hooks), so it must be the committed
+    // source of truth — a derived-at-render sorted copy would desync from those index lookups.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setOrderedLayers(order.map((i) => orderedLayers[i]));
     setLayerSettings((prev) => order.map((i) => prev[i]));
   }, [orderedLayers]);
