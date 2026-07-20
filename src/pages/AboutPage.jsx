@@ -256,11 +256,10 @@ export const AboutPage = () => {
                   style={{ color: 'var(--c-foreground)' }}
                 >
                   <li>
-                    Multi-layer support for MRI, PET, SPECT and meshes in one view. Supports NIfTI (.nii, .nii.gz), MGH/MGZ, GIFTI, PLY, OBJ
+                    Multi-layer support for MRI, PET, SPECT and meshes in one view. Supports NIfTI
+                    (.nii, .nii.gz), MGH/MGZ, GIFTI, PLY, OBJ
                   </li>
-                  <li>
-                    Per-layer opacity, colormap, colorbar, inversion and threshold controls
-                  </li>
+                  <li>Per-layer opacity, colormap, colorbar, inversion and threshold controls</li>
                   <li>
                     Drag-to-reorder layers, with a modality subtype label shown on each volume
                   </li>

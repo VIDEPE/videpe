@@ -67,7 +67,8 @@ const FEATURES = [
       <>
         Curious?
         <br />
-        Try a full EEG (inc. electrode position & inverse solution) + MRI dataset in one click — no files of your own needed.
+        Try a full EEG (inc. electrode position & inverse solution) + MRI dataset in one click — no
+        files of your own needed.
       </>
     ),
     anchor: '#feature-demo',

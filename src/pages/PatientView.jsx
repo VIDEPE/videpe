@@ -1,107 +1,26 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
-import toast from 'react-hot-toast';
 import { Niivue } from '@niivue/niivue';
+import toast from 'react-hot-toast';
 
-import { cn } from '../utils/utils';
 import { FullWidthLayout } from '../components/FullWidthLayout';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { EegViewer } from '../components/EegViewer';
 import { NiiViewer } from '../components/NiiViewer';
 import { SplitPane } from '../components/SplitPane';
-import { loadBrainVisionEEG } from '../loaders/loadBrainVisionEEG';
-import {
-  detectAndLoadEEG,
-  checkEegFiles,
-  ELEC_POS_EXTENSIONS,
-  INV_SOLUTIONS_EXTENSIONS,
-  EEG_FORMAT_EXTENSIONS,
-} from '../loaders/eegFormats';
-import { parseElectrodePositionFile } from '../loaders/parseElectrodePositionFile';
-import { parseInverseSolutionFieldtrip } from '../loaders/parseInverseSolutionFieldtrip';
+import { EEGTypeToggle } from '../components/EEGTypeToggle';
 import { FileDropZone } from '../components/FileDropZone';
-import { detectVolumeType, filesToLayers } from '../utils/NiiViewer.utils';
+import { filesToLayers } from '../utils/NiiViewer.utils';
 import { buildIntracranialLayer } from '../utils/eegTopographyUtils';
-import { electricalSourceImaging } from '../utils/electricalSourceImagingUtils';
-
-const DEMO_EEG = {
-  header: 'demo_data/sub-synth_task-rest_desc-spkavgall_eeg.vhdr',
-  data: 'demo_data/sub-synth_task-rest_desc-spkavgall_eeg.eeg',
-  elec_pos: 'demo_data/sub-synth_electrodes.tsv',
-  invers_solution: 'demo_data/sub-synth_desc-unitnoiselcmv_inversefilters.mat',
-};
-
-const DEMO_LAYERS = [
-  { url: 'demo_data/sub-synth_T1w.nii.gz', ...detectVolumeType('sub-synth_T1w.nii.gz') },
-  {
-    url: 'demo_data/sub-synth_label-WM_dseg.nii.gz',
-    ...detectVolumeType('sub-synth_label-WM_dseg.nii.gz'),
-  },
-  {
-    url: 'demo_data/sub-synth_label-CSF_dseg.nii.gz',
-    ...detectVolumeType('sub-synth_label-CSF_dseg.nii.gz'),
-  },
-];
-
-// Fetches a demo file by URL and wraps it as a File, so demo loading can feed the same
-// parseElectrodePositionFile/parseInverseSolutionFieldtrip entry points used by file drops.
-async function fetchAsFile(url) {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`Failed to fetch ${url}: ${response.statusText}`);
-  const blob = await response.blob();
-  return new File([blob], url.split('/').pop());
-}
+import { useEegFileIntake } from '../hooks/useEegFileIntake';
+import { useMontage } from '../hooks/useMontage';
+import { useElectricalSourceImaging } from '../hooks/useElectricalSourceImaging';
+import { useDemoData } from '../hooks/useDemoData';
 
 // Shared title styling — keeps "Neuroimaging" and the toggle's labels visually
 // consistent, and both header bars the same height (TrafficLightButtons are 16px tall).
 const PANEL_TITLE_CLASS = 'h-7 flex items-center text-xl font-medium leading-none text-header';
-
-// Sits in the SplitPane's left title once EEG is loaded, replacing the static "EEG"
-// label. One switch, not two buttons — clicking anywhere flips the value regardless of
-// which label half was clicked. pointer-events-auto overrides panelHeader's <h2>.
-const EEGTypeToggle = ({ recordingType, onChange }) => {
-  const isIntracranial = recordingType === 'ieeg';
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={isIntracranial}
-      aria-label="Recording type"
-      onClick={() => onChange(isIntracranial ? 'eeg' : 'ieeg')}
-      className="relative w-28 h-6.5 rounded-full border border-border bg-background cursor-pointer pointer-events-auto"
-      title="Automatically detected from channel naming — click to overwrite"
-    >
-      <span className="absolute inset-0.5 flex">
-        <span
-          className={cn(
-            'absolute inset-y-0 left-0 w-1/2 rounded-full bg-primary transition-transform duration-150 ease-out',
-            isIntracranial && 'translate-x-full'
-          )}
-        />
-        <span
-          className={cn(
-            'relative z-10 flex-1 flex items-center justify-center text-xl font-medium leading-none transition-colors',
-            !isIntracranial ? 'text-header' : 'text-foreground/50'
-          )}
-        >
-          EEG
-        </span>
-        <span
-          className={cn(
-            'relative z-10 flex-1 flex items-center justify-center text-xl font-medium leading-none transition-colors',
-            isIntracranial ? 'text-header' : 'text-foreground/50'
-          )}
-        >
-          iEEG
-        </span>
-      </span>
-    </button>
-  );
-};
-
-// Electrode position files are routed to handleElecPosFile instead of the EEG-format
-// accumulation logic below, regardless of which dropzone/button they came in through.
 
 export const PatientView = () => {
   // Prevent default browser drag-and-drop behavior (e.g., opening files in a new tab)
@@ -122,20 +41,10 @@ export const PatientView = () => {
   // them) when e.g. switching out of iEEG mode clears intracranialLayer.
   const [niiHasOwnContent, setNiiHasOwnContent] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [isDemoloading, setIsDemoloading] = useState(false);
   const eegReadyResolveRef = useRef(null); // set before demo load; EegViewer calls it when charts are ready
   const niiReadyResolveRef = useRef(null); // set before demo load; NiiViewer calls it when volumes are ready
-  const [pendingEegFiles, setPendingEegFiles] = useState([]);
-  const [eegHint, setEegHint] = useState(null);
   const [maximizedPanel, setMaximizedPanel] = useState(null); // null | 'left' | 'right'
 
-  // Custom electrode positions — owned here rather than in EegViewer, since they can be
-  // dropped at the initial EEG dropzone before EegViewer even exists, and need to stay in
-  // sync across the several places that can supply/replace them (this dropzone,
-  // EegViewer's own persistent dropzone, and the topography popup's "use custom
-  // positions" button) — all three call the same onElecPosFile callback below.
-  const [customElectrodes, setCustomElectrodes] = useState([]); // [{label,x,y,z}]
-  const [customElecPosFileName, setCustomElecPosFileName] = useState(null);
   // Live EEG/electrode state lifted out of EegViewer — drives the intracranial connectome
   // layer in the Neuroimaging pane. { isIntracranial, matched, voltages } | null.
   const [intracranialSnapshot, setIntracranialSnapshot] = useState(null);
@@ -143,81 +52,41 @@ export const PatientView = () => {
   // toggle. EegViewer reports its auto-detection result up via the same setter that the
   // title's click handler uses, then reads the resulting value back down as a prop.
   const [recordingType, setRecordingType] = useState('eeg');
-  const [inverseSolution, setInverseSolution] = useState(null);
-  const [inverseSolutionFileName, setInverseSolutionFileName] = useState(null);
   const [channelSnapshot, setChannelSnapshot] = useState(null); // { isIntracranial, channelNames, voltages } lifted from EegViewer on each click
-  // 'none' | 'average' | 'median' — owned here (not EegViewer) because ESI requires the
-  // Average montage: loading an inverse solution forces this to 'average', and switching
-  // away hides the ESI layer (see handleMontageChange/esiLayer below).
-  const [montage, setMontage] = useState('none');
 
-  const handleElecPosFile = useCallback(async (file) => {
-    try {
-      const { electrodes } = await parseElectrodePositionFile(file);
-      if (!electrodes.length) return; // ignore empty or unparseable files
-      setCustomElectrodes(electrodes);
-      setCustomElecPosFileName(file.name.replace(/\.[^.]+$/, ''));
-      // Confirm the load — this dropzone shows no state of its own in compact mode, so
-      // without this the file appears to vanish and the user can't tell it was accepted.
-      toast.success(`Loaded ${electrodes.length} electrode positions from ${file.name}`);
-    } catch (err) {
-      toast.error(err.message);
-    }
-  }, []);
+  const { montage, setMontage, resetMontage } = useMontage();
 
-  const handleInverseSolutionFile = useCallback(
-    async (file) => {
-      try {
-        const parsedInverseSolution = await parseInverseSolutionFieldtrip(file);
-        setInverseSolution(parsedInverseSolution);
-        setInverseSolutionFileName(file.name.replace(/\.[^.]+$/, ''));
-        // Confirm the load — same reasoning as electrode positions above: the compact
-        // dropzone gives no visible feedback of its own that the file was accepted.
-        // Forcing the Average montage (and warning about it) is handled by the effect
-        // below, which also covers the case of switching into EEG mode with a solution
-        // already loaded.
-        toast.success(`Loaded inverse solution from ${file.name}`);
+  const {
+    inverseSolutionFileName,
+    esiLayer,
+    handleInverseSolutionFile,
+    handleMontageChange,
+    resetInverseSolution,
+  } = useElectricalSourceImaging({ eeg, recordingType, channelSnapshot, montage, setMontage });
 
-        // ESI only applies to scalp EEG — the file is still stored (and will be picked up
-        // automatically by the force-Average effect below once the user switches back to
-        // EEG mode), but tell them it has no effect right now rather than let them wonder
-        // why nothing happened.
-        if (recordingType === 'ieeg') {
-          toast(
-            'Electrical Source Imaging is not available for iEEG — will apply once you switch to EEG mode',
-            {
-              icon: '⚠️',
-            }
-          );
-        }
-      } catch (err) {
-        toast.error(err.message);
-      }
-    },
-    [recordingType]
-  );
+  const {
+    pendingEegFiles,
+    eegHint,
+    customElectrodes,
+    customElecPosFileName,
+    handleElecPosFile,
+    handleEegFiles,
+    resetIntake,
+  } = useEegFileIntake({
+    setEeg,
+    setIsLoading,
+    onInverseSolutionFile: handleInverseSolutionFile,
+  });
 
-  // Holds the latest montage so the ESI-forcing effect below can read it without listing
-  // montage as a dependency — otherwise the effect would re-run and undo a deliberate
-  // switch away from Average the moment the user made it.
-  const montageRef = useRef(montage);
-  montageRef.current = montage;
-
-  // ESI is only valid for scalp EEG under a common-average reference. Whenever an inverse
-  // solution is present in EEG mode, force the Average montage and tell the user why —
-  // but not before `eeg` loads, since recordingType defaults to 'eeg' pre-load and the
-  // recording could still turn out to be iEEG. Not keyed on montage, so a deliberate
-  // switch away from Average isn't undone. Fixed toast id collapses StrictMode's
-  // double-invoke (and any rapid re-trigger) into one.
-  useEffect(() => {
-    if (!inverseSolution || !eeg || recordingType !== 'eeg') return;
-    if (montageRef.current === 'average') return; // already Average — repeating the warning is just noise
-    setMontage('average');
-    toast('Montage set to Average — required for Electrical Source Imaging', {
-      icon: '⚠️',
-      id: 'esi-force-average-montage',
-    });
-  }, [inverseSolution, eeg, recordingType]);
+  const { isDemoLoading, handleLoadDemo } = useDemoData({
+    setEeg,
+    setLayers,
+    handleElecPosFile,
+    handleInverseSolutionFile,
+    setIsLoading,
+    eegReadyResolveRef,
+    niiReadyResolveRef,
+  });
 
   // Derives the Neuroimaging pane's connectome layer from the EEG state lifted out of
   // EegViewer — null until there's an intracranial recording with at least one
@@ -226,32 +95,6 @@ export const PatientView = () => {
     () => buildIntracranialLayer(intracranialSnapshot ?? {}),
     [intracranialSnapshot]
   ); // intracranial electrodes
-
-  const esiLayer = useMemo(
-    () =>
-      montage === 'average' ? electricalSourceImaging(inverseSolution, channelSnapshot) : null,
-    [inverseSolution, channelSnapshot, montage]
-  ); // ESI source power — { sourcePowerConnectomes, sourcePowerVolume } | null | [] — only valid under the Average montage
-
-  // Montage is a controlled prop on EegViewer so it can be forced to 'average' above
-  // when adding an inverse solution file.
-  // This is the other direction — the user switching away from it while ESI is active. Warns
-  // only when doing so actually hides a layer that was visible: not merely whenever an
-  // inverse solution happens to be loaded. That excludes iEEG mode (ESI never applies
-  // there) and EEG mode before the first channel click (no channelSnapshot yet, so no
-  // layer has ever been computed) — in both cases esiLayer is already falsy, so nothing
-  // is being hidden and the warning would be misleading.
-  const handleMontageChange = useCallback(
-    (newMontage) => {
-      setMontage(newMontage);
-      if (newMontage !== 'average' && esiLayer) {
-        toast('Electrical Source Imaging requires the Average montage — layer hidden', {
-          icon: '⚠️',
-        });
-      }
-    },
-    [esiLayer]
-  );
 
   // when both these flags are true, then the two plots can be synchronised
   const [niiNvReady, setNiiNvReady] = useState(false); // flag when the NiiViewer canvas is initialised
@@ -288,99 +131,6 @@ export const PatientView = () => {
     nvRef_eegtopo.current.broadcastTo([nvRef_niiviewer.current], { '2d': false, '3d': true });
   }, [niiNvReady, topoNvReady]);
 
-  // Handler for when EEG files are dropped or selected.
-  // Files accumulate across drops until all required files for a format are present.
-  // Electrode position files (.elc/.tsv) are split out first and routed separately —
-  // they're orthogonal to EEG format detection and can arrive alone or alongside EEG files.
-  const handleEegFiles = async (newFiles) => {
-    const allFiles = Array.from(newFiles);
-    // Detect and handle electrode position files
-    const elecPosFiles = allFiles.filter((f) =>
-      ELEC_POS_EXTENSIONS.some((ext) => f.name.toLowerCase().endsWith(ext))
-    );
-    if (elecPosFiles.length > 0) {
-      await handleElecPosFile(elecPosFiles[elecPosFiles.length - 1]); // keep only the last if multiple were dropped at once
-      if (elecPosFiles.length > 1) {
-        toast('Multiple electrode position files loaded => using the latest.', {
-          icon: '⚠️',
-        });
-      }
-    }
-    // Detect and handle inverse filter files
-    const invFiltFiles = allFiles.filter((f) =>
-      INV_SOLUTIONS_EXTENSIONS.some((ext) => f.name.toLowerCase().endsWith(ext))
-    );
-    if (invFiltFiles.length > 0) {
-      await handleInverseSolutionFile(invFiltFiles[invFiltFiles.length - 1]); // keep only the last if multiple were dropped at once
-      if (invFiltFiles.length > 1) {
-        toast('Multiple inverse solution files loaded => using the latest.', {
-          icon: '⚠️',
-        });
-      }
-    }
-
-    // Exclude electrode position and inverse filter files from EEG format detection — they are handled separately above. The remaining files are checked for EEG formats.
-    const remainingFiles = allFiles.filter(
-      (f) => !elecPosFiles.includes(f) && !invFiltFiles.includes(f)
-    );
-    // Anything left whose extension doesn't belong to a supported EEG format (e.g. an
-    // imaging volume meant for the Neuroimaging panel) is rejected outright
-    const eegFiles = remainingFiles.filter((f) =>
-      EEG_FORMAT_EXTENSIONS.some((ext) => f.name.toLowerCase().endsWith(ext))
-    );
-    const unsupportedFiles = remainingFiles.filter((f) => !eegFiles.includes(f));
-    if (unsupportedFiles.length > 0) {
-      toast.error(
-        `Unsupported file${unsupportedFiles.length > 1 ? 's' : ''}: ${unsupportedFiles
-          .map((f) => f.name)
-          .join(', ')}\nDrop imaging files in the Neuroimaging panel instead.`
-      );
-    }
-
-    if (eegFiles.length === 0) return; // pure electrode-position/inv-filter/unsupported drop — nothing else to do
-
-    // Merge pending with new files
-    const merged = [...pendingEegFiles, ...eegFiles];
-    // Then keep only the last file for each extension by createing a map of extension to file.
-    // This way, if a user drops a new .vhdr file, it will replace the previous .vhdr in the pending state, while still keeping any .eeg file that was dropped before.
-    const byExtension = new Map();
-    for (const file of merged) {
-      const ext = file.name.toLowerCase().match(/(\.[^.]+)$/)?.[1];
-      // for each file with a recognized extension, store it in the Map keyed by that extension.
-      // If a .vhdr was already in the map and another .vhdr comes along, .set() overwrites the old entry
-      if (ext) byExtension.set(ext, file);
-    }
-    // Pull File objects back out of the map
-    const deduped = [...byExtension.values()];
-    // Check the accumulated files against known EEG formats to determine if we can load or if we need to wait for more files.
-    const { formatName, complete, missing, warning } = checkEegFiles(deduped);
-
-    if (complete) {
-      // All required files present — clear pending state and load.
-      // EegViewer shows its own loading/success toast once mounted, so this just
-      // detects the format and surfaces errors.
-      setPendingEegFiles([]);
-      setEegHint(null);
-      setIsLoading(true);
-      try {
-        setEeg(await detectAndLoadEEG(deduped));
-      } catch (err) {
-        toast.error(`Error loading EEG:\n${err.message}`);
-      } finally {
-        setIsLoading(false);
-      }
-    } else if (formatName) {
-      // Partial match or name mismatch — hold files and show what's wrong
-      setPendingEegFiles(deduped);
-      setEegHint(warning ?? `${formatName} also requires: ${missing.join(', ')}`);
-    } else {
-      // No recognized format at all
-      setPendingEegFiles([]);
-      setEegHint(null);
-      toast.error(`Unrecognized EEG format.\nSupported: BrainVision (.vhdr + .eeg)`);
-    }
-  };
-
   // Handler for when imaging files are dropped or selected. It reads the files as ArrayBuffers and prepares them for visualization, updating state accordingly.
   // NiiViewer shows its own loading/success toast once mounted, so this just sets layers and surfaces errors.
   const handleNiiFiles = async (files) => {
@@ -395,76 +145,41 @@ export const PatientView = () => {
     }
   };
 
-  const handleLoadDemo = async () => {
-    setIsLoading(true);
-    setIsDemoloading(true);
-    // Create ready promises before setting state — the viewers resolve them once fully rendered
-    const eegReady = new Promise((resolve) => {
-      eegReadyResolveRef.current = resolve;
-    });
-    const niiReady = new Promise((resolve) => {
-      niiReadyResolveRef.current = resolve;
-    });
-    try {
-      const base = import.meta.env.BASE_URL; // base is the public folder in Vite, so demo_data is at `${base}demo_data/...`
-      await toast.promise(
-        (async () => {
-          // Load and set EEG
-          const result = await loadBrainVisionEEG(base + DEMO_EEG.header, base + DEMO_EEG.data);
-          setEeg(result);
-          // Load and set electrode positions and inverse solution, via the same handlers
-          // file drops use, so they reach EegViewer/ESI exactly as a manual drop would.
-          const elecPosFile = await fetchAsFile(base + DEMO_EEG.elec_pos);
-          await handleElecPosFile(elecPosFile);
-          const inverseSolutionFile = await fetchAsFile(base + DEMO_EEG.invers_solution);
-          await handleInverseSolutionFile(inverseSolutionFile);
-          // Load and set layers
-          setLayers(DEMO_LAYERS);
-          await Promise.all([eegReady, niiReady]);
-        })(),
-        {
-          loading: 'Loading demo data…',
-          success: 'Demo data loaded!',
-          error: (err) => `Error loading demo data:\n${err.message}`,
-        }
-      );
-    } finally {
-      setIsLoading(false);
-      setIsDemoloading(false);
-    }
-  };
-
-  // Resets both viewers, returning to the empty drop zone state.
+  // Top-bar "Reset" button — clears both panels back to their empty drop zone state, as
+  // if the page had just loaded. Superset of handleEegReset + handleNiiReset below, plus
+  // the EEG-side state that only this full reset needs to touch (layers/niiHasOwnContent
+  // are the Neuroimaging side, which handleEegReset deliberately leaves alone).
   const handleReset = () => {
     setEeg(null);
     setLayers([]);
     setNiiHasOwnContent(false);
-    setPendingEegFiles([]);
-    setEegHint(null);
-    setCustomElectrodes([]);
-    setCustomElecPosFileName(null);
+    resetIntake();
     setIntracranialSnapshot(null);
-    setInverseSolution(null);
-    setInverseSolutionFileName(null);
+    resetInverseSolution();
+    resetMontage();
     setChannelSnapshot(null);
     setRecordingType('eeg');
-    setMontage('none');
   };
 
+  // SplitPane's left (EEG) panel reset button — clears only the EEG side (recording,
+  // pending files, electrode positions, inverse solution/montage/ESI, recording type).
+  // Leaves `layers`/`niiHasOwnContent` untouched, so any imaging data already loaded in
+  // the Neuroimaging panel survives; the intracranial connectome layer built from EEG
+  // state does get cleared, via setIntracranialSnapshot(null) below.
   const handleEegReset = () => {
     setEeg(null);
-    setPendingEegFiles([]);
-    setEegHint(null);
-    setCustomElectrodes([]);
-    setCustomElecPosFileName(null);
+    resetIntake();
     setRecordingType('eeg');
     setIntracranialSnapshot(null);
-    setInverseSolution(null);
-    setInverseSolutionFileName(null);
+    resetInverseSolution();
+    resetMontage();
     setChannelSnapshot(null);
-    setMontage('none');
   };
 
+  // SplitPane's right (Neuroimaging) panel reset button — clears only the imaging volumes
+  // dropped via PatientView's `layers` state and NiiViewer's own internal dropzone flag.
+  // Leaves the EEG side, and therefore the intracranial/ESI connectome layers derived
+  // from it, untouched — NiiViewer stays mounted and simply re-renders without `layers`.
   const handleNiiReset = () => {
     setLayers([]);
     setNiiHasOwnContent(false);
@@ -487,14 +202,14 @@ export const PatientView = () => {
             }
             disabled={isLoading}
             title={
-              isDemoloading
+              isDemoLoading
                 ? 'Loading demo data…'
                 : eeg || layers.length > 0 || pendingEegFiles.length > 0
                   ? 'Reset both viewers'
                   : 'Load demo data to test VIDEPE without needing your own files'
             }
           >
-            {isDemoloading
+            {isDemoLoading
               ? 'Loading…'
               : eeg || layers.length > 0 || pendingEegFiles.length > 0
                 ? 'Reset'
