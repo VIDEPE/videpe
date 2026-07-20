@@ -96,6 +96,7 @@ export const EegViewer = ({
   onRecordingTypeChange,
   montage = 'none', // 'none' | 'average' | 'median' — controlled by PatientView, which forces 'average' when ESI needs it
   onMontageChange,
+  onTopoHasContentChange, // reports whether the topography NiiVue canvas currently has a mesh to draw — see NiiViewer's onHasContentChange for why PatientView needs this instead of inferring it
 }) => {
   const { isDarkMode } = useTheme();
   const syncKey = 'eeg-sync'; // shared across all channels to link their interactions
@@ -180,6 +181,16 @@ export const EegViewer = ({
     onIntracranialSnapshotChange,
     onChannelSnapshotChange,
   });
+
+  // Reports whether EegTopoViewer's NiiVue canvas currently has a mesh loaded — mirrors
+  // the guard in EegTopoViewer's mesh-loading effect (isIntracranial || !electrodes?.length
+  // || !voltages?.length skips the load) so PatientView can tell when the 3D scene it's
+  // synced to is genuinely empty and disable the cross-panel rotation link accordingly.
+  const topoHasContent =
+    topoVisible && !isIntracranial && electrodes?.length > 0 && topoVoltages?.length > 0;
+  useEffect(() => {
+    onTopoHasContentChange?.(topoHasContent);
+  }, [topoHasContent, onTopoHasContentChange]);
 
   // Show a loading toast while the initial buffer loads, then update it to a success
   // message — self-contained so EegViewer reports its own status regardless of where

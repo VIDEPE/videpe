@@ -11,6 +11,7 @@ const renderPatientView = () =>
     </MemoryRouter>
   );
 import toast from 'react-hot-toast';
+import { Niivue } from '@niivue/niivue';
 import { loadBrainVisionEEG } from '@/loaders/loadBrainVisionEEG';
 import { checkEegFiles, detectAndLoadEEG } from '@/loaders/eegFormats';
 import { parseInverseSolutionFieldtrip } from '@/loaders/parseInverseSolutionFieldtrip';
@@ -58,6 +59,8 @@ vi.mock('@/components/EegViewer', () => ({
       onMontageChange,
       onRecordingTypeChange,
       onInverseSolutionFile,
+      onTopoNvReady,
+      onTopoHasContentChange,
     }) => (
       <div data-testid="eeg-viewer">
         <span data-testid="eeg-custom-electrodes-count">{customElectrodes?.length ?? 0}</span>
@@ -148,12 +151,33 @@ vi.mock('@/components/EegViewer', () => ({
         >
           trigger-intracranial-clear
         </button>
+        {/* Simulates EegTopoViewer's NiiVue canvas attaching (real EegViewer forwards this
+            from EegTopoViewer's onTopoNvReady prop once mounted) */}
+        <button type="button" data-testid="trigger-topo-nv-ready" onClick={() => onTopoNvReady?.()}>
+          trigger-topo-nv-ready
+        </button>
+        {/* Simulates the topography mesh appearing/disappearing — e.g. the topo window being
+            opened/closed, or an electrode file being loaded/cleared. */}
+        <button
+          type="button"
+          data-testid="trigger-topo-has-content"
+          onClick={() => onTopoHasContentChange?.(true)}
+        >
+          trigger-topo-has-content
+        </button>
+        <button
+          type="button"
+          data-testid="trigger-topo-no-content"
+          onClick={() => onTopoHasContentChange?.(false)}
+        >
+          trigger-topo-no-content
+        </button>
       </div>
     )
   ),
 }));
 vi.mock('@/components/NiiViewer', () => ({
-  NiiViewer: vi.fn(({ onHasContentChange }) => (
+  NiiViewer: vi.fn(({ onHasContentChange, onNiiNvReady }) => (
     <div data-testid="nii-viewer">
       {/* Simulates NiiViewer reporting that it holds layers loaded straight into its own
           internal dropzone — layers PatientView has no other visibility into (they never
@@ -165,10 +189,29 @@ vi.mock('@/components/NiiViewer', () => ({
       >
         trigger-nii-has-content
       </button>
+      {/* Simulates NiiViewer's NiiVue canvas attaching */}
+      <button type="button" data-testid="trigger-nii-nv-ready" onClick={() => onNiiNvReady?.()}>
+        trigger-nii-nv-ready
+      </button>
     </div>
   )),
 }));
 vi.mock('@/components/FileDropZone', () => ({ FileDropZone: vi.fn(() => null) }));
+
+// PatientView constructs two real Niivue instances itself (nvRef_niiviewer/nvRef_eegtopo) to
+// link their 3D rotation via broadcastTo — mock just the class so its calls can be inspected
+// without a real WebGL context, while keeping every other export real: NiiViewer.utils'
+// filesToLayers (used below) depends on the real isMeshExt, and other modules imported
+// transitively depend on SLICE_TYPE/NVImage/etc.
+vi.mock('@niivue/niivue', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    Niivue: vi.fn().mockImplementation(function () {
+      return { broadcastTo: vi.fn() };
+    }),
+  };
+});
 
 vi.mock('@/loaders/parseInverseSolutionFieldtrip', () => ({
   parseInverseSolutionFieldtrip: vi.fn().mockResolvedValue({
@@ -1269,5 +1312,80 @@ describe('PatientView — intracranial connectome layer', () => {
     await userEvent.click(getDemoResetButton()); // Reset
 
     expect(screen.queryByTestId('nii-viewer')).not.toBeInTheDocument();
+  });
+});
+
+// Regression tests for the "can't rotate 3D view after removing the linked 3D render" bug:
+// NiiVue's sync() unconditionally calls drawScene() on the linked instance every frame, which
+// throws (and aborts the *other* panel's own repaint too) if that instance has no volumes/
+// meshes loaded. PatientView must only keep the cross-panel broadcastTo() link active while
+// both NiiVue canvases have actual content, and re-evaluate that whenever content changes.
+describe('PatientView — cross-panel 3D rotation sync', () => {
+  beforeEach(() => {
+    FileDropZone.mockClear();
+    Niivue.mockClear();
+    checkEegFiles.mockReturnValue({
+      formatName: 'BrainVision',
+      complete: true,
+      missing: [],
+      warning: null,
+    });
+    detectAndLoadEEG.mockResolvedValue({ channelNames: ['B1'], fs: 1, tMax: 1, getChunk: vi.fn() });
+  });
+
+  // Mounts both NiiViewer (via an imaging volume) and EegViewer (via an EEG recording), and
+  // returns the two real Niivue instances PatientView constructed for them — created in a
+  // fixed order (nvRef_niiviewer, then nvRef_eegtopo) by the lazy-ref pattern at the top of
+  // PatientView, so they're always the first two instances built on a fresh render.
+  const setupBothPanelsWithContent = async () => {
+    renderPatientView();
+    await act(async () => {
+      await getNiiOnFiles()([makeFile('sub-01_T1w.nii')]);
+    });
+    await act(async () => {
+      await getEegOnFiles()([makeFile('sub01.vhdr'), makeFile('sub01.eeg')]);
+    });
+
+    const [nvNii, nvTopo] = Niivue.mock.results.map((r) => r.value);
+    return { nvNii, nvTopo };
+  };
+
+  it('does not link when both canvases are ready but the topo panel has no content yet', async () => {
+    const { nvNii, nvTopo } = await setupBothPanelsWithContent();
+
+    await userEvent.click(screen.getByTestId('trigger-nii-nv-ready'));
+    await userEvent.click(screen.getByTestId('trigger-topo-nv-ready'));
+    // topoHasContent never triggered — e.g. the topo window is open but no electrode
+    // position file has been loaded, so its NiiVue canvas is still a genuinely empty scene.
+    // The effect still runs (both canvases are ready) but must leave both sides unlinked
+    // rather than broadcasting to a scene with nothing to draw.
+
+    expect(nvNii.broadcastTo).toHaveBeenLastCalledWith([]);
+    expect(nvTopo.broadcastTo).toHaveBeenLastCalledWith([]);
+  });
+
+  it('links the two panels once both canvases are ready and both have content', async () => {
+    const { nvNii, nvTopo } = await setupBothPanelsWithContent();
+
+    await userEvent.click(screen.getByTestId('trigger-nii-nv-ready'));
+    await userEvent.click(screen.getByTestId('trigger-topo-nv-ready'));
+    await userEvent.click(screen.getByTestId('trigger-topo-has-content'));
+
+    expect(nvNii.broadcastTo).toHaveBeenLastCalledWith([nvTopo], { '2d': false, '3d': true });
+    expect(nvTopo.broadcastTo).toHaveBeenLastCalledWith([nvNii], { '2d': false, '3d': true });
+  });
+
+  it('unlinks both panels the moment one side loses its content, instead of leaving a stale link to a now-empty NiiVue instance', async () => {
+    const { nvNii, nvTopo } = await setupBothPanelsWithContent();
+    await userEvent.click(screen.getByTestId('trigger-nii-nv-ready'));
+    await userEvent.click(screen.getByTestId('trigger-topo-nv-ready'));
+    await userEvent.click(screen.getByTestId('trigger-topo-has-content'));
+    expect(nvNii.broadcastTo).toHaveBeenLastCalledWith([nvTopo], { '2d': false, '3d': true });
+
+    // e.g. the user closes the floating topography window, or its electrode mesh is cleared
+    await userEvent.click(screen.getByTestId('trigger-topo-no-content'));
+
+    expect(nvNii.broadcastTo).toHaveBeenLastCalledWith([]);
+    expect(nvTopo.broadcastTo).toHaveBeenLastCalledWith([]);
   });
 });
