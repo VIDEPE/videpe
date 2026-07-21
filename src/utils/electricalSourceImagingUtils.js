@@ -372,7 +372,10 @@ export function convertSourcePowersToVolume(
 //   { format, flatSourceFilters, insideSourcePositions, nInsideSources, nChannels, channelLabels, ... }
 // @param {object} channelSnapshot - per-click EEG state lifted from EegViewer:
 //   { isIntracranial: boolean, channelNames: string[], voltages: number[] }
-// @returns NiiVue connectome layer object for rendering source power in NiiViewer
+// @returns {{ sourcePowerConnectomes: object, sourcePowerVolume: object }|null|[]} an object
+//   exposing both representations as lazy, memoized getters — each is only actually built
+//   (and cached) the first time it's read, so the mode not currently rendered never pays for
+//   its own conversion.
 export function electricalSourceImaging(inverseSolution, channelSnapshot) {
   if (!inverseSolution) return null;
   if (!channelSnapshot?.voltages?.length) return null;
@@ -400,21 +403,37 @@ export function electricalSourceImaging(inverseSolution, channelSnapshot) {
       nChannels,
     });
 
-    // Build power connectomes from the inside source positions
-    const sourcePowerConnectomes = convertSourcePowersToConnectome(
-      insideSourcePositions,
-      sourcePowers
-    );
-    // Build power volume from inside volume indices
-    const sourcePowerVolume = convertSourcePowersToVolume(
-      sourceVolumeIndices,
-      sourcePowers,
-      gridDimensions,
-      pixDims,
-      affine
-    );
-
-    return { sourcePowerConnectomes, sourcePowerVolume };
+    // sourcePowerConnectomes/sourcePowerVolume below are accessor ("get") properties, not
+    // plain fields — building this object doesn't run either conversion. A getter's body only
+    // executes the moment something actually reads that property (e.g. NiiViewer reading
+    // .sourcePowerConnectomes while in connectome mode); its `return` is just that getter
+    // function's own, same as any function.
+    //
+    // The first read of a given property builds it and caches the result (see the ??= below);
+    // every later read of that same property — e.g. toggling back to a mode already visited
+    // this click — returns the cached value instead of recomputing. Toggling to the *other*
+    // mode for the first time still pays for that mode's conversion once. Nothing explicitly
+    // clears the cache — the next EEG click produces an entirely new esiLayer object (fresh
+    // cachedConnectomes/cachedVolume, starting at null), and this one is simply discarded.
+    let cachedConnectomes = null;
+    let cachedVolume = null;
+    return {
+      get sourcePowerConnectomes() {
+        return (cachedConnectomes ??= convertSourcePowersToConnectome(
+          insideSourcePositions,
+          sourcePowers
+        ));
+      },
+      get sourcePowerVolume() {
+        return (cachedVolume ??= convertSourcePowersToVolume(
+          sourceVolumeIndices,
+          sourcePowers,
+          gridDimensions,
+          pixDims,
+          affine
+        ));
+      },
+    };
   } else {
     throw new Error(`inverseFilter object has unkown/empty 'format' parameter.`);
   }

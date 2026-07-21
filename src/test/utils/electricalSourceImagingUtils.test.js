@@ -750,4 +750,24 @@ describe('electricalSourceImaging', () => {
     expect(result.sourcePowerVolume.bytes).toBeInstanceOf(Uint8Array);
     expect(result.sourcePowerVolume.bytes).toHaveLength(360);
   });
+
+  it('builds each representation lazily, only when accessed, and caches the result', () => {
+    // sourceVolumeIndices deliberately mismatched against sourcePowers (2 sources) so
+    // building the volume representation throws (see buildSourceVolumeGrid) — used as an
+    // observable signal for whether it was built eagerly or only on access.
+    const badVolumeModel = { ...MINIMAL_MODEL, sourceVolumeIndices: [[0, 0, 0]] };
+
+    let result;
+    expect(() => {
+      result = electricalSourceImaging(badVolumeModel, SCALP_SNAPSHOT);
+    }).not.toThrow();
+
+    // Connectome doesn't touch sourceVolumeIndices, so accessing it never triggers the
+    // broken volume path, and repeated access returns the same memoized object.
+    expect(result.sourcePowerConnectomes.kind).toBe('connectome');
+    expect(result.sourcePowerConnectomes).toBe(result.sourcePowerConnectomes);
+
+    // Only actually accessing sourcePowerVolume builds (and fails to build) it.
+    expect(() => result.sourcePowerVolume).toThrow(/unequal number/);
+  });
 });
