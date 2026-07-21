@@ -2,7 +2,12 @@ import { StrictMode } from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach, assert } from 'vitest';
 import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { getInitialLayerSettings, detectVolumeType, filesToLayers, ESI_LAYER_URL } from '@/utils/NiiViewer.utils';
+import {
+  getInitialLayerSettings,
+  detectVolumeType,
+  filesToLayers,
+  ESI_LAYER_URL,
+} from '@/utils/NiiViewer.utils';
 import {
   NiiViewer,
   syncVolumesAndApplySettings,
@@ -1655,34 +1660,32 @@ describe('NiiViewer', () => {
   });
   describe('esi layer', () => {
     it('never calls loadConnectomeAsMesh() when ESI layer is rendered while MRI layer is still loading', async () => {
-
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
       const nv = nvRef.current;
       // Mock nv.loadVolumes that gets hung up on a promise that later can be resolved manually
       let resolveMriLoad;
       nv.loadVolumes = vi.fn().mockImplementation(
-        (vols) => new Promise((resolve) => {
-          resolveMriLoad = () => {
-            nv.volumes = vols;
-            resolve();
-          };
-        })
+        (vols) =>
+          new Promise((resolve) => {
+            resolveMriLoad = () => {
+              nv.volumes = vols;
+              resolve();
+            };
+          })
       );
 
       // Render mri and esilayer
-      const esiLayer = makeEsiLayer(); 
-      render(<NiiViewer
-                nvRef={nvRef}
-                layers={[{ type: 'MRI', url: '/mri.nii' }]}
-                esiLayer={esiLayer} />);
+      const esiLayer = makeEsiLayer();
+      render(
+        <NiiViewer nvRef={nvRef} layers={[{ type: 'MRI', url: '/mri.nii' }]} esiLayer={esiLayer} />
+      );
 
       expect(nv.loadConnectomeAsMesh).not.toHaveBeenCalled();
-      resolveMriLoad()
+      resolveMriLoad();
       await waitFor(() => expect(nv.loadVolumes).toHaveBeenCalled());
 
-      expect(nv.loadConnectomeAsMesh).not.toHaveBeenCalled()
-
+      expect(nv.loadConnectomeAsMesh).not.toHaveBeenCalled();
     });
   });
 });
