@@ -141,6 +141,9 @@ export function useEsiLayer({
       const { boundMin: esiBoundMin, boundMax: esiBoundMax } = getCalBounds(activeEsiLayer);
       const esiCalMin = fractionToCalValue(settings.cal_min, esiBoundMin, esiBoundMax);
       const esiCalMax = fractionToCalValue(settings.cal_max, esiBoundMin, esiBoundMax);
+      // NiiVue already skips below-threshold nodes when coloring, but its label builder warns
+      // once per node when doing so — filter them out here to get the same result silently.
+      const visibleNodes = activeEsiLayer.nodes.filter((node) => node.colorValue >= esiCalMin);
       const mesh = nv.loadConnectomeAsMesh({
         name: activeEsiLayer.name,
         nodeColormap: EEG_NODE_POS_KEY,
@@ -155,7 +158,7 @@ export function useEsiLayer({
         edgeScale: 0.5,
         showLegend: false,
         colorbarVisible: false, // suppresses the colorbar entry NiiVue would otherwise add
-        nodes: activeEsiLayer.nodes,
+        nodes: visibleNodes,
         edges: activeEsiLayer.edges, // always [] for ESI — source points have no connecting structure
       });
       mesh.opacity = settings.visible ? settings.opacity : 0;
