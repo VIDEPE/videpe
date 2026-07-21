@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
+import { renderHook, waitFor, act } from '@testing-library/react';
 import { useEsiLayer } from '@/hooks/useEsiLayer';
 import { ESI_LAYER_URL } from '@/utils/NiiViewer.utils';
 
@@ -59,9 +59,13 @@ function makeNv() {
 }
 
 // Wraps useEsiLayer with the orderedLayers/layerSettings state it expects its caller to own,
-// mirroring how NiiViewer itself supplies them.
-function useHarness({ esiLayer, isEsiVolumeMode, nvRef }) {
-  const [orderedLayers, setOrderedLayers] = useState([]);
+// mirroring how NiiViewer itself supplies them. initialOrderedLayers lets tests seed a
+// pending (not-yet-in-nv.volumes) MRI/PET layer, same as useLayerLoader does synchronously
+// before its own async nv load resolves. setOrderedLayers/setLayerSettings are also returned
+// so a test can simulate that async load "finishing" (a new orderedLayers/layerSettings array
+// arriving) independently of the ESI layer itself changing.
+function useHarness({ esiLayer, isEsiVolumeMode, nvRef, initialOrderedLayers = [] }) {
+  const [orderedLayers, setOrderedLayers] = useState(initialOrderedLayers);
   const [layerSettings, setLayerSettings] = useState([]);
   const hookResult = useEsiLayer({
     esiLayer,
@@ -72,7 +76,7 @@ function useHarness({ esiLayer, isEsiVolumeMode, nvRef }) {
     setOrderedLayers,
     setLayerSettings,
   });
-  return { orderedLayers, layerSettings, ...hookResult };
+  return { orderedLayers, layerSettings, setOrderedLayers, setLayerSettings, ...hookResult };
 }
 
 describe('useEsiLayer', () => {
@@ -249,6 +253,37 @@ describe('useEsiLayer', () => {
       rerender({ esiLayer, isEsiVolumeMode: true, nvRef });
       await waitFor(() => expect(nv.addVolumesFromUrl).toHaveBeenCalled());
       expect(nv.removeMesh).toHaveBeenCalledWith(mesh);
+    });
+
+    it('defers adding the ESI volume until other image-volume layers already known in orderedLayers have landed in nv.volumes', async () => {
+      // Regression test: if the ESI volume's addVolumesFromUrl call resolves before the
+      // MRI/PET background's own (independent, async) load does, the ESI volume — a coarse
+      // source-power grid — can grab nv.volumes[0], NiiVue's base/reference volume that
+      // defines the rendering grid. The whole scene then gets resampled onto ESI's coarse
+      // grid, visible as blocky "squares" until the layers are manually reordered.
+      const mriLayer = { url: 'blob:mri', name: 'mri.nii', kind: 'volume' };
+      const esiLayer = makeEsiLayer();
+      const { result } = renderHook((props) => useHarness(props), {
+        initialProps: {
+          esiLayer,
+          isEsiVolumeMode: true,
+          nvRef,
+          initialOrderedLayers: [mriLayer],
+        },
+      });
+
+      // mriLayer is already known (in orderedLayers), but hasn't landed in nv.volumes yet
+      // (its own load is still in flight) — the ESI volume must not jump ahead of it.
+      expect(nv.addVolumesFromUrl).not.toHaveBeenCalled();
+
+      // The MRI load finishes: it lands in nv.volumes, and the loader (in real usage,
+      // useLayerLoader) announces this with a new orderedLayers array.
+      nv.volumes = [{ id: 'vol-mri' }];
+      act(() => {
+        result.current.setOrderedLayers([mriLayer]);
+      });
+
+      await waitFor(() => expect(nv.addVolumesFromUrl).toHaveBeenCalled());
     });
 
     it('tears down the volume when esiLayer becomes null', async () => {
