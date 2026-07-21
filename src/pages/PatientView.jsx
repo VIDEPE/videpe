@@ -108,12 +108,12 @@ export const PatientView = () => {
   // EegTopoViewer's setup effect can then list it as a dependency without re-running on
   // every PatientView re-render.
   const handleTopoNvReady = useCallback(() => setTopoNvReady(true), []);
-  // Flags indicating whether the topography/imaging NiiVue canvas currently has a 3D scene with a 3D extent. 
-  // The rotation sync — broadcastTo() — between them must stay off unless BOTH do. It'll throw 'zero-extend warnings'. 
+  // Flags indicating whether the topography/imaging NiiVue canvas currently has a 3D scene with a 3D extent.
+  // The rotation sync — broadcastTo() — between them must stay off unless BOTH do. It'll throw 'zero-extend warnings'.
   // 'Zero 3D extend' happens for an empty scene AND for a connectome-only scene (intracranial electrodes / ESI in connectome
-  // mode), therefor a "has a volume or mesh", not merely "has any layer" condition is needed. 
+  // mode), therefor a "has a volume or mesh", not merely "has any layer" condition is needed.
   // EegTopoViewer always builds a real convex-hull surface mesh => topoHasContent always implies a usable extent.
-  // NiiViewer reports its own via onHas3DExtentChange, which is set to 'false' on unmount (see useNiiVueLifecycle.js)
+  // NiiViewer reports its own via onHas3DExtentChange, which is set to 'false' on unmount (see useSharedNiiVueInstance.js)
   const [topoHasContent, setTopoHasContent] = useState(false); // reported by EegViewer/EegTopoViewer
   const [niiHas3DExtent, setNiiHas3DExtent] = useState(false); // reported by NiiViewer
 

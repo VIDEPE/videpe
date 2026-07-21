@@ -20,7 +20,7 @@ import { ImagingControls } from './ImagingControls';
 import { FileDropZone } from '../components/FileDropZone';
 import { useCanvasAutoLayout } from '@/hooks/useCanvasAutoLayout';
 import { useCanvasRowResize } from '@/hooks/useCanvasRowResize';
-import { useNiiVueLifecycle } from '@/hooks/useNiiVueLifecycle';
+import { useSharedNiiVueInstance } from '@/hooks/useSharedNiiVueInstance';
 import { useLoadingToast } from '@/hooks/useLoadingToast';
 import { useLayerLoader } from '@/hooks/useLayerLoader';
 import { useIntracranialConnectome } from '@/hooks/useIntracranialConnectome';
@@ -180,7 +180,7 @@ export const NiiViewer = ({
   // Drag-to-resize for the canvas row's min-height.
   const { canvasRowRef, handleCanvasResizeStart } = useCanvasRowResize(MIN_CANVAS_HEIGHT);
   // Attaches the shared NiiVue instance to the canvas on mount, and clears it on unmount.
-  const { canvasRef } = useNiiVueLifecycle({
+  const { canvasRef } = useSharedNiiVueInstance({
     nvRef,
     hasImageVolumes,
     activeSliceType,
@@ -448,7 +448,7 @@ export const NiiViewer = ({
   // sync() crash (createOnLocationChange → toFixed(Infinity)) if another instance is broadcast-
   // linked to it. PatientView uses this to keep the cross-panel rotation link off whenever this
   // viewer holds nothing but connectomes — see the sync effect in PatientView. Covers every
-  // case where the component stays mounted; useNiiVueLifecycle's unmount cleanup separately
+  // case where the component stays mounted; useSharedNiiVueInstance's unmount cleanup separately
   // reports `false` once nv is actually emptied, since this effect body can't fire on unmount.
   useEffect(() => {
     onHas3DExtentChange?.(orderedLayers.some((layer) => layer.kind !== 'connectome'));

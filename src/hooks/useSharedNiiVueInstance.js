@@ -31,7 +31,7 @@ import {
  * @returns {Object}
  *   - `canvasRef` (RefObject) — attach to the `<canvas>` element NiiVue should render into.
  */
-export function useNiiVueLifecycle({
+export function useSharedNiiVueInstance({
   nvRef,
   hasImageVolumes,
   activeSliceType,
