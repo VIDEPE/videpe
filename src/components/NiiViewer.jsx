@@ -165,7 +165,7 @@ export const NiiViewer = ({
   // connectome-only one.
   const hasImageVolumes = orderedLayers.some(isImageVolumeLayer);
   // Connectome/Volume toggle state for the ESI layer — read by both ESI effects below.
-  const isEsiVolumeMode = layerSettings.find((s) => s.url === ESI_LAYER_URL)?.isEsiVolume;
+  const isEsiVolumeMode = layerSettings.find((s) => s.url === ESI_LAYER_URL)?.isEsiVolume ?? true;
   const sliceTypeOptions = [
     { sliceType: SLICE_TYPE.AXIAL, label: 'Axial', buttonLabel: 'Ax' },
     { sliceType: SLICE_TYPE.CORONAL, label: 'Coronal', buttonLabel: 'Co' },

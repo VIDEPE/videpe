@@ -1,14 +1,13 @@
 import { StrictMode } from 'react';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, assert } from 'vitest';
 import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { getInitialLayerSettings, detectVolumeType, filesToLayers } from '@/utils/NiiViewer.utils';
+import { getInitialLayerSettings, detectVolumeType, filesToLayers, ESI_LAYER_URL } from '@/utils/NiiViewer.utils';
 import {
   NiiViewer,
   syncVolumesAndApplySettings,
   syncMeshesAndApplySettings,
 } from '@/components/NiiViewer';
-
 // Mirrors the real @niivue/niivue MESH_EXTENSIONS list closely enough to exercise
 // isMeshExt's actual extension-based routing without pulling in the real package.
 const MOCK_MESH_EXTENSIONS = [
@@ -68,6 +67,32 @@ const makeIntracranialLayer = (overrides = {}) => ({
   edges: [],
   calMax: 1,
   ...overrides,
+});
+
+const makeConnectomeLayer = (overrides = {}) => ({
+  url: ESI_LAYER_URL,
+  name: 'ESI Source Power',
+  kind: 'connectome',
+  nodes: [{ name: 'esi-src-0', x: 0, y: 0, z: 0, colorValue: 0.5, sizeValue: 0.5 }],
+  edges: [],
+  boundMin: 0,
+  boundMax: 1,
+  ...overrides,
+});
+
+const makeVolumeLayer = (overrides = {}) => ({
+  url: ESI_LAYER_URL,
+  name: 'ESI Source Power.nii',
+  bytes: new Uint8Array([1, 2, 3]),
+  kind: 'volume',
+  boundMin: 0,
+  boundMax: 1,
+  ...overrides,
+});
+
+const makeEsiLayer = ({ connectome, volume } = {}) => ({
+  sourcePowerConnectomes: connectome ?? makeConnectomeLayer(),
+  sourcePowerVolume: volume ?? makeVolumeLayer(),
 });
 
 vi.mock('react-hot-toast', () => ({
@@ -1626,6 +1651,38 @@ describe('NiiViewer', () => {
       expect(
         mriLabel.compareDocumentPosition(connectomeLabel) & Node.DOCUMENT_POSITION_FOLLOWING
       ).toBeTruthy();
+    });
+  });
+  describe('esi layer', () => {
+    it('never calls loadConnectomeAsMesh() when ESI layer is rendered while MRI layer is still loading', async () => {
+
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const nv = nvRef.current;
+      // Mock nv.loadVolumes that gets hung up on a promise that later can be resolved manually
+      let resolveMriLoad;
+      nv.loadVolumes = vi.fn().mockImplementation(
+        (vols) => new Promise((resolve) => {
+          resolveMriLoad = () => {
+            nv.volumes = vols;
+            resolve();
+          };
+        })
+      );
+
+      // Render mri and esilayer
+      const esiLayer = makeEsiLayer(); 
+      render(<NiiViewer
+                nvRef={nvRef}
+                layers={[{ type: 'MRI', url: '/mri.nii' }]}
+                esiLayer={esiLayer} />);
+
+      expect(nv.loadConnectomeAsMesh).not.toHaveBeenCalled();
+      resolveMriLoad()
+      await waitFor(() => expect(nv.loadVolumes).toHaveBeenCalled());
+
+      expect(nv.loadConnectomeAsMesh).not.toHaveBeenCalled()
+
     });
   });
 });
