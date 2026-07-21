@@ -125,6 +125,44 @@ describe('useEsiLayer', () => {
       expect(call.nodeMaxColor).toBe(100); // 1 * 100 — default cal_max fraction
     });
 
+    it('excludes nodes below the resolved cal_min from what is passed to loadConnectomeAsMesh (NiiVue warns once per excluded node otherwise)', () => {
+      const esiLayer = makeEsiLayer({
+        connectome: makeConnectomeLayer({
+          boundMin: 0,
+          boundMax: 100,
+          nodes: [
+            { name: 'below-threshold', x: 0, y: 0, z: 0, colorValue: 0.5, sizeValue: 0.5 },
+            { name: 'above-threshold', x: 1, y: 1, z: 1, colorValue: 50, sizeValue: 0.5 },
+          ],
+        }),
+      });
+      renderHook((props) => useHarness(props), {
+        initialProps: { esiLayer, isEsiVolumeMode: false, nvRef },
+      });
+      const call = nv.loadConnectomeAsMesh.mock.calls[0][0];
+      // nodeMinColor resolves to 0.01 * 100 = 1 (see the test above) — only 'above-threshold'
+      // (50) clears it.
+      expect(call.nodes.map((n) => n.name)).toEqual(['above-threshold']);
+    });
+
+    it('hides nodes below cal_min and keeps nodes at/above it even when cal_min equals cal_max', () => {
+      const esiLayer = makeEsiLayer({
+        connectome: makeConnectomeLayer({
+          boundMin: 5,
+          boundMax: 5, // cal_min and cal_max both resolve to 5
+          nodes: [
+            { name: 'below', x: 0, y: 0, z: 0, colorValue: 4, sizeValue: 0.1 },
+            { name: 'at-or-above', x: 1, y: 1, z: 1, colorValue: 5, sizeValue: 0.1 },
+          ],
+        }),
+      });
+      renderHook((props) => useHarness(props), {
+        initialProps: { esiLayer, isEsiVolumeMode: false, nvRef },
+      });
+      const call = nv.loadConnectomeAsMesh.mock.calls[0][0];
+      expect(call.nodes.map((n) => n.name)).toEqual(['at-or-above']);
+    });
+
     it('rebuilds the mesh (remove + re-add) when the connectome data object changes', () => {
       const esiLayer1 = makeEsiLayer();
       const { rerender } = renderHook((props) => useHarness(props), {
