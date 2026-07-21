@@ -97,8 +97,7 @@ export const PatientView = () => {
   ); // intracranial electrodes
 
   // Whether the Neuroimaging pane currently has anything to show — same condition that
-  // decides whether NiiViewer is mounted at all (below) and whether its reset button
-  // appears; also feeds the cross-panel rotation sync effect further down.
+  // decides whether NiiViewer is mounted at all (below) and whether its reset button appears.
   const niiViewerHasContent =
     layers.length > 0 || Boolean(intracranialLayer) || Boolean(esiLayer) || niiHasOwnContent;
 
@@ -109,14 +108,12 @@ export const PatientView = () => {
   // EegTopoViewer's setup effect can then list it as a dependency without re-running on
   // every PatientView re-render.
   const handleTopoNvReady = useCallback(() => setTopoNvReady(true), []);
-  // Whether each panel's NiiVue canvas currently has a 3D scene with a usable spatial extent
-  // — the cross-panel rotation sync below must stay off unless BOTH do, since NiiVue's sync()
-  // calls createOnLocationChange() on the linked instance every frame, which throws
-  // (toFixed(Infinity)) when that instance's scene extent is zero. That happens for an empty
-  // scene AND for a connectome-only scene (intracranial electrodes / ESI in connectome mode),
-  // so "has a volume or mesh" — not merely "has any layer" — is the right condition here.
-  // EegTopoViewer always builds a real convex-hull surface mesh, so topoHasContent already
-  // implies a usable extent; NiiViewer reports its own via onHas3DExtentChange.
+  // Flags indicating whether the topography/imaging NiiVue canvas currently has a 3D scene with a 3D extent. 
+  // The rotation sync — broadcastTo() — between them must stay off unless BOTH do. It'll throw 'zero-extend warnings'. 
+  // 'Zero 3D extend' happens for an empty scene AND for a connectome-only scene (intracranial electrodes / ESI in connectome
+  // mode), therefor a "has a volume or mesh", not merely "has any layer" condition is needed. 
+  // EegTopoViewer always builds a real convex-hull surface mesh => topoHasContent always implies a usable extent.
+  // NiiViewer reports its own via onHas3DExtentChange, which is set to 'false' on unmount (see useNiiVueLifecycle.js)
   const [topoHasContent, setTopoHasContent] = useState(false); // reported by EegViewer/EegTopoViewer
   const [niiHas3DExtent, setNiiHas3DExtent] = useState(false); // reported by NiiViewer
 
@@ -139,27 +136,23 @@ export const PatientView = () => {
     });
   }
 
-  // Once both viewers are ready, mirror 3D camera movement between them in both directions so
-  // rotating/zooming one view updates the other — but only while BOTH sides have a 3D scene
-  // with a usable spatial extent (a volume or mesh), never a connectome-only or empty scene
-  // (see niiHas3DExtent/topoHasContent above for why). Re-runs whenever that changes on either
-  // side (not just once at mount), so e.g. closing the topo window, or resetting the imaging
-  // panel down to just an ESI connectome, un-links the panels instead of leaving a stale link
-  // to a now-degenerate NiiVue instance whose sync() would crash the still-focused panel.
+  // Once both viewers are ready and BOTH sides have a 3D scene, then and only then the 3D rotation
+  // can be synced (see niiHas3DExtent/topoHasContent above for why).
+  // Re-runs whenever this changes on either side (not just once at mount),
+  // so e.g. closing the topo window, or resetting the imaging panel down to just an ESI connectome,
+  // un-links the panels — broadcastTo([]) — instead of leaving a stale link to a now-degenerate NiiVue instance whose sync() would crash the still-focused panel.
   useEffect(() => {
     if (!niiNvReady || !topoNvReady) return;
     const nvNii = nvRef_niiviewer.current;
     const nvTopo = nvRef_eegtopo.current;
-    // niiViewerHasContent guards against a stale niiHas3DExtent after NiiViewer unmounts — its
-    // reporting effect can't fire `false` on unmount, but this prop-derived flag goes false then.
-    if (niiViewerHasContent && niiHas3DExtent && topoHasContent) {
+    if (niiHas3DExtent && topoHasContent) {
       nvNii.broadcastTo([nvTopo], { '2d': false, '3d': true });
       nvTopo.broadcastTo([nvNii], { '2d': false, '3d': true });
     } else {
       nvNii.broadcastTo([]);
       nvTopo.broadcastTo([]);
     }
-  }, [niiNvReady, topoNvReady, niiViewerHasContent, niiHas3DExtent, topoHasContent]);
+  }, [niiNvReady, topoNvReady, niiHas3DExtent, topoHasContent]);
 
   // Handler for when imaging files are dropped or selected. It reads the files as ArrayBuffers and prepares them for visualization, updating state accordingly.
   // NiiViewer shows its own loading/success toast once mounted, so this just sets layers and surfaces errors.

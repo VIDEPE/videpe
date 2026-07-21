@@ -1333,6 +1333,94 @@ describe('NiiViewer', () => {
     });
   });
 
+  // onHas3DExtentChange tells PatientView whether this viewer's NiiVue scene has a usable
+  // spatial extent — a connectome layer alone (intracranial electrodes / ESI connectome mode)
+  // leaves NiiVue's scene extent at zero, which crashes its per-frame sync() if another
+  // instance is broadcast-linked to it. See the cross-panel rotation sync effect in PatientView.
+  describe('onHas3DExtentChange', () => {
+    it('reports false while the scene holds only a connectome layer', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const onHas3DExtentChange = vi.fn();
+      render(
+        <NiiViewer
+          nvRef={nvRef}
+          layers={[]}
+          intracranialLayer={makeIntracranialLayer()}
+          onHas3DExtentChange={onHas3DExtentChange}
+        />
+      );
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      expect(onHas3DExtentChange).toHaveBeenLastCalledWith(false);
+    });
+
+    it('reports true once an image volume is present alongside a connectome', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const onHas3DExtentChange = vi.fn();
+      render(
+        <NiiViewer
+          nvRef={nvRef}
+          layers={[{ type: 'MRI', url: '/mri.nii' }]}
+          intracranialLayer={makeIntracranialLayer()}
+          onHas3DExtentChange={onHas3DExtentChange}
+        />
+      );
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      expect(onHas3DExtentChange).toHaveBeenLastCalledWith(true);
+    });
+
+    it('drops back to false when the image volume is reset away, leaving only the connectome', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const onHas3DExtentChange = vi.fn();
+      const { rerender } = render(
+        <NiiViewer
+          nvRef={nvRef}
+          layers={[{ type: 'MRI', url: '/mri.nii' }]}
+          intracranialLayer={makeIntracranialLayer()}
+          onHas3DExtentChange={onHas3DExtentChange}
+        />
+      );
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+      expect(onHas3DExtentChange).toHaveBeenLastCalledWith(true);
+
+      // Imaging-only reset: layers clears but the connectome keeps the component mounted —
+      // the same scenario as the "clears stale volumes" test above, from the extent-reporting side.
+      rerender(
+        <NiiViewer
+          nvRef={nvRef}
+          layers={[]}
+          intracranialLayer={makeIntracranialLayer()}
+          onHas3DExtentChange={onHas3DExtentChange}
+        />
+      );
+
+      expect(onHas3DExtentChange).toHaveBeenLastCalledWith(false);
+    });
+
+    it('reports false on unmount, once nv has actually been cleared — not just left stale at its last value', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const onHas3DExtentChange = vi.fn();
+      const { unmount } = render(
+        <NiiViewer
+          nvRef={nvRef}
+          layers={[{ type: 'MRI', url: '/mri.nii' }]}
+          onHas3DExtentChange={onHas3DExtentChange}
+        />
+      );
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+      expect(onHas3DExtentChange).toHaveBeenLastCalledWith(true);
+
+      unmount();
+
+      expect(onHas3DExtentChange).toHaveBeenLastCalledWith(false);
+    });
+  });
+
   describe('mesh layers (loaded from files)', () => {
     it('loads a mesh passed via the layers prop through addMeshesFromUrl, not loadVolumes', async () => {
       const { Niivue } = await import('@niivue/niivue');

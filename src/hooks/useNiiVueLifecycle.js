@@ -24,6 +24,10 @@ import {
  *   can react to the canvas becoming usable.
  * @param {React.RefObject} params.fileMeshesRef - url→NVMesh map for file-loaded surface
  *   meshes; cleared alongside `nv.meshes` on unmount so a later remount starts from empty.
+ * @param {Function} [params.onHas3DExtentChange] - called with `false` on unmount, once `nv`'s
+ *   volumes/meshes have actually been cleared — the caller's own has-3D-extent reporting (driven
+ *   by `orderedLayers`) can't fire on unmount since its effect body simply stops running, so it
+ *   would otherwise stay stale at whatever it last reported.
  * @returns {Object}
  *   - `canvasRef` (RefObject) — attach to the `<canvas>` element NiiVue should render into.
  */
@@ -33,6 +37,7 @@ export function useNiiVueLifecycle({
   activeSliceType,
   onNiiNvReady,
   fileMeshesRef,
+  onHas3DExtentChange,
 }) {
   const canvasRef = useRef();
   const canvasReadyRef = useRef(false); // guards attachToCanvas against StrictMode double-invoke
@@ -68,8 +73,9 @@ export function useNiiVueLifecycle({
       while (nv.volumes.length > 0) nv.removeVolumeByIndex(0);
       (nv.meshes ?? []).slice().forEach((mesh) => nv.removeMesh(mesh));
       fileMeshesRef.current.clear(); // drop tracked file meshes so they aren't re-applied on remount
+      onHas3DExtentChange?.(false); // nv is now genuinely empty — report that before it goes stale
     };
-  }, [nvRef, fileMeshesRef]);
+  }, [nvRef, fileMeshesRef, onHas3DExtentChange]);
 
   return { canvasRef };
 }

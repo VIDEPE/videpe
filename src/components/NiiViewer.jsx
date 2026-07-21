@@ -186,6 +186,7 @@ export const NiiViewer = ({
     activeSliceType,
     onNiiNvReady,
     fileMeshesRef,
+    onHas3DExtentChange,
   });
   // Loading/success toast tracking isLoading.
   useLoadingToast(isLoading, NII_LOADING_TOAST_ID);
@@ -446,7 +447,9 @@ export const NiiViewer = ({
   // layer in connectome mode) leaves NiiVue's scene extent at zero, which makes its per-frame
   // sync() crash (createOnLocationChange → toFixed(Infinity)) if another instance is broadcast-
   // linked to it. PatientView uses this to keep the cross-panel rotation link off whenever this
-  // viewer holds nothing but connectomes — see the sync effect in PatientView.
+  // viewer holds nothing but connectomes — see the sync effect in PatientView. Covers every
+  // case where the component stays mounted; useNiiVueLifecycle's unmount cleanup separately
+  // reports `false` once nv is actually emptied, since this effect body can't fire on unmount.
   useEffect(() => {
     onHas3DExtentChange?.(orderedLayers.some((layer) => layer.kind !== 'connectome'));
   }, [orderedLayers, onHas3DExtentChange]);
