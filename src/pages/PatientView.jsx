@@ -96,6 +96,11 @@ export const PatientView = () => {
     [intracranialSnapshot]
   ); // intracranial electrodes
 
+  // Whether the Neuroimaging pane currently has anything to show — same condition that
+  // decides whether NiiViewer is mounted at all (below) and whether its reset button appears.
+  const niiViewerHasContent =
+    layers.length > 0 || Boolean(intracranialLayer) || Boolean(esiLayer) || niiHasOwnContent;
+
   // when both these flags are true, then the two plots can be synchronised
   const [niiNvReady, setNiiNvReady] = useState(false); // flag when the NiiViewer canvas is initialised
   const [topoNvReady, setTopoNvReady] = useState(false); // flag when EegTopoViewer canvas is initialised
@@ -103,6 +108,14 @@ export const PatientView = () => {
   // EegTopoViewer's setup effect can then list it as a dependency without re-running on
   // every PatientView re-render.
   const handleTopoNvReady = useCallback(() => setTopoNvReady(true), []);
+  // Flags indicating whether the topography/imaging NiiVue canvas currently has a 3D scene with a 3D extent.
+  // The rotation sync — broadcastTo() — between them must stay off unless BOTH do. It'll throw 'zero-extend warnings'.
+  // 'Zero 3D extend' happens for an empty scene AND for a connectome-only scene (intracranial electrodes / ESI in connectome
+  // mode), therefor a "has a volume or mesh", not merely "has any layer" condition is needed.
+  // EegTopoViewer always builds a real convex-hull surface mesh => topoHasContent always implies a usable extent.
+  // NiiViewer reports its own via onHas3DExtentChange, which is set to 'false' on unmount (see useSharedNiiVueInstance.js)
+  const [topoHasContent, setTopoHasContent] = useState(false); // reported by EegViewer/EegTopoViewer
+  const [niiHas3DExtent, setNiiHas3DExtent] = useState(false); // reported by NiiViewer
 
   // Lazy ref init — created once, never replaced. A cleanup-based useEffect would let
   // StrictMode's remount cycle recreate this and break NiiViewer's canvasReadyRef guard.
@@ -123,13 +136,23 @@ export const PatientView = () => {
     });
   }
 
-  // Once both viewers are ready, mirror 3D camera movement between them in both
-  // directions so rotating/zooming one view updates the other.
+  // Once both viewers are ready and BOTH sides have a 3D scene, then and only then the 3D rotation
+  // can be synced (see niiHas3DExtent/topoHasContent above for why).
+  // Re-runs whenever this changes on either side (not just once at mount),
+  // so e.g. closing the topo window, or resetting the imaging panel down to just an ESI connectome,
+  // un-links the panels — broadcastTo([]) — instead of leaving a stale link to a now-degenerate NiiVue instance whose sync() would crash the still-focused panel.
   useEffect(() => {
     if (!niiNvReady || !topoNvReady) return;
-    nvRef_niiviewer.current.broadcastTo([nvRef_eegtopo.current], { '2d': false, '3d': true });
-    nvRef_eegtopo.current.broadcastTo([nvRef_niiviewer.current], { '2d': false, '3d': true });
-  }, [niiNvReady, topoNvReady]);
+    const nvNii = nvRef_niiviewer.current;
+    const nvTopo = nvRef_eegtopo.current;
+    if (niiHas3DExtent && topoHasContent) {
+      nvNii.broadcastTo([nvTopo], { '2d': false, '3d': true });
+      nvTopo.broadcastTo([nvNii], { '2d': false, '3d': true });
+    } else {
+      nvNii.broadcastTo([]);
+      nvTopo.broadcastTo([]);
+    }
+  }, [niiNvReady, topoNvReady, niiHas3DExtent, topoHasContent]);
 
   // Handler for when imaging files are dropped or selected. It reads the files as ArrayBuffers and prepares them for visualization, updating state accordingly.
   // NiiViewer shows its own loading/success toast once mounted, so this just sets layers and surfaces errors.
@@ -248,11 +271,7 @@ export const PatientView = () => {
         }
         rightLabel={<span className={PANEL_TITLE_CLASS}>Neuroimaging</span>}
         onLeftReset={eeg || pendingEegFiles.length > 0 ? handleEegReset : undefined}
-        onRightReset={
-          layers.length > 0 || intracranialLayer || esiLayer || niiHasOwnContent
-            ? handleNiiReset
-            : undefined
-        }
+        onRightReset={niiViewerHasContent ? handleNiiReset : undefined}
         onMaximizeChange={setMaximizedPanel}
         left={
           eeg ? (
@@ -273,6 +292,7 @@ export const PatientView = () => {
               onInverseSolutionFile={handleInverseSolutionFile}
               onIntracranialSnapshotChange={setIntracranialSnapshot}
               onChannelSnapshotChange={setChannelSnapshot}
+              onTopoHasContentChange={setTopoHasContent}
             />
           ) : (
             <div className="h-full p-2">
@@ -300,13 +320,14 @@ export const PatientView = () => {
           )
         }
         right={
-          layers.length > 0 || intracranialLayer || esiLayer || niiHasOwnContent ? (
+          niiViewerHasContent ? (
             <NiiViewer
               nvRef={nvRef_niiviewer}
               layers={layers}
               intracranialLayer={intracranialLayer}
               esiLayer={esiLayer}
               onHasContentChange={setNiiHasOwnContent}
+              onHas3DExtentChange={setNiiHas3DExtent}
               isFullscreen={maximizedPanel === 'right'}
               onViewReady={() => niiReadyResolveRef.current?.()}
               onNiiNvReady={() => setNiiNvReady(true)}

@@ -20,7 +20,7 @@ import { ImagingControls } from './ImagingControls';
 import { FileDropZone } from '../components/FileDropZone';
 import { useCanvasAutoLayout } from '@/hooks/useCanvasAutoLayout';
 import { useCanvasRowResize } from '@/hooks/useCanvasRowResize';
-import { useNiiVueLifecycle } from '@/hooks/useNiiVueLifecycle';
+import { useSharedNiiVueInstance } from '@/hooks/useSharedNiiVueInstance';
 import { useLoadingToast } from '@/hooks/useLoadingToast';
 import { useLayerLoader } from '@/hooks/useLayerLoader';
 import { useIntracranialConnectome } from '@/hooks/useIntracranialConnectome';
@@ -145,6 +145,7 @@ export const NiiViewer = ({
   onHasContentChange, // reports orderedLayers.length > 0 — lets the parent see layers
   // dropped into this component's own dropzone, which never touch the layers/
   // intracranialLayer/esiLayer props, so it doesn't wrongly unmount this viewer when those go empty/null together.
+  onHas3DExtentChange, // reports whether the scene has a volume/mesh (non-connectome) — gates the cross-panel rotation sync; see the effect below
   isFullscreen = false,
 }) => {
   // ─── State ─────────────────────────────────────────────────────────────────
@@ -179,12 +180,13 @@ export const NiiViewer = ({
   // Drag-to-resize for the canvas row's min-height.
   const { canvasRowRef, handleCanvasResizeStart } = useCanvasRowResize(MIN_CANVAS_HEIGHT);
   // Attaches the shared NiiVue instance to the canvas on mount, and clears it on unmount.
-  const { canvasRef } = useNiiVueLifecycle({
+  const { canvasRef } = useSharedNiiVueInstance({
     nvRef,
     hasImageVolumes,
     activeSliceType,
     onNiiNvReady,
     fileMeshesRef,
+    onHas3DExtentChange,
   });
   // Loading/success toast tracking isLoading.
   useLoadingToast(isLoading, NII_LOADING_TOAST_ID);
@@ -439,6 +441,18 @@ export const NiiViewer = ({
   useEffect(() => {
     onHasContentChange?.(orderedLayers.length > 0);
   }, [orderedLayers, onHasContentChange]);
+
+  // Reports whether the 3D scene has a usable spatial extent — i.e. at least one image
+  // volume or surface mesh. A connectome-only scene (intracranial electrodes and/or the ESI
+  // layer in connectome mode) leaves NiiVue's scene extent at zero, which makes its per-frame
+  // sync() crash (createOnLocationChange → toFixed(Infinity)) if another instance is broadcast-
+  // linked to it. PatientView uses this to keep the cross-panel rotation link off whenever this
+  // viewer holds nothing but connectomes — see the sync effect in PatientView. Covers every
+  // case where the component stays mounted; useSharedNiiVueInstance's unmount cleanup separately
+  // reports `false` once nv is actually emptied, since this effect body can't fire on unmount.
+  useEffect(() => {
+    onHas3DExtentChange?.(orderedLayers.some((layer) => layer.kind !== 'connectome'));
+  }, [orderedLayers, onHas3DExtentChange]);
 
   // ─── Effects: card ordering ─────────────────────────────────────────────────
 
