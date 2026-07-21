@@ -5,6 +5,7 @@ import {
   makeSettingsMergeUpdater,
   getCalBounds,
   fractionToCalValue,
+  isImageVolumeLayer,
   ESI_LAYER_URL,
 } from '@/utils/NiiViewer.utils';
 import { EEG_NODE_POS_KEY } from '@/utils/eegColormaps';
@@ -115,6 +116,19 @@ export function useEsiLayer({
     }
 
     if (activeEsiLayer === lastEsiLayerRef.current) return; // unrelated re-render — data/mode hasn't changed
+
+    if (activeEsiLayer.kind !== 'connectome') {
+      // If other image volumes (e.g. the MRI) are known in orderedLayers but still loading
+      // (useLayerLoader), don't add the ESI volume yet — it could win the race for
+      // nv.volumes[0], NiiVue's base volume, and leave the scene resampled onto ESI's coarse
+      // grid ("squares") until manually reordered. Checked before lastEsiLayerRef updates
+      // below, so this effect retries once the MRI finishes loading.
+      const expectedVolumesAheadOfEsi = orderedLayers.filter(
+        (l) => isImageVolumeLayer(l) && l.url !== ESI_LAYER_URL
+      ).length;
+      if (nv.volumes.length < expectedVolumesAheadOfEsi) return;
+    }
+
     lastEsiLayerRef.current = activeEsiLayer; // remember what this rebuild is based on
 
     // Apply whatever opacity/visibility is already set for this layer (preserved across
