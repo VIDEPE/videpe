@@ -117,6 +117,12 @@ export async function syncVolumesAndApplySettings(nv, layers, layerSettings) {
   const indexOffset = nv.volumes.length; // Volumes before this index are already loaded into nv.
   const newLayers = layers.slice(indexOffset);
   if (newLayers.length > 0) {
+    // MRI backgrounds/segmentation masks are typically mostly zero outside their ROI. Without
+    // this, NiiVue's cal_min/cal_max auto-scan warns "% of voxels are zero", then sets this
+    // flag itself anyway — setting it upfront skips the reactive warning.
+    newLayers.forEach((layer) => {
+      layer.ignoreZeroVoxels = true;
+    });
     if (indexOffset === 0) {
       await nv.loadVolumes(newLayers);
     } else {
