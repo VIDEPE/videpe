@@ -57,7 +57,7 @@ export const getInitialLayerSettings = (layers, startIndex = 0) =>
     colormap: TYPE_COLORMAP_DEFAULTS[layer.type] ?? 'gray',
     invert: false,
     showColorbar: false,
-    isEsiVolume: true,
+    ...(layer.url === ESI_LAYER_URL ? { isEsiVolume: true } : {}),
     // The Threshold slider's floor always allows dragging down to 0 (so users can always
     // see every power value, however low — see getCalBounds in NiiViewer.jsx), but the
     // ESI layer starts at a small positive default instead of 0: NiiVue's transparent-
