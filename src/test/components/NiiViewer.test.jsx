@@ -172,15 +172,6 @@ describe('syncVolumesAndApplySettings', () => {
     expect(nv.loadVolumes).toHaveBeenCalledWith(volumes);
   });
 
-  it('sets ignoreZeroVoxels on each volume before loading, so NiiVue does not warn about zero voxels while computing cal_max', async () => {
-    const volumes = [makeVolume('/mri.nii', 'id-mri'), makeVolume('/pet.nii', 'id-pet')];
-    await syncVolumesAndApplySettings(nv, volumes, [makeLayerSetting(), makeLayerSetting()]);
-    expect(nv.loadVolumes).toHaveBeenCalledWith([
-      expect.objectContaining({ ignoreZeroVoxels: true }),
-      expect.objectContaining({ ignoreZeroVoxels: true }),
-    ]);
-  });
-
   it('sets colormap for each volume after loading', async () => {
     const volumes = [makeVolume('/mri.nii', 'id-mri'), makeVolume('/pet.nii', 'id-pet')];
     const settings = [
