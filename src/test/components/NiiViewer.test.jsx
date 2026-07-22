@@ -1687,5 +1687,35 @@ describe('NiiViewer', () => {
 
       expect(nv.loadConnectomeAsMesh).not.toHaveBeenCalled();
     });
+
+    it('does not resurrect the ESI layer as a volume immediately after it is deleted in connectome mode', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const esiLayer = makeEsiLayer();
+      render(<NiiViewer nvRef={nvRef} layers={[]} esiLayer={esiLayer} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      const nv = nvRef.current;
+      // isEsiVolume defaults to true (volume mode) — switch to connectome mode first, matching
+      // the bug report ("closing ESI layer in connectome mode...").
+      await userEvent.click(screen.getByRole('button', { name: 'Expand Layer 1 controls' }));
+      await userEvent.click(screen.getByRole('switch', { name: 'Show Layer 1 as volume' }));
+      await waitFor(() => expect(nv.loadConnectomeAsMesh).toHaveBeenCalled());
+
+      nv.addVolumesFromUrl.mockClear();
+      nv.loadConnectomeAsMesh.mockClear();
+
+      // Close (delete) the ESI card while in connectome mode.
+      await userEvent.click(screen.getByRole('button', { name: 'Close Layer 1 volume' }));
+
+      // Regression: esiLayer itself (upstream state, e.g. from PatientView) never went away
+      // when the card is deleted — a naive re-derivation of the Connectome/Volume toggle from
+      // the now-removed settings entry used to fall back to its `true` default, which alone
+      // was enough to make useEsiLayer's effects rebuild the just-deleted layer as a volume.
+      expect(nv.addVolumesFromUrl).not.toHaveBeenCalled();
+      expect(
+        screen.queryByRole('button', { name: 'Expand Layer 1 controls' })
+      ).not.toBeInTheDocument();
+    });
   });
 });
