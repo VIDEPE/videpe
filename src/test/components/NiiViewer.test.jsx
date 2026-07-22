@@ -1708,10 +1708,12 @@ describe('NiiViewer', () => {
       // Close (delete) the ESI card while in connectome mode.
       await userEvent.click(screen.getByRole('button', { name: 'Close Layer 1 volume' }));
 
-      // Regression: esiLayer itself (upstream state, e.g. from PatientView) never went away
-      // when the card is deleted — a naive re-derivation of the Connectome/Volume toggle from
-      // the now-removed settings entry used to fall back to its `true` default, which alone
-      // was enough to make useEsiLayer's effects rebuild the just-deleted layer as a volume.
+      // Regression: deleting the card removes its layerSettings entry, but esiLayer itself is
+      // owned upstream (e.g. by PatientView) and is untouched by the deletion — so useEsiLayer
+      // still sees the same non-null esiLayer on the next render. If isEsiVolumeMode's fallback
+      // for a missing settings entry ever defaults back to `true` (Volume mode) instead of the
+      // last mode actually used, that's enough on its own to make useEsiLayer rebuild the
+      // just-deleted layer as a volume — this asserts that doesn't happen.
       expect(nv.addVolumesFromUrl).not.toHaveBeenCalled();
       expect(
         screen.queryByRole('button', { name: 'Expand Layer 1 controls' })
