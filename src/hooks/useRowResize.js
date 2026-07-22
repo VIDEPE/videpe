@@ -7,19 +7,19 @@ import { useRef, useCallback } from 'react';
  * @param {number} minHeight - px floor the row's min-height is clamped to; dragging past this
  *   point has no further effect.
  * @returns {Object}
- *   - `canvasRowRef` (RefObject) — attach to the resizable row element.
- *   - `handleCanvasResizeStart` (Function) — attach to the drag handle's `onMouseDown`; takes
+ *   - `rowRef` (RefObject) — attach to the resizable row element.
+ *   - `handleResizeStart` (Function) — attach to the drag handle's `onMouseDown`; takes
  *     the mouse event, reads the row's current height as the drag's starting point, and wires
  *     up (then tears down, on mouseup) the window-level mousemove listener that updates
  *     `row.style.minHeight` on every frame.
  */
-export function useCanvasRowResize(minHeight) {
-  const canvasRowRef = useRef();
+export function useRowResize(minHeight) {
+  const rowRef = useRef();
 
-  const handleCanvasResizeStart = useCallback(
+  const handleResizeStart = useCallback(
     (e) => {
       e.preventDefault();
-      const row = canvasRowRef.current;
+      const row = rowRef.current;
       if (!row) return;
       const startY = e.clientY;
       const startHeight = row.getBoundingClientRect().height;
@@ -38,5 +38,5 @@ export function useCanvasRowResize(minHeight) {
     [minHeight]
   );
 
-  return { canvasRowRef, handleCanvasResizeStart };
+  return { rowRef, handleResizeStart };
 }

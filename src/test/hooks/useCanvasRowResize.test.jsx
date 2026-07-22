@@ -1,17 +1,17 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { useCanvasRowResize } from '@/hooks/useCanvasRowResize';
+import { useRowResize } from '@/hooks/useRowResize';
 
 // Moved here from NiiViewer.test.jsx's "canvas resize handle" block — this is pure drag-to-
 // resize math with no NiiVue involved. NiiViewer.test.jsx keeps one smoke test confirming the
 // hook is actually wired up to the real resize handle.
 
 function TestComponent({ minHeight }) {
-  const { canvasRowRef, handleCanvasResizeStart } = useCanvasRowResize(minHeight);
-  return <div data-testid="row" ref={canvasRowRef} onMouseDown={handleCanvasResizeStart} />;
+  const { rowRef, handleResizeStart } = useRowResize(minHeight);
+  return <div data-testid="row" ref={rowRef} onMouseDown={handleResizeStart} />;
 }
 
-describe('useCanvasRowResize', () => {
+describe('useRowResize', () => {
   const setup = (minHeight = 350) => {
     render(<TestComponent minHeight={minHeight} />);
     const row = screen.getByTestId('row');
