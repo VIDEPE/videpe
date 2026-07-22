@@ -212,6 +212,7 @@ function SortableSettingsCard({
             ref={handleRef}
             className="cursor-grab active:cursor-grabbing touch-none shrink-0"
             aria-label={`Drag to reorder ${label}`}
+            title={`Drag to reorder ${label} relative to other layers`}
           >
             <GripVertical
               size={16}
@@ -273,7 +274,10 @@ function SortableSettingsCard({
           <div className="border-t border-border px-3 py-1.5 flex flex-col gap-1.5 text-xs">
             {/* Opacity — meaningful for volumes*/}
             {isImageVolume && (
-              <div className="flex items-center gap-3">
+              <div
+                className="flex items-center gap-3"
+                title="Adjust the transparency of this layer (0% = invisible, 100% = fully opaque)"
+              >
                 <span className="w-20 shrink-0 text-foreground select-none pointer-events-none">
                   Opacity
                 </span>
@@ -313,7 +317,10 @@ function SortableSettingsCard({
 
             {/* MeshXRay — meaningful for mesh and commectomes */}
             {!isImageVolume && (
-              <div className="flex items-center gap-3">
+              <div
+                className="flex items-center gap-3"
+                title="Adjust the transparency of the mesh surface so structures behind it can show through"
+              >
                 <span className="w-20 shrink-0 text-foreground select-none pointer-events-none">
                   Mesh Xray
                 </span>
@@ -356,7 +363,10 @@ function SortableSettingsCard({
                 intracranial electrode connectome or file-loaded meshes, which have no
                 user-adjustable range. */}
             {(isImageVolume || isEsiLayer) && (
-              <div className="flex items-center gap-3">
+              <div
+                className="flex items-center gap-3"
+                title="Set the minimum and maximum intensity values that get colored — values outside this range are hidden"
+              >
                 <span className="w-20 shrink-0 text-foreground select-none pointer-events-none">
                   Threshold
                 </span>
@@ -416,7 +426,10 @@ function SortableSettingsCard({
             {/* Colormap — not applicable to connectome or mesh layers, which colour themselves
                 via baked-in node/edge/vertex colors rather than a NiiVue volume colormap */}
             {isImageVolume && (
-              <div className="flex items-center gap-3">
+              <div
+                className="flex items-center gap-3"
+                title="Choose the color scheme used to represent intensity values in this layer"
+              >
                 <span className="w-20 shrink-0 text-foreground select-none pointer-events-none">
                   Colormap
                 </span>
@@ -437,7 +450,10 @@ function SortableSettingsCard({
 
             <div className="flex flex-row">
               {isEsiLayer && (
-                <div className="w-1/2 flex items-center gap-2.5">
+                <div
+                  className="w-1/2 flex items-center gap-2.5"
+                  title="Switch this ESI layer between a 3D volume rendering and a connectome (mesh) rendering"
+                >
                   <span className="text-foreground select-none pointer-events-none">Volume</span>
                   <ToggleSwitch
                     checked={settings.isEsiVolume}
@@ -450,7 +466,10 @@ function SortableSettingsCard({
               {/* Invert / Show colorbar — also not applicable to connectome or mesh layers */}
               {isImageVolume && (
                 <>
-                  <div className="w-1/2 flex items-center gap-2.5">
+                  <div
+                    className="w-1/2 flex items-center gap-2.5"
+                    title="Flip the colormap direction, reversing which end represents high vs. low intensity"
+                  >
                     <span className="text-foreground select-none pointer-events-none">Invert</span>
                     <ToggleSwitch
                       checked={settings.invert}
@@ -460,7 +479,10 @@ function SortableSettingsCard({
                     />
                   </div>
 
-                  <div className="w-1/2 flex items-center gap-2.5">
+                  <div
+                    className="w-1/2 flex items-center gap-2.5"
+                    title="Show or hide the color scale legend for this layer"
+                  >
                     <span className="text-foreground select-none pointer-events-none">
                       Colorbar
                     </span>
