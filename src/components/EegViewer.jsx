@@ -24,6 +24,7 @@ import { useViewportControls } from '@/hooks/useViewportControls';
 import { useScrubberDrag } from '@/hooks/useScrubberDrag';
 import { useElectrodeMatching } from '@/hooks/useElectrodeMatching';
 import { useTopographySnapshot } from '@/hooks/useTopographySnapshot';
+import { useRowResize } from '@/hooks/useRowResize';
 
 import { ELEC_POS_EXTENSIONS, INV_SOLUTIONS_EXTENSIONS } from '@/loaders/eegFormats';
 import { EegTopoViewer } from '@/components/EegTopoViewer';
@@ -35,6 +36,7 @@ const Y_AXIS_WIDTH = 60; // px for the y-axis area (channel name + tick space) �
 const PLOT_RIGHT_PAD = 20; // px right padding — must match in both channel plots and x-axis strip so ticks align
 const OVERDRAW = 2; // canvas height multiplier — peaks bleed ±50% into adjacent lanes instead of clipping
 const MIN_CHANNEL_AREA_HEIGHT = 120; // px floor for the channel-plot scroll area. Below this the whole viewer overflows and the pane's scroll container takes over (mirrors NiiViewer's MIN_CANVAS_HEIGHT) instead of letting the x-axis/scrubber/controls/dropzone overlap
+const MIN_PLOT_ROW_HEIGHT = 350; // px floor for the uPlot area
 const ICON_SIZE = 22; // default size for lucide icons in the controls, used to compute input widths
 const INPUT_MIN_CH = 3; // minimum input width in ch units
 const INPUT_EXTRA_CH = 3; // extra ch of breathing room beyond the value's character length
@@ -105,6 +107,9 @@ export const EegViewer = ({
 
   // Container measurement — plotWidth feeds uPlot options, channelAreaHeight drives plotHeight below
   const { containerRef, width: plotWidth, height: channelAreaHeight } = useContainerResize();
+
+  // Drag-to-resize for the canvas row's min-height.
+    const { rowRef, handleResizeStart } = useRowResize(MIN_PLOT_ROW_HEIGHT);
 
   // Channel count / x-range / time-step / y-range controls, plus their input handlers
   const {
@@ -362,7 +367,12 @@ export const EegViewer = ({
             never shrink below the channel-area floor + x-axis + scrubber + controls. When the
             pane gets shorter than that, the viewer overflows and the pane scrolls (see the
             MIN_CHANNEL_AREA_HEIGHT floor below) rather than the fixed rows overlapping. */}
-        <div className="flex-1 flex flex-row">
+        <div 
+            ref={rowRef}
+            data_testid="eeg-plot-row"
+            className="flex-1 flex flex-row"
+            style={{ minHeight: MIN_PLOT_ROW_HEIGHT }}
+        >
           {/* Left sidebar: Channels controls centered in the available height, Montage pinned to the bottom-left corner */}
           <div className="shrink-0 flex flex-col px-1">
             <div className="flex-1 flex flex-row items-center">
@@ -782,6 +792,15 @@ export const EegViewer = ({
             />
           </div>
         </FileDropZone>
+        {/* Resize handle — drag down to grow canvas past flex size, drag up to shrink back.
+          Once it reaches the row's natural flex size, further upward dragging has no effect,
+          since min-height never shrinks a flex item below what it'd render at anyway. See handleCanvasResizeStart*/}
+        <div
+          data-testid="nii-canvas-resize-handle"
+          className="h-1.5 w-full shrink-0 cursor-row-resize rounded-sm select-none bg-border hover:bg-secondary active:bg-primary"
+          title="Drag to resize the canvas"
+          onMouseDown={handleResizeStart}
+        />
       </div>
 
       {/* Floating topography viewer — position:fixed so it overlays the whole page */}
