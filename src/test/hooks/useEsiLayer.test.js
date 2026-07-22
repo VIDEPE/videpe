@@ -199,6 +199,32 @@ describe('useEsiLayer', () => {
       expect(nv.removeMesh).toHaveBeenCalledWith(mesh);
       expect(result.current.esiMeshRef.current).toBeNull();
     });
+
+    // Regression test for "closing the ESI layer in Connectome mode resurrected it as a
+    // Volume": handleDeleteLayer (in NiiViewer.jsx) strips the settings entry directly without
+    // going through this hook — simulated here via setOrderedLayers/setLayerSettings, since
+    // esiLayer/isEsiVolumeMode staying the same is exactly what keeps the merge/build effects
+    // from reacting to the deletion itself. What's under test is what happens once fresh ESI
+    // data actually does arrive afterwards (e.g. a new EEG click): the newly-seeded settings
+    // entry must match the mode that was active, not fall back to Volume mode's hardcoded
+    // `isEsiVolume: true` default.
+    it('reseeds the settings entry to the current mode (not a hardcoded default) when ESI data reappears after its card was deleted', () => {
+      const esiLayer1 = makeEsiLayer();
+      const { result, rerender } = renderHook((props) => useHarness(props), {
+        initialProps: { esiLayer: esiLayer1, isEsiVolumeMode: false, nvRef },
+      });
+      expect(result.current.layerSettings[0].isEsiVolume).toBe(false);
+
+      act(() => {
+        result.current.setOrderedLayers([]);
+        result.current.setLayerSettings([]);
+      });
+
+      const esiLayer2 = makeEsiLayer({ connectome: makeConnectomeLayer({ nodes: [] }) });
+      rerender({ esiLayer: esiLayer2, isEsiVolumeMode: false, nvRef });
+
+      expect(result.current.layerSettings[0].isEsiVolume).toBe(false);
+    });
   });
 
   describe('volume mode', () => {
