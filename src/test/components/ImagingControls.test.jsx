@@ -8,6 +8,7 @@ const makeVolume = (type, url) => ({ type, url });
 const makeSettings = (overrides = {}) => ({
   visible: true,
   opacity: 1.0,
+  meshXRay: 1,
   colormap: 'gray',
   invert: false,
   showColorbar: false,
@@ -410,13 +411,18 @@ describe('ImagingControls', () => {
       ).not.toBeInTheDocument();
     });
 
-    it('still renders the Opacity slider and Delete button for a connectome-kind layer', async () => {
+    it('renders the Mesh Xray slider (not Opacity) and the Delete button for a connectome-kind layer', async () => {
       renderControls([makeIntracranialLayer()], [makeSettings()]);
       await userEvent.click(
         screen.getByRole('button', { name: 'Expand Intracranial - Electrodes controls' })
       );
 
-      expect(screen.getByLabelText('Intracranial - Electrodes opacity slider')).toBeInTheDocument();
+      expect(
+        screen.getByLabelText('Intracranial - Electrodes meshXRay slider')
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByLabelText('Intracranial - Electrodes opacity slider')
+      ).not.toBeInTheDocument();
       expect(
         screen.getByRole('button', { name: 'Close Intracranial - Electrodes volume' })
       ).toBeInTheDocument();
@@ -450,6 +456,81 @@ describe('ImagingControls', () => {
       expect(screen.getByLabelText('MRI colormap')).toBeInTheDocument();
       expect(screen.getByRole('switch', { name: 'Invert MRI colormap' })).toBeInTheDocument();
       expect(screen.getByRole('switch', { name: 'Show MRI colorbar' })).toBeInTheDocument();
+    });
+  });
+
+  describe('Mesh Xray control', () => {
+    const makeIntracranialLayer = () => ({
+      kind: 'connectome',
+      type: 'Intracranial',
+      subtype: 'Electrodes',
+      url: '__intracranial-electrodes__',
+    });
+
+    // setup does two things: renders one connectome layer and expands it.
+    const setup = async (settings, onSettingChange = vi.fn()) => {
+      renderControls([makeIntracranialLayer()], [settings], onSettingChange);
+      await userEvent.click(
+        screen.getByRole('button', { name: 'Expand Intracranial - Electrodes controls' })
+      );
+      return { onSettingChange };
+    };
+
+    it('reflects current meshXRay as aria-valuenow (0-100)', async () => {
+      await setup(makeSettings({ meshXRay: 0.6 }));
+      expect(screen.getByLabelText('Intracranial - Electrodes meshXRay slider')).toHaveAttribute(
+        'aria-valuenow',
+        '60'
+      );
+    });
+
+    it('number input reflects current meshXRay as a 0-100 integer', async () => {
+      await setup(makeSettings({ meshXRay: 0.6 }));
+      expect(screen.getByLabelText('Intracranial - Electrodes meshXRay')).toHaveValue(60);
+    });
+
+    it('slider arrow-key change calls onSettingChange with a 0-1 float value', async () => {
+      const { onSettingChange } = await setup(makeSettings({ meshXRay: 0.5 }));
+      const slider = screen.getByLabelText('Intracranial - Electrodes meshXRay slider');
+      slider.focus();
+      fireEvent.keyDown(slider, { key: 'ArrowRight' });
+      expect(onSettingChange).toHaveBeenCalledWith(0, 'meshXRay', 0.51);
+    });
+
+    it('number input change calls onSettingChange with rounded 0-1 value', async () => {
+      const { onSettingChange } = await setup(makeSettings({ meshXRay: 1.0 }));
+      fireEvent.change(screen.getByLabelText('Intracranial - Electrodes meshXRay'), {
+        target: { value: '75' },
+      });
+      expect(onSettingChange).toHaveBeenCalledWith(0, 'meshXRay', 0.75);
+    });
+
+    it('number input clamps to 0-100 on blur', async () => {
+      const { onSettingChange } = await setup(makeSettings({ meshXRay: 0.5 }));
+      fireEvent.change(screen.getByLabelText('Intracranial - Electrodes meshXRay'), {
+        target: { value: '150' },
+      });
+      fireEvent.blur(screen.getByLabelText('Intracranial - Electrodes meshXRay'));
+      expect(onSettingChange).toHaveBeenLastCalledWith(0, 'meshXRay', 1);
+    });
+
+    it('does not render for an image-volume layer, which shows Opacity instead (regression)', async () => {
+      renderControls([makeVolume('MRI', '/mri.nii')], [makeSettings()]);
+      await userEvent.click(screen.getByRole('button', { name: 'Expand MRI controls' }));
+
+      expect(screen.queryByLabelText('MRI meshXRay slider')).not.toBeInTheDocument();
+      expect(screen.getByLabelText('MRI opacity slider')).toBeInTheDocument();
+    });
+
+    it('renders for a mesh-kind layer too, not just connectomes', async () => {
+      renderControls(
+        [{ type: 'Mesh', subtype: 'cortex', url: 'blob:cortex', kind: 'mesh' }],
+        [makeSettings({ meshXRay: 0.6 })]
+      );
+      await userEvent.click(screen.getByRole('button', { name: 'Expand Mesh - cortex controls' }));
+
+      expect(screen.getByLabelText('Mesh - cortex meshXRay slider')).toBeInTheDocument();
+      expect(screen.queryByLabelText('Mesh - cortex opacity slider')).not.toBeInTheDocument();
     });
   });
 

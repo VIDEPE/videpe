@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import * as Slider from '@radix-ui/react-slider';
 import { Eye, EyeOff, ChevronDown, ChevronUp, GripVertical, Lock } from 'lucide-react';
 import { DragDropProvider } from '@dnd-kit/react';
@@ -100,6 +100,15 @@ function SortableSettingsCard({
 
   // Local string state — allows typing a partial value (e.g. empty string) without breaking the numeric opacity
   const [meshXRayStr, setMeshXRayStr] = useState(() => String(Math.round(settings.meshXRay * 100)));
+
+  // Unlike opacity/cal_min/cal_max, meshXRay maps to a single value shared across every
+  // mesh/connectome layer (see handleSettingChange in NiiViewer.jsx), so this card's own
+  // settings.meshXRay can change from a slider on a *different* card. The local string state
+  // above is only ever written by this card's own handlers, so without this effect it would
+  // silently go stale whenever another card is the one that changed the value.
+  useEffect(() => {
+    setMeshXRayStr(String(Math.round(settings.meshXRay * 100)));
+  }, [settings.meshXRay]);
 
   // Typing must stay permissive: mirror the raw text as-is so partial/empty input isn't
   // clobbered mid-edit. Only forward a value upstream once it parses to a real number —
