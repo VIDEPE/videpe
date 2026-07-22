@@ -196,12 +196,19 @@ export function EegTopoViewer({
     loadMesh();
   }, [nvRef, electrodeMesh, electrodes, matched, voltages, colourBlindMode, isIntracranial]);
 
-  // Drag the floating window by its title bar
+  // Drag the floating window by its title bar. Position is clamped to the viewport so the
+  // window (and its title bar drag handle) can never be dragged out of view and get stranded.
   const handleDragStart = useCallback(
     (e) => {
       dragOffset.current = { x: e.clientX - position.x, y: e.clientY - position.y };
-      const onMove = (e) =>
-        setPosition({ x: e.clientX - dragOffset.current.x, y: e.clientY - dragOffset.current.y });
+      const onMove = (e) => {
+        const maxX = Math.max(0, window.innerWidth - size.width);
+        const maxY = Math.max(0, window.innerHeight - size.height);
+        setPosition({
+          x: Math.min(Math.max(e.clientX - dragOffset.current.x, 0), maxX),
+          y: Math.min(Math.max(e.clientY - dragOffset.current.y, 0), maxY),
+        });
+      };
       const onUp = () => {
         window.removeEventListener('mousemove', onMove);
         window.removeEventListener('mouseup', onUp);
@@ -209,7 +216,7 @@ export function EegTopoViewer({
       window.addEventListener('mousemove', onMove);
       window.addEventListener('mouseup', onUp);
     },
-    [position]
+    [position, size]
   );
 
   // Resize the floating window by dragging an edge or corner. direction is a combination of
@@ -300,6 +307,7 @@ export function EegTopoViewer({
     >
       {/* Title bar — drag handle; explicit bg-surface so NiiVue's black canvas doesn't bleed through */}
       <div
+        data-testid="topo-title-bar"
         className="flex items-center justify-between px-2 py-1 border-b border-border cursor-grab select-none shrink-0 bg-surface"
         onMouseDown={handleDragStart}
       >
