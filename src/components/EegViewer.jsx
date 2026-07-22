@@ -24,6 +24,7 @@ import { useViewportControls } from '@/hooks/useViewportControls';
 import { useScrubberDrag } from '@/hooks/useScrubberDrag';
 import { useElectrodeMatching } from '@/hooks/useElectrodeMatching';
 import { useTopographySnapshot } from '@/hooks/useTopographySnapshot';
+import { useRowResize } from '@/hooks/useRowResize';
 
 import { ELEC_POS_EXTENSIONS, INV_SOLUTIONS_EXTENSIONS } from '@/loaders/eegFormats';
 import { EegTopoViewer } from '@/components/EegTopoViewer';
@@ -35,6 +36,7 @@ const Y_AXIS_WIDTH = 60; // px for the y-axis area (channel name + tick space) �
 const PLOT_RIGHT_PAD = 20; // px right padding — must match in both channel plots and x-axis strip so ticks align
 const OVERDRAW = 2; // canvas height multiplier — peaks bleed ±50% into adjacent lanes instead of clipping
 const MIN_CHANNEL_AREA_HEIGHT = 120; // px floor for the channel-plot scroll area. Below this the whole viewer overflows and the pane's scroll container takes over (mirrors NiiViewer's MIN_CANVAS_HEIGHT) instead of letting the x-axis/scrubber/controls/dropzone overlap
+const MIN_PLOT_ROW_HEIGHT = 350; // px floor for the uPlot area
 const ICON_SIZE = 22; // default size for lucide icons in the controls, used to compute input widths
 const INPUT_MIN_CH = 3; // minimum input width in ch units
 const INPUT_EXTRA_CH = 3; // extra ch of breathing room beyond the value's character length
@@ -105,6 +107,9 @@ export const EegViewer = ({
 
   // Container measurement — plotWidth feeds uPlot options, channelAreaHeight drives plotHeight below
   const { containerRef, width: plotWidth, height: channelAreaHeight } = useContainerResize();
+
+  // Drag-to-resize for the canvas row's min-height.
+  const { rowRef, handleResizeStart } = useRowResize(MIN_PLOT_ROW_HEIGHT);
 
   // Channel count / x-range / time-step / y-range controls, plus their input handlers
   const {
@@ -311,12 +316,13 @@ export const EegViewer = ({
 
   return (
     <>
-      {/* h-full fills the flex column in PatientView; flex-col stacks the plot row above the controls */}
+      {/* min-h-full (not h-full) so this box grows with a dragged-taller plot row, keeping the
+          absolute keyboard-hint icon below anchored to the real bottom instead of overlapping it */}
       {/* tabIndex + onKeyDown make the viewer keyboard-navigable once focused (see handleKeyDown) */}
       <div
         ref={viewerRef}
         data-testid="eeg-viewer-container"
-        className="w-full h-full flex flex-col group/viewer relative focus:outline-solid focus:outline-2 focus:outline-secondary focus:-outline-offset-2"
+        className="w-full min-h-full pb-2.5 px-2 flex flex-col group/viewer relative focus:outline-solid focus:outline-2 focus:outline-secondary focus:-outline-offset-2"
         tabIndex={0}
         onMouseDown={focusViewer}
         onKeyDown={handleKeyDown}
@@ -325,7 +331,7 @@ export const EegViewer = ({
             Uses a custom hover tooltip instead of the native title attribute, since native
             tooltips have a long built-in show delay — long enough that clicking the icon (to
             focus the viewer) often fired before the tooltip ever appeared. */}
-        <div className="absolute bottom-12 right-2 z-20 group/tip">
+        <div className="absolute bottom-18 right-3 z-20 group/tip">
           <div className="text-foreground/40 hover:text-foreground/80 group-focus/viewer:text-secondary transition-colors cursor-help">
             <Keyboard size={18} />
           </div>
@@ -362,7 +368,12 @@ export const EegViewer = ({
             never shrink below the channel-area floor + x-axis + scrubber + controls. When the
             pane gets shorter than that, the viewer overflows and the pane scrolls (see the
             MIN_CHANNEL_AREA_HEIGHT floor below) rather than the fixed rows overlapping. */}
-        <div className="flex-1 flex flex-row">
+        <div
+          ref={rowRef}
+          data-testid="eeg-plot-row"
+          className="flex-1 flex flex-row"
+          style={{ minHeight: MIN_PLOT_ROW_HEIGHT }}
+        >
           {/* Left sidebar: Channels controls centered in the available height, Montage pinned to the bottom-left corner */}
           <div className="shrink-0 flex flex-col px-1">
             <div className="flex-1 flex flex-row items-center">
@@ -761,7 +772,7 @@ export const EegViewer = ({
           accepted_formats=".elc,.tsv,.mat"
           label="Browse or drop electrode positions / inverse solution"
           compact
-          className="shrink-0 mb-1"
+          className="shrink-0 mb-2 mt-1"
         >
           {/* Makes it clear whether a custom electrode-position/inverse-solution file is
               currently active, rather than leaving the user to guess from the dropzone alone
@@ -782,6 +793,16 @@ export const EegViewer = ({
             />
           </div>
         </FileDropZone>
+
+        {/* Resize handle — drag down to grow the EEG plot area past flex size, drag up to shrink back.
+          Once it reaches the row's natural flex size, further upward dragging has no effect,
+          since min-height never shrinks a flex item below what it'd render at anyway. See handleCanvasResizeStart*/}
+        <div
+          data-testid="eeg-plot-resize-handle"
+          className="h-1.5 w-full shrink-0 cursor-row-resize rounded-sm select-none bg-border hover:bg-secondary active:bg-primary"
+          title="Drag to resize the EEG plot area"
+          onMouseDown={handleResizeStart}
+        />
       </div>
 
       {/* Floating topography viewer — position:fixed so it overlays the whole page */}

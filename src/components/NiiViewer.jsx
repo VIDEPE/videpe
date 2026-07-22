@@ -28,7 +28,7 @@ import {
 import { ImagingControls } from './ImagingControls';
 import { FileDropZone } from '../components/FileDropZone';
 import { useCanvasAutoLayout } from '@/hooks/useCanvasAutoLayout';
-import { useCanvasRowResize } from '@/hooks/useCanvasRowResize';
+import { useRowResize } from '@/hooks/useRowResize';
 import { useSharedNiiVueInstance } from '@/hooks/useSharedNiiVueInstance';
 import { useLoadingToast } from '@/hooks/useLoadingToast';
 import { useLayerLoader } from '@/hooks/useLayerLoader';
@@ -190,7 +190,7 @@ export const NiiViewer = ({
   // Tracks the canvas container's size and switches nv between AUTO/GRID multiplanar layout.
   const { canvasContainerRef } = useCanvasAutoLayout({ nvRef });
   // Drag-to-resize for the canvas row's min-height.
-  const { canvasRowRef, handleCanvasResizeStart } = useCanvasRowResize(MIN_CANVAS_HEIGHT);
+  const { rowRef, handleResizeStart } = useRowResize(MIN_CANVAS_HEIGHT);
   // Attaches the shared NiiVue instance to the canvas on mount, and clears it on unmount.
   const { canvasRef } = useSharedNiiVueInstance({
     nvRef,
@@ -498,7 +498,7 @@ export const NiiViewer = ({
   // ─── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="h-full flex flex-col pb-3 px-2 gap-2">
+    <div className="h-full flex flex-col pb-2.5 px-2 gap-2">
       {/* Controls panel, with a compact drop zone below it for loading additional files while the NiiViewer is active */}
       <div className="flex flex-col">
         <ImagingControls
@@ -518,7 +518,7 @@ export const NiiViewer = ({
 
       {/* Canvas fills remaining height, min MIN_CANVAS_HEIGHT. Resize handle below can raise that floor. */}
       <div
-        ref={canvasRowRef}
+        ref={rowRef}
         data-testid="nii-canvas-row"
         className="flex flex-row flex-1"
         style={{ minHeight: MIN_CANVAS_HEIGHT }}
@@ -578,7 +578,7 @@ export const NiiViewer = ({
         data-testid="nii-canvas-resize-handle"
         className="h-1.5 w-full shrink-0 cursor-row-resize rounded-sm select-none bg-border hover:bg-secondary active:bg-primary"
         title="Drag to resize the canvas"
-        onMouseDown={handleCanvasResizeStart}
+        onMouseDown={handleResizeStart}
       />
     </div>
   );
