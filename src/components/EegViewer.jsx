@@ -109,7 +109,7 @@ export const EegViewer = ({
   const { containerRef, width: plotWidth, height: channelAreaHeight } = useContainerResize();
 
   // Drag-to-resize for the canvas row's min-height.
-    const { rowRef, handleResizeStart } = useRowResize(MIN_PLOT_ROW_HEIGHT);
+  const { rowRef, handleResizeStart } = useRowResize(MIN_PLOT_ROW_HEIGHT);
 
   // Channel count / x-range / time-step / y-range controls, plus their input handlers
   const {
@@ -321,7 +321,7 @@ export const EegViewer = ({
       <div
         ref={viewerRef}
         data-testid="eeg-viewer-container"
-        className="w-full h-full flex flex-col group/viewer relative focus:outline-solid focus:outline-2 focus:outline-secondary focus:-outline-offset-2"
+        className="w-full h-full pb-2.5 px-2 flex flex-col group/viewer relative focus:outline-solid focus:outline-2 focus:outline-secondary focus:-outline-offset-2"
         tabIndex={0}
         onMouseDown={focusViewer}
         onKeyDown={handleKeyDown}
@@ -330,7 +330,7 @@ export const EegViewer = ({
             Uses a custom hover tooltip instead of the native title attribute, since native
             tooltips have a long built-in show delay — long enough that clicking the icon (to
             focus the viewer) often fired before the tooltip ever appeared. */}
-        <div className="absolute bottom-12 right-2 z-20 group/tip">
+        <div className="absolute bottom-18 right-3 z-20 group/tip">
           <div className="text-foreground/40 hover:text-foreground/80 group-focus/viewer:text-secondary transition-colors cursor-help">
             <Keyboard size={18} />
           </div>
@@ -368,10 +368,10 @@ export const EegViewer = ({
             pane gets shorter than that, the viewer overflows and the pane scrolls (see the
             MIN_CHANNEL_AREA_HEIGHT floor below) rather than the fixed rows overlapping. */}
         <div 
-            ref={rowRef}
-            data_testid="eeg-plot-row"
-            className="flex-1 flex flex-row"
-            style={{ minHeight: MIN_PLOT_ROW_HEIGHT }}
+          ref={rowRef}
+          data-testid="eeg-plot-row"
+          className="flex-1 flex flex-row"
+          style={{ minHeight: MIN_PLOT_ROW_HEIGHT }}
         >
           {/* Left sidebar: Channels controls centered in the available height, Montage pinned to the bottom-left corner */}
           <div className="shrink-0 flex flex-col px-1">
@@ -771,7 +771,7 @@ export const EegViewer = ({
           accepted_formats=".elc,.tsv,.mat"
           label="Browse or drop electrode positions / inverse solution"
           compact
-          className="shrink-0 mb-1"
+          className="shrink-0 mb-2 mt-1"
         >
           {/* Makes it clear whether a custom electrode-position/inverse-solution file is
               currently active, rather than leaving the user to guess from the dropzone alone
@@ -792,13 +792,14 @@ export const EegViewer = ({
             />
           </div>
         </FileDropZone>
-        {/* Resize handle — drag down to grow canvas past flex size, drag up to shrink back.
+
+        {/* Resize handle — drag down to grow the EEG plot area past flex size, drag up to shrink back.
           Once it reaches the row's natural flex size, further upward dragging has no effect,
           since min-height never shrinks a flex item below what it'd render at anyway. See handleCanvasResizeStart*/}
         <div
-          data-testid="nii-canvas-resize-handle"
+          data-testid="eeg-plot-resize-handle"
           className="h-1.5 w-full shrink-0 cursor-row-resize rounded-sm select-none bg-border hover:bg-secondary active:bg-primary"
-          title="Drag to resize the canvas"
+          title="Drag to resize the EEG plot area"
           onMouseDown={handleResizeStart}
         />
       </div>

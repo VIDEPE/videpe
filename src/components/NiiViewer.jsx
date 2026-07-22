@@ -498,7 +498,7 @@ export const NiiViewer = ({
   // ─── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="h-full flex flex-col pb-3 px-2 gap-2">
+    <div className="h-full flex flex-col pb-2.5 px-2 gap-2">
       {/* Controls panel, with a compact drop zone below it for loading additional files while the NiiViewer is active */}
       <div className="flex flex-col">
         <ImagingControls
