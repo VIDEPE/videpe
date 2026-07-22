@@ -795,6 +795,77 @@ describe('NiiViewer', () => {
     });
   });
 
+  describe('meshXRay setting', () => {
+    const meshLayer = {
+      url: 'blob:cortex',
+      name: 'cortex.gii',
+      type: 'Mesh',
+      subtype: 'cortex',
+      kind: 'mesh',
+    };
+
+    it('writes to nv.opts.meshXRay (not a top-level nv property) and calls updateGLVolume', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      render(<NiiViewer nvRef={nvRef} layers={[]} intracranialLayer={makeIntracranialLayer()} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      const nv = nvRef.current;
+      nv.updateGLVolume.mockClear();
+      await userEvent.click(
+        screen.getByRole('button', { name: 'Expand Intracranial - Electrodes controls' })
+      );
+      fireEvent.change(screen.getByLabelText('Intracranial - Electrodes meshXRay'), {
+        target: { value: '40' },
+      });
+
+      expect(nv.opts.meshXRay).toBe(0.4);
+      expect(nv.meshXRay).toBeUndefined(); // not the stray top-level property
+      expect(nv.updateGLVolume).toHaveBeenCalled();
+    });
+
+    it('changing meshXRay on one mesh/connectome card updates the value shown on every other one, since nv.opts.meshXRay is scene-global', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      render(
+        <NiiViewer nvRef={nvRef} layers={[meshLayer]} intracranialLayer={makeIntracranialLayer()} />
+      );
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      // Expand both cards so their meshXRay inputs are in the DOM.
+      await userEvent.click(
+        screen.getByRole('button', { name: 'Expand Intracranial - Electrodes controls' })
+      );
+      await userEvent.click(screen.getByRole('button', { name: 'Expand Mesh - cortex controls' }));
+
+      fireEvent.change(screen.getByLabelText('Intracranial - Electrodes meshXRay'), {
+        target: { value: '25' },
+      });
+
+      expect(screen.getByLabelText('Intracranial - Electrodes meshXRay')).toHaveValue(25);
+      expect(screen.getByLabelText('Mesh - cortex meshXRay')).toHaveValue(25);
+    });
+
+    it('does not affect the meshXRay value shown on other layers when a non-meshXRay setting changes', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      render(
+        <NiiViewer nvRef={nvRef} layers={[meshLayer]} intracranialLayer={makeIntracranialLayer()} />
+      );
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      await userEvent.click(
+        screen.getByRole('button', { name: 'Expand Intracranial - Electrodes controls' })
+      );
+      await userEvent.click(screen.getByRole('button', { name: 'Expand Mesh - cortex controls' }));
+
+      // Toggling one card's visibility is unrelated to meshXRay and shouldn't broadcast anything.
+      await userEvent.click(screen.getByRole('button', { name: 'Hide Mesh - cortex' }));
+
+      expect(screen.getByLabelText('Intracranial - Electrodes meshXRay')).toHaveValue(100);
+    });
+  });
+
   describe('handleSliceTypeChange', () => {
     // Helper: render NiiViewer, wait for load, return the nv mock instance with mocks cleared
     const setup = async () => {

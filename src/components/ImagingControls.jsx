@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import * as Slider from '@radix-ui/react-slider';
 import { Eye, EyeOff, ChevronDown, ChevronUp, GripVertical, Lock } from 'lucide-react';
 import { DragDropProvider } from '@dnd-kit/react';
@@ -64,9 +64,9 @@ function SortableSettingsCard({
   // have no NiiVue volume colormap or intensity range either, so — like connectomes — they
   // expose only opacity/visibility, not the colormap/threshold/invert/colorbar controls.
   const isMesh = layer.kind === 'mesh';
-  // Whether this layer has an adjustable intensity range and colormap (image volumes do;
-  // connectomes and meshes don't).
-  const hasIntensityControls = !isConnectome && !isMesh;
+  // Image volumes have an adjustable intensity range/colormap and can be reordered;
+  // connectomes and meshes don't/can't, but get their own Mesh Xray control instead.
+  const isImageVolume = isImageVolumeLayer(layer);
   // ESI layers have their own toggle for ESI Volume / ESI Connectome
   const isEsiLayer = layer.url === ESI_LAYER_URL;
 
@@ -96,6 +96,43 @@ function SortableSettingsCard({
     const clamped = Math.max(0, Math.min(100, Math.round(Number(raw) || 0)));
     setOpacityStr(String(clamped));
     onSettingChange(index, 'opacity', clamped / 100);
+  };
+
+  // Local string state — allows typing a partial value (e.g. empty string) without breaking the numeric opacity
+  const [meshXRayStr, setMeshXRayStr] = useState(() => String(Math.round(settings.meshXRay * 100)));
+
+  // Unlike opacity/cal_min/cal_max, meshXRay maps to a single value shared across every
+  // mesh/connectome layer (see handleSettingChange in NiiViewer.jsx), so this card's own
+  // settings.meshXRay can change from a slider on a *different* card. The local string state
+  // above is only ever written by this card's own handlers, so without this effect it would
+  // silently go stale whenever another card is the one that changed the value.
+  useEffect(() => {
+    setMeshXRayStr(String(Math.round(settings.meshXRay * 100)));
+  }, [settings.meshXRay]);
+
+  // Typing must stay permissive: mirror the raw text as-is so partial/empty input isn't
+  // clobbered mid-edit. Only forward a value upstream once it parses to a real number —
+  // commitMeshXRay below is the backstop for the number field once it loses focus.
+  const handleMeshXRayChange = (e) => {
+    setMeshXRayStr(e.target.value);
+    const val = Number(e.target.value);
+    if (e.target.value !== '' && !isNaN(val))
+      onSettingChange(index, 'meshXRay', Math.max(0, Math.min(100, Math.round(val))) / 100);
+  };
+
+  // Radix's Slider always yields a single valid value in range, so unlike the typing handler
+  // above there's no parsing/clamping to do here.
+  const handleMeshXRaySliderChange = ([val]) => {
+    setMeshXRayStr(String(val));
+    onSettingChange(index, 'meshXRay', val / 100);
+  };
+
+  // Blur-time commit: unlike the typing handler above, this always forces a valid
+  // 0-100 value and snaps the display back, however invalid what's currently shown is.
+  const commitMeshXRay = (raw) => {
+    const clamped = Math.max(0, Math.min(100, Math.round(Number(raw) || 0)));
+    setMeshXRayStr(String(clamped));
+    onSettingChange(index, 'meshXRay', clamped / 100);
   };
 
   // Local string state — allows typing a partial value (e.g. empty string) without breaking
@@ -234,49 +271,91 @@ function SortableSettingsCard({
       >
         <div className="overflow-hidden">
           <div className="border-t border-border px-3 py-1.5 flex flex-col gap-1.5 text-xs">
-            {/* Opacity */}
-            <div className="flex items-center gap-3">
-              <span className="w-20 shrink-0 text-foreground select-none pointer-events-none">
-                Opacity
-              </span>
-              <Slider.Root
-                className="relative flex-1 min-w-0 h-4 flex touch-none select-none items-center"
-                min={0}
-                max={100}
-                step={1}
-                value={[Math.round(settings.opacity * 100)]}
-                onValueChange={handleOpacitySliderChange}
-              >
-                <Slider.Track className="relative h-1 grow rounded bg-border">
-                  <Slider.Range className="absolute h-full rounded bg-primary" />
-                </Slider.Track>
-                <Slider.Thumb
-                  className="block h-3 w-3 rounded-full bg-primary cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/50"
-                  aria-label={`${label} opacity slider`}
-                />
-              </Slider.Root>
-              <div className="flex items-center">
-                <input
-                  type="number"
-                  value={opacityStr}
+            {/* Opacity — meaningful for volumes*/}
+            {isImageVolume && (
+              <div className="flex items-center gap-3">
+                <span className="w-20 shrink-0 text-foreground select-none pointer-events-none">
+                  Opacity
+                </span>
+                <Slider.Root
+                  className="relative flex-1 min-w-0 h-4 flex touch-none select-none items-center"
                   min={0}
                   max={100}
                   step={1}
-                  style={{ width: 'calc(3ch + 1.5rem)' }}
-                  onChange={handleOpacityChange}
-                  onBlur={() => commitOpacity(opacityStr)}
-                  className="text-center border border-border rounded px-1 py-0.5 text-xs bg-background text-foreground [appearance:textfield]"
-                  aria-label={`${label} opacity`}
-                />
-                <span className="text-foreground pl-0.5 select-none pointer-events-none">%</span>
+                  value={[Math.round(settings.opacity * 100)]}
+                  onValueChange={handleOpacitySliderChange}
+                >
+                  <Slider.Track className="relative h-1 grow rounded bg-border">
+                    <Slider.Range className="absolute h-full rounded bg-primary" />
+                  </Slider.Track>
+                  <Slider.Thumb
+                    className="block h-3 w-3 rounded-full bg-primary cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    aria-label={`${label} opacity slider`}
+                  />
+                </Slider.Root>
+                <div className="flex items-center">
+                  <input
+                    type="number"
+                    value={opacityStr}
+                    min={0}
+                    max={100}
+                    step={1}
+                    style={{ width: 'calc(3ch + 1.5rem)' }}
+                    onChange={handleOpacityChange}
+                    onBlur={() => commitOpacity(opacityStr)}
+                    className="text-center border border-border rounded px-1 py-0.5 text-xs bg-background text-foreground [appearance:textfield]"
+                    aria-label={`${label} opacity`}
+                  />
+                  <span className="text-foreground pl-0.5 select-none pointer-events-none">%</span>
+                </div>
               </div>
-            </div>
+            )}
+
+            {/* MeshXRay — meaningful for mesh and commectomes */}
+            {!isImageVolume && (
+              <div className="flex items-center gap-3">
+                <span className="w-20 shrink-0 text-foreground select-none pointer-events-none">
+                  Mesh Xray
+                </span>
+                <Slider.Root
+                  className="relative flex-1 min-w-0 h-4 flex touch-none select-none items-center"
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={[Math.round(settings.meshXRay * 100)]}
+                  onValueChange={handleMeshXRaySliderChange}
+                >
+                  <Slider.Track className="relative h-1 grow rounded bg-border">
+                    <Slider.Range className="absolute h-full rounded bg-primary" />
+                  </Slider.Track>
+                  <Slider.Thumb
+                    className="block h-3 w-3 rounded-full bg-primary cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    aria-label={`${label} meshXRay slider`}
+                  />
+                </Slider.Root>
+                <div className="flex items-center">
+                  <input
+                    type="number"
+                    value={meshXRayStr}
+                    min={0}
+                    max={100}
+                    step={1}
+                    style={{ width: 'calc(3ch + 1.5rem)' }}
+                    onChange={handleMeshXRayChange}
+                    onBlur={() => commitMeshXRay(meshXRayStr)}
+                    className="text-center border border-border rounded px-1 py-0.5 text-xs bg-background text-foreground [appearance:textfield]"
+                    aria-label={`${label} meshXRay`}
+                  />
+                  <span className="text-foreground pl-0.5 select-none pointer-events-none">%</span>
+                </div>
+              </div>
+            )}
 
             {/* Threshold — meaningful for image volumes and the ESI layer (in either mode,
                 since it colors its mesh from these same fractions), but not for the
                 intracranial electrode connectome or file-loaded meshes, which have no
                 user-adjustable range. */}
-            {(hasIntensityControls || isEsiLayer) && (
+            {(isImageVolume || isEsiLayer) && (
               <div className="flex items-center gap-3">
                 <span className="w-20 shrink-0 text-foreground select-none pointer-events-none">
                   Threshold
@@ -336,7 +415,7 @@ function SortableSettingsCard({
 
             {/* Colormap — not applicable to connectome or mesh layers, which colour themselves
                 via baked-in node/edge/vertex colors rather than a NiiVue volume colormap */}
-            {hasIntensityControls && (
+            {isImageVolume && (
               <div className="flex items-center gap-3">
                 <span className="w-20 shrink-0 text-foreground select-none pointer-events-none">
                   Colormap
@@ -369,7 +448,7 @@ function SortableSettingsCard({
                 </div>
               )}
               {/* Invert / Show colorbar — also not applicable to connectome or mesh layers */}
-              {hasIntensityControls && (
+              {isImageVolume && (
                 <>
                   <div className="w-1/2 flex items-center gap-2.5">
                     <span className="text-foreground select-none pointer-events-none">Invert</span>
