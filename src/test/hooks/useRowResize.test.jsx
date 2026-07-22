@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { useRowResize } from '@/hooks/useRowResize';
 
-// this is pure drag-to-resize math with no NiiVue/uPlot involved. 
+// this is pure drag-to-resize math with no NiiVue/uPlot involved.
 // NiiViewer.test.jsx and EegViewer.test.jsx keeps one smoke test confirming the hook is actually wired up to the real resize handle.
 
 function TestComponent({ minHeight }) {

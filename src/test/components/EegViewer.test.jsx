@@ -1359,6 +1359,33 @@ describe('EegViewer — montage controls', () => {
   });
 });
 
+describe('eeg plot resize handle', () => {
+  const setup = async () => {
+    await renderViewer();
+    const row = screen.getByTestId('eeg-plot-row');
+    vi.spyOn(row, 'getBoundingClientRect').mockReturnValue({ height: 400 });
+    return row;
+  };
+
+  it('renders a resize handle', async () => {
+    await setup();
+    expect(screen.getByTestId('eeg-plot-resize-handle')).toBeInTheDocument();
+  });
+
+  // The drag/clamp math itself (raise/lower, floor clamping, stopping after mouseup) is
+  // unit-tested directly in useRowResize.test.jsx. This smoke test only confirms
+  // EegViewer actually wires a real drag on its own resize handle through to the row's
+  // min-height, with its own MIN_PLOT_ROW_HEIGHT floor.
+  it('wires drags on its own resize handle through to the plot row min-height', async () => {
+    const row = await setup();
+    fireEvent.mouseDown(screen.getByTestId('eeg-plot-resize-handle'), { clientY: 0 });
+    fireEvent.mouseMove(window, { clientY: 150 });
+    fireEvent.mouseUp(window);
+
+    expect(row.style.minHeight).toBe('550px'); // 400 (starting height) + 150 (drag delta)
+  });
+});
+
 describe('EegViewer — topography uses the montaged buffer', () => {
   it('topography voltages reflect the montage prop', async () => {
     const provider = makeProvider();

@@ -367,7 +367,7 @@ export const EegViewer = ({
             never shrink below the channel-area floor + x-axis + scrubber + controls. When the
             pane gets shorter than that, the viewer overflows and the pane scrolls (see the
             MIN_CHANNEL_AREA_HEIGHT floor below) rather than the fixed rows overlapping. */}
-        <div 
+        <div
           ref={rowRef}
           data-testid="eeg-plot-row"
           className="flex-1 flex flex-row"
