@@ -316,12 +316,13 @@ export const EegViewer = ({
 
   return (
     <>
-      {/* h-full fills the flex column in PatientView; flex-col stacks the plot row above the controls */}
+      {/* min-h-full (not h-full) so this box grows with a dragged-taller plot row, keeping the
+          absolute keyboard-hint icon below anchored to the real bottom instead of overlapping it */}
       {/* tabIndex + onKeyDown make the viewer keyboard-navigable once focused (see handleKeyDown) */}
       <div
         ref={viewerRef}
         data-testid="eeg-viewer-container"
-        className="w-full h-full pb-2.5 px-2 flex flex-col group/viewer relative focus:outline-solid focus:outline-2 focus:outline-secondary focus:-outline-offset-2"
+        className="w-full min-h-full pb-2.5 px-2 flex flex-col group/viewer relative focus:outline-solid focus:outline-2 focus:outline-secondary focus:-outline-offset-2"
         tabIndex={0}
         onMouseDown={focusViewer}
         onKeyDown={handleKeyDown}
