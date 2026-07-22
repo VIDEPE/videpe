@@ -51,13 +51,14 @@ export const isImageVolumeLayer = (layer) => layer.kind !== 'connectome' && laye
 // first layer overall gets full opacity.
 export const getInitialLayerSettings = (layers, startIndex = 0, isEsiVolumeMode) =>
   layers.map((layer, index) => ({
-    url: layer.url,
-    visible: true,
+    url: layer.url, // identifier to link this settings entry to its layer, since array position can shift
+    visible: true, // eye-toggle state — hidden layers get their opacity forced to 0 downstream
     opacity: startIndex + index === 0 ? 1.0 : 0.6, // first loaded layer is fully opaque, others slightly transparent by default
-    colormap: TYPE_COLORMAP_DEFAULTS[layer.type] ?? 'gray',
-    invert: false,
-    showColorbar: false,
-    ...(layer.url === ESI_LAYER_URL ? { isEsiVolume: isEsiVolumeMode } : {}),
+    meshXRay: 1, // fully see-through-able by default, so a connectome isn't hidden behind a volume out of the box; shared across all mesh/connectome layers
+    colormap: TYPE_COLORMAP_DEFAULTS[layer.type] ?? 'gray', // NiiVue colormap key, defaulted by modality
+    invert: false, // flips the colormap direction (dark-to-light vs light-to-dark)
+    showColorbar: false, // whether this layer's colorbar legend is drawn on the canvas
+    ...(layer.url === ESI_LAYER_URL ? { isEsiVolume: isEsiVolumeMode } : {}), // ESI layer's Connectome/Volume mode toggle
     // The Threshold slider's floor always allows dragging down to 0 (so users can always
     // see every power value, however low — see getCalBounds in NiiViewer.jsx), but the
     // ESI layer starts at a small positive default instead of 0: NiiVue's transparent-

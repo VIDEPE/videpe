@@ -63,6 +63,9 @@ function applyConnectomeSettingChange({
       mesh.opacity = value;
       nv.updateGLVolume();
     }
+  } else if (key === 'meshXRay') {
+    nv.opts.meshXRay = value;
+    nv.updateGLVolume();
   } else if (key === 'cal_min' || key === 'cal_max' || key === 'cal_range') {
     // Unlike cal_min/cal_max on an NVImage, a connectome mesh's color range is only read when
     // its color buffers are rebuilt — mutating nodeMinColor/edgeMin etc. alone has no visual
@@ -96,6 +99,9 @@ function applyFileMeshSettingChange({ layer, key, value, settings, nv, fileMeshe
       mesh.opacity = value;
       nv.updateGLVolume();
     }
+  } else if (key === 'meshXRay') {
+    nv.opts.meshXRay = value;
+    nv.updateGLVolume();
   }
 }
 
@@ -254,9 +260,22 @@ export const NiiViewer = ({
       // captured before the first call's setLayerSettings took effect, silently discarding it.
       const layerUpdate =
         key === 'cal_range' ? { cal_min: value[0], cal_max: value[1] } : { [key]: value };
-      const nextLayerSettings = layerSettings.map((layerSetting, index) =>
-        index === layerIndex ? { ...layerSetting, ...layerUpdate } : layerSetting
-      );
+
+      // nv.opts.meshXRay is one scene-global value, not per-layer, so unlike every other
+      // setting here, a meshXRay change has to be written onto every mesh/connectome layer's
+      // settings entry — not just the layer whose slider was dragged — or their cards would
+      // silently drift out of sync with each other.
+      let nextLayerSettings;
+      if (key === 'meshXRay') {
+        nextLayerSettings = layerSettings.map((layerSetting, index) => {
+          const isMeshOrConnectome = !isImageVolumeLayer(orderedLayers[index]);
+          return isMeshOrConnectome ? { ...layerSetting, meshXRay: value } : layerSetting;
+        });
+      } else {
+        nextLayerSettings = layerSettings.map((layerSetting, index) =>
+          index === layerIndex ? { ...layerSetting, ...layerUpdate } : layerSetting
+        );
+      }
       setLayerSettings(nextLayerSettings);
       // Persisted independently of layerSettings so the Connectome/Volume toggle survives
       // handleDeleteLayer wiping the ESI settings entry — see lastEsiVolumeMode's declaration.
