@@ -6,6 +6,15 @@ import toast from 'react-hot-toast';
 
 const NII_LOADING_TOAST_ID = 'nii-viewer-loading'; // fixed id so loading/success toasts update in place rather than stacking
 const MIN_CANVAS_HEIGHT = 350; // px — matches the canvas row's original fixed floor
+// Static — doesn't depend on any component state/props — so it lives at module scope rather
+// than being rebuilt on every render.
+const SLICE_TYPE_OPTIONS = [
+  { sliceType: SLICE_TYPE.AXIAL, label: 'Axial', buttonLabel: 'Ax' },
+  { sliceType: SLICE_TYPE.CORONAL, label: 'Coronal', buttonLabel: 'Co' },
+  { sliceType: SLICE_TYPE.SAGITTAL, label: 'Sagittal', buttonLabel: 'Sa' },
+  { sliceType: SLICE_TYPE.MULTIPLANAR, label: 'Multiplanar', buttonLabel: 'MP' },
+  { sliceType: SLICE_TYPE.RENDER, label: '3D', buttonLabel: '3D' },
+];
 import {
   getInitialLayerSettings,
   filesToLayers,
@@ -153,26 +162,29 @@ export const NiiViewer = ({
   const [orderedLayers, setOrderedLayers] = useState(layers); // mirrors `layers` + any merged connectome layers; user-reorderable
   const [isLoading, setIsLoading] = useState(true);
   const [activeSliceType, setActiveSliceType] = useState(SLICE_TYPE.MULTIPLANAR);
+  // Connectome/Volume toggle for the ESI layer, split into two values, both read by the ESI
+  // effects below: isEsiVolumeMode normally just mirrors the layerSettings entry, but that entry
+  // briefly disappears whenever handleDeleteLayer deletes the ESI card — and falling back to a
+  // hardcoded `true` in that gap would look like the user just switched from Connectome to
+  // Volume mode. useEsiLayer reacts to that (fake) mode change by rebuilding the layer it was
+  // just asked to delete. lastEsiVolumeMode is what isEsiVolumeMode falls back to instead: the
+  // last mode the user actually chose (only handleSettingChange writes it, on the user's own
+  // 'isEsiVolume' toggle), which keeps the value stable across the deletion so useEsiLayer sees
+  // no change and leaves the deleted layer alone.
+  const [lastEsiVolumeMode, setLastEsiVolumeMode] = useState(true);
+  const isEsiVolumeMode =
+    layerSettings.find((s) => s.url === ESI_LAYER_URL)?.isEsiVolume ?? lastEsiVolumeMode;
 
   // ─── Refs ───────────────────────────────────────────────────────────────────
   const opacityRafRef = useRef(null); // rAF id — cancelled on each drag so only the latest value redraws
   const fileMeshesRef = useRef(new Map()); // url → NVMesh for surface meshes loaded from files; keyed by url since nv.meshes also holds connectome meshes
 
   // ─── Derived values ─────────────────────────────────────────────────────────
-  // Derived from orderedLayers (not `layers`) to also catch files dropped into this
-  // component's own zone, which never touches the `layers` prop. Meshes and connectomes are
-  // both excluded — neither has 2D slices, so a mesh-only scene is 3D-only just like a
-  // connectome-only one.
+  // hasImageVolumes is derived from orderedLayers (not `layers`) to also catch files dropped
+  // into this component's own zone, which never touches the `layers` prop.
+  // Meshes and connectomes are both excluded — neither has 2D slices, so a mesh-only scene
+  // is 3D-only just like a connectome-only one.
   const hasImageVolumes = orderedLayers.some(isImageVolumeLayer);
-  // Connectome/Volume toggle state for the ESI layer — read by both ESI effects below.
-  const isEsiVolumeMode = layerSettings.find((s) => s.url === ESI_LAYER_URL)?.isEsiVolume ?? true;
-  const sliceTypeOptions = [
-    { sliceType: SLICE_TYPE.AXIAL, label: 'Axial', buttonLabel: 'Ax' },
-    { sliceType: SLICE_TYPE.CORONAL, label: 'Coronal', buttonLabel: 'Co' },
-    { sliceType: SLICE_TYPE.SAGITTAL, label: 'Sagittal', buttonLabel: 'Sa' },
-    { sliceType: SLICE_TYPE.MULTIPLANAR, label: 'Multiplanar', buttonLabel: 'MP' },
-    { sliceType: SLICE_TYPE.RENDER, label: '3D', buttonLabel: '3D' },
-  ];
 
   // ─── Hooks: canvas + NiiVue lifecycle ────────────────────────────────────────
   // Tracks the canvas container's size and switches nv between AUTO/GRID multiplanar layout.
@@ -246,6 +258,9 @@ export const NiiViewer = ({
         index === layerIndex ? { ...layerSetting, ...layerUpdate } : layerSetting
       );
       setLayerSettings(nextLayerSettings);
+      // Persisted independently of layerSettings so the Connectome/Volume toggle survives
+      // handleDeleteLayer wiping the ESI settings entry — see lastEsiVolumeMode's declaration.
+      if (key === 'isEsiVolume') setLastEsiVolumeMode(value);
 
       if (!nvRef.current) return;
       const nv = nvRef.current;
@@ -531,7 +546,7 @@ export const NiiViewer = ({
             {/* Viewer controls with Ax, Co, Sa, MP and 3D buttons — the 2D ones are greyed
                 out and inert without an image volume loaded (3D/connectome-only scenes
                 have no slices to show), per the hasImageVolumes effect above. */}
-            {sliceTypeOptions.map(({ sliceType, label, buttonLabel }) => {
+            {SLICE_TYPE_OPTIONS.map(({ sliceType, label, buttonLabel }) => {
               const disabled = sliceType !== SLICE_TYPE.RENDER && !hasImageVolumes;
               return (
                 <button

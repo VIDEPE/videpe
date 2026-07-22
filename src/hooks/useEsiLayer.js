@@ -79,7 +79,7 @@ export function useEsiLayer({
     // Add/replace/remove the ESI entry in orderedLayers to match activeEsiLayer
     setOrderedLayers(makeLayerMergeUpdater(activeEsiLayer, ESI_LAYER_URL));
     // Add/remove its settings entry (visible/opacity/isEsiVolume/etc.); leaves an existing entry untouched
-    setLayerSettings(makeSettingsMergeUpdater(activeEsiLayer, ESI_LAYER_URL));
+    setLayerSettings(makeSettingsMergeUpdater(activeEsiLayer, ESI_LAYER_URL, isEsiVolumeMode));
   }, [esiLayer, isEsiVolumeMode, setOrderedLayers, setLayerSettings]);
 
   // Builds/rebuilds/removes the ESI source-power mesh (connectome mode) or NVImage volume

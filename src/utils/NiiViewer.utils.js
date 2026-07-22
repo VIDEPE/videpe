@@ -49,7 +49,7 @@ export const isImageVolumeLayer = (layer) => layer.kind !== 'connectome' && laye
 // orderedLayers/layerSettings are updated independently. startIndex is layers[0]'s position
 // among all loaded layers — pass the already-loaded count when appending so only the very
 // first layer overall gets full opacity.
-export const getInitialLayerSettings = (layers, startIndex = 0) =>
+export const getInitialLayerSettings = (layers, startIndex = 0, isEsiVolumeMode) =>
   layers.map((layer, index) => ({
     url: layer.url,
     visible: true,
@@ -57,7 +57,7 @@ export const getInitialLayerSettings = (layers, startIndex = 0) =>
     colormap: TYPE_COLORMAP_DEFAULTS[layer.type] ?? 'gray',
     invert: false,
     showColorbar: false,
-    ...(layer.url === ESI_LAYER_URL ? { isEsiVolume: true } : {}),
+    ...(layer.url === ESI_LAYER_URL ? { isEsiVolume: isEsiVolumeMode } : {}),
     // The Threshold slider's floor always allows dragging down to 0 (so users can always
     // see every power value, however low — see getCalBounds in NiiViewer.jsx), but the
     // ESI layer starts at a small positive default instead of 0: NiiVue's transparent-
@@ -220,7 +220,7 @@ export function makeLayerMergeUpdater(layer, sentinelUrl) {
 // array — kept as a separate function since "present" here means "has a settings entry", and a
 // data-only refresh (layer present in both) must leave the user's existing settings untouched
 // rather than overwrite them.
-export function makeSettingsMergeUpdater(layer, sentinelUrl) {
+export function makeSettingsMergeUpdater(layer, sentinelUrl, isEsiVolumeMode) {
   return (prevSettings) => {
     const existingIndex = prevSettings.findIndex((s) => s.url === sentinelUrl);
     const alreadyPresent = existingIndex !== -1;
@@ -237,7 +237,10 @@ export function makeSettingsMergeUpdater(layer, sentinelUrl) {
     }
 
     // First appearance — seed default settings for it.
-    return [...prevSettings, ...getInitialLayerSettings([layer], prevSettings.length)];
+    return [
+      ...prevSettings,
+      ...getInitialLayerSettings([layer], prevSettings.length, isEsiVolumeMode),
+    ];
   };
 }
 

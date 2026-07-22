@@ -2,7 +2,12 @@ import { StrictMode } from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach, assert } from 'vitest';
 import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { getInitialLayerSettings, detectVolumeType, filesToLayers, ESI_LAYER_URL } from '@/utils/NiiViewer.utils';
+import {
+  getInitialLayerSettings,
+  detectVolumeType,
+  filesToLayers,
+  ESI_LAYER_URL,
+} from '@/utils/NiiViewer.utils';
 import {
   NiiViewer,
   syncVolumesAndApplySettings,
@@ -1655,34 +1660,64 @@ describe('NiiViewer', () => {
   });
   describe('esi layer', () => {
     it('never calls loadConnectomeAsMesh() when ESI layer is rendered while MRI layer is still loading', async () => {
-
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
       const nv = nvRef.current;
       // Mock nv.loadVolumes that gets hung up on a promise that later can be resolved manually
       let resolveMriLoad;
       nv.loadVolumes = vi.fn().mockImplementation(
-        (vols) => new Promise((resolve) => {
-          resolveMriLoad = () => {
-            nv.volumes = vols;
-            resolve();
-          };
-        })
+        (vols) =>
+          new Promise((resolve) => {
+            resolveMriLoad = () => {
+              nv.volumes = vols;
+              resolve();
+            };
+          })
       );
 
       // Render mri and esilayer
-      const esiLayer = makeEsiLayer(); 
-      render(<NiiViewer
-                nvRef={nvRef}
-                layers={[{ type: 'MRI', url: '/mri.nii' }]}
-                esiLayer={esiLayer} />);
+      const esiLayer = makeEsiLayer();
+      render(
+        <NiiViewer nvRef={nvRef} layers={[{ type: 'MRI', url: '/mri.nii' }]} esiLayer={esiLayer} />
+      );
 
       expect(nv.loadConnectomeAsMesh).not.toHaveBeenCalled();
-      resolveMriLoad()
+      resolveMriLoad();
       await waitFor(() => expect(nv.loadVolumes).toHaveBeenCalled());
 
-      expect(nv.loadConnectomeAsMesh).not.toHaveBeenCalled()
+      expect(nv.loadConnectomeAsMesh).not.toHaveBeenCalled();
+    });
 
+    it('does not resurrect the ESI layer as a volume immediately after it is deleted in connectome mode', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const esiLayer = makeEsiLayer();
+      render(<NiiViewer nvRef={nvRef} layers={[]} esiLayer={esiLayer} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      const nv = nvRef.current;
+      // isEsiVolume defaults to true (volume mode) — switch to connectome mode first, matching
+      // the bug report ("closing ESI layer in connectome mode...").
+      await userEvent.click(screen.getByRole('button', { name: 'Expand Layer 1 controls' }));
+      await userEvent.click(screen.getByRole('switch', { name: 'Show Layer 1 as volume' }));
+      await waitFor(() => expect(nv.loadConnectomeAsMesh).toHaveBeenCalled());
+
+      nv.addVolumesFromUrl.mockClear();
+      nv.loadConnectomeAsMesh.mockClear();
+
+      // Close (delete) the ESI card while in connectome mode.
+      await userEvent.click(screen.getByRole('button', { name: 'Close Layer 1 volume' }));
+
+      // Regression: deleting the card removes its layerSettings entry, but esiLayer itself is
+      // owned upstream (e.g. by PatientView) and is untouched by the deletion — so useEsiLayer
+      // still sees the same non-null esiLayer on the next render. If isEsiVolumeMode's fallback
+      // for a missing settings entry ever defaults back to `true` (Volume mode) instead of the
+      // last mode actually used, that's enough on its own to make useEsiLayer rebuild the
+      // just-deleted layer as a volume — this asserts that doesn't happen.
+      expect(nv.addVolumesFromUrl).not.toHaveBeenCalled();
+      expect(
+        screen.queryByRole('button', { name: 'Expand Layer 1 controls' })
+      ).not.toBeInTheDocument();
     });
   });
 });
