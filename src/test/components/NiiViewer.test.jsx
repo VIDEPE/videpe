@@ -1519,6 +1519,31 @@ describe('NiiViewer', () => {
       expect(nv.removeVolumeByIndex).not.toHaveBeenCalled();
     });
 
+    it('does not resurrect the intracranial card immediately after it is deleted', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      // intracranialLayer is passed as a stable prop, matching how PatientView keeps re-deriving
+      // the same object reference between voltage updates — this is what a naive delete would
+      // race against, since the layer itself never goes away on its own.
+      render(
+        <NiiViewer
+          nvRef={nvRef}
+          layers={[{ type: 'MRI', url: '/mri.nii' }]}
+          intracranialLayer={makeIntracranialLayer()}
+        />
+      );
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      await userEvent.click(
+        screen.getByRole('button', { name: /expand.*intracranial - electrodes/i })
+      );
+      await userEvent.click(
+        screen.getByRole('button', { name: /close.*intracranial - electrodes/i })
+      );
+
+      expect(screen.queryByText('Intracranial - Electrodes')).not.toBeInTheDocument();
+    });
+
     it('clears volumes and meshes from the shared nv instance when the component unmounts', async () => {
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
@@ -1967,7 +1992,10 @@ describe('NiiViewer', () => {
       // last mode actually used, that's enough on its own to make useEsiLayer rebuild the
       // just-deleted layer as a volume — this asserts that doesn't happen.
       expect(nv.addVolumesFromUrl).not.toHaveBeenCalled();
-      expect(screen.queryByRole('button', { name: /expand.*layer 1/i })).not.toBeInTheDocument();
+      // Query by the card's name text rather than the expand/collapse button — a resurrected
+      // card starts out expanded (not collapsed), so an 'expand...' name query would wrongly
+      // pass even if the card came back, since the button it matches would read 'Collapse...'.
+      expect(screen.queryByText('Layer 1')).not.toBeInTheDocument();
     });
   });
 });

@@ -44,6 +44,9 @@ import { EEG_NODE_POS_KEY } from '@/utils/eegColormaps';
  *     in handleDeleteLayer) to reset `esiMeshRef.current` to null; mutating it directly from
  *     outside this hook isn't allowed.
  *   - `clearEsiVolume` (Function) — same, for `esiVolumeRef.current`.
+ *   - `dismissEsiLayer` (Function) — call from handleDeleteLayer alongside clearEsiMesh/
+ *     clearEsiVolume so the merge effect stops resurrecting the just-deleted card until esiLayer
+ *     actually changes upstream.
  */
 export function useEsiLayer({
   esiLayer,
@@ -57,6 +60,14 @@ export function useEsiLayer({
   const esiMeshRef = useRef(null); // current ESI connectome mesh in the scene (connectome mode)
   const esiVolumeRef = useRef(null); // current ESI NVImage volume in the scene (volume mode) — mutually exclusive with esiMeshRef
   const lastEsiLayerRef = useRef(null); // guards against rebuilding on unrelated re-renders — tracks whichever of the two is active
+  // The activeEsiLayer object the user explicitly deleted via handleDeleteLayer, if any — esiLayer
+  // itself is owned upstream (e.g. PatientView) and is untouched by a card deletion, so without
+  // this the merge effect below sees the very same non-null activeEsiLayer on the next render and
+  // re-appends it (since deleting removed it from orderedLayers/layerSettings, making it look like
+  // a fresh first appearance). Compared by reference: a genuinely new activeEsiLayer (new EEG
+  // click, or a mode switch resolving to the other representation) always differs from whatever
+  // was dismissed, so it reappears normally — only the exact dismissed object stays suppressed.
+  const dismissedEsiLayerRef = useRef(null);
 
   // Sanctioned way for the caller to reset these refs after it removes the mesh/volume from nv
   // itself (e.g. handleDeleteLayer) — external code can read `.current` but isn't allowed to
@@ -67,6 +78,12 @@ export function useEsiLayer({
   const clearEsiVolume = useCallback(() => {
     esiVolumeRef.current = null;
   }, []);
+  // Call from handleDeleteLayer when the user closes the ESI card — marks the currently-built
+  // activeEsiLayer (whichever of mesh/volume is live, tracked by lastEsiLayerRef) as dismissed so
+  // the merge effect stops resurrecting it.
+  const dismissEsiLayer = useCallback(() => {
+    dismissedEsiLayerRef.current = lastEsiLayerRef.current;
+  }, []);
 
   // Merges the separately-tracked esiLayer prop into orderedLayers/layerSettings — same
   // pattern as the intracranialLayer merge effect, keyed on ESI_LAYER_URL.
@@ -76,13 +93,16 @@ export function useEsiLayer({
         ? esiLayer.sourcePowerVolume
         : esiLayer.sourcePowerConnectomes
       : esiLayer;
+    // Treat a just-dismissed layer as absent until esiLayer actually changes upstream.
+    const effectiveEsiLayer =
+      activeEsiLayer && activeEsiLayer === dismissedEsiLayerRef.current ? null : activeEsiLayer;
 
-    // Add/replace/remove the ESI entry in orderedLayers to match activeEsiLayer
-    setOrderedLayers(makeLayerMergeUpdater(activeEsiLayer, ESI_LAYER_URL));
+    // Add/replace/remove the ESI entry in orderedLayers to match effectiveEsiLayer
+    setOrderedLayers(makeLayerMergeUpdater(effectiveEsiLayer, ESI_LAYER_URL));
     // Add/remove its settings entry (visible/opacity/isEsiVolume/etc.); leaves an existing entry untouched
     setLayerSettings(
       makeSettingsMergeUpdater(
-        activeEsiLayer,
+        effectiveEsiLayer,
         ESI_LAYER_URL,
         isEsiVolumeMode,
         getCurrentMeshXRay(orderedLayers, layerSettings)
@@ -242,5 +262,5 @@ export function useEsiLayer({
     }
   }, [esiLayer, isEsiVolumeMode, orderedLayers, layerSettings, nvRef]);
 
-  return { esiMeshRef, esiVolumeRef, clearEsiMesh, clearEsiVolume };
+  return { esiMeshRef, esiVolumeRef, clearEsiMesh, clearEsiVolume, dismissEsiLayer };
 }

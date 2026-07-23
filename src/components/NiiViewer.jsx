@@ -263,16 +263,17 @@ export const NiiViewer = ({
     onViewReady,
   });
   // Merges the intracranial electrode connectome into the card list and builds/rebuilds its mesh.
-  const { intracranialMeshRef, clearIntracranialMesh } = useIntracranialConnectome({
-    intracranialLayer,
-    nvRef,
-    orderedLayers,
-    layerSettings,
-    setOrderedLayers,
-    setLayerSettings,
-  });
+  const { intracranialMeshRef, clearIntracranialMesh, dismissIntracranialLayer } =
+    useIntracranialConnectome({
+      intracranialLayer,
+      nvRef,
+      orderedLayers,
+      layerSettings,
+      setOrderedLayers,
+      setLayerSettings,
+    });
   // Merges the ESI source-power layer into the card list and builds/rebuilds its mesh or volume.
-  const { esiMeshRef, clearEsiMesh, clearEsiVolume } = useEsiLayer({
+  const { esiMeshRef, clearEsiMesh, clearEsiVolume, dismissEsiLayer } = useEsiLayer({
     esiLayer,
     isEsiVolumeMode,
     nvRef,
@@ -496,9 +497,14 @@ export const NiiViewer = ({
           nv.removeMesh(meshRef.current);
           clearMesh();
         }
-        // Note: PatientView keeps re-deriving intracranialLayer from live EEG state, so this
-        // card reappears on the next voltage update unless that upstream state also clears —
-        // acceptable for now, not a locked-in requirement to support a persistent dismissal.
+        // Both intracranialLayer and esiLayer are owned upstream (PatientView keeps re-deriving
+        // them from live EEG state) and are untouched by this deletion — without dismissing here,
+        // their hooks' merge effects would see the same non-null layer object on the next render
+        // and re-append the card immediately, since deleting it made it look like a fresh first
+        // appearance. Dismissing suppresses that until the upstream layer actually changes (e.g.
+        // the next voltage update or EEG click).
+        if (isEsi) dismissEsiLayer();
+        else dismissIntracranialLayer();
       } else if (layer?.kind === 'mesh') {
         // File meshes live in nv.meshes, tracked by fileMeshesRef — drop it from both.
         const mesh = fileMeshesRef.current.get(layer.url);
@@ -510,8 +516,12 @@ export const NiiViewer = ({
         const nvIndex = orderedLayers.slice(0, index).filter(isImageVolumeLayer).length;
         nv.removeVolumeByIndex(nvIndex);
         // The ESI volume (volume mode) is a non-connectome layer too — clear its ref so the
-        // ESI build effect doesn't try to remove an already-gone NVImage on its next rebuild.
-        if (layer?.url === ESI_LAYER_URL) clearEsiVolume();
+        // ESI build effect doesn't try to remove an already-gone NVImage on its next rebuild,
+        // and dismiss it for the same reason as the connectome branch above.
+        if (layer?.url === ESI_LAYER_URL) {
+          clearEsiVolume();
+          dismissEsiLayer();
+        }
       }
       setOrderedLayers(orderedLayers.filter((_, i) => i !== index));
       setLayerSettings(layerSettings.filter((_, i) => i !== index));
@@ -525,6 +535,8 @@ export const NiiViewer = ({
       clearEsiMesh,
       clearEsiVolume,
       clearIntracranialMesh,
+      dismissEsiLayer,
+      dismissIntracranialLayer,
     ]
   );
 

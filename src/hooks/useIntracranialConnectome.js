@@ -35,6 +35,9 @@ import { EEG_NODE_POS_KEY, EEG_NODE_NEG_KEY } from '@/utils/eegColormaps';
  *   - `clearIntracranialMesh` (Function) — call after the caller itself removes the mesh from
  *     nv (e.g. in handleDeleteLayer) to reset the ref to null; mutating `.current` from outside
  *     this hook isn't allowed, so this is the sanctioned way to clear it externally.
+ *   - `dismissIntracranialLayer` (Function) — call from handleDeleteLayer alongside
+ *     clearIntracranialMesh so the merge effect stops resurrecting the just-deleted card until
+ *     intracranialLayer actually changes upstream (the next voltage update).
  */
 export function useIntracranialConnectome({
   intracranialLayer,
@@ -46,12 +49,27 @@ export function useIntracranialConnectome({
 }) {
   const intracranialMeshRef = useRef(null); // current intracranial connectome mesh in the scene
   const lastIntracranialLayerRef = useRef(null); // guards against rebuilding on unrelated re-renders
+  // The intracranialLayer object the user explicitly deleted via handleDeleteLayer, if any —
+  // intracranialLayer itself is owned upstream (PatientView keeps re-deriving it from live EEG
+  // state) and is untouched by a card deletion, so without this the merge effect below sees the
+  // very same non-null intracranialLayer on the next render and re-appends it (since deleting
+  // removed it from orderedLayers/layerSettings, making it look like a fresh first appearance).
+  // Compared by reference: a genuinely new intracranialLayer (the next voltage update) always
+  // differs from whatever was dismissed, so it reappears normally as before — only the exact
+  // dismissed object stays suppressed.
+  const dismissedIntracranialLayerRef = useRef(null);
 
   // Sanctioned way for the caller to reset intracranialMeshRef after it removes the mesh from
   // nv itself (e.g. handleDeleteLayer) — external code can read `.current` but isn't allowed to
   // write it directly, since the ref is owned by this hook.
   const clearIntracranialMesh = useCallback(() => {
     intracranialMeshRef.current = null;
+  }, []);
+  // Call from handleDeleteLayer when the user closes the intracranial card — marks the
+  // currently-built intracranialLayer (tracked by lastIntracranialLayerRef) as dismissed so the
+  // merge effect stops resurrecting it before the next voltage update actually changes it.
+  const dismissIntracranialLayer = useCallback(() => {
+    dismissedIntracranialLayerRef.current = lastIntracranialLayerRef.current;
   }, []);
 
   // Merges intracranialLayer into orderedLayers/layerSettings by its sentinel URL so it
@@ -60,10 +78,17 @@ export function useIntracranialConnectome({
   // caused StrictMode's double-invoke to append the settings entry twice, misaligning
   // the arrays and crashing handleNiiFiles. Each updater is idempotent on its own.
   useEffect(() => {
-    setOrderedLayers(makeLayerMergeUpdater(intracranialLayer, INTRACRANIAL_CONNECTOME_URL));
+    // Treat a just-dismissed layer as absent until intracranialLayer actually changes upstream.
+    const effectiveIntracranialLayer =
+      intracranialLayer && intracranialLayer === dismissedIntracranialLayerRef.current
+        ? null
+        : intracranialLayer;
+    setOrderedLayers(
+      makeLayerMergeUpdater(effectiveIntracranialLayer, INTRACRANIAL_CONNECTOME_URL)
+    );
     setLayerSettings(
       makeSettingsMergeUpdater(
-        intracranialLayer,
+        effectiveIntracranialLayer,
         INTRACRANIAL_CONNECTOME_URL,
         undefined,
         getCurrentMeshXRay(orderedLayers, layerSettings)
@@ -135,5 +160,5 @@ export function useIntracranialConnectome({
     nv.updateGLVolume(); // redraw with the new mesh visible
   }, [intracranialLayer, orderedLayers, layerSettings, nvRef]);
 
-  return { intracranialMeshRef, clearIntracranialMesh };
+  return { intracranialMeshRef, clearIntracranialMesh, dismissIntracranialLayer };
 }
