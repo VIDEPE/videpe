@@ -17,6 +17,7 @@ const SLICE_TYPE_OPTIONS = [
 ];
 import {
   getInitialLayerSettings,
+  getCurrentMeshXRay,
   filesToLayers,
   isImageVolumeLayer,
   getCalBounds,
@@ -387,8 +388,15 @@ export const NiiViewer = ({
     setIsLoading(true);
     const newLayers = filesToLayers(files);
     const allLayers = [...orderedLayers, ...newLayers];
-    // startIndex ensures new layers get 0.6 opacity rather than being treated as the first
-    const newLayerSettings = getInitialLayerSettings(newLayers, orderedLayers.length);
+    // startIndex ensures new layers get 0.6 opacity rather than being treated as the first;
+    // getCurrentMeshXRay keeps a newly-dropped mesh in sync with the scene's existing
+    // meshXRay rather than resetting it back to the default (see that function's comment).
+    const newLayerSettings = getInitialLayerSettings(
+      newLayers,
+      orderedLayers.length,
+      undefined,
+      getCurrentMeshXRay(orderedLayers, layerSettings)
+    );
     const allLayerSettings = [...layerSettings, ...newLayerSettings];
     setOrderedLayers(allLayers);
     setLayerSettings(allLayerSettings);

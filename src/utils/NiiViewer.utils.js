@@ -43,18 +43,22 @@ export const ESI_LAYER_URL = '__esi-source-power__';
 // layer follows its current kind — 'volume' in Volume mode, 'connectome' in Connectome mode.
 export const isImageVolumeLayer = (layer) => layer.kind !== 'connectome' && layer.kind !== 'mesh';
 
-// Returns default display settings, one per layer. Colormap is derived from layer.type
-// (layers carry no colormap field). Each entry mirrors its layer's url so effects can locate
-// a specific layer's settings by url rather than array position, which is fragile when
-// orderedLayers/layerSettings are updated independently. startIndex is layers[0]'s position
-// among all loaded layers — pass the already-loaded count when appending so only the very
-// first layer overall gets full opacity.
-export const getInitialLayerSettings = (layers, startIndex = 0, isEsiVolumeMode) =>
+// Returns default display settings, one per layer. Settings are keyed by the layer's url
+// (not array position, which shifts as layers are added/reordered). startIndex is where
+// `layers` starts among all loaded layers, so only the very first layer overall gets full
+// opacity. currentMeshXRay seeds the meshXRay field: pass 1 for a scene's first mesh/
+// connectome, or getCurrentMeshXRay(...) when appending to an already-populated scene.
+export const getInitialLayerSettings = (
+  layers,
+  startIndex = 0,
+  isEsiVolumeMode,
+  currentMeshXRay = 1
+) =>
   layers.map((layer, index) => ({
     url: layer.url, // identifier to link this settings entry to its layer, since array position can shift
     visible: true, // eye-toggle state — hidden layers get their opacity forced to 0 downstream
     opacity: startIndex + index === 0 ? 1.0 : 0.6, // first loaded layer is fully opaque, others slightly transparent by default
-    meshXRay: 1, // fully see-through-able by default, so a connectome isn't hidden behind a volume out of the box; shared across all mesh/connectome layers
+    meshXRay: currentMeshXRay, // shared across all mesh/connectome layers
     colormap: TYPE_COLORMAP_DEFAULTS[layer.type] ?? 'gray', // NiiVue colormap key, defaulted by modality
     invert: false, // flips the colormap direction (dark-to-light vs light-to-dark)
     showColorbar: false, // whether this layer's colorbar legend is drawn on the canvas
@@ -68,6 +72,16 @@ export const getInitialLayerSettings = (layers, startIndex = 0, isEsiVolumeMode)
     cal_min: layer.url === ESI_LAYER_URL ? 0.01 : 0,
     cal_max: 1,
   }));
+
+// Finds the meshXRay value already active in the scene, from any existing mesh/connectome
+// layer's settings (they're always kept in sync with each other and with nv.opts.meshXRay —
+// see handleSettingChange's meshXRay special-case in NiiViewer.jsx). Pass the result into
+// getInitialLayerSettings when appending a new mesh/connectome layer, so it joins at the
+// current value instead of resetting the scene back to the default.
+export function getCurrentMeshXRay(layers, layerSettings) {
+  const index = layers.findIndex((layer) => !isImageVolumeLayer(layer));
+  return index === -1 ? 1 : layerSettings[index].meshXRay;
+}
 
 // Detects imaging modality from a filename using BIDS suffix first, then keyword fallback.
 // Returns { type, subtype } where type is 'MRI', 'PET', 'SPECT', or nameWithoutExtension for unknowns.
@@ -171,6 +185,11 @@ export async function syncMeshesAndApplySettings(nv, meshLayers, meshLayerSettin
     if (!mesh) return;
     const setting = meshLayerSettings[index];
     mesh.opacity = setting.visible ? setting.opacity : 0;
+    // nv.opts.meshXRay is a scene-global NiiVue option, not a per-mesh property, and NiiVue's
+    // own default (0) doesn't match this app's default (1, see getInitialLayerSettings) — apply
+    // it here on load, or the card's slider would show 100% while the mesh actually renders
+    // opaque until the user drags the slider once.
+    nv.opts.meshXRay = setting.meshXRay;
   });
   nv.updateGLVolume();
 }
@@ -221,7 +240,7 @@ export function makeLayerMergeUpdater(layer, sentinelUrl) {
 // array — kept as a separate function since "present" here means "has a settings entry", and a
 // data-only refresh (layer present in both) must leave the user's existing settings untouched
 // rather than overwrite them.
-export function makeSettingsMergeUpdater(layer, sentinelUrl, isEsiVolumeMode) {
+export function makeSettingsMergeUpdater(layer, sentinelUrl, isEsiVolumeMode, currentMeshXRay) {
   return (prevSettings) => {
     const existingIndex = prevSettings.findIndex((s) => s.url === sentinelUrl);
     const alreadyPresent = existingIndex !== -1;
@@ -240,7 +259,7 @@ export function makeSettingsMergeUpdater(layer, sentinelUrl, isEsiVolumeMode) {
     // First appearance — seed default settings for it.
     return [
       ...prevSettings,
-      ...getInitialLayerSettings([layer], prevSettings.length, isEsiVolumeMode),
+      ...getInitialLayerSettings([layer], prevSettings.length, isEsiVolumeMode, currentMeshXRay),
     ];
   };
 }

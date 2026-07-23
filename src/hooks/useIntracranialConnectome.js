@@ -1,6 +1,7 @@
 import { useRef, useEffect, useCallback } from 'react';
 import {
   getInitialLayerSettings,
+  getCurrentMeshXRay,
   makeLayerMergeUpdater,
   makeSettingsMergeUpdater,
   INTRACRANIAL_CONNECTOME_URL,
@@ -60,8 +61,15 @@ export function useIntracranialConnectome({
   // the arrays and crashing handleNiiFiles. Each updater is idempotent on its own.
   useEffect(() => {
     setOrderedLayers(makeLayerMergeUpdater(intracranialLayer, INTRACRANIAL_CONNECTOME_URL));
-    setLayerSettings(makeSettingsMergeUpdater(intracranialLayer, INTRACRANIAL_CONNECTOME_URL));
-  }, [intracranialLayer, setOrderedLayers, setLayerSettings]);
+    setLayerSettings(
+      makeSettingsMergeUpdater(
+        intracranialLayer,
+        INTRACRANIAL_CONNECTOME_URL,
+        undefined,
+        getCurrentMeshXRay(orderedLayers, layerSettings)
+      )
+    );
+  }, [intracranialLayer, orderedLayers, layerSettings, setOrderedLayers, setLayerSettings]);
 
   useEffect(() => {
     const nv = nvRef.current; // guard clause — nothing to do before NiiVue has attached to a canvas
@@ -109,8 +117,18 @@ export function useIntracranialConnectome({
     const existingIndex = orderedLayers.findIndex((l) => l.url === INTRACRANIAL_CONNECTOME_URL); // its current position in the card list, if it has one yet
     const settings =
       layerSettings[existingIndex] ?? // its existing settings, preserved across this rebuild
-      getInitialLayerSettings([intracranialLayer], orderedLayers.length)[0]; // or computed fresh on first appearance
+      getInitialLayerSettings(
+        [intracranialLayer],
+        orderedLayers.length,
+        undefined,
+        getCurrentMeshXRay(orderedLayers, layerSettings)
+      )[0]; // or computed fresh on first appearance
     mesh.opacity = settings.visible ? settings.opacity : 0; // 0 opacity is how a hidden mesh is represented, same convention as image volumes
+    // nv.opts.meshXRay is a scene-global NiiVue option, not a per-mesh property, and NiiVue's
+    // own default (0) doesn't match this app's default (1, see getInitialLayerSettings) — apply
+    // it here on build, or the card's slider would show 100% while the mesh actually renders
+    // opaque until the user drags the slider once.
+    nv.opts.meshXRay = settings.meshXRay;
 
     nv.addMesh(mesh); // actually add it to the 3D scene
     intracranialMeshRef.current = mesh; // track it so the next change/removal can find it

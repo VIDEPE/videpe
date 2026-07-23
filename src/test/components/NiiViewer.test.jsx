@@ -337,7 +337,12 @@ describe('syncVolumesAndApplySettings', () => {
 
 describe('syncMeshesAndApplySettings', () => {
   const makeMeshLayer = (url, name) => ({ url, name, kind: 'mesh' });
-  const makeMeshSetting = (overrides = {}) => ({ visible: true, opacity: 0.6, ...overrides });
+  const makeMeshSetting = (overrides = {}) => ({
+    visible: true,
+    opacity: 0.6,
+    meshXRay: 1,
+    ...overrides,
+  });
 
   let nv;
   beforeEach(() => {
@@ -351,6 +356,7 @@ describe('syncMeshesAndApplySettings', () => {
         return added;
       }),
       updateGLVolume: vi.fn(),
+      opts: {},
     };
   });
 
@@ -886,6 +892,21 @@ describe('NiiViewer', () => {
       kind: 'mesh',
     };
 
+    // Regression test: NiiVue's own default for nv.opts.meshXRay is 0, but this app's default
+    // settings value (see getInitialLayerSettings) is 1 — that default must be written onto
+    // nv.opts.meshXRay as soon as a mesh/connectome is built, not only once the user drags the
+    // slider (which is the only other place that write happened before this fix).
+    it('initializes nv.opts.meshXRay to the default settings value (1) as soon as a mesh/connectome loads, without needing a user interaction', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      render(
+        <NiiViewer nvRef={nvRef} layers={[meshLayer]} intracranialLayer={makeIntracranialLayer()} />
+      );
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      expect(nvRef.current.opts.meshXRay).toBe(1);
+    });
+
     // meshXRay's nv-side write is throttled through requestAnimationFrame (one redraw per frame
     // — see applyConnectomeSettingChange/applyFileMeshSettingChange in NiiViewer.jsx); rAF is
     // stubbed synchronous for the whole suite (see the top of this describe('NiiViewer', ...) block).
@@ -929,6 +950,27 @@ describe('NiiViewer', () => {
 
       expect(screen.getByLabelText('Intracranial - Electrodes meshXRay')).toHaveValue(25);
       expect(screen.getByLabelText('Mesh - cortex meshXRay')).toHaveValue(25);
+    });
+
+    it('does not reset nv.opts.meshXRay back to the default when a second mesh is dropped in after the user has already customized it', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      render(<NiiViewer nvRef={nvRef} layers={[]} intracranialLayer={makeIntracranialLayer()} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      await userEvent.click(
+        screen.getByRole('button', { name: /expand.*intracranial - electrodes/i })
+      );
+      fireEvent.change(screen.getByLabelText('Intracranial - Electrodes meshXRay'), {
+        target: { value: '30' },
+      });
+      expect(nvRef.current.opts.meshXRay).toBe(0.3);
+
+      const input = document.querySelector('input[type="file"]');
+      await userEvent.upload(input, new File(['data'], 'cortex.gii'));
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      expect(nvRef.current.opts.meshXRay).toBe(0.3);
     });
 
     it('does not affect the meshXRay value shown on other layers when a non-meshXRay setting changes', async () => {

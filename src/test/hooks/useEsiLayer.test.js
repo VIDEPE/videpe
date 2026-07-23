@@ -54,6 +54,7 @@ function makeNv() {
     setOpacity: vi.fn(),
     setColormap: vi.fn(),
     updateGLVolume: vi.fn(),
+    opts: {},
   };
   return nv;
 }
@@ -165,6 +166,17 @@ describe('useEsiLayer', () => {
       });
       const call = nv.loadConnectomeAsMesh.mock.calls[0][0];
       expect(call.nodes.map((n) => n.name)).toEqual(['at-or-above']);
+    });
+
+    // Regression test: NiiVue's own default for nv.opts.meshXRay is 0, but this app's default
+    // settings value (see getInitialLayerSettings) is 1 — the build effect must write that
+    // default onto nv.opts.meshXRay itself, not just leave it for the user's own slider drag.
+    it('initializes nv.opts.meshXRay to the default settings value (1) when the mesh is first built', () => {
+      const esiLayer = makeEsiLayer();
+      renderHook((props) => useHarness(props), {
+        initialProps: { esiLayer, isEsiVolumeMode: false, nvRef },
+      });
+      expect(nv.opts.meshXRay).toBe(1);
     });
 
     it('rebuilds the mesh (remove + re-add) when the connectome data object changes', () => {
