@@ -57,7 +57,7 @@ const FEATURES = [
     icon: Brain,
     label: 'Neuroimaging',
     description:
-      'Overlay MRI, PET, SPECT and meshes in full 3D and fine-tune each layer — opacity, colormap, order.',
+      'Overlay MRI, PET, SPECT and meshes in full 3D and fine-tune each layer — colormap, threshold, order.',
     anchor: '#feature-neuroimaging',
   },
   {
