@@ -497,12 +497,8 @@ export const NiiViewer = ({
           nv.removeMesh(meshRef.current);
           clearMesh();
         }
-        // Both intracranialLayer and esiLayer are owned upstream (PatientView keeps re-deriving
-        // them from live EEG state) and are untouched by this deletion — without dismissing here,
-        // their hooks' merge effects would see the same non-null layer object on the next render
-        // and re-append the card immediately, since deleting it made it look like a fresh first
-        // appearance. Dismissing suppresses that until the upstream layer actually changes (e.g.
-        // the next voltage update or EEG click).
+        // Both layers are owned upstream and untouched by this deletion — dismiss so each
+        // hook's merge effect doesn't mistake the deleted entry for a fresh first appearance.
         if (isEsi) dismissEsiLayer();
         else dismissIntracranialLayer();
       } else if (layer?.kind === 'mesh') {

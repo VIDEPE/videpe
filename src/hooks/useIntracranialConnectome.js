@@ -49,14 +49,11 @@ export function useIntracranialConnectome({
 }) {
   const intracranialMeshRef = useRef(null); // current intracranial connectome mesh in the scene
   const lastIntracranialLayerRef = useRef(null); // guards against rebuilding on unrelated re-renders
-  // The intracranialLayer object the user explicitly deleted via handleDeleteLayer, if any —
-  // intracranialLayer itself is owned upstream (PatientView keeps re-deriving it from live EEG
-  // state) and is untouched by a card deletion, so without this the merge effect below sees the
-  // very same non-null intracranialLayer on the next render and re-appends it (since deleting
-  // removed it from orderedLayers/layerSettings, making it look like a fresh first appearance).
-  // Compared by reference: a genuinely new intracranialLayer (the next voltage update) always
-  // differs from whatever was dismissed, so it reappears normally as before — only the exact
-  // dismissed object stays suppressed.
+  // The specific intracranialLayer object dismissed via handleDeleteLayer, if any. Not a boolean:
+  // intracranialLayer is a prop that PatientView keeps recomputing from live EEG data, so a plain
+  // "dismissed = true" flag could never be un-set. Storing the reference lets the merge effect
+  // below tell "still that same stale layer" from "genuinely new data" by identity — the
+  // dismissal auto-expires the moment a new object arrives, no explicit undo needed.
   const dismissedIntracranialLayerRef = useRef(null);
 
   // Sanctioned way for the caller to reset intracranialMeshRef after it removes the mesh from
@@ -65,9 +62,8 @@ export function useIntracranialConnectome({
   const clearIntracranialMesh = useCallback(() => {
     intracranialMeshRef.current = null;
   }, []);
-  // Call from handleDeleteLayer when the user closes the intracranial card — marks the
-  // currently-built intracranialLayer (tracked by lastIntracranialLayerRef) as dismissed so the
-  // merge effect stops resurrecting it before the next voltage update actually changes it.
+  // Snapshots whichever object is currently on screen (lastIntracranialLayerRef, kept current by
+  // the build effect below) as dismissed, so the merge effect recognizes and ignores it.
   const dismissIntracranialLayer = useCallback(() => {
     dismissedIntracranialLayerRef.current = lastIntracranialLayerRef.current;
   }, []);

@@ -60,13 +60,11 @@ export function useEsiLayer({
   const esiMeshRef = useRef(null); // current ESI connectome mesh in the scene (connectome mode)
   const esiVolumeRef = useRef(null); // current ESI NVImage volume in the scene (volume mode) — mutually exclusive with esiMeshRef
   const lastEsiLayerRef = useRef(null); // guards against rebuilding on unrelated re-renders — tracks whichever of the two is active
-  // The activeEsiLayer object the user explicitly deleted via handleDeleteLayer, if any — esiLayer
-  // itself is owned upstream (e.g. PatientView) and is untouched by a card deletion, so without
-  // this the merge effect below sees the very same non-null activeEsiLayer on the next render and
-  // re-appends it (since deleting removed it from orderedLayers/layerSettings, making it look like
-  // a fresh first appearance). Compared by reference: a genuinely new activeEsiLayer (new EEG
-  // click, or a mode switch resolving to the other representation) always differs from whatever
-  // was dismissed, so it reappears normally — only the exact dismissed object stays suppressed.
+  // The specific activeEsiLayer object dismissed via handleDeleteLayer, if any. Not a boolean:
+  // esiLayer is a prop that PatientView keeps recomputing (new EEG click), so a plain "dismissed
+  // = true" flag could never be un-set. Storing the reference lets the merge effect below tell
+  // "still that same stale layer" from "genuinely new data" by identity — the dismissal
+  // auto-expires the moment a new object arrives, no explicit undo needed.
   const dismissedEsiLayerRef = useRef(null);
 
   // Sanctioned way for the caller to reset these refs after it removes the mesh/volume from nv
@@ -78,9 +76,8 @@ export function useEsiLayer({
   const clearEsiVolume = useCallback(() => {
     esiVolumeRef.current = null;
   }, []);
-  // Call from handleDeleteLayer when the user closes the ESI card — marks the currently-built
-  // activeEsiLayer (whichever of mesh/volume is live, tracked by lastEsiLayerRef) as dismissed so
-  // the merge effect stops resurrecting it.
+  // Snapshots whichever of mesh/volume is currently on screen (lastEsiLayerRef, kept current by
+  // the build effect below) as dismissed, so the merge effect recognizes and ignores it.
   const dismissEsiLayer = useCallback(() => {
     dismissedEsiLayerRef.current = lastEsiLayerRef.current;
   }, []);
