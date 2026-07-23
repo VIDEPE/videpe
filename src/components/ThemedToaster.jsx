@@ -4,7 +4,7 @@ import { Toaster } from 'react-hot-toast';
 export const ThemedToaster = () => (
   <Toaster
     position="top-left"
-    reverseOrder={false}
+    reverseOrder={true}
     toastOptions={{
       // Ensure toasts follow the app's theme
       style: {
