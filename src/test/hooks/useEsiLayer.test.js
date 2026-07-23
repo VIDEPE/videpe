@@ -250,7 +250,7 @@ describe('useEsiLayer', () => {
       await waitFor(() => expect(nv.volumes).toHaveLength(1));
       expect(nv.volumes[0].cal_min).toBeCloseTo(1); // 0.01 * 100
       expect(nv.volumes[0].cal_max).toBe(100);
-      expect(nv.volumes[0].colormapType).toBe(1); // ZERO_TO_MAX_TRANSLUCENT_BELOW_MIN
+      expect(nv.volumes[0].colormapType).toBe(2); // Hard transition between transparant and opaque
     });
 
     it('removes the stale volume only after the replacement has finished loading', async () => {
