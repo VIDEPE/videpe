@@ -1,6 +1,7 @@
 import { useRef, useEffect, useCallback } from 'react';
 import {
   getInitialLayerSettings,
+  getCurrentMeshXRay,
   makeLayerMergeUpdater,
   makeSettingsMergeUpdater,
   getCalBounds,
@@ -79,8 +80,15 @@ export function useEsiLayer({
     // Add/replace/remove the ESI entry in orderedLayers to match activeEsiLayer
     setOrderedLayers(makeLayerMergeUpdater(activeEsiLayer, ESI_LAYER_URL));
     // Add/remove its settings entry (visible/opacity/isEsiVolume/etc.); leaves an existing entry untouched
-    setLayerSettings(makeSettingsMergeUpdater(activeEsiLayer, ESI_LAYER_URL, isEsiVolumeMode));
-  }, [esiLayer, isEsiVolumeMode, setOrderedLayers, setLayerSettings]);
+    setLayerSettings(
+      makeSettingsMergeUpdater(
+        activeEsiLayer,
+        ESI_LAYER_URL,
+        isEsiVolumeMode,
+        getCurrentMeshXRay(orderedLayers, layerSettings)
+      )
+    );
+  }, [esiLayer, isEsiVolumeMode, orderedLayers, layerSettings, setOrderedLayers, setLayerSettings]);
 
   // Builds/rebuilds/removes the ESI source-power mesh (connectome mode) or NVImage volume
   // (volume mode) whenever esiLayer's data or the Connectome/Volume toggle changes. Same
@@ -176,6 +184,11 @@ export function useEsiLayer({
         edges: activeEsiLayer.edges, // always [] for ESI — source points have no connecting structure
       });
       mesh.opacity = settings.visible ? settings.opacity : 0;
+      // nv.opts.meshXRay is a scene-global NiiVue option, not a per-mesh property, and NiiVue's
+      // own default (0) doesn't match this app's default (1, see getInitialLayerSettings) —
+      // apply it here on build, or the card's slider would show 100% while the mesh actually
+      // renders opaque until the user drags the slider once.
+      nv.opts.meshXRay = settings.meshXRay;
 
       nv.addMesh(mesh); // actually add it to the 3D scene
       esiMeshRef.current = mesh; // track it so the next change/removal can find it
