@@ -212,6 +212,7 @@ function SortableSettingsCard({
             ref={handleRef}
             className="cursor-grab active:cursor-grabbing touch-none shrink-0"
             aria-label={`Drag to reorder ${label}`}
+            title={`Drag to reorder ${label} relative to other layers`}
           >
             <GripVertical
               size={16}
@@ -240,8 +241,8 @@ function SortableSettingsCard({
           type="button"
           onClick={() => onSettingChange(index, 'visible', !settings.visible)}
           className="button button-icon shrink-0"
-          aria-label={`${settings.visible ? 'Hide' : 'Show'} ${label}`}
-          title={`${settings.visible ? 'Hide' : 'Show'} ${label}`}
+          aria-label={`${settings.visible ? 'Hide' : 'Show'} layer: ${label}`}
+          title={`${settings.visible ? 'Hide' : 'Show'} layer: ${label}`}
           aria-pressed={settings.visible}
         >
           {settings.visible ? <Eye size={14} /> : <EyeOff size={14} />}
@@ -252,8 +253,8 @@ function SortableSettingsCard({
           type="button"
           onClick={onToggleExpand}
           className="button button-icon"
-          title={isExpanded ? `Collapse ${label} controls` : `Expand ${label} controls`}
-          aria-label={isExpanded ? `Collapse ${label} controls` : `Expand ${label} controls`}
+          title={isExpanded ? `Collapse layer: ${label}` : `Expand layer: ${label}`}
+          aria-label={isExpanded ? `Collapse layer: ${label}` : `Expand layer: ${label}`}
           aria-expanded={isExpanded}
         >
           {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
@@ -273,7 +274,10 @@ function SortableSettingsCard({
           <div className="border-t border-border px-3 py-1.5 flex flex-col gap-1.5 text-xs">
             {/* Opacity — meaningful for volumes*/}
             {isImageVolume && (
-              <div className="flex items-center gap-3">
+              <div
+                className="flex items-center gap-3"
+                title="Adjust the transparency of this layer (0% = invisible, 100% = fully opaque)"
+              >
                 <span className="w-20 shrink-0 text-foreground select-none pointer-events-none">
                   Opacity
                 </span>
@@ -313,7 +317,12 @@ function SortableSettingsCard({
 
             {/* MeshXRay — meaningful for mesh and commectomes */}
             {!isImageVolume && (
-              <div className="flex items-center gap-3">
+              <div
+                className="flex items-center gap-3 whitespace-pre-wrap"
+                title={
+                  'Adjust the transparency of all meshes/connectomes so structures behind it can show through\n(Note this global setting applies to all meshes/connectomes)'
+                }
+              >
                 <span className="w-20 shrink-0 text-foreground select-none pointer-events-none">
                   Mesh Xray
                 </span>
@@ -356,7 +365,10 @@ function SortableSettingsCard({
                 intracranial electrode connectome or file-loaded meshes, which have no
                 user-adjustable range. */}
             {(isImageVolume || isEsiLayer) && (
-              <div className="flex items-center gap-3">
+              <div
+                className="flex items-center gap-3"
+                title="Set the minimum and maximum intensity values that get colored — values below are hidden, above get capped"
+              >
                 <span className="w-20 shrink-0 text-foreground select-none pointer-events-none">
                   Threshold
                 </span>
@@ -416,7 +428,10 @@ function SortableSettingsCard({
             {/* Colormap — not applicable to connectome or mesh layers, which colour themselves
                 via baked-in node/edge/vertex colors rather than a NiiVue volume colormap */}
             {isImageVolume && (
-              <div className="flex items-center gap-3">
+              <div
+                className="flex items-center gap-3"
+                title="Choose the color scheme for this layer"
+              >
                 <span className="w-20 shrink-0 text-foreground select-none pointer-events-none">
                   Colormap
                 </span>
@@ -437,30 +452,39 @@ function SortableSettingsCard({
 
             <div className="flex flex-row">
               {isEsiLayer && (
-                <div className="w-1/2 flex items-center gap-2.5">
+                <div
+                  className="w-1/2 flex items-center gap-2.5"
+                  title="Switch this ESI layer between a 3D volume rendering and a connectome rendering"
+                >
                   <span className="text-foreground select-none pointer-events-none">Volume</span>
                   <ToggleSwitch
                     checked={settings.isEsiVolume}
                     onChange={(value) => onSettingChange(index, 'isEsiVolume', value)}
                     aria-label={`Show ${label} as volume`}
-                    title={`Show ${label} as volume`}
+                    title="Switch this ESI layer between a 3D volume rendering and a connectome rendering"
                   />
                 </div>
               )}
               {/* Invert / Show colorbar — also not applicable to connectome or mesh layers */}
               {isImageVolume && (
                 <>
-                  <div className="w-1/2 flex items-center gap-2.5">
+                  <div
+                    className="w-1/2 flex items-center gap-2.5"
+                    title="Flip the colormap direction, reversing which color represents high vs. low intensity"
+                  >
                     <span className="text-foreground select-none pointer-events-none">Invert</span>
                     <ToggleSwitch
                       checked={settings.invert}
                       onChange={(value) => onSettingChange(index, 'invert', value)}
                       aria-label={`Invert ${label} colormap`}
-                      title={`Invert ${label} colormap`}
+                      title="Flip the colormap direction, reversing which color represents high vs. low intensity"
                     />
                   </div>
 
-                  <div className="w-1/2 flex items-center gap-2.5">
+                  <div
+                    className="w-1/2 flex items-center gap-2.5"
+                    title="Show or hide the color scale legend for this layer"
+                  >
                     <span className="text-foreground select-none pointer-events-none">
                       Colorbar
                     </span>
@@ -468,7 +492,7 @@ function SortableSettingsCard({
                       checked={settings.showColorbar}
                       onChange={(value) => onSettingChange(index, 'showColorbar', value)}
                       aria-label={`Show ${label} colorbar`}
-                      title={`Show ${label} colorbar`}
+                      title="Show or hide the color scale legend for this layer"
                     />
                   </div>
                 </>
@@ -480,8 +504,8 @@ function SortableSettingsCard({
                   className="text-foreground hover:text-alert cursor-pointer"
                   type="button"
                   onClick={() => onDeleteLayer(index)}
-                  aria-label={`Close ${label} volume`}
-                  title={`Close ${label} volume`}
+                  aria-label={`Close layer: ${label}`}
+                  title={`Close layer: ${label}`}
                 >
                   <X size={16} />
                 </button>

@@ -62,18 +62,18 @@ describe('ImagingControls', () => {
 
     it('shows Hide button when volume is visible', () => {
       renderControls([makeVolume('MRI', '/mri.nii')], [makeSettings({ visible: true })]);
-      expect(screen.getByRole('button', { name: 'Hide MRI' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /hide.*mri/i })).toBeInTheDocument();
     });
 
     it('shows Show button when volume is hidden', () => {
       renderControls([makeVolume('MRI', '/mri.nii')], [makeSettings({ visible: false })]);
-      expect(screen.getByRole('button', { name: 'Show MRI' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /show.*mri/i })).toBeInTheDocument();
     });
 
     it('calls onSettingChange with visible=false when clicking Hide', async () => {
       const onSettingChange = vi.fn();
       renderControls([makeVolume('MRI', '/mri.nii')], [makeSettings()], onSettingChange);
-      await userEvent.click(screen.getByRole('button', { name: 'Hide MRI' }));
+      await userEvent.click(screen.getByRole('button', { name: /hide.*mri/i }));
       expect(onSettingChange).toHaveBeenCalledWith(0, 'visible', false);
     });
 
@@ -84,7 +84,7 @@ describe('ImagingControls', () => {
         [makeSettings({ visible: false })],
         onSettingChange
       );
-      await userEvent.click(screen.getByRole('button', { name: 'Show MRI' }));
+      await userEvent.click(screen.getByRole('button', { name: /show.*mri/i }));
       expect(onSettingChange).toHaveBeenCalledWith(0, 'visible', true);
     });
   });
@@ -101,17 +101,17 @@ describe('ImagingControls', () => {
 
     it('clicking Expand shows the controls', async () => {
       renderControls([makeVolume('MRI', '/mri.nii')], [makeSettings()]);
-      await userEvent.click(screen.getByRole('button', { name: 'Expand MRI controls' }));
+      await userEvent.click(screen.getByRole('button', { name: /expand.*mri/i }));
       expect(screen.getByLabelText('MRI opacity')).toBeInTheDocument();
       expect(screen.getByLabelText('MRI colormap')).toBeInTheDocument();
-      expect(screen.getByRole('switch', { name: 'Invert MRI colormap' })).toBeInTheDocument();
-      expect(screen.getByRole('switch', { name: 'Show MRI colorbar' })).toBeInTheDocument();
+      expect(screen.getByRole('switch', { name: /invert.*mri/i })).toBeInTheDocument();
+      expect(screen.getByRole('switch', { name: /mri.*colorbar/i })).toBeInTheDocument();
     });
 
     it('clicking Collapse hides the controls again', async () => {
       renderControls([makeVolume('MRI', '/mri.nii')], [makeSettings()]);
-      await userEvent.click(screen.getByRole('button', { name: 'Expand MRI controls' }));
-      await userEvent.click(screen.getByRole('button', { name: 'Collapse MRI controls' }));
+      await userEvent.click(screen.getByRole('button', { name: /expand.*mri/i }));
+      await userEvent.click(screen.getByRole('button', { name: /collapse.*mri/i }));
       // Controls are always rendered (for the collapse animation) but hidden via aria-hidden on the wrapper
       expect(screen.getByLabelText('MRI opacity').closest('[aria-hidden]')).toHaveAttribute(
         'aria-hidden',
@@ -124,10 +124,10 @@ describe('ImagingControls', () => {
         [makeVolume('MRI', '/mri.nii'), makeVolume('PET', '/pet.nii')],
         [makeSettings(), makeSettings({ colormap: 'viridis' })]
       );
-      await userEvent.click(screen.getByRole('button', { name: 'Expand MRI controls' }));
+      await userEvent.click(screen.getByRole('button', { name: /expand.*mri/i }));
       expect(screen.getByLabelText('MRI opacity')).toBeInTheDocument();
 
-      await userEvent.click(screen.getByRole('button', { name: 'Expand PET controls' }));
+      await userEvent.click(screen.getByRole('button', { name: /expand.*pet/i }));
       // Controls are always rendered (for the collapse animation) but hidden via aria-hidden on the wrapper
       expect(screen.getByLabelText('MRI opacity').closest('[aria-hidden]')).toHaveAttribute(
         'aria-hidden',
@@ -154,7 +154,10 @@ describe('ImagingControls', () => {
         onSettingChange,
         onDeleteVolume
       );
-      await userEvent.click(screen.getByRole('button', { name: `Expand ${volumeType} controls` }));
+      // Find the expand button of the just created rendercontrol and click it
+      await userEvent.click(
+        screen.getByRole('button', { name: new RegExp(`expand.*${volumeType}`, 'i') })
+      );
       return { onSettingChange, onDeleteVolume };
     };
 
@@ -210,7 +213,7 @@ describe('ImagingControls', () => {
 
     it('invert toggle reflects current invert state', async () => {
       await setup('MRI', makeSettings({ invert: false }));
-      expect(screen.getByRole('switch', { name: 'Invert MRI colormap' })).toHaveAttribute(
+      expect(screen.getByRole('switch', { name: /invert.*mri/i })).toHaveAttribute(
         'aria-checked',
         'false'
       );
@@ -218,13 +221,13 @@ describe('ImagingControls', () => {
 
     it('invert toggle click calls onSettingChange with toggled value', async () => {
       const { onSettingChange } = await setup('MRI', makeSettings({ invert: false }));
-      await userEvent.click(screen.getByRole('switch', { name: 'Invert MRI colormap' }));
+      await userEvent.click(screen.getByRole('switch', { name: /invert.*mri/i }));
       expect(onSettingChange).toHaveBeenCalledWith(0, 'invert', true);
     });
 
     it('colorbar toggle click calls onSettingChange with toggled value', async () => {
       const { onSettingChange } = await setup('MRI', makeSettings({ showColorbar: false }));
-      await userEvent.click(screen.getByRole('switch', { name: 'Show MRI colorbar' }));
+      await userEvent.click(screen.getByRole('switch', { name: /mri.*colorbar/i }));
       expect(onSettingChange).toHaveBeenCalledWith(0, 'showColorbar', true);
     });
 
@@ -252,9 +255,9 @@ describe('ImagingControls', () => {
       );
 
       // click expand on the 2nd (=> index = 1 )
-      await userEvent.click(screen.getByRole('button', { name: `Expand PET controls` }));
+      await userEvent.click(screen.getByRole('button', { name: /expand.*pet/i }));
       // click the delete volume button
-      await userEvent.click(screen.getByRole('button', { name: 'Close PET volume' }));
+      await userEvent.click(screen.getByRole('button', { name: /close.*pet/i }));
       // expect onDeleteVolume to be called with index 1
       expect(onDeleteVolume).toHaveBeenCalledWith(1);
     });
@@ -263,7 +266,7 @@ describe('ImagingControls', () => {
   describe('threshold', () => {
     const setup = async (settings, onSettingChange = vi.fn()) => {
       renderControls([makeVolume('MRI', '/mri.nii')], [settings], onSettingChange);
-      await userEvent.click(screen.getByRole('button', { name: 'Expand MRI controls' }));
+      await userEvent.click(screen.getByRole('button', { name: /expand.*mri/i }));
       return { onSettingChange };
     };
 
@@ -361,7 +364,7 @@ describe('ImagingControls', () => {
         [makeSettings()]
       );
       await userEvent.click(
-        screen.getByRole('button', { name: 'Expand Intracranial - Electrodes controls' })
+        screen.getByRole('button', { name: /expand.*intracranial - electrodes/i })
       );
       expect(
         screen.queryByLabelText('Intracranial - Electrodes Threshold minimum')
@@ -380,7 +383,7 @@ describe('ImagingControls', () => {
         [makeSettings()]
       );
       await userEvent.click(
-        screen.getByRole('button', { name: 'Expand Electrical Source Imaging controls' })
+        screen.getByRole('button', { name: /expand.*electrical source imaging/i })
       );
       expect(
         screen.getByLabelText('Electrical Source Imaging Threshold minimum')
@@ -399,22 +402,22 @@ describe('ImagingControls', () => {
     it('does not render Colormap, Invert, or Colorbar controls for a connectome-kind layer', async () => {
       renderControls([makeIntracranialLayer()], [makeSettings()]);
       await userEvent.click(
-        screen.getByRole('button', { name: 'Expand Intracranial - Electrodes controls' })
+        screen.getByRole('button', { name: /expand.*intracranial - electrodes/i })
       );
 
       expect(screen.queryByLabelText('Intracranial - Electrodes colormap')).not.toBeInTheDocument();
       expect(
-        screen.queryByRole('switch', { name: 'Invert Intracranial - Electrodes colormap' })
+        screen.queryByRole('switch', { name: /invert.*intracranial - electrodes/i })
       ).not.toBeInTheDocument();
       expect(
-        screen.queryByRole('switch', { name: 'Show Intracranial - Electrodes colorbar' })
+        screen.queryByRole('switch', { name: /intracranial - electrodes.*colorbar/i })
       ).not.toBeInTheDocument();
     });
 
     it('renders the Mesh Xray slider (not Opacity) and the Delete button for a connectome-kind layer', async () => {
       renderControls([makeIntracranialLayer()], [makeSettings()]);
       await userEvent.click(
-        screen.getByRole('button', { name: 'Expand Intracranial - Electrodes controls' })
+        screen.getByRole('button', { name: /expand.*intracranial - electrodes/i })
       );
 
       expect(
@@ -424,7 +427,7 @@ describe('ImagingControls', () => {
         screen.queryByLabelText('Intracranial - Electrodes opacity slider')
       ).not.toBeInTheDocument();
       expect(
-        screen.getByRole('button', { name: 'Close Intracranial - Electrodes volume' })
+        screen.getByRole('button', { name: /close.*intracranial - electrodes/i })
       ).toBeInTheDocument();
     });
 
@@ -432,7 +435,7 @@ describe('ImagingControls', () => {
       renderControls([makeIntracranialLayer()], [makeSettings()]);
 
       expect(
-        screen.getByRole('button', { name: 'Hide Intracranial - Electrodes' })
+        screen.getByRole('button', { name: /hide.*intracranial - electrodes/i })
       ).toBeInTheDocument();
     });
 
@@ -451,11 +454,11 @@ describe('ImagingControls', () => {
 
     it('renders Colormap/Invert/Colorbar controls normally for non-connectome layers (regression)', async () => {
       renderControls([makeVolume('MRI', '/mri.nii')], [makeSettings()]);
-      await userEvent.click(screen.getByRole('button', { name: 'Expand MRI controls' }));
+      await userEvent.click(screen.getByRole('button', { name: /expand.*mri/i }));
 
       expect(screen.getByLabelText('MRI colormap')).toBeInTheDocument();
-      expect(screen.getByRole('switch', { name: 'Invert MRI colormap' })).toBeInTheDocument();
-      expect(screen.getByRole('switch', { name: 'Show MRI colorbar' })).toBeInTheDocument();
+      expect(screen.getByRole('switch', { name: /invert.*mri/i })).toBeInTheDocument();
+      expect(screen.getByRole('switch', { name: /mri.*colorbar/i })).toBeInTheDocument();
     });
   });
 
@@ -471,7 +474,7 @@ describe('ImagingControls', () => {
     const setup = async (settings, onSettingChange = vi.fn()) => {
       renderControls([makeIntracranialLayer()], [settings], onSettingChange);
       await userEvent.click(
-        screen.getByRole('button', { name: 'Expand Intracranial - Electrodes controls' })
+        screen.getByRole('button', { name: /expand.*intracranial - electrodes/i })
       );
       return { onSettingChange };
     };
@@ -516,7 +519,7 @@ describe('ImagingControls', () => {
 
     it('does not render for an image-volume layer, which shows Opacity instead (regression)', async () => {
       renderControls([makeVolume('MRI', '/mri.nii')], [makeSettings()]);
-      await userEvent.click(screen.getByRole('button', { name: 'Expand MRI controls' }));
+      await userEvent.click(screen.getByRole('button', { name: /expand.*mri/i }));
 
       expect(screen.queryByLabelText('MRI meshXRay slider')).not.toBeInTheDocument();
       expect(screen.getByLabelText('MRI opacity slider')).toBeInTheDocument();
@@ -527,7 +530,7 @@ describe('ImagingControls', () => {
         [{ type: 'Mesh', subtype: 'cortex', url: 'blob:cortex', kind: 'mesh' }],
         [makeSettings({ meshXRay: 0.6 })]
       );
-      await userEvent.click(screen.getByRole('button', { name: 'Expand Mesh - cortex controls' }));
+      await userEvent.click(screen.getByRole('button', { name: /expand.*mesh - cortex/i }));
 
       expect(screen.getByLabelText('Mesh - cortex meshXRay slider')).toBeInTheDocument();
       expect(screen.queryByLabelText('Mesh - cortex opacity slider')).not.toBeInTheDocument();
