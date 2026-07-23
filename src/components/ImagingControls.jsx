@@ -241,8 +241,8 @@ function SortableSettingsCard({
           type="button"
           onClick={() => onSettingChange(index, 'visible', !settings.visible)}
           className="button button-icon shrink-0"
-          aria-label={`${settings.visible ? 'Hide' : 'Show'} ${label}`}
-          title={`${settings.visible ? 'Hide' : 'Show'} ${label}`}
+          aria-label={`${settings.visible ? 'Hide' : 'Show'} layer: ${label}`}
+          title={`${settings.visible ? 'Hide' : 'Show'} layer: ${label}`}
           aria-pressed={settings.visible}
         >
           {settings.visible ? <Eye size={14} /> : <EyeOff size={14} />}
@@ -253,8 +253,8 @@ function SortableSettingsCard({
           type="button"
           onClick={onToggleExpand}
           className="button button-icon"
-          title={isExpanded ? `Collapse ${label} controls` : `Expand ${label} controls`}
-          aria-label={isExpanded ? `Collapse ${label} controls` : `Expand ${label} controls`}
+          title={isExpanded ? `Collapse layer: ${label}` : `Expand layer: ${label}`}
+          aria-label={isExpanded ? `Collapse layer: ${label}` : `Expand layer: ${label}`}
           aria-expanded={isExpanded}
         >
           {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
@@ -504,8 +504,8 @@ function SortableSettingsCard({
                   className="text-foreground hover:text-alert cursor-pointer"
                   type="button"
                   onClick={() => onDeleteLayer(index)}
-                  aria-label={`Close ${label} volume`}
-                  title={`Close ${label} volume`}
+                  aria-label={`Close layer: ${label}`}
+                  title={`Close layer: ${label}`}
                 >
                   <X size={16} />
                 </button>
