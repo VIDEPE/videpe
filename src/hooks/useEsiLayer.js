@@ -217,7 +217,7 @@ export function useEsiLayer({
           // @niivue/niivue, only a TS-only enum). Voxels below cal_min get a hard alpha=0
           // cutoff in NiiVue's shader — unlike type 1's smooth (f/cal_min)² ramp, there's no
           // continuous scaling near-zero values can land on unpredictably.
-          nvVolume.colormapType = 1;
+          nvVolume.colormapType = 2;
 
           if (staleVolume) {
             const staleIndex = nv.volumes.indexOf(staleVolume);
