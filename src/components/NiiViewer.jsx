@@ -223,6 +223,7 @@ export const NiiViewer = ({
   const opacityRafRef = useRef(null); // rAF id — cancelled on each drag so only the latest value redraws
   const thresholdRafRef = useRef(null); // rAF id — cancelled on each drag so only the latest value redraws
   const meshXRayRafRef = useRef(null); // rAF id — cancelled on each drag so only the latest value redraws
+  const settingsCommitRafRef = useRef(null); // rAF id — throttles the layerSettings React commit itself to once per frame, so it matches the once-per-frame GL redraw above instead of re-rendering the whole card list on every Radix onValueChange tick
   const fileMeshesRef = useRef(new Map()); // url → NVMesh for surface meshes loaded from files; keyed by url since nv.meshes also holds connectome meshes
 
   // ─── Derived values ─────────────────────────────────────────────────────────
@@ -316,9 +317,22 @@ export const NiiViewer = ({
           index === layerIndex ? { ...layerSetting, ...layerUpdate } : layerSetting
         );
       }
-      setLayerSettings(nextLayerSettings);
+      // Throttled to once per animation frame — cancelling any pending commit and scheduling the
+      // latest one, same pattern as the GL redraw below. This matters for slider drags
+      // (opacity/threshold/meshXRay), which can call this several times per frame; it's a no-op
+      // cost for single-fire changes (visible/colormap/isEsiVolume/...) since those only ever
+      // call this once, so they still land on the very next frame either way.
+      if (settingsCommitRafRef.current) cancelAnimationFrame(settingsCommitRafRef.current);
+      settingsCommitRafRef.current = requestAnimationFrame(() => {
+        settingsCommitRafRef.current = null;
+        setLayerSettings(nextLayerSettings);
+      });
       // Persisted independently of layerSettings so the Connectome/Volume toggle survives
       // handleDeleteLayer wiping the ESI settings entry — see lastEsiVolumeMode's declaration.
+      // setLastEsiVolumeMode fires synchronously here (unlike the throttled setLayerSettings
+      // above), but that's safe: the `?? lastEsiVolumeMode` fallback above only ever kicks in
+      // when the ESI settings entry is entirely absent (deleted), not when it's merely one frame
+      // stale, so the two being on different schedules doesn't produce a wrong intermediate value.
       if (key === 'isEsiVolume') setLastEsiVolumeMode(value);
 
       if (!nvRef.current) return;

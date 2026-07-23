@@ -547,6 +547,25 @@ describe('filesToLayers', () => {
 });
 
 describe('NiiViewer', () => {
+  // requestAnimationFrame is stubbed to run its callback immediately (instead of waiting for a
+  // real animation frame) for the whole suite, not just the settings-change tests below: every
+  // opacity/threshold/meshXRay write and the layerSettings React commit itself are now throttled
+  // through rAF (see NiiViewer.jsx's opacityRafRef/thresholdRafRef/meshXRayRafRef/
+  // settingsCommitRafRef), and jsdom's real rAF is timer-backed rather than instant, so leaving
+  // it un-stubbed would make assertions dependent on real wall-clock timing instead of failing
+  // deterministically.
+  beforeEach(() => {
+    vi.stubGlobal('requestAnimationFrame', (cb) => {
+      cb();
+      return 0;
+    });
+    vi.stubGlobal('cancelAnimationFrame', () => {});
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   describe('getInitialLayerSettings', () => {
     it('starts all layers visible', () => {
       const result = getInitialLayerSettings([{ type: 'MRI' }, { type: 'PET' }, { type: 'SPECT' }]);
@@ -833,20 +852,8 @@ describe('NiiViewer', () => {
 
     describe('opacity/threshold — throttled through requestAnimationFrame', () => {
       // opacity and cal_min/cal_max/cal_range writes are throttled to one GL redraw per frame
-      // (see applyVolumeSettingChange in NiiViewer.jsx) — the mock instance instead of the real
-      // one so assertions right after fireEvent.change don't have to wait a real animation frame.
-      beforeEach(() => {
-        vi.stubGlobal('requestAnimationFrame', (cb) => {
-          cb();
-          return 0;
-        });
-        vi.stubGlobal('cancelAnimationFrame', () => {});
-      });
-
-      afterEach(() => {
-        vi.unstubAllGlobals();
-      });
-
+      // (see applyVolumeSettingChange in NiiViewer.jsx) — rAF is stubbed synchronous for the
+      // whole suite (see the top of this describe('NiiViewer', ...) block).
       it("calls nv.setOpacity with the new value when a visible volume's opacity changes", async () => {
         const nv = await setup();
         await userEvent.click(screen.getByRole('button', { name: /expand.*mri/i }));
@@ -879,23 +886,9 @@ describe('NiiViewer', () => {
       kind: 'mesh',
     };
 
-    // meshXRay's nv-side write is now throttled through requestAnimationFrame (one redraw per
-    // frame — see applyConnectomeSettingChange/applyFileMeshSettingChange in NiiViewer.jsx), so
-    // it no longer happens in the same tick as fireEvent.change. Stub rAF to run its callback
-    // immediately instead of waiting for a real animation frame, so assertions right after
-    // fireEvent.change can still check the result synchronously.
-    beforeEach(() => {
-      vi.stubGlobal('requestAnimationFrame', (cb) => {
-        cb();
-        return 0;
-      });
-      vi.stubGlobal('cancelAnimationFrame', () => {});
-    });
-
-    afterEach(() => {
-      vi.unstubAllGlobals();
-    });
-
+    // meshXRay's nv-side write is throttled through requestAnimationFrame (one redraw per frame
+    // — see applyConnectomeSettingChange/applyFileMeshSettingChange in NiiViewer.jsx); rAF is
+    // stubbed synchronous for the whole suite (see the top of this describe('NiiViewer', ...) block).
     it('writes to nv.opts.meshXRay (not a top-level nv property) and calls updateGLVolume', async () => {
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
@@ -1403,20 +1396,8 @@ describe('NiiViewer', () => {
       // the UI, on any layer, not just this one.
       //
       // The nv-side redraw is throttled to one per frame (see applyConnectomeSettingChange in
-      // NiiViewer.jsx) — stub rAF to run synchronously so assertions right after
-      // fireEvent.change don't have to wait a real animation frame.
-      beforeEach(() => {
-        vi.stubGlobal('requestAnimationFrame', (cb) => {
-          cb();
-          return 0;
-        });
-        vi.stubGlobal('cancelAnimationFrame', () => {});
-      });
-
-      afterEach(() => {
-        vi.unstubAllGlobals();
-      });
-
+      // NiiViewer.jsx); rAF is stubbed synchronous for the whole suite (see the top of this
+      // describe('NiiViewer', ...) block).
       it('sets mesh node/edge color range from the dragged threshold and calls updateMesh + updateGLVolume', async () => {
         const { Niivue } = await import('@niivue/niivue');
         const nvRef = { current: new Niivue() };
