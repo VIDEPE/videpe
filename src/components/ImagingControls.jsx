@@ -318,8 +318,10 @@ function SortableSettingsCard({
             {/* MeshXRay — meaningful for mesh and commectomes */}
             {!isImageVolume && (
               <div
-                className="flex items-center gap-3"
-                title="Adjust the transparency of the mesh surface so structures behind it can show through"
+                className="flex items-center gap-3 whitespace-pre-wrap"
+                title={
+                  'Adjust the transparency of all meshes/connectomes so structures behind it can show through\n(Note this global setting applies to all meshes/connectomes)'
+                }
               >
                 <span className="w-20 shrink-0 text-foreground select-none pointer-events-none">
                   Mesh Xray
@@ -365,7 +367,7 @@ function SortableSettingsCard({
             {(isImageVolume || isEsiLayer) && (
               <div
                 className="flex items-center gap-3"
-                title="Set the minimum and maximum intensity values that get colored — values outside this range are hidden"
+                title="Set the minimum and maximum intensity values that get colored — values below are hidden, above get capped"
               >
                 <span className="w-20 shrink-0 text-foreground select-none pointer-events-none">
                   Threshold
@@ -428,7 +430,7 @@ function SortableSettingsCard({
             {isImageVolume && (
               <div
                 className="flex items-center gap-3"
-                title="Choose the color scheme used to represent intensity values in this layer"
+                title="Choose the color scheme for this layer"
               >
                 <span className="w-20 shrink-0 text-foreground select-none pointer-events-none">
                   Colormap
@@ -452,14 +454,14 @@ function SortableSettingsCard({
               {isEsiLayer && (
                 <div
                   className="w-1/2 flex items-center gap-2.5"
-                  title="Switch this ESI layer between a 3D volume rendering and a connectome (mesh) rendering"
+                  title="Switch this ESI layer between a 3D volume rendering and a connectome rendering"
                 >
                   <span className="text-foreground select-none pointer-events-none">Volume</span>
                   <ToggleSwitch
                     checked={settings.isEsiVolume}
                     onChange={(value) => onSettingChange(index, 'isEsiVolume', value)}
                     aria-label={`Show ${label} as volume`}
-                    title={`Show ${label} as volume`}
+                    title="Switch this ESI layer between a 3D volume rendering and a connectome rendering"
                   />
                 </div>
               )}
@@ -468,14 +470,14 @@ function SortableSettingsCard({
                 <>
                   <div
                     className="w-1/2 flex items-center gap-2.5"
-                    title="Flip the colormap direction, reversing which end represents high vs. low intensity"
+                    title="Flip the colormap direction, reversing which color represents high vs. low intensity"
                   >
                     <span className="text-foreground select-none pointer-events-none">Invert</span>
                     <ToggleSwitch
                       checked={settings.invert}
                       onChange={(value) => onSettingChange(index, 'invert', value)}
                       aria-label={`Invert ${label} colormap`}
-                      title={`Invert ${label} colormap`}
+                      title="Flip the colormap direction, reversing which color represents high vs. low intensity"
                     />
                   </div>
 
@@ -490,7 +492,7 @@ function SortableSettingsCard({
                       checked={settings.showColorbar}
                       onChange={(value) => onSettingChange(index, 'showColorbar', value)}
                       aria-label={`Show ${label} colorbar`}
-                      title={`Show ${label} colorbar`}
+                      title="Show or hide the color scale legend for this layer"
                     />
                   </div>
                 </>
