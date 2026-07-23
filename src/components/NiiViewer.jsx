@@ -133,6 +133,13 @@ function applyVolumeSettingChange({
     }
   } else if (key === 'colormap') {
     nv.setColormap(nvVolume.id, value);
+    // setColormap's internal updateGLVolume() re-triggers NiiVue's own cal_min/cal_max
+    // auto-scan, which would otherwise silently overwrite the user's chosen threshold right
+    // after it's set (same requirement as syncVolumesAndApplySettings's initial-load path).
+    const { boundMin, boundMax } = getCalBounds(layer, nvVolume);
+    nvVolume.cal_min = fractionToCalValue(settings.cal_min, boundMin, boundMax);
+    nvVolume.cal_max = fractionToCalValue(settings.cal_max, boundMin, boundMax);
+    nv.updateGLVolume();
   } else if (key === 'invert') {
     nvVolume.colormapInvert = value;
     nv.updateGLVolume();

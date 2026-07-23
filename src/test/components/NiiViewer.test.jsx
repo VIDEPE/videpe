@@ -705,6 +705,38 @@ describe('NiiViewer', () => {
       // toHaveBeenLastCalledWith isolates the handleSettingChange call from the initial syncVolumesAndApplySettings call
       expect(nv.setColormap).toHaveBeenLastCalledWith('mri-id', 'magma');
     });
+
+    it('reapplies the user-chosen cal_min/cal_max after a colormap change, since NiiVue setColormap triggers its own cal auto-scan internally', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'MRI', url: '/mri.nii', id: 'mri-id' }]} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      const nv = nvRef.current;
+      const nvVolume = nv.volumes[0];
+      // Mirrors real NiiVue: setColormap's internal updateGLVolume() re-runs its own
+      // cal_min/cal_max auto-scan, resetting them back to the volume's full range.
+      nv.setColormap.mockImplementation(() => {
+        nvVolume.cal_min = 0;
+        nvVolume.cal_max = 1;
+      });
+
+      await userEvent.click(screen.getByRole('button', { name: /expand.*mri/i }));
+      fireEvent.change(screen.getByLabelText('MRI Threshold minimum'), { target: { value: '40' } });
+      // mockClear() resets a vi.fn() mock's recorded call history (call count, arguments) back to empty
+      // wiping out the record of the updateGLVolume() that changing the colormap triggered internally. 
+      // This allows expect(nv.updateGLVolume).toHaveBeenCalled()  to only reflects a updateGLVolume that 
+      // has been run again AFTER the colormap and cal_min/max changes.
+      nv.updateGLVolume.mockClear();
+
+      await userEvent.selectOptions(screen.getByLabelText('MRI colormap'), 'magma');
+
+      // The user's own threshold (40%) must survive setColormap's reset...
+      expect(nvVolume.cal_min).toBeCloseTo(0.4);
+      // ...and the canvas must actually be redrawn with it — setting nvVolume.cal_min alone,
+      // without a following updateGLVolume(), would leave the (reset) old threshold on screen.
+      expect(nv.updateGLVolume).toHaveBeenCalled();
+    });
   });
 
   describe('canvas aspect ratio layout', () => {
