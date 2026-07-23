@@ -214,6 +214,10 @@ export const AboutPage = () => {
                   <li>Configurable number of simultaneously visible channels</li>
                   <li>Min-max downsampling keeps rendering fast at any zoom level</li>
                   <li>
+                    Drag-to-resize handle on the plot row to trade channel height for more visible
+                    channels
+                  </li>
+                  <li>
                     EEG topography — a resizable panel showing a 3D voltage map at the selected time
                     point using{' '}
                     <a
@@ -256,10 +260,12 @@ export const AboutPage = () => {
                   style={{ color: 'var(--c-foreground)' }}
                 >
                   <li>
-                    Multi-layer support for MRI, PET, SPECT and meshes in one view. Supports NIfTI (.nii, .nii.gz), MGH/MGZ, GIFTI, PLY, OBJ
+                    Multi-layer support for MRI, PET, SPECT and meshes in one view. Supports NIfTI
+                    (.nii, .nii.gz), MGH/MGZ, GIFTI, PLY, OBJ
                   </li>
                   <li>
-                    Per-layer opacity, colormap, colorbar, inversion and threshold controls
+                    Per-layer opacity/mesh xray, colormap, colorbar, inversion and threshold
+                    controls
                   </li>
                   <li>
                     Drag-to-reorder layers, with a modality subtype label shown on each volume

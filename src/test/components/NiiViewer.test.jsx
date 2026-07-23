@@ -1,14 +1,18 @@
 import { StrictMode } from 'react';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, assert } from 'vitest';
 import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { getInitialLayerSettings, detectVolumeType, filesToLayers } from '@/utils/NiiViewer.utils';
+import {
+  getInitialLayerSettings,
+  detectVolumeType,
+  filesToLayers,
+  ESI_LAYER_URL,
+} from '@/utils/NiiViewer.utils';
 import {
   NiiViewer,
   syncVolumesAndApplySettings,
   syncMeshesAndApplySettings,
 } from '@/components/NiiViewer';
-
 // Mirrors the real @niivue/niivue MESH_EXTENSIONS list closely enough to exercise
 // isMeshExt's actual extension-based routing without pulling in the real package.
 const MOCK_MESH_EXTENSIONS = [
@@ -70,6 +74,32 @@ const makeIntracranialLayer = (overrides = {}) => ({
   ...overrides,
 });
 
+const makeConnectomeLayer = (overrides = {}) => ({
+  url: ESI_LAYER_URL,
+  name: 'ESI Source Power',
+  kind: 'connectome',
+  nodes: [{ name: 'esi-src-0', x: 0, y: 0, z: 0, colorValue: 0.5, sizeValue: 0.5 }],
+  edges: [],
+  boundMin: 0,
+  boundMax: 1,
+  ...overrides,
+});
+
+const makeVolumeLayer = (overrides = {}) => ({
+  url: ESI_LAYER_URL,
+  name: 'ESI Source Power.nii',
+  bytes: new Uint8Array([1, 2, 3]),
+  kind: 'volume',
+  boundMin: 0,
+  boundMax: 1,
+  ...overrides,
+});
+
+const makeEsiLayer = ({ connectome, volume } = {}) => ({
+  sourcePowerConnectomes: connectome ?? makeConnectomeLayer(),
+  sourcePowerVolume: volume ?? makeVolumeLayer(),
+});
+
 vi.mock('react-hot-toast', () => ({
   default: {
     error: vi.fn(),
@@ -99,10 +129,15 @@ vi.mock('@niivue/niivue', () => ({
       addColormap: vi.fn(),
       // loadConnectomeAsMesh is synchronous in real NiiVue (returns but doesn't add the mesh) —
       // mirror that by handing back a plain object carrying the json's properties plus the
-      // opacity/visible defaults the real NVConnectome constructor would apply.
-      loadConnectomeAsMesh: vi
-        .fn()
-        .mockImplementation((json) => ({ ...json, opacity: 1, visible: true })),
+      // opacity/visible defaults the real NVConnectome constructor would apply, plus a stubbed
+      // updateMesh — the real NVConnectome recomputes its color buffers there, called whenever
+      // the Threshold slider changes (see applyConnectomeSettingChange in NiiViewer.jsx).
+      loadConnectomeAsMesh: vi.fn().mockImplementation((json) => ({
+        ...json,
+        opacity: 1,
+        visible: true,
+        updateMesh: vi.fn(),
+      })),
       addMesh: vi.fn().mockImplementation(function (mesh) {
         // mirrors what real NiiVue does — appends the mesh to the existing ones
         instance.meshes = [...instance.meshes, mesh];
@@ -302,7 +337,12 @@ describe('syncVolumesAndApplySettings', () => {
 
 describe('syncMeshesAndApplySettings', () => {
   const makeMeshLayer = (url, name) => ({ url, name, kind: 'mesh' });
-  const makeMeshSetting = (overrides = {}) => ({ visible: true, opacity: 0.6, ...overrides });
+  const makeMeshSetting = (overrides = {}) => ({
+    visible: true,
+    opacity: 0.6,
+    meshXRay: 1,
+    ...overrides,
+  });
 
   let nv;
   beforeEach(() => {
@@ -316,6 +356,7 @@ describe('syncMeshesAndApplySettings', () => {
         return added;
       }),
       updateGLVolume: vi.fn(),
+      opts: {},
     };
   });
 
@@ -512,6 +553,25 @@ describe('filesToLayers', () => {
 });
 
 describe('NiiViewer', () => {
+  // requestAnimationFrame is stubbed to run its callback immediately (instead of waiting for a
+  // real animation frame) for the whole suite, not just the settings-change tests below: every
+  // opacity/threshold/meshXRay write and the layerSettings React commit itself are now throttled
+  // through rAF (see NiiViewer.jsx's opacityRafRef/thresholdRafRef/meshXRayRafRef/
+  // settingsCommitRafRef), and jsdom's real rAF is timer-backed rather than instant, so leaving
+  // it un-stubbed would make assertions dependent on real wall-clock timing instead of failing
+  // deterministically.
+  beforeEach(() => {
+    vi.stubGlobal('requestAnimationFrame', (cb) => {
+      cb();
+      return 0;
+    });
+    vi.stubGlobal('cancelAnimationFrame', () => {});
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   describe('getInitialLayerSettings', () => {
     it('starts all layers visible', () => {
       const result = getInitialLayerSettings([{ type: 'MRI' }, { type: 'PET' }, { type: 'SPECT' }]);
@@ -668,12 +728,44 @@ describe('NiiViewer', () => {
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
 
       // Expand the MRI card and change the colormap
-      await userEvent.click(screen.getByRole('button', { name: 'Expand MRI controls' }));
+      await userEvent.click(screen.getByRole('button', { name: /expand.*mri/i }));
       await userEvent.selectOptions(screen.getByLabelText('MRI colormap'), 'magma');
 
       const nv = nvRef.current;
       // toHaveBeenLastCalledWith isolates the handleSettingChange call from the initial syncVolumesAndApplySettings call
       expect(nv.setColormap).toHaveBeenLastCalledWith('mri-id', 'magma');
+    });
+
+    it('reapplies the user-chosen cal_min/cal_max after a colormap change, since NiiVue setColormap triggers its own cal auto-scan internally', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'MRI', url: '/mri.nii', id: 'mri-id' }]} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      const nv = nvRef.current;
+      const nvVolume = nv.volumes[0];
+      // Mirrors real NiiVue: setColormap's internal updateGLVolume() re-runs its own
+      // cal_min/cal_max auto-scan, resetting them back to the volume's full range.
+      nv.setColormap.mockImplementation(() => {
+        nvVolume.cal_min = 0;
+        nvVolume.cal_max = 1;
+      });
+
+      await userEvent.click(screen.getByRole('button', { name: /expand.*mri/i }));
+      fireEvent.change(screen.getByLabelText('MRI Threshold minimum'), { target: { value: '40' } });
+      // mockClear() resets a vi.fn() mock's recorded call history (call count, arguments) back to empty
+      // wiping out the record of the updateGLVolume() that changing the colormap triggered internally.
+      // This allows expect(nv.updateGLVolume).toHaveBeenCalled()  to only reflects a updateGLVolume that
+      // has been run again AFTER the colormap and cal_min/max changes.
+      nv.updateGLVolume.mockClear();
+
+      await userEvent.selectOptions(screen.getByLabelText('MRI colormap'), 'magma');
+
+      // The user's own threshold (40%) must survive setColormap's reset...
+      expect(nvVolume.cal_min).toBeCloseTo(0.4);
+      // ...and the canvas must actually be redrawn with it — setting nvVolume.cal_min alone,
+      // without a following updateGLVolume(), would leave the (reset) old threshold on screen.
+      expect(nv.updateGLVolume).toHaveBeenCalled();
     });
   });
 
@@ -712,7 +804,10 @@ describe('NiiViewer', () => {
       return nv;
     };
 
-    it('switches to AUTO layout when canvas width is at least 2× the height', async () => {
+    // The aspect-ratio/debounce math itself (AUTO vs GRID thresholds, rapid-resize debouncing)
+    // is unit-tested directly in useCanvasAutoLayout.test.jsx. This smoke test only confirms
+    // NiiViewer actually wires a real canvas resize through to nv.setMultiplanarLayout.
+    it('wires canvas container resizes through to nv.setMultiplanarLayout', async () => {
       const { MULTIPLANAR_TYPE } = await import('@niivue/niivue');
       const nv = await setup();
 
@@ -722,35 +817,6 @@ describe('NiiViewer', () => {
       });
 
       expect(nv.setMultiplanarLayout).toHaveBeenCalledWith(MULTIPLANAR_TYPE.AUTO);
-    });
-
-    it('uses GRID layout when canvas width is less than 2× the height', async () => {
-      const { MULTIPLANAR_TYPE } = await import('@niivue/niivue');
-      const nv = await setup();
-
-      act(() => {
-        resizeCallback([{ contentRect: { width: 400, height: 300 } }]);
-        vi.advanceTimersByTime(150); // flush the resize-size debounce
-      });
-
-      expect(nv.setMultiplanarLayout).toHaveBeenCalledWith(MULTIPLANAR_TYPE.GRID);
-    });
-
-    it('switches back to GRID when canvas becomes narrow again', async () => {
-      const { MULTIPLANAR_TYPE } = await import('@niivue/niivue');
-      const nv = await setup();
-
-      act(() => {
-        resizeCallback([{ contentRect: { width: 800, height: 200 } }]);
-        vi.advanceTimersByTime(150); // flush the resize-size debounce
-      });
-      nv.setMultiplanarLayout.mockClear();
-      act(() => {
-        resizeCallback([{ contentRect: { width: 400, height: 300 } }]);
-        vi.advanceTimersByTime(150); // flush the resize-size debounce
-      });
-
-      expect(nv.setMultiplanarLayout).toHaveBeenCalledWith(MULTIPLANAR_TYPE.GRID);
     });
   });
 
@@ -770,24 +836,160 @@ describe('NiiViewer', () => {
 
     it('calls nv.setOpacity with 0 when hiding a visible volume', async () => {
       const nv = await setup();
-      await userEvent.click(screen.getByRole('button', { name: 'Hide MRI' }));
+      await userEvent.click(screen.getByRole('button', { name: /hide.*mri/i }));
       expect(nv.setOpacity).toHaveBeenCalledWith(0, 0);
     });
 
     it('sets colormapInvert on the NVImage and calls updateGLVolume when invert is toggled', async () => {
       const nv = await setup();
-      await userEvent.click(screen.getByRole('button', { name: 'Expand MRI controls' }));
-      await userEvent.click(screen.getByRole('switch', { name: 'Invert MRI colormap' }));
+      await userEvent.click(screen.getByRole('button', { name: /expand.*mri/i }));
+      await userEvent.click(screen.getByRole('switch', { name: /invert.*mri/i }));
       expect(nv.volumes[0].colormapInvert).toBe(true);
       expect(nv.updateGLVolume).toHaveBeenCalledOnce();
     });
 
     it('sets colorbarVisible on the NVImage and calls updateGLVolume when colorbar is toggled', async () => {
       const nv = await setup();
-      await userEvent.click(screen.getByRole('button', { name: 'Expand MRI controls' }));
-      await userEvent.click(screen.getByRole('switch', { name: 'Show MRI colorbar' }));
+      await userEvent.click(screen.getByRole('button', { name: /expand.*mri/i }));
+      await userEvent.click(screen.getByRole('switch', { name: /mri.*colorbar/i }));
       expect(nv.volumes[0].colorbarVisible).toBe(true);
       expect(nv.updateGLVolume).toHaveBeenCalledOnce();
+    });
+
+    describe('opacity/threshold — throttled through requestAnimationFrame', () => {
+      // opacity and cal_min/cal_max/cal_range writes are throttled to one GL redraw per frame
+      // (see applyVolumeSettingChange in NiiViewer.jsx) — rAF is stubbed synchronous for the
+      // whole suite (see the top of this describe('NiiViewer', ...) block).
+      it("calls nv.setOpacity with the new value when a visible volume's opacity changes", async () => {
+        const nv = await setup();
+        await userEvent.click(screen.getByRole('button', { name: /expand.*mri/i }));
+        fireEvent.change(screen.getByLabelText('MRI opacity'), { target: { value: '55' } });
+        expect(nv.setOpacity).toHaveBeenCalledWith(0, 0.55);
+      });
+
+      it('sets nvVolume.cal_min/cal_max from the dragged threshold and calls updateGLVolume', async () => {
+        const nv = await setup();
+        await userEvent.click(screen.getByRole('button', { name: /expand.*mri/i }));
+        fireEvent.change(screen.getByLabelText('MRI Threshold minimum'), {
+          target: { value: '30' },
+        });
+        fireEvent.change(screen.getByLabelText('MRI Threshold maximum'), {
+          target: { value: '80' },
+        });
+        expect(nv.volumes[0].cal_min).toBeCloseTo(0.3);
+        expect(nv.volumes[0].cal_max).toBeCloseTo(0.8);
+        expect(nv.updateGLVolume).toHaveBeenCalled();
+      });
+    });
+  });
+
+  describe('meshXRay setting', () => {
+    const meshLayer = {
+      url: 'blob:cortex',
+      name: 'cortex.gii',
+      type: 'Mesh',
+      subtype: 'cortex',
+      kind: 'mesh',
+    };
+
+    // Regression test: NiiVue's own default for nv.opts.meshXRay is 0, but this app's default
+    // settings value (see getInitialLayerSettings) is 1 — that default must be written onto
+    // nv.opts.meshXRay as soon as a mesh/connectome is built, not only once the user drags the
+    // slider (which is the only other place that write happened before this fix).
+    it('initializes nv.opts.meshXRay to the default settings value (1) as soon as a mesh/connectome loads, without needing a user interaction', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      render(
+        <NiiViewer nvRef={nvRef} layers={[meshLayer]} intracranialLayer={makeIntracranialLayer()} />
+      );
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      expect(nvRef.current.opts.meshXRay).toBe(1);
+    });
+
+    // meshXRay's nv-side write is throttled through requestAnimationFrame (one redraw per frame
+    // — see applyConnectomeSettingChange/applyFileMeshSettingChange in NiiViewer.jsx); rAF is
+    // stubbed synchronous for the whole suite (see the top of this describe('NiiViewer', ...) block).
+    it('writes to nv.opts.meshXRay (not a top-level nv property) and calls updateGLVolume', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      render(<NiiViewer nvRef={nvRef} layers={[]} intracranialLayer={makeIntracranialLayer()} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      const nv = nvRef.current;
+      nv.updateGLVolume.mockClear();
+      await userEvent.click(
+        screen.getByRole('button', { name: /expand.*intracranial - electrodes/i })
+      );
+      fireEvent.change(screen.getByLabelText('Intracranial - Electrodes meshXRay'), {
+        target: { value: '40' },
+      });
+
+      expect(nv.opts.meshXRay).toBe(0.4);
+      expect(nv.meshXRay).toBeUndefined(); // not the stray top-level property
+      expect(nv.updateGLVolume).toHaveBeenCalled();
+    });
+
+    it('changing meshXRay on one mesh/connectome card updates the value shown on every other one, since nv.opts.meshXRay is scene-global', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      render(
+        <NiiViewer nvRef={nvRef} layers={[meshLayer]} intracranialLayer={makeIntracranialLayer()} />
+      );
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      // Expand both cards so their meshXRay inputs are in the DOM.
+      await userEvent.click(
+        screen.getByRole('button', { name: /expand.*intracranial - electrodes/i })
+      );
+      await userEvent.click(screen.getByRole('button', { name: /expand.*mesh - cortex/i }));
+
+      fireEvent.change(screen.getByLabelText('Intracranial - Electrodes meshXRay'), {
+        target: { value: '25' },
+      });
+
+      expect(screen.getByLabelText('Intracranial - Electrodes meshXRay')).toHaveValue(25);
+      expect(screen.getByLabelText('Mesh - cortex meshXRay')).toHaveValue(25);
+    });
+
+    it('does not reset nv.opts.meshXRay back to the default when a second mesh is dropped in after the user has already customized it', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      render(<NiiViewer nvRef={nvRef} layers={[]} intracranialLayer={makeIntracranialLayer()} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      await userEvent.click(
+        screen.getByRole('button', { name: /expand.*intracranial - electrodes/i })
+      );
+      fireEvent.change(screen.getByLabelText('Intracranial - Electrodes meshXRay'), {
+        target: { value: '30' },
+      });
+      expect(nvRef.current.opts.meshXRay).toBe(0.3);
+
+      const input = document.querySelector('input[type="file"]');
+      await userEvent.upload(input, new File(['data'], 'cortex.gii'));
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      expect(nvRef.current.opts.meshXRay).toBe(0.3);
+    });
+
+    it('does not affect the meshXRay value shown on other layers when a non-meshXRay setting changes', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      render(
+        <NiiViewer nvRef={nvRef} layers={[meshLayer]} intracranialLayer={makeIntracranialLayer()} />
+      );
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      await userEvent.click(
+        screen.getByRole('button', { name: /expand.*intracranial - electrodes/i })
+      );
+      await userEvent.click(screen.getByRole('button', { name: /expand.*mesh - cortex/i }));
+
+      // Toggling one card's visibility is unrelated to meshXRay and shouldn't broadcast anything.
+      await userEvent.click(screen.getByRole('button', { name: /hide.*mesh - cortex/i }));
+
+      expect(screen.getByLabelText('Intracranial - Electrodes meshXRay')).toHaveValue(100);
     });
   });
 
@@ -950,7 +1152,7 @@ describe('NiiViewer', () => {
 
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
 
-      await userEvent.click(screen.getByRole('button', { name: 'Expand scan controls' }));
+      await userEvent.click(screen.getByRole('button', { name: /expand.*scan/i }));
       expect(screen.getByLabelText('scan opacity')).toHaveValue(60);
     });
 
@@ -974,7 +1176,7 @@ describe('NiiViewer', () => {
       expect(loadedUrls).not.toContain('__intracranial-electrodes__');
 
       // Both cards are present — the new volume alongside the untouched connectome.
-      expect(screen.getByRole('button', { name: 'Expand scan controls' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /expand.*scan/i })).toBeInTheDocument();
       expect(screen.getByText('Intracranial')).toBeInTheDocument();
     });
 
@@ -1066,9 +1268,9 @@ describe('NiiViewer', () => {
       const nv = await setup();
 
       // click expand settings on the first volume (=> index = 0 )
-      await userEvent.click(screen.getByRole('button', { name: `Expand MRI controls` }));
+      await userEvent.click(screen.getByRole('button', { name: /expand.*mri/i }));
       // click the delete volume button
-      await userEvent.click(screen.getByRole('button', { name: 'Close MRI volume' }));
+      await userEvent.click(screen.getByRole('button', { name: /close.*mri/i }));
       // expect to only have 1 volume left
       expect(nv.volumes.length).toBe(1);
       // expect the remaining volume to have the right url
@@ -1079,9 +1281,9 @@ describe('NiiViewer', () => {
       const nv = await setup();
 
       // click expand settings on the first volume (=> index = 0 )
-      await userEvent.click(screen.getByRole('button', { name: `Expand MRI controls` }));
+      await userEvent.click(screen.getByRole('button', { name: /expand.*mri/i }));
       // click the delete volume button
-      await userEvent.click(screen.getByRole('button', { name: 'Close MRI volume' }));
+      await userEvent.click(screen.getByRole('button', { name: /close.*mri/i }));
       // expect the settings card to be removed
       expect(screen.queryByText('MRI')).not.toBeInTheDocument();
       // expect the other settings card to still be there
@@ -1090,8 +1292,6 @@ describe('NiiViewer', () => {
   });
 
   describe('canvas resize handle', () => {
-    const MIN_CANVAS_HEIGHT = 350;
-
     const setup = async () => {
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
@@ -1106,41 +1306,17 @@ describe('NiiViewer', () => {
       expect(screen.getByTestId('nii-canvas-resize-handle')).toBeInTheDocument();
     });
 
-    it('raises the canvas row min-height when the handle is dragged down', async () => {
+    // The drag/clamp math itself (raise/lower, floor clamping, stopping after mouseup) is
+    // unit-tested directly in useCanvasRowResize.test.jsx. This smoke test only confirms
+    // NiiViewer actually wires a real drag on its own resize handle through to the row's
+    // min-height, with its own MIN_CANVAS_HEIGHT floor.
+    it('wires drags on its own resize handle through to the canvas row min-height', async () => {
       const row = await setup();
       fireEvent.mouseDown(screen.getByTestId('nii-canvas-resize-handle'), { clientY: 0 });
       fireEvent.mouseMove(window, { clientY: 150 });
       fireEvent.mouseUp(window);
 
       expect(row.style.minHeight).toBe('550px'); // 400 (starting height) + 150 (drag delta)
-    });
-
-    it('lowers the canvas row min-height when the handle is dragged up', async () => {
-      const row = await setup();
-      fireEvent.mouseDown(screen.getByTestId('nii-canvas-resize-handle'), { clientY: 0 });
-      fireEvent.mouseMove(window, { clientY: -50 });
-      fireEvent.mouseUp(window);
-
-      expect(row.style.minHeight).toBe('350px'); // 400 (starting height) - 50 (drag delta)
-    });
-
-    it('clamps at the 350px floor instead of shrinking further', async () => {
-      const row = await setup();
-      fireEvent.mouseDown(screen.getByTestId('nii-canvas-resize-handle'), { clientY: 0 });
-      fireEvent.mouseMove(window, { clientY: -2000 }); // drag far past any reasonable minimum
-      fireEvent.mouseUp(window);
-
-      expect(row.style.minHeight).toBe(`${MIN_CANVAS_HEIGHT}px`);
-    });
-
-    it('stops responding to mouse movement once the drag ends', async () => {
-      const row = await setup();
-      fireEvent.mouseDown(screen.getByTestId('nii-canvas-resize-handle'), { clientY: 0 });
-      fireEvent.mouseMove(window, { clientY: 100 });
-      fireEvent.mouseUp(window);
-      fireEvent.mouseMove(window, { clientY: 500 }); // should be ignored — drag already ended
-
-      expect(row.style.minHeight).toBe('500px');
     });
   });
 
@@ -1203,7 +1379,7 @@ describe('NiiViewer', () => {
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
 
       // Customize the MRI volume's visibility before the connectome refreshes
-      await userEvent.click(screen.getByRole('button', { name: 'Hide MRI' }));
+      await userEvent.click(screen.getByRole('button', { name: /hide.*mri/i }));
 
       const nv = nvRef.current;
       nv.loadVolumes.mockClear();
@@ -1225,7 +1401,7 @@ describe('NiiViewer', () => {
       expect(nv.addMesh).toHaveBeenCalled(); // rebuilt with the new data
       expect(nv.loadVolumes).not.toHaveBeenCalled(); // images untouched, not re-loaded
       // MRI's visibility change survived the connectome refresh
-      expect(screen.getByRole('button', { name: 'Show MRI' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /show.*mri/i })).toBeInTheDocument();
     });
 
     it('toggling the connectome card visibility sets mesh.opacity directly, not nv.setOpacity', async () => {
@@ -1244,10 +1420,59 @@ describe('NiiViewer', () => {
       const mesh = nv.addMesh.mock.calls.at(-1)[0];
       nv.setOpacity.mockClear();
 
-      await userEvent.click(screen.getByRole('button', { name: 'Hide Intracranial - Electrodes' }));
+      await userEvent.click(
+        screen.getByRole('button', { name: /hide.*intracranial - electrodes/i })
+      );
 
       expect(mesh.opacity).toBe(0);
       expect(nv.setOpacity).not.toHaveBeenCalled();
+    });
+
+    describe('threshold — throttled through requestAnimationFrame', () => {
+      // The connectome Threshold control only renders for the ESI layer in Connectome mode
+      // (see the isEsiLayer check in ImagingControls.jsx) — the generic intracranial-electrodes
+      // connectome has no Threshold control at all, so this exercises the ESI layer instead.
+      // Opacity isn't tested here: ImagingControls only renders an Opacity slider for image
+      // volumes (`{isImageVolume && (...)}`), so key === 'opacity' can never actually fire for
+      // a connectome layer — that branch in applyConnectomeSettingChange is unreachable from
+      // the UI, on any layer, not just this one.
+      //
+      // The nv-side redraw is throttled to one per frame (see applyConnectomeSettingChange in
+      // NiiViewer.jsx); rAF is stubbed synchronous for the whole suite (see the top of this
+      // describe('NiiViewer', ...) block).
+      it('sets mesh node/edge color range from the dragged threshold and calls updateMesh + updateGLVolume', async () => {
+        const { Niivue } = await import('@niivue/niivue');
+        const nvRef = { current: new Niivue() };
+        const esiLayer = makeEsiLayer();
+        render(<NiiViewer nvRef={nvRef} layers={[]} esiLayer={esiLayer} />);
+        await waitFor(() =>
+          expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument()
+        );
+
+        const nv = nvRef.current;
+        // isEsiVolume defaults to true (volume mode) — switch to connectome mode first, since
+        // that's the only mode the generic connectome Threshold branch under test applies to.
+        await userEvent.click(screen.getByRole('button', { name: /expand.*layer 1/i }));
+        await userEvent.click(screen.getByRole('switch', { name: /layer 1.*volume/i }));
+        await waitFor(() => expect(nv.loadConnectomeAsMesh).toHaveBeenCalled());
+
+        const mesh = nv.addMesh.mock.calls.at(-1)[0];
+        nv.updateGLVolume.mockClear();
+
+        fireEvent.change(screen.getByLabelText('Layer 1 Threshold minimum'), {
+          target: { value: '30' },
+        });
+        fireEvent.change(screen.getByLabelText('Layer 1 Threshold maximum'), {
+          target: { value: '80' },
+        });
+
+        expect(mesh.nodeMinColor).toBeCloseTo(0.3);
+        expect(mesh.nodeMaxColor).toBeCloseTo(0.8);
+        expect(mesh.edgeMin).toBeCloseTo(0.3);
+        expect(mesh.edgeMax).toBeCloseTo(0.8);
+        expect(mesh.updateMesh).toHaveBeenCalled();
+        expect(nv.updateGLVolume).toHaveBeenCalled();
+      });
     });
 
     it('removes the mesh and its card when intracranialLayer becomes null', async () => {
@@ -1284,14 +1509,39 @@ describe('NiiViewer', () => {
       nv.removeVolumeByIndex.mockClear();
 
       await userEvent.click(
-        screen.getByRole('button', { name: 'Expand Intracranial - Electrodes controls' })
+        screen.getByRole('button', { name: /expand.*intracranial - electrodes/i })
       );
       await userEvent.click(
-        screen.getByRole('button', { name: 'Close Intracranial - Electrodes volume' })
+        screen.getByRole('button', { name: /close.*intracranial - electrodes/i })
       );
 
       expect(nv.removeMesh).toHaveBeenCalledWith(mesh);
       expect(nv.removeVolumeByIndex).not.toHaveBeenCalled();
+    });
+
+    it('does not resurrect the intracranial card immediately after it is deleted', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      // intracranialLayer is passed as a stable prop, matching how PatientView keeps re-deriving
+      // the same object reference between voltage updates — this is what a naive delete would
+      // race against, since the layer itself never goes away on its own.
+      render(
+        <NiiViewer
+          nvRef={nvRef}
+          layers={[{ type: 'MRI', url: '/mri.nii' }]}
+          intracranialLayer={makeIntracranialLayer()}
+        />
+      );
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      await userEvent.click(
+        screen.getByRole('button', { name: /expand.*intracranial - electrodes/i })
+      );
+      await userEvent.click(
+        screen.getByRole('button', { name: /close.*intracranial - electrodes/i })
+      );
+
+      expect(screen.queryByText('Intracranial - Electrodes')).not.toBeInTheDocument();
     });
 
     it('clears volumes and meshes from the shared nv instance when the component unmounts', async () => {
@@ -1380,8 +1630,96 @@ describe('NiiViewer', () => {
       await userEvent.upload(input, new File(['data'], 'scan.nii'));
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
 
-      expect(screen.getByRole('button', { name: 'Expand scan controls' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /expand.*scan/i })).toBeInTheDocument();
       expect(screen.getByText('Intracranial')).toBeInTheDocument();
+    });
+  });
+
+  // onHas3DExtentChange tells PatientView whether this viewer's NiiVue scene has a usable
+  // spatial extent — a connectome layer alone (intracranial electrodes / ESI connectome mode)
+  // leaves NiiVue's scene extent at zero, which crashes its per-frame sync() if another
+  // instance is broadcast-linked to it. See the cross-panel rotation sync effect in PatientView.
+  describe('onHas3DExtentChange', () => {
+    it('reports false while the scene holds only a connectome layer', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const onHas3DExtentChange = vi.fn();
+      render(
+        <NiiViewer
+          nvRef={nvRef}
+          layers={[]}
+          intracranialLayer={makeIntracranialLayer()}
+          onHas3DExtentChange={onHas3DExtentChange}
+        />
+      );
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      expect(onHas3DExtentChange).toHaveBeenLastCalledWith(false);
+    });
+
+    it('reports true once an image volume is present alongside a connectome', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const onHas3DExtentChange = vi.fn();
+      render(
+        <NiiViewer
+          nvRef={nvRef}
+          layers={[{ type: 'MRI', url: '/mri.nii' }]}
+          intracranialLayer={makeIntracranialLayer()}
+          onHas3DExtentChange={onHas3DExtentChange}
+        />
+      );
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      expect(onHas3DExtentChange).toHaveBeenLastCalledWith(true);
+    });
+
+    it('drops back to false when the image volume is reset away, leaving only the connectome', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const onHas3DExtentChange = vi.fn();
+      const { rerender } = render(
+        <NiiViewer
+          nvRef={nvRef}
+          layers={[{ type: 'MRI', url: '/mri.nii' }]}
+          intracranialLayer={makeIntracranialLayer()}
+          onHas3DExtentChange={onHas3DExtentChange}
+        />
+      );
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+      expect(onHas3DExtentChange).toHaveBeenLastCalledWith(true);
+
+      // Imaging-only reset: layers clears but the connectome keeps the component mounted —
+      // the same scenario as the "clears stale volumes" test above, from the extent-reporting side.
+      rerender(
+        <NiiViewer
+          nvRef={nvRef}
+          layers={[]}
+          intracranialLayer={makeIntracranialLayer()}
+          onHas3DExtentChange={onHas3DExtentChange}
+        />
+      );
+
+      expect(onHas3DExtentChange).toHaveBeenLastCalledWith(false);
+    });
+
+    it('reports false on unmount, once nv has actually been cleared — not just left stale at its last value', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const onHas3DExtentChange = vi.fn();
+      const { unmount } = render(
+        <NiiViewer
+          nvRef={nvRef}
+          layers={[{ type: 'MRI', url: '/mri.nii' }]}
+          onHas3DExtentChange={onHas3DExtentChange}
+        />
+      );
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+      expect(onHas3DExtentChange).toHaveBeenLastCalledWith(true);
+
+      unmount();
+
+      expect(onHas3DExtentChange).toHaveBeenLastCalledWith(false);
     });
   });
 
@@ -1476,11 +1814,16 @@ describe('NiiViewer', () => {
       const addedMesh = (await mesh)[0];
       nv.setOpacity.mockClear();
 
-      await userEvent.click(screen.getByRole('button', { name: 'Hide Mesh - cortex' }));
+      await userEvent.click(screen.getByRole('button', { name: /hide.*mesh - cortex/i }));
 
       expect(addedMesh.opacity).toBe(0);
       expect(nv.setOpacity).not.toHaveBeenCalled();
     });
+
+    // No opacity or threshold rAF-throttle test here: ImagingControls only renders an Opacity
+    // slider for image volumes and a Threshold control for image volumes/the ESI layer (see
+    // ImagingControls.jsx's isImageVolume/isEsiLayer gates) — a file-loaded mesh gets neither,
+    // so `key === 'opacity'` in applyFileMeshSettingChange can never actually fire from the UI.
 
     it('deleting a mesh card calls nv.removeMesh, not nv.removeVolumeByIndex', async () => {
       const { Niivue } = await import('@niivue/niivue');
@@ -1499,8 +1842,8 @@ describe('NiiViewer', () => {
       const addedMesh = (await nv.addMeshesFromUrl.mock.results.at(-1).value)[0];
       nv.removeVolumeByIndex.mockClear();
 
-      await userEvent.click(screen.getByRole('button', { name: 'Expand Mesh - cortex controls' }));
-      await userEvent.click(screen.getByRole('button', { name: 'Close Mesh - cortex volume' }));
+      await userEvent.click(screen.getByRole('button', { name: /expand.*mesh - cortex/i }));
+      await userEvent.click(screen.getByRole('button', { name: /close.*mesh - cortex/i }));
 
       expect(nv.removeMesh).toHaveBeenCalledWith(addedMesh);
       expect(nv.removeVolumeByIndex).not.toHaveBeenCalled();
@@ -1590,6 +1933,69 @@ describe('NiiViewer', () => {
       expect(
         mriLabel.compareDocumentPosition(connectomeLabel) & Node.DOCUMENT_POSITION_FOLLOWING
       ).toBeTruthy();
+    });
+  });
+  describe('esi layer', () => {
+    it('never calls loadConnectomeAsMesh() when ESI layer is rendered while MRI layer is still loading', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const nv = nvRef.current;
+      // Mock nv.loadVolumes that gets hung up on a promise that later can be resolved manually
+      let resolveMriLoad;
+      nv.loadVolumes = vi.fn().mockImplementation(
+        (vols) =>
+          new Promise((resolve) => {
+            resolveMriLoad = () => {
+              nv.volumes = vols;
+              resolve();
+            };
+          })
+      );
+
+      // Render mri and esilayer
+      const esiLayer = makeEsiLayer();
+      render(
+        <NiiViewer nvRef={nvRef} layers={[{ type: 'MRI', url: '/mri.nii' }]} esiLayer={esiLayer} />
+      );
+
+      expect(nv.loadConnectomeAsMesh).not.toHaveBeenCalled();
+      resolveMriLoad();
+      await waitFor(() => expect(nv.loadVolumes).toHaveBeenCalled());
+
+      expect(nv.loadConnectomeAsMesh).not.toHaveBeenCalled();
+    });
+
+    it('does not resurrect the ESI layer as a volume immediately after it is deleted in connectome mode', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const esiLayer = makeEsiLayer();
+      render(<NiiViewer nvRef={nvRef} layers={[]} esiLayer={esiLayer} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      const nv = nvRef.current;
+      // isEsiVolume defaults to true (volume mode) — switch to connectome mode first, matching
+      // the bug report ("closing ESI layer in connectome mode...").
+      await userEvent.click(screen.getByRole('button', { name: /expand.*layer 1/i }));
+      await userEvent.click(screen.getByRole('switch', { name: /layer 1.*volume/i }));
+      await waitFor(() => expect(nv.loadConnectomeAsMesh).toHaveBeenCalled());
+
+      nv.addVolumesFromUrl.mockClear();
+      nv.loadConnectomeAsMesh.mockClear();
+
+      // Close (delete) the ESI card while in connectome mode.
+      await userEvent.click(screen.getByRole('button', { name: /close.*layer 1/i }));
+
+      // Regression: deleting the card removes its layerSettings entry, but esiLayer itself is
+      // owned upstream (e.g. by PatientView) and is untouched by the deletion — so useEsiLayer
+      // still sees the same non-null esiLayer on the next render. If isEsiVolumeMode's fallback
+      // for a missing settings entry ever defaults back to `true` (Volume mode) instead of the
+      // last mode actually used, that's enough on its own to make useEsiLayer rebuild the
+      // just-deleted layer as a volume — this asserts that doesn't happen.
+      expect(nv.addVolumesFromUrl).not.toHaveBeenCalled();
+      // Query by the card's name text rather than the expand/collapse button — a resurrected
+      // card starts out expanded (not collapsed), so an 'expand...' name query would wrongly
+      // pass even if the card came back, since the button it matches would read 'Collapse...'.
+      expect(screen.queryByText('Layer 1')).not.toBeInTheDocument();
     });
   });
 });

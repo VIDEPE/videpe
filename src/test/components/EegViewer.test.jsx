@@ -1359,6 +1359,33 @@ describe('EegViewer — montage controls', () => {
   });
 });
 
+describe('eeg plot resize handle', () => {
+  const setup = async () => {
+    await renderViewer();
+    const row = screen.getByTestId('eeg-plot-row');
+    vi.spyOn(row, 'getBoundingClientRect').mockReturnValue({ height: 400 });
+    return row;
+  };
+
+  it('renders a resize handle', async () => {
+    await setup();
+    expect(screen.getByTestId('eeg-plot-resize-handle')).toBeInTheDocument();
+  });
+
+  // The drag/clamp math itself (raise/lower, floor clamping, stopping after mouseup) is
+  // unit-tested directly in useRowResize.test.jsx. This smoke test only confirms
+  // EegViewer actually wires a real drag on its own resize handle through to the row's
+  // min-height, with its own MIN_PLOT_ROW_HEIGHT floor.
+  it('wires drags on its own resize handle through to the plot row min-height', async () => {
+    const row = await setup();
+    fireEvent.mouseDown(screen.getByTestId('eeg-plot-resize-handle'), { clientY: 0 });
+    fireEvent.mouseMove(window, { clientY: 150 });
+    fireEvent.mouseUp(window);
+
+    expect(row.style.minHeight).toBe('550px'); // 400 (starting height) + 150 (drag delta)
+  });
+});
+
 describe('EegViewer — topography uses the montaged buffer', () => {
   it('topography voltages reflect the montage prop', async () => {
     const provider = makeProvider();
@@ -1420,55 +1447,10 @@ describe('EegViewer — recording type detection', () => {
     toast.mockClear();
   });
 
-  it('reports the detected recording type via onRecordingTypeChange for scalp-shaped channel names', async () => {
-    const onRecordingTypeChange = vi.fn();
-    const provider = makeProvider();
-    render(
-      <EegViewer
-        provider={provider}
-        channelNames={provider.channelNames}
-        onRecordingTypeChange={onRecordingTypeChange}
-      />
-    );
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(onRecordingTypeChange).toHaveBeenCalledWith('eeg');
-  });
-
-  it('shows a toast naming the detected recording type once detection resolves', async () => {
-    const { default: toast } = await import('react-hot-toast');
-    await renderViewer();
-    expect(toast).toHaveBeenCalledWith('EEG recording detected', {
-      id: expect.any(String),
-      icon: '🔍',
-    });
-  });
-
-  it('reports iEEG via onRecordingTypeChange and toasts accordingly for intracranial-shaped channel names', async () => {
-    const { default: toast } = await import('react-hot-toast');
-    const onRecordingTypeChange = vi.fn();
-    const provider = makeIntracranialProvider();
-    render(
-      <EegViewer
-        provider={provider}
-        channelNames={provider.channelNames}
-        onRecordingTypeChange={onRecordingTypeChange}
-      />
-    );
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(onRecordingTypeChange).toHaveBeenCalledWith('ieeg');
-    expect(toast).toHaveBeenCalledWith('iEEG recording detected', {
-      id: expect.any(String),
-      icon: '🔍',
-    });
-  });
+  // Detection logic itself (onRecordingTypeChange + toast for both scalp and intracranial
+  // channel shapes) is unit-tested directly in useElectrodeMatching.test.js. The tests below
+  // only cover what that hook test can't: how EegViewer wires the resulting isIntracranial
+  // state into its children (EegTopoViewer).
 
   it('keeps matched empty for an intracranial recordingType with no custom positions, even though standard_1005 was fetched', async () => {
     const provider = makeIntracranialProvider();

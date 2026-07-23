@@ -404,6 +404,56 @@ describe('EegTopoViewer', () => {
     });
   });
 
+  describe('drag', () => {
+    it('moves the window when dragging the title bar', async () => {
+      const { container } = await act(async () => render(<EegTopoViewer {...defaultProps} />));
+      const windowEl = container.firstChild;
+      const startLeft = parseInt(windowEl.style.left);
+      const startTop = parseInt(windowEl.style.top);
+
+      fireEvent.mouseDown(screen.getByTestId('topo-title-bar'), { clientX: 0, clientY: 0 });
+      await act(async () => {
+        fireEvent.mouseMove(window, { clientX: 30, clientY: 20 });
+        fireEvent.mouseUp(window);
+      });
+
+      expect(parseInt(windowEl.style.left)).toBe(startLeft + 30);
+      expect(parseInt(windowEl.style.top)).toBe(startTop + 20);
+    });
+
+    it('clamps at the top-left viewport edge instead of dragging the window off-screen', async () => {
+      const { container } = await act(async () => render(<EegTopoViewer {...defaultProps} />));
+      const windowEl = container.firstChild;
+
+      fireEvent.mouseDown(screen.getByTestId('topo-title-bar'), { clientX: 0, clientY: 0 });
+      await act(async () => {
+        // Drag far past the top-left corner of the viewport.
+        fireEvent.mouseMove(window, { clientX: -5000, clientY: -5000 });
+        fireEvent.mouseUp(window);
+      });
+
+      expect(parseInt(windowEl.style.left)).toBe(0);
+      expect(parseInt(windowEl.style.top)).toBe(0);
+    });
+
+    it('clamps at the bottom-right viewport edge instead of dragging the window off-screen', async () => {
+      const { container } = await act(async () => render(<EegTopoViewer {...defaultProps} />));
+      const windowEl = container.firstChild;
+      const width = parseInt(windowEl.style.width);
+      const height = parseInt(windowEl.style.height);
+
+      fireEvent.mouseDown(screen.getByTestId('topo-title-bar'), { clientX: 0, clientY: 0 });
+      await act(async () => {
+        // Drag far past the bottom-right corner of the viewport.
+        fireEvent.mouseMove(window, { clientX: 50000, clientY: 50000 });
+        fireEvent.mouseUp(window);
+      });
+
+      expect(parseInt(windowEl.style.left)).toBe(window.innerWidth - width);
+      expect(parseInt(windowEl.style.top)).toBe(window.innerHeight - height);
+    });
+  });
+
   describe('colourblind mode', () => {
     it('renders a colourblind toggle button over the topography canvas', async () => {
       await act(async () => render(<EegTopoViewer {...defaultProps} />));

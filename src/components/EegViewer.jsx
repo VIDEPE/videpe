@@ -19,25 +19,24 @@ import {
 } from 'lucide-react';
 import { minMaxDownsample } from '@/utils/downsample';
 import { useEegBuffer } from '@/loaders/eegBuffer';
-import { applyMontage } from '@/utils/eegViewerUtils';
+import { useContainerResize } from '@/hooks/useContainerResize';
+import { useViewportControls } from '@/hooks/useViewportControls';
+import { useScrubberDrag } from '@/hooks/useScrubberDrag';
+import { useElectrodeMatching } from '@/hooks/useElectrodeMatching';
+import { useTopographySnapshot } from '@/hooks/useTopographySnapshot';
+import { useRowResize } from '@/hooks/useRowResize';
 
-import { parseElcElectrodePositions } from '@/loaders/parseElcElectrodePositions';
 import { ELEC_POS_EXTENSIONS, INV_SOLUTIONS_EXTENSIONS } from '@/loaders/eegFormats';
-import { matchChannelsToPositions } from '@/utils/eegTopographyUtils';
-import { detectIsIntracranial } from '@/utils/intracranialDetection';
 import { EegTopoViewer } from '@/components/EegTopoViewer';
 import { FileDropZone } from '@/components/FileDropZone';
 import { StatusLed } from '@/components/StatusLed';
 
-const MIN_STANDARD_MATCH_COUNT_FOR_LED = 19; // below this limit (=>classic 10-20 system's electrode count), the standard_1005 template match is too sparse for a usable topography — status LED stays red instead of auto-matched blue
-const MIN_CUSTOM_MATCH_RATIO_FOR_LED = 0.9; // a user-supplied position file should cover nearly every channel — below this, the LED turns amber rather than green, since it likely doesn't match this recording. 90% (not 100%) tolerates the odd non-scalp channel (ECG/EOG/trigger) a position file has no reason to cover.
 const EEG_LOADING_TOAST_ID = 'eeg-buffer-loading'; // fixed id so the loading/success toasts update in place rather than stacking
-const RECORDING_TYPE_TOAST_ID = 'eeg-recording-type-detected'; // fixed id so re-detection updates the toast in place instead of stacking
 const Y_AXIS_WIDTH = 60; // px for the y-axis area (channel name + tick space) — must match x-axis strip left padding
 const PLOT_RIGHT_PAD = 20; // px right padding — must match in both channel plots and x-axis strip so ticks align
 const OVERDRAW = 2; // canvas height multiplier — peaks bleed ±50% into adjacent lanes instead of clipping
-const MIN_PLOT_HEIGHT = 12; // minimum px per channel lane — prevents uPlot from collapsing at high channel counts
 const MIN_CHANNEL_AREA_HEIGHT = 120; // px floor for the channel-plot scroll area. Below this the whole viewer overflows and the pane's scroll container takes over (mirrors NiiViewer's MIN_CANVAS_HEIGHT) instead of letting the x-axis/scrubber/controls/dropzone overlap
+const MIN_PLOT_ROW_HEIGHT = 350; // px floor for the uPlot area
 const ICON_SIZE = 22; // default size for lucide icons in the controls, used to compute input widths
 const INPUT_MIN_CH = 3; // minimum input width in ch units
 const INPUT_EXTRA_CH = 3; // extra ch of breathing room beyond the value's character length
@@ -99,94 +98,48 @@ export const EegViewer = ({
   onRecordingTypeChange,
   montage = 'none', // 'none' | 'average' | 'median' — controlled by PatientView, which forces 'average' when ESI needs it
   onMontageChange,
+  onTopoHasContentChange, // reports whether the topography NiiVue canvas currently has a mesh to draw — see NiiViewer's onHasContentChange for why PatientView needs this instead of inferring it
 }) => {
   const { isDarkMode } = useTheme();
   const syncKey = 'eeg-sync'; // shared across all channels to link their interactions
 
-  // the following refs do not cause re-renders when updated
-  const containerRef = useRef(null); // channel plot panel — measures both plot width and available height
-  const scrubberRef = useRef(null); // attached to the bar div — used to measure its pixel width
-  const dragRef = useRef(null); // stores active drag state — null when not dragging
-  const rafRef = useRef(null); // stores the pending requestAnimationFrame id so we can cancel it
-  const resizeDebounceRef = useRef(null); // debounces ResizeObserver to avoid rebuilding charts on every resize pixel
-  const hasMeasuredRef = useRef(false); // true after the first ResizeObserver measurement
-
-  // the following states on the other hand do cause re-renders when updated
-  const [plotWidth, setPlotWidth] = useState(0); // passed to uPlot options to fill the space
-  const [channelAreaHeight, setChannelAreaHeight] = useState(0); // used to compute per-channel plot height
-
-  const defaultVisibleChannelCount = 20;
-  const [visibleChannelCount, setVisibleChannelCount] = useState(defaultVisibleChannelCount); // how many channels fit in view at once
-  const [visibleChannelCountStr, setVisibleChannelCountStr] = useState(
-    String(defaultVisibleChannelCount)
-  );
-
   const tMax = provider.tMax; // total time span of the recording, in seconds
-  // Max input lengths — prevents the boxes from accepting absurdly long strings that warp the layout.
-  // Window/shift allow one decimal place so get +2 (dot + digit); range and channels are integers.
-  const CHANNEL_INPUT_MAX_LENGTH = String(channelNames.length).length; // enough to display the max channel count, e.g. "128"
-  const WINDOW_INPUT_MAX_LENGTH = String(Math.ceil(tMax)).length + 2; // enough to display the max window size (tMax) with a comma + 1 decimal
-  const SHIFT_INPUT_MAX_LENGTH = 6; // covers up to 9999.9 s
-  const Y_INPUT_MAX_LENGTH = 5; // covers 0.0001 to 99999 µV
-  const Y_MAX = 10 ** Y_INPUT_MAX_LENGTH - 1; // 99999 — derived from Y_INPUT_MAX_LENGTH so both stay in sync
-  const Y_MIN = 10 ** -(Y_INPUT_MAX_LENGTH - 2); // 0.001 minimum range (with Y_INPUT_MAX_LENGTH char length) to prevent uPlot from breaking with a zero or negative y-range
 
-  // Default to showing the full recording if it's shorter than 20s, otherwise start with a
-  // 20s window. For a short recording, floor tMax to 1 decimal: this keeps the window ≤ tMax
-  // (a window LARGER than the recording made the scrubber thumb exceed 100% and overflow to
-  // the right, dragging in a horizontal scrollbar) AND matches the 1-decimal value the input
-  // snaps to on blur, so a non-integer tMax (e.g. 6.01171875s) shows a clean "6" not the full
-  // float. floor (not round) so rounding can never nudge it back above tMax.
-  const defaultWindowSize = tMax < 20 ? Math.floor(tMax * 10) / 10 : 20;
-  const [windowSize, setWindowSize] = useState(defaultWindowSize); // seconds visible in the x-range, initialized to 20s or the full recording if shorter
-  const [windowSizeStr, setWindowSizeStr] = useState(String(defaultWindowSize));
+  // Container measurement — plotWidth feeds uPlot options, channelAreaHeight drives plotHeight below
+  const { containerRef, width: plotWidth, height: channelAreaHeight } = useContainerResize();
 
-  const [startTime, setStartTime] = useState(0); // start of the visible x-range
-  const defaultShiftTimeStepSize = 5;
-  const [shiftTimeStepSize, setShiftTimeStepSize] = useState(defaultShiftTimeStepSize);
-  const [shiftTimeStepSizeStr, setShiftTimeStepSizeStr] = useState(
-    String(defaultShiftTimeStepSize)
-  );
+  // Drag-to-resize for the canvas row's min-height.
+  const { rowRef, handleResizeStart } = useRowResize(MIN_PLOT_ROW_HEIGHT);
 
-  const defaultYScale = 0.15;
-  const [yScale, setYScale] = useState(defaultYScale); // y-axis half-range in µV; all channels share this
-  const [yScaleStr, setYScaleStr] = useState(String(defaultYScale)); // separate state for the input string to allow temporary invalid states (e.g. empty string while editing) without breaking the numeric yScale used for plotting
-  const [isDragging, setIsDragging] = useState(false); // true while the scrubber thumb is being dragged, so it stays highlighted
-  // Clamp the visible channel count to a valid range whenever channelNames or the count changes
-  const maxChannelsByHeight =
-    channelAreaHeight > 0 ? Math.floor(channelAreaHeight / MIN_PLOT_HEIGHT) : channelNames.length;
-  const clampChannelCount = (n) =>
-    Math.max(1, Math.min(channelNames.length, maxChannelsByHeight, n));
-  // Whenever on of the control variables changes, ensure it is still valid and update the input string to match
-  const updateYScale = (newVal) => {
-    const rounded_newVal =
-      Math.round(newVal * 10 ** (Y_INPUT_MAX_LENGTH - 2)) / 10 ** (Y_INPUT_MAX_LENGTH - 2);
-    const clamped = Math.max(Y_MIN, Math.min(Y_MAX, rounded_newVal));
-    setYScale(clamped);
-    setYScaleStr(String(clamped));
-  };
-  const updateWindowSize = (newVal) => {
-    const clamped = Math.round(Math.min(tMax, Math.max(1, newVal)) * 10) / 10;
-    setWindowSize(clamped);
-    setWindowSizeStr(String(clamped));
-    // If the new window size would push the right edge past tMax, pull startTime back
-    setStartTime((prev) => Math.max(0, Math.min(prev, tMax - clamped)));
-    // Shift step must never exceed window size — clamp it down if needed
-    if (shiftTimeStepSize > clamped) {
-      setShiftTimeStepSize(clamped);
-      setShiftTimeStepSizeStr(String(clamped));
-    }
-  };
-  const updateShiftTimeStepSize = (newVal) => {
-    const clamped = Math.max(1, Math.min(windowSize, Math.round(newVal * 10) / 10));
-    setShiftTimeStepSize(clamped);
-    setShiftTimeStepSizeStr(String(clamped));
-  };
-  const updateVisibleChannelCount = (newVal) => {
-    const clamped = clampChannelCount(Math.round(newVal));
-    setVisibleChannelCount(clamped);
-    setVisibleChannelCountStr(String(clamped));
-  };
+  // Channel count / x-range / time-step / y-range controls, plus their input handlers
+  const {
+    visibleChannelCount,
+    visibleChannelCountStr,
+    windowSize,
+    windowSizeStr,
+    startTime,
+    setStartTime,
+    setWindowSize,
+    setWindowSizeStr,
+    shiftTimeStepSizeStr,
+    yScale,
+    yScaleStr,
+    updateVisibleChannelCount,
+    updateYScale,
+    onVisibleChannelCountChange,
+    onVisibleChannelCountBlur,
+    onWindowSizeChange,
+    onWindowSizeBlur,
+    onShiftTimeStepChange,
+    onShiftTimeStepBlur,
+    onYScaleChange,
+    onYScaleBlur,
+    increaseWindowSize,
+    decreaseWindowSize,
+    forwardshiftStartTime,
+    backwardshiftStartTime,
+  } = useViewportControls({ tMax, channelCount: channelNames.length, channelAreaHeight });
+
   const X_AXIS_HEIGHT = 45; // px reserved for the fixed x-axis strip below the scroll area
   const plotHeight =
     channelAreaHeight > 0 ? Math.floor(channelAreaHeight / visibleChannelCount) : 0;
@@ -196,127 +149,53 @@ export const EegViewer = ({
   // keeps the previous buffer's data on screen until the new one arrives (no flash).
   const { timestamps, channels, isLoading } = useEegBuffer(provider, startTime, windowSize);
 
-  // ── Topography / recording-type state ───────────────────────────────────────
+  // ── Topography state ─────────────────────────────────────────────────────────
   const [topoVisible, setTopoVisible] = useState(false);
   const [topoTimepoint, setTopoTimepoint] = useState(null);
-  // Detection-only — always holds the standard_1005 template + its match against
-  // channelNames, used purely as input to detectIsIntracranial. Never used to
-  // render the topography itself (that's customElectrodes' job — see below).
-  const [standard1005Electrodes, setStandard1005Electrodes] = useState([]);
-  const [standard1005Matched, setStandard1005Matched] = useState([]);
 
-  // Fetch the built-in electrode position template, match it against the recording's
-  // channel names (for detection purposes only), then (re-)detect the recording type
-  // and report it upward — PatientView owns recordingType and shows/drives the
-  // EEG/iEEG toggle in the panel title, since this component no longer renders it
-  // itself. Re-runs whenever channelNames changes (new recording loaded).
+  // Electrode-position matching + recording-type (EEG/iEEG) auto-detection — PatientView
+  // owns recordingType and shows/drives the EEG/iEEG toggle in the panel title, since this
+  // component no longer renders it itself.
+  const {
+    isIntracranial,
+    electrodes,
+    matched,
+    isStandardElectrodes,
+    electrodePositionMatchCount,
+    electrodePositionTotalCount,
+    isElectrodePositionMatchGoodForLed,
+  } = useElectrodeMatching({
+    channelNames,
+    customElectrodes,
+    customElecPosFileName,
+    recordingType,
+    onRecordingTypeChange,
+  });
+
+  // Montage application + the electrode/channel voltage snapshots at the clicked topography
+  // timepoint, lifted up to PatientView for the intracranial connectome and ESI.
+  const { montagedChannels, topoVoltages, topoVoltagesByChannel } = useTopographySnapshot({
+    channels,
+    montage,
+    topoTimepoint,
+    timestamps,
+    fs: provider.fs,
+    matched,
+    channelNames,
+    isIntracranial,
+    onIntracranialSnapshotChange,
+    onChannelSnapshotChange,
+  });
+
+  // Reports whether EegTopoViewer's NiiVue canvas currently has a mesh loaded — mirrors
+  // the guard in EegTopoViewer's mesh-loading effect (isIntracranial || !electrodes?.length
+  // || !voltages?.length skips the load) so PatientView can tell when the 3D scene it's
+  // synced to is genuinely empty and disable the cross-panel rotation link accordingly.
+  const topoHasContent =
+    topoVisible && !isIntracranial && electrodes?.length > 0 && topoVoltages?.length > 0;
   useEffect(() => {
-    fetch('electrode_positions/standard_1005.elc')
-      .then((r) => r.text())
-      .then((text) => {
-        const { electrodes: parsedElectrodes } = parseElcElectrodePositions(text);
-        setStandard1005Electrodes(parsedElectrodes);
-        setStandard1005Matched(matchChannelsToPositions(channelNames, parsedElectrodes).matched);
-        const detected = detectIsIntracranial(channelNames, parsedElectrodes) ? 'ieeg' : 'eeg';
-        onRecordingTypeChange?.(detected);
-        toast(detected === 'ieeg' ? 'iEEG recording detected' : 'EEG recording detected', {
-          id: RECORDING_TYPE_TOAST_ID,
-          icon: '🔍',
-        });
-      })
-      .catch(() => {}); // silently ignore if file unavailable (e.g. in tests without the asset)
-  }, [channelNames, onRecordingTypeChange]);
-
-  const isIntracranial = recordingType === 'ieeg';
-
-  // Channels matched against the custom electrode positions (if any) — independent
-  // of mode, since intracranial recordings need this for the 3D connectome too.
-  const customMatched = useMemo(
-    () => matchChannelsToPositions(channelNames, customElectrodes).matched,
-    [channelNames, customElectrodes]
-  );
-
-  // Render-facing electrodes/matched. Scalp mode falls back to the standard_1005
-  // template when no custom file is loaded (today's behavior); intracranial mode
-  // never falls back to it — standard_1005 simply doesn't apply to depth probes.
-  const usingCustom = isIntracranial || customElectrodes.length > 0;
-  const electrodes = usingCustom ? customElectrodes : standard1005Electrodes;
-  const matched = usingCustom ? customMatched : standard1005Matched;
-  const isStandardElectrodes = !isIntracranial && customElectrodes.length === 0;
-  // Gates the status LED's auto-matched (blue) state — a technically non-empty match can
-  // still be too sparse (e.g. one shared label like "Cz" out of 200+ channels) to call
-  // positions "known".
-  const isStandardMatchGoodForLed =
-    isStandardElectrodes && standard1005Matched.length >= MIN_STANDARD_MATCH_COUNT_FOR_LED;
-
-  // Electrode Position status LED — matchCount/totalCount are shown regardless of quality
-  // (isGoodMatch just picks the color). A custom file's match is judged against
-  // customMatched even in iEEG mode (no standard-template fallback there, but a custom
-  // file's own match quality is still meaningful); the standard-template count only
-  // applies in EEG mode, since standard_1005 doesn't apply to iEEG at all.
-  const hasCustomElecPos = Boolean(customElecPosFileName);
-  const electrodePositionMatchCount = hasCustomElecPos
-    ? customMatched.length
-    : !isIntracranial
-      ? standard1005Matched.length
-      : undefined;
-  const electrodePositionTotalCount =
-    hasCustomElecPos || !isIntracranial ? channelNames.length : undefined;
-  const isElectrodePositionMatchGoodForLed = hasCustomElecPos
-    ? channelNames.length > 0 &&
-      customMatched.length / channelNames.length >= MIN_CUSTOM_MATCH_RATIO_FOR_LED
-    : isStandardMatchGoodForLed;
-
-  // Apply the selected montage once, shared by the channel plots and the topography snapshot
-  const montagedChannels = useMemo(() => {
-    if (!channels) return null;
-    return applyMontage(channels, montage);
-  }, [channels, montage]);
-
-  // Sample index shared by both voltage snapshots below.
-  const topoSampleIndex = useMemo(() => {
-    if (topoTimepoint === null || !timestamps?.length) return null;
-    return Math.max(
-      0,
-      Math.min(timestamps.length - 1, Math.round((topoTimepoint - timestamps[0]) * provider.fs))
-    );
-  }, [topoTimepoint, timestamps, provider.fs]);
-
-  // Extract one voltage per matched channel at the clicked timepoint — drives the
-  // scalp mesh and the intracranial 3D connectome (both need real x/y/z positions).
-  const topoVoltages = useMemo(() => {
-    if (topoSampleIndex === null || !montagedChannels || !matched.length) return [];
-    return matched.map((m) => montagedChannels[m.channelIdx]?.[topoSampleIndex] ?? 0);
-  }, [topoSampleIndex, montagedChannels, matched]);
-
-  // Extract one voltage per channel (not just position-matched ones) at the same
-  // timepoint — drives the intracranial matrix, which has no position-file gate.
-  const topoVoltagesByChannel = useMemo(() => {
-    if (topoSampleIndex === null || !montagedChannels) return [];
-    return montagedChannels.map((ch) => ch?.[topoSampleIndex] ?? 0);
-  }, [topoSampleIndex, montagedChannels]);
-
-  // Lift the live electrode/voltage state up so PatientView can build the
-  // intracranial connectome layer for the Neuroimaging pane — fires regardless of
-  // whether the topography window itself is open, since the connectome auto-shows.
-  useEffect(() => {
-    onIntracranialSnapshotChange?.({ isIntracranial, matched, voltages: topoVoltages });
-  }, [isIntracranial, matched, topoVoltages, onIntracranialSnapshotChange]);
-
-  // Lift all-channel voltages for ESI — fires only when topoTimepoint changes (i.e. on
-  // user clicks), NOT on every buffer refresh. Depending on topoVoltagesByChannel would
-  // also fire whenever timestamps shift during buffer loads, causing rapid cascading
-  // re-renders that supersede EegTopoViewer's async mesh load and leave it stuck loading.
-  useEffect(() => {
-    if (topoTimepoint === null || !montagedChannels || !timestamps?.length) return;
-    const sampleIndex = Math.max(
-      0,
-      Math.min(timestamps.length - 1, Math.round((topoTimepoint - timestamps[0]) * provider.fs))
-    );
-    const voltages = montagedChannels.map((ch) => ch?.[sampleIndex] ?? 0);
-    onChannelSnapshotChange?.({ isIntracranial, channelNames, voltages });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [topoTimepoint, isIntracranial, channelNames, onChannelSnapshotChange]);
+    onTopoHasContentChange?.(topoHasContent);
+  }, [topoHasContent, onTopoHasContentChange]);
 
   // Show a loading toast while the initial buffer loads, then update it to a success
   // message — self-contained so EegViewer reports its own status regardless of where
@@ -348,36 +227,6 @@ export const EegViewer = ({
     );
   }, [timestamps, montagedChannels, channelNames, startTime, windowSize, plotWidth]);
 
-  useEffect(() => {
-    // ResizeObserver fires whenever the container changes size and updates plotWidth/channelAreaHeight,
-    // which causes uPlot to redraw at the correct pixel dimensions
-    // Single observer on containerRef gives both width (for plot sizing) and height (for plotHeight)
-    const observer = new ResizeObserver(([entry]) => {
-      const w = Math.floor(entry.contentRect.width);
-      const h = Math.floor(entry.contentRect.height);
-      if (!hasMeasuredRef.current) {
-        // First measurement on mount: update immediately so charts render without delay
-        hasMeasuredRef.current = true;
-        setPlotWidth(w);
-        setChannelAreaHeight(h);
-        return;
-      }
-      // Subsequent changes (e.g. panel drag): debounce so charts only rebuild after resizing stops
-      if (resizeDebounceRef.current) clearTimeout(resizeDebounceRef.current);
-      resizeDebounceRef.current = setTimeout(() => {
-        setPlotWidth(w);
-        setChannelAreaHeight(h);
-      }, 150);
-    });
-    if (containerRef.current) observer.observe(containerRef.current);
-    return () => observer.disconnect();
-  }, []);
-
-  // Re-clamp channel count whenever the container height changes (e.g. window resize, split-pane drag)
-  useEffect(() => {
-    updateVisibleChannelCount(visibleChannelCount);
-  }, [channelAreaHeight]); // eslint-disable-line react-hooks/exhaustive-deps
-
   // Signal onViewReady once the first measurement lands and charts have rendered
   const onViewReadyCalledRef = useRef(false);
   useEffect(() => {
@@ -387,74 +236,15 @@ export const EegViewer = ({
     }
   }, [plotWidth, onViewReady]);
 
-  useEffect(() => {
-    const onMouseMove = (e) => {
-      if (!dragRef.current || !scrubberRef.current) return;
-
-      // Cancel any frame that was already queued but hasn't run yet.
-      // Without this, fast mouse moves would stack up multiple pending updates
-      // and they'd all fire in the same frame, doing redundant work.
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-
-      // Capture clientX immediately — by the time the rAF callback runs,
-      // the original event object may be recycled by the browser and clientX would be 0.
-      const clientX = e.clientX;
-
-      rafRef.current = requestAnimationFrame(() => {
-        if (!dragRef.current || !scrubberRef.current) return;
-        const barWidth = scrubberRef.current.offsetWidth;
-        const dt = ((clientX - dragRef.current.startX) / barWidth) * tMax;
-        const { type, startTime: st, startWindowSize: sw } = dragRef.current;
-
-        const r10 = (v) => Math.round(v * 10) / 10;
-        if (type === 'move') {
-          setStartTime(r10(Math.max(0, Math.min(tMax - sw, st + dt))));
-        } else if (type === 'resize-right') {
-          const newSize = r10(Math.max(1, Math.min(tMax - st, sw + dt)));
-          setWindowSize(newSize);
-          setWindowSizeStr(String(newSize));
-        } else if (type === 'resize-left') {
-          const newStart = r10(Math.max(0, Math.min(st + sw - 1, st + dt)));
-          const newSize = r10(st + sw - newStart);
-          setStartTime(newStart);
-          setWindowSize(newSize);
-          setWindowSizeStr(String(newSize));
-        }
-      });
-    };
-    // On mouse up, clear the drag state to stop dragging
-    const onMouseUp = () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      dragRef.current = null;
-      setIsDragging(false);
-    };
-
-    // Attach listeners to the window to track mouse movements instead of the scrubber,
-    // this allows dragging to continue even if the cursor leaves the scrubber area
-    window.addEventListener('mousemove', onMouseMove);
-    window.addEventListener('mouseup', onMouseUp);
-    return () => {
-      window.removeEventListener('mousemove', onMouseMove);
-      window.removeEventListener('mouseup', onMouseUp);
-    };
-  }, [tMax]);
-
-  const startDrag = (e, type) => {
-    e.preventDefault(); // stops text selection during drag
-    e.stopPropagation(); // stops the event bubbling up to the bar's own onMouseDown
-    dragRef.current = { type, startX: e.clientX, startTime, startWindowSize: windowSize };
-    setIsDragging(true);
-  };
-
-  const increaseWindowSize = () => updateWindowSize(Math.floor(windowSize) + 10);
-  const decreaseWindowSize = () => updateWindowSize(Math.max(1, Math.floor(windowSize) - 10));
-
-  const forwardshiftStartTime = () => {
-    setStartTime((start) => Math.min(tMax - windowSize, start + shiftTimeStepSize));
-  };
-  const backwardshiftStartTime = () => {
-    setStartTime((start) => Math.max(0, start - shiftTimeStepSize));
-  };
+  // Timeline scrubber drag (pan/resize the visible window)
+  const { scrubberRef, isDragging, startDrag } = useScrubberDrag({
+    tMax,
+    startTime,
+    windowSize,
+    setStartTime,
+    setWindowSize,
+    setWindowSizeStr,
+  });
 
   // Clicking anywhere in the viewer (other than a button/input) moves keyboard focus to the
   // container so the shortcuts above become active, without stealing focus from form controls
@@ -526,12 +316,13 @@ export const EegViewer = ({
 
   return (
     <>
-      {/* h-full fills the flex column in PatientView; flex-col stacks the plot row above the controls */}
+      {/* min-h-full (not h-full) so this box grows with a dragged-taller plot row, keeping the
+          absolute keyboard-hint icon below anchored to the real bottom instead of overlapping it */}
       {/* tabIndex + onKeyDown make the viewer keyboard-navigable once focused (see handleKeyDown) */}
       <div
         ref={viewerRef}
         data-testid="eeg-viewer-container"
-        className="w-full h-full flex flex-col group/viewer relative focus:outline-solid focus:outline-2 focus:outline-secondary focus:-outline-offset-2"
+        className="w-full min-h-full pb-2.5 px-2 flex flex-col group/viewer relative focus:outline-solid focus:outline-2 focus:outline-secondary focus:-outline-offset-2"
         tabIndex={0}
         onMouseDown={focusViewer}
         onKeyDown={handleKeyDown}
@@ -540,7 +331,7 @@ export const EegViewer = ({
             Uses a custom hover tooltip instead of the native title attribute, since native
             tooltips have a long built-in show delay — long enough that clicking the icon (to
             focus the viewer) often fired before the tooltip ever appeared. */}
-        <div className="absolute bottom-12 right-2 z-20 group/tip">
+        <div className="absolute bottom-18 right-3 z-20 group/tip">
           <div className="text-foreground/40 hover:text-foreground/80 group-focus/viewer:text-secondary transition-colors cursor-help">
             <Keyboard size={18} />
           </div>
@@ -577,7 +368,12 @@ export const EegViewer = ({
             never shrink below the channel-area floor + x-axis + scrubber + controls. When the
             pane gets shorter than that, the viewer overflows and the pane scrolls (see the
             MIN_CHANNEL_AREA_HEIGHT floor below) rather than the fixed rows overlapping. */}
-        <div className="flex-1 flex flex-row">
+        <div
+          ref={rowRef}
+          data-testid="eeg-plot-row"
+          className="flex-1 flex flex-row"
+          style={{ minHeight: MIN_PLOT_ROW_HEIGHT }}
+        >
           {/* Left sidebar: Channels controls centered in the available height, Montage pinned to the bottom-left corner */}
           <div className="shrink-0 flex flex-col px-1">
             <div className="flex-1 flex flex-row items-center">
@@ -601,18 +397,8 @@ export const EegViewer = ({
                     min={1}
                     max={channelNames.length}
                     style={{ width: inputWidth(visibleChannelCountStr) }}
-                    onChange={(e) => {
-                      if (e.target.value.length > CHANNEL_INPUT_MAX_LENGTH) return;
-                      setVisibleChannelCountStr(e.target.value);
-                      const val = Number(e.target.value);
-                      if (e.target.value !== '' && !isNaN(val))
-                        setVisibleChannelCount(clampChannelCount(Math.round(val)));
-                    }}
-                    onBlur={() =>
-                      updateVisibleChannelCount(
-                        Number(visibleChannelCountStr) || visibleChannelCount
-                      )
-                    }
+                    onChange={onVisibleChannelCountChange}
+                    onBlur={onVisibleChannelCountBlur}
                     className="text-center border border-border rounded px-1 py-0.5 text-sm bg-background text-foreground [appearance:textfield]"
                     aria-label="Number of channels displayed"
                   />
@@ -840,13 +626,8 @@ export const EegViewer = ({
                     value={yScaleStr}
                     min={1}
                     style={{ width: inputWidth(yScaleStr) }}
-                    onChange={(e) => {
-                      if (e.target.value.length > Y_INPUT_MAX_LENGTH) return;
-                      setYScaleStr(e.target.value);
-                      const val = Number(e.target.value);
-                      if (e.target.value !== '' && !isNaN(val)) setYScale(Math.max(Y_MIN, val));
-                    }}
-                    onBlur={() => updateYScale(Number(yScaleStr) || yScale)}
+                    onChange={onYScaleChange}
+                    onBlur={onYScaleBlur}
                     className="text-center border border-border rounded px-1 py-0.5 text-sm bg-background text-foreground [appearance:textfield]"
                     aria-label="Range (µV)"
                   />
@@ -890,18 +671,8 @@ export const EegViewer = ({
                     min={1}
                     max={windowSize}
                     style={{ width: inputWidth(shiftTimeStepSizeStr) }}
-                    onChange={(e) => {
-                      if (e.target.value.length > SHIFT_INPUT_MAX_LENGTH) return;
-                      setShiftTimeStepSizeStr(e.target.value);
-                      const val = Number(e.target.value);
-                      if (e.target.value !== '' && !isNaN(val))
-                        setShiftTimeStepSize(
-                          Math.max(1, Math.min(windowSize, Math.round(val * 10) / 10))
-                        );
-                    }}
-                    onBlur={() =>
-                      updateShiftTimeStepSize(Number(shiftTimeStepSizeStr) || shiftTimeStepSize)
-                    }
+                    onChange={onShiftTimeStepChange}
+                    onBlur={onShiftTimeStepBlur}
                     className="text-center border border-border rounded px-1 py-0.5 text-sm bg-background text-foreground [appearance:textfield]"
                     aria-label="Time step (s)"
                   />
@@ -945,14 +716,8 @@ export const EegViewer = ({
                     min={1}
                     style={{ width: inputWidth(windowSizeStr) }}
                     max={tMax}
-                    onChange={(e) => {
-                      if (e.target.value.length > WINDOW_INPUT_MAX_LENGTH) return;
-                      setWindowSizeStr(e.target.value);
-                      const val = Number(e.target.value);
-                      if (e.target.value !== '' && !isNaN(val) && val > 0)
-                        setWindowSize(Math.max(1, Math.min(tMax, val)));
-                    }}
-                    onBlur={() => updateWindowSize(Number(windowSizeStr) || windowSize)}
+                    onChange={onWindowSizeChange}
+                    onBlur={onWindowSizeBlur}
                     className="text-center border border-border rounded px-1 py-0.5 text-sm bg-background text-foreground [appearance:textfield]"
                     aria-label="Window size (s)"
                   />
@@ -1007,7 +772,7 @@ export const EegViewer = ({
           accepted_formats=".elc,.tsv,.mat"
           label="Browse or drop electrode positions / inverse solution"
           compact
-          className="shrink-0 mb-1"
+          className="shrink-0 mb-2 mt-1"
         >
           {/* Makes it clear whether a custom electrode-position/inverse-solution file is
               currently active, rather than leaving the user to guess from the dropzone alone
@@ -1028,6 +793,16 @@ export const EegViewer = ({
             />
           </div>
         </FileDropZone>
+
+        {/* Resize handle — drag down to grow the EEG plot area past flex size, drag up to shrink back.
+          Once it reaches the row's natural flex size, further upward dragging has no effect,
+          since min-height never shrinks a flex item below what it'd render at anyway. See handleCanvasResizeStart*/}
+        <div
+          data-testid="eeg-plot-resize-handle"
+          className="h-1.5 w-full shrink-0 cursor-row-resize rounded-sm select-none bg-border hover:bg-secondary active:bg-primary"
+          title="Drag to resize the EEG plot area"
+          onMouseDown={handleResizeStart}
+        />
       </div>
 
       {/* Floating topography viewer — position:fixed so it overlays the whole page */}

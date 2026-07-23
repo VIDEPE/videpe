@@ -1,6 +1,6 @@
 # VIDEPE
 
-![Version](https://img.shields.io/badge/version-0.10.0-blue)
+![Version](https://img.shields.io/badge/version-0.11.0-blue)
 
 **V**isualization & **I**ntegration of **D**ata for **E**pilepsy **P**resurgical **E**valuation
 
@@ -23,6 +23,7 @@ All data processing happens entirely in your browser. No files are ever uploaded
   - Configurable number of simultaneously visible channels
   - Min-max downsampling keeps rendering fast at any zoom level
   - Sliding-window buffer — only a portion of the recording is kept in memory at once, so hour-long, high-channel-count recordings stay fast without exhausting browser memory
+  - Drag-to-resize handle on the plot row to trade channel height for more visible channels
   - **EEG topography** — a resizable panel showing a 3D voltage map at the selected time point using [NiiVue](https://niivue.com/) mesh rendering
     - Re-reference on the fly: none, average, or median reference
     - Diverging blue-white-red colormap with a live colorbar (µV), plus a colour-blind-friendly mode
@@ -35,7 +36,7 @@ All data processing happens entirely in your browser. No files are ever uploaded
 - **Neuroimaging viewer** — full multiplanar and 3D rendering powered by [NiiVue](https://niivue.com/). Load multiple volumes/meshes simultaneously and adjust each one independently.
   - Multi-layer support for e.g. MRI, PET, and SPECT in one view
     - Supports NIfTI (`.nii`, `.nii.gz`), MGH/MGZ, GIFTI, PLY, OBJ
-  - Per-layer opacity, colormap, inversion, colorbar and thresholding controls
+  - Per-layer opacity/mesh xray, colormap, inversion, colorbar and thresholding controls
   - Drag-to-reorder layers, with a modality subtype label shown on each volume
   - Slice view buttons for axial, coronal, sagittal, multiplanar, and 3D render
   - Switches to auto layout when maximised, restores to grid on collapse
