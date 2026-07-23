@@ -40,71 +40,6 @@ import { useEsiLayer } from '@/hooks/useEsiLayer';
 export { syncVolumesAndApplySettings, syncMeshesAndApplySettings };
 
 // ─── handleSettingChange dispatch helpers ──────────────────────────────────────
-// Connectome layers (intracranial electrodes / ESI connectome mode) aren't in nv.volumes at
-// all — they're a mesh, built/tracked by useIntracranialConnectome/useEsiLayer — so settings
-// are applied to the mesh object directly instead of through nv.setOpacity/setColormap.
-function applyConnectomeSettingChange({
-  layer,
-  key,
-  value,
-  settings,
-  nv,
-  esiMeshRef,
-  intracranialMeshRef,
-}) {
-  const mesh = layer.url === ESI_LAYER_URL ? esiMeshRef.current : intracranialMeshRef.current;
-  if (!mesh) return;
-
-  if (key === 'visible') {
-    mesh.opacity = value ? settings.opacity : 0;
-    nv.updateGLVolume();
-  } else if (key === 'opacity') {
-    if (settings.visible) {
-      mesh.opacity = value;
-      nv.updateGLVolume();
-    }
-  } else if (key === 'meshXRay') {
-    nv.opts.meshXRay = value;
-    nv.updateGLVolume();
-  } else if (key === 'cal_min' || key === 'cal_max' || key === 'cal_range') {
-    // Unlike cal_min/cal_max on an NVImage, a connectome mesh's color range is only read when
-    // its color buffers are rebuilt — mutating nodeMinColor/edgeMin etc. alone has no visual
-    // effect until mesh.updateMesh(gl) recomputes them.
-    const { boundMin, boundMax } = getCalBounds(layer);
-    const calMin = fractionToCalValue(settings.cal_min, boundMin, boundMax);
-    const calMax = fractionToCalValue(settings.cal_max, boundMin, boundMax);
-    mesh.nodeMinColor = calMin;
-    mesh.nodeMaxColor = calMax;
-    mesh.edgeMin = calMin;
-    mesh.edgeMax = calMax;
-    mesh.updateMesh(nv.gl);
-    nv.updateGLVolume();
-  }
-  // colormap/invert/showColorbar: ImagingControls doesn't render those controls for this
-  // kind, so there's nothing to apply here.
-}
-
-// File-loaded surface meshes live in nv.meshes (tracked by fileMeshesRef), not nv.volumes —
-// like connectomes, they only expose opacity/visibility; colormap/threshold/invert/showColorbar
-// aren't rendered for this kind, so there's nothing to apply for those.
-function applyFileMeshSettingChange({ layer, key, value, settings, nv, fileMeshesRef }) {
-  const mesh = fileMeshesRef.current.get(layer.url);
-  if (!mesh) return;
-
-  if (key === 'visible') {
-    mesh.opacity = value ? settings.opacity : 0;
-    nv.updateGLVolume();
-  } else if (key === 'opacity') {
-    if (settings.visible) {
-      mesh.opacity = value;
-      nv.updateGLVolume();
-    }
-  } else if (key === 'meshXRay') {
-    nv.opts.meshXRay = value;
-    nv.updateGLVolume();
-  }
-}
-
 // Image volumes are the default case — mapped from their position in orderedLayers to their
 // index in nv.volumes by counting only the preceding image-volume entries (connectome and
 // mesh layers occupy a slot in orderedLayers but not in nv.volumes).
@@ -118,6 +53,7 @@ function applyVolumeSettingChange({
   nextLayerSettings,
   nv,
   opacityRafRef,
+  thresholdRafRef,
 }) {
   const nvIndex = orderedLayers.slice(0, layerIndex).filter(isImageVolumeLayer).length;
   const nvVolume = nv.volumes[nvIndex];
@@ -148,12 +84,107 @@ function applyVolumeSettingChange({
     nv.opts.isColorbar = nextLayerSettings.some((layerSetting) => layerSetting.showColorbar);
     nv.updateGLVolume();
   } else if (key === 'cal_min' || key === 'cal_max' || key === 'cal_range') {
-    // value alone (a 0-1 fraction) isn't a real cal_min/cal_max — it has to be resolved
-    // against this volume's own data range first (see getCalBounds above).
-    const { boundMin, boundMax } = getCalBounds(layer, nvVolume);
-    nvVolume.cal_min = fractionToCalValue(settings.cal_min, boundMin, boundMax);
-    nvVolume.cal_max = fractionToCalValue(settings.cal_max, boundMin, boundMax);
+    // Throttle to one GL redraw per frame — cancels any pending rAF so only the latest drag value redraws
+    if (settings.visible) {
+      if (thresholdRafRef.current) cancelAnimationFrame(thresholdRafRef.current);
+      thresholdRafRef.current = requestAnimationFrame(() => {
+        // value alone (a 0-1 fraction) isn't a real cal_min/cal_max — it has to be resolved
+        // against this volume's own data range first (see getCalBounds above).
+        const { boundMin, boundMax } = getCalBounds(layer, nvVolume);
+        nvVolume.cal_min = fractionToCalValue(settings.cal_min, boundMin, boundMax);
+        nvVolume.cal_max = fractionToCalValue(settings.cal_max, boundMin, boundMax);
+        nv.updateGLVolume();
+      });
+    }
+  }
+}
+
+// Connectome layers (intracranial electrodes / ESI connectome mode) aren't in nv.volumes at
+// all — they're a mesh, built/tracked by useIntracranialConnectome/useEsiLayer — so settings
+// are applied to the mesh object directly instead of through nv.setOpacity/setColormap.
+function applyConnectomeSettingChange({
+  layer,
+  key,
+  value,
+  settings,
+  nv,
+  esiMeshRef,
+  intracranialMeshRef,
+  thresholdRafRef,
+  meshXRayRafRef,
+}) {
+  const mesh = layer.url === ESI_LAYER_URL ? esiMeshRef.current : intracranialMeshRef.current;
+  if (!mesh) return;
+
+  // ImagingControls only renders an Opacity slider for image volumes (`{isImageVolume && (...)}`)
+  // — a connectome never gets one — so there's no 'opacity' branch here; key === 'opacity' can
+  // never fire for this layer kind. 'visible' sets mesh.opacity directly instead.
+  if (key === 'visible') {
+    mesh.opacity = value ? settings.opacity : 0;
     nv.updateGLVolume();
+  } else if (key === 'cal_min' || key === 'cal_max' || key === 'cal_range') {
+    // Throttle to one GL redraw per frame — cancels any pending rAF so only the latest drag value redraws
+    if (settings.visible) {
+      if (thresholdRafRef.current) cancelAnimationFrame(thresholdRafRef.current);
+      thresholdRafRef.current = requestAnimationFrame(() => {
+        // Unlike cal_min/cal_max on an NVImage, a connectome mesh's color range is only read when
+        // its color buffers are rebuilt — mutating nodeMinColor/edgeMin etc. alone has no visual
+        // effect until mesh.updateMesh(gl) recomputes them.
+        const { boundMin, boundMax } = getCalBounds(layer);
+        const calMin = fractionToCalValue(settings.cal_min, boundMin, boundMax);
+        const calMax = fractionToCalValue(settings.cal_max, boundMin, boundMax);
+        mesh.nodeMinColor = calMin;
+        mesh.nodeMaxColor = calMax;
+        mesh.edgeMin = calMin;
+        mesh.edgeMax = calMax;
+        mesh.updateMesh(nv.gl);
+        nv.updateGLVolume();
+      });
+    }
+  } else if (key === 'meshXRay') {
+    // Throttle to one GL redraw per frame — cancels any pending rAF so only the latest drag value redraws
+    if (settings.visible) {
+      if (meshXRayRafRef.current) cancelAnimationFrame(meshXRayRafRef.current);
+      meshXRayRafRef.current = requestAnimationFrame(() => {
+        nv.opts.meshXRay = value;
+        nv.updateGLVolume();
+      });
+    }
+  }
+  // colormap/invert/showColorbar: ImagingControls doesn't render those controls for this
+  // kind, so there's nothing to apply here.
+}
+
+// File-loaded surface meshes live in nv.meshes (tracked by fileMeshesRef), not nv.volumes —
+// like connectomes, they only expose opacity/visibility; colormap/threshold/invert/showColorbar
+// aren't rendered for this kind, so there's nothing to apply for those.
+function applyFileMeshSettingChange({
+  layer,
+  key,
+  value,
+  settings,
+  nv,
+  fileMeshesRef,
+  meshXRayRafRef,
+}) {
+  const mesh = fileMeshesRef.current.get(layer.url);
+  if (!mesh) return;
+
+  // ImagingControls only renders an Opacity slider for image volumes (`{isImageVolume && (...)}`)
+  // — a file-loaded mesh never gets one — so there's no 'opacity' branch here; key === 'opacity'
+  // can never fire for this layer kind. 'visible' sets mesh.opacity directly instead.
+  if (key === 'visible') {
+    mesh.opacity = value ? settings.opacity : 0;
+    nv.updateGLVolume();
+  } else if (key === 'meshXRay') {
+    // Throttle to one GL redraw per frame — cancels any pending rAF so only the latest drag value redraws
+    if (settings.visible) {
+      if (meshXRayRafRef.current) cancelAnimationFrame(meshXRayRafRef.current);
+      meshXRayRafRef.current = requestAnimationFrame(() => {
+        nv.opts.meshXRay = value;
+        nv.updateGLVolume();
+      });
+    }
   }
 }
 
@@ -190,6 +221,9 @@ export const NiiViewer = ({
 
   // ─── Refs ───────────────────────────────────────────────────────────────────
   const opacityRafRef = useRef(null); // rAF id — cancelled on each drag so only the latest value redraws
+  const thresholdRafRef = useRef(null); // rAF id — cancelled on each drag so only the latest value redraws
+  const meshXRayRafRef = useRef(null); // rAF id — cancelled on each drag so only the latest value redraws
+  const settingsCommitRafRef = useRef(null); // rAF id — throttles the layerSettings React commit itself to once per frame, so it matches the once-per-frame GL redraw above instead of re-rendering the whole card list on every Radix onValueChange tick
   const fileMeshesRef = useRef(new Map()); // url → NVMesh for surface meshes loaded from files; keyed by url since nv.meshes also holds connectome meshes
 
   // ─── Derived values ─────────────────────────────────────────────────────────
@@ -283,9 +317,22 @@ export const NiiViewer = ({
           index === layerIndex ? { ...layerSetting, ...layerUpdate } : layerSetting
         );
       }
-      setLayerSettings(nextLayerSettings);
+      // Throttled to once per animation frame — cancelling any pending commit and scheduling the
+      // latest one, same pattern as the GL redraw below. This matters for slider drags
+      // (opacity/threshold/meshXRay), which can call this several times per frame; it's a no-op
+      // cost for single-fire changes (visible/colormap/isEsiVolume/...) since those only ever
+      // call this once, so they still land on the very next frame either way.
+      if (settingsCommitRafRef.current) cancelAnimationFrame(settingsCommitRafRef.current);
+      settingsCommitRafRef.current = requestAnimationFrame(() => {
+        settingsCommitRafRef.current = null;
+        setLayerSettings(nextLayerSettings);
+      });
       // Persisted independently of layerSettings so the Connectome/Volume toggle survives
       // handleDeleteLayer wiping the ESI settings entry — see lastEsiVolumeMode's declaration.
+      // setLastEsiVolumeMode fires synchronously here (unlike the throttled setLayerSettings
+      // above), but that's safe: the `?? lastEsiVolumeMode` fallback above only ever kicks in
+      // when the ESI settings entry is entirely absent (deleted), not when it's merely one frame
+      // stale, so the two being on different schedules doesn't produce a wrong intermediate value.
       if (key === 'isEsiVolume') setLastEsiVolumeMode(value);
 
       if (!nvRef.current) return;
@@ -303,9 +350,19 @@ export const NiiViewer = ({
           nv,
           esiMeshRef,
           intracranialMeshRef,
+          thresholdRafRef,
+          meshXRayRafRef,
         });
       } else if (layer.kind === 'mesh') {
-        applyFileMeshSettingChange({ layer, key, value, settings, nv, fileMeshesRef });
+        applyFileMeshSettingChange({
+          layer,
+          key,
+          value,
+          settings,
+          nv,
+          fileMeshesRef,
+          meshXRayRafRef,
+        });
       } else {
         applyVolumeSettingChange({
           layer,
@@ -317,6 +374,7 @@ export const NiiViewer = ({
           nextLayerSettings,
           nv,
           opacityRafRef,
+          thresholdRafRef,
         });
       }
     },

@@ -129,10 +129,15 @@ vi.mock('@niivue/niivue', () => ({
       addColormap: vi.fn(),
       // loadConnectomeAsMesh is synchronous in real NiiVue (returns but doesn't add the mesh) —
       // mirror that by handing back a plain object carrying the json's properties plus the
-      // opacity/visible defaults the real NVConnectome constructor would apply.
-      loadConnectomeAsMesh: vi
-        .fn()
-        .mockImplementation((json) => ({ ...json, opacity: 1, visible: true })),
+      // opacity/visible defaults the real NVConnectome constructor would apply, plus a stubbed
+      // updateMesh — the real NVConnectome recomputes its color buffers there, called whenever
+      // the Threshold slider changes (see applyConnectomeSettingChange in NiiViewer.jsx).
+      loadConnectomeAsMesh: vi.fn().mockImplementation((json) => ({
+        ...json,
+        opacity: 1,
+        visible: true,
+        updateMesh: vi.fn(),
+      })),
       addMesh: vi.fn().mockImplementation(function (mesh) {
         // mirrors what real NiiVue does — appends the mesh to the existing ones
         instance.meshes = [...instance.meshes, mesh];
@@ -542,6 +547,25 @@ describe('filesToLayers', () => {
 });
 
 describe('NiiViewer', () => {
+  // requestAnimationFrame is stubbed to run its callback immediately (instead of waiting for a
+  // real animation frame) for the whole suite, not just the settings-change tests below: every
+  // opacity/threshold/meshXRay write and the layerSettings React commit itself are now throttled
+  // through rAF (see NiiViewer.jsx's opacityRafRef/thresholdRafRef/meshXRayRafRef/
+  // settingsCommitRafRef), and jsdom's real rAF is timer-backed rather than instant, so leaving
+  // it un-stubbed would make assertions dependent on real wall-clock timing instead of failing
+  // deterministically.
+  beforeEach(() => {
+    vi.stubGlobal('requestAnimationFrame', (cb) => {
+      cb();
+      return 0;
+    });
+    vi.stubGlobal('cancelAnimationFrame', () => {});
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   describe('getInitialLayerSettings', () => {
     it('starts all layers visible', () => {
       const result = getInitialLayerSettings([{ type: 'MRI' }, { type: 'PET' }, { type: 'SPECT' }]);
@@ -724,8 +748,8 @@ describe('NiiViewer', () => {
       await userEvent.click(screen.getByRole('button', { name: /expand.*mri/i }));
       fireEvent.change(screen.getByLabelText('MRI Threshold minimum'), { target: { value: '40' } });
       // mockClear() resets a vi.fn() mock's recorded call history (call count, arguments) back to empty
-      // wiping out the record of the updateGLVolume() that changing the colormap triggered internally. 
-      // This allows expect(nv.updateGLVolume).toHaveBeenCalled()  to only reflects a updateGLVolume that 
+      // wiping out the record of the updateGLVolume() that changing the colormap triggered internally.
+      // This allows expect(nv.updateGLVolume).toHaveBeenCalled()  to only reflects a updateGLVolume that
       // has been run again AFTER the colormap and cal_min/max changes.
       nv.updateGLVolume.mockClear();
 
@@ -825,6 +849,32 @@ describe('NiiViewer', () => {
       expect(nv.volumes[0].colorbarVisible).toBe(true);
       expect(nv.updateGLVolume).toHaveBeenCalledOnce();
     });
+
+    describe('opacity/threshold — throttled through requestAnimationFrame', () => {
+      // opacity and cal_min/cal_max/cal_range writes are throttled to one GL redraw per frame
+      // (see applyVolumeSettingChange in NiiViewer.jsx) — rAF is stubbed synchronous for the
+      // whole suite (see the top of this describe('NiiViewer', ...) block).
+      it("calls nv.setOpacity with the new value when a visible volume's opacity changes", async () => {
+        const nv = await setup();
+        await userEvent.click(screen.getByRole('button', { name: /expand.*mri/i }));
+        fireEvent.change(screen.getByLabelText('MRI opacity'), { target: { value: '55' } });
+        expect(nv.setOpacity).toHaveBeenCalledWith(0, 0.55);
+      });
+
+      it('sets nvVolume.cal_min/cal_max from the dragged threshold and calls updateGLVolume', async () => {
+        const nv = await setup();
+        await userEvent.click(screen.getByRole('button', { name: /expand.*mri/i }));
+        fireEvent.change(screen.getByLabelText('MRI Threshold minimum'), {
+          target: { value: '30' },
+        });
+        fireEvent.change(screen.getByLabelText('MRI Threshold maximum'), {
+          target: { value: '80' },
+        });
+        expect(nv.volumes[0].cal_min).toBeCloseTo(0.3);
+        expect(nv.volumes[0].cal_max).toBeCloseTo(0.8);
+        expect(nv.updateGLVolume).toHaveBeenCalled();
+      });
+    });
   });
 
   describe('meshXRay setting', () => {
@@ -836,6 +886,9 @@ describe('NiiViewer', () => {
       kind: 'mesh',
     };
 
+    // meshXRay's nv-side write is throttled through requestAnimationFrame (one redraw per frame
+    // — see applyConnectomeSettingChange/applyFileMeshSettingChange in NiiViewer.jsx); rAF is
+    // stubbed synchronous for the whole suite (see the top of this describe('NiiViewer', ...) block).
     it('writes to nv.opts.meshXRay (not a top-level nv property) and calls updateGLVolume', async () => {
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
@@ -1333,6 +1386,53 @@ describe('NiiViewer', () => {
       expect(nv.setOpacity).not.toHaveBeenCalled();
     });
 
+    describe('threshold — throttled through requestAnimationFrame', () => {
+      // The connectome Threshold control only renders for the ESI layer in Connectome mode
+      // (see the isEsiLayer check in ImagingControls.jsx) — the generic intracranial-electrodes
+      // connectome has no Threshold control at all, so this exercises the ESI layer instead.
+      // Opacity isn't tested here: ImagingControls only renders an Opacity slider for image
+      // volumes (`{isImageVolume && (...)}`), so key === 'opacity' can never actually fire for
+      // a connectome layer — that branch in applyConnectomeSettingChange is unreachable from
+      // the UI, on any layer, not just this one.
+      //
+      // The nv-side redraw is throttled to one per frame (see applyConnectomeSettingChange in
+      // NiiViewer.jsx); rAF is stubbed synchronous for the whole suite (see the top of this
+      // describe('NiiViewer', ...) block).
+      it('sets mesh node/edge color range from the dragged threshold and calls updateMesh + updateGLVolume', async () => {
+        const { Niivue } = await import('@niivue/niivue');
+        const nvRef = { current: new Niivue() };
+        const esiLayer = makeEsiLayer();
+        render(<NiiViewer nvRef={nvRef} layers={[]} esiLayer={esiLayer} />);
+        await waitFor(() =>
+          expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument()
+        );
+
+        const nv = nvRef.current;
+        // isEsiVolume defaults to true (volume mode) — switch to connectome mode first, since
+        // that's the only mode the generic connectome Threshold branch under test applies to.
+        await userEvent.click(screen.getByRole('button', { name: /expand.*layer 1/i }));
+        await userEvent.click(screen.getByRole('switch', { name: /layer 1.*volume/i }));
+        await waitFor(() => expect(nv.loadConnectomeAsMesh).toHaveBeenCalled());
+
+        const mesh = nv.addMesh.mock.calls.at(-1)[0];
+        nv.updateGLVolume.mockClear();
+
+        fireEvent.change(screen.getByLabelText('Layer 1 Threshold minimum'), {
+          target: { value: '30' },
+        });
+        fireEvent.change(screen.getByLabelText('Layer 1 Threshold maximum'), {
+          target: { value: '80' },
+        });
+
+        expect(mesh.nodeMinColor).toBeCloseTo(0.3);
+        expect(mesh.nodeMaxColor).toBeCloseTo(0.8);
+        expect(mesh.edgeMin).toBeCloseTo(0.3);
+        expect(mesh.edgeMax).toBeCloseTo(0.8);
+        expect(mesh.updateMesh).toHaveBeenCalled();
+        expect(nv.updateGLVolume).toHaveBeenCalled();
+      });
+    });
+
     it('removes the mesh and its card when intracranialLayer becomes null', async () => {
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
@@ -1652,6 +1752,11 @@ describe('NiiViewer', () => {
       expect(addedMesh.opacity).toBe(0);
       expect(nv.setOpacity).not.toHaveBeenCalled();
     });
+
+    // No opacity or threshold rAF-throttle test here: ImagingControls only renders an Opacity
+    // slider for image volumes and a Threshold control for image volumes/the ESI layer (see
+    // ImagingControls.jsx's isImageVolume/isEsiLayer gates) — a file-loaded mesh gets neither,
+    // so `key === 'opacity'` in applyFileMeshSettingChange can never actually fire from the UI.
 
     it('deleting a mesh card calls nv.removeMesh, not nv.removeVolumeByIndex', async () => {
       const { Niivue } = await import('@niivue/niivue');
