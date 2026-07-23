@@ -698,7 +698,7 @@ describe('NiiViewer', () => {
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
 
       // Expand the MRI card and change the colormap
-      await userEvent.click(screen.getByRole('button', { name: 'Expand MRI controls' }));
+      await userEvent.click(screen.getByRole('button', { name: /expand.*mri/i }));
       await userEvent.selectOptions(screen.getByLabelText('MRI colormap'), 'magma');
 
       const nv = nvRef.current;
@@ -774,22 +774,22 @@ describe('NiiViewer', () => {
 
     it('calls nv.setOpacity with 0 when hiding a visible volume', async () => {
       const nv = await setup();
-      await userEvent.click(screen.getByRole('button', { name: 'Hide MRI' }));
+      await userEvent.click(screen.getByRole('button', { name: /hide.*mri/i }));
       expect(nv.setOpacity).toHaveBeenCalledWith(0, 0);
     });
 
     it('sets colormapInvert on the NVImage and calls updateGLVolume when invert is toggled', async () => {
       const nv = await setup();
-      await userEvent.click(screen.getByRole('button', { name: 'Expand MRI controls' }));
-      await userEvent.click(screen.getByRole('switch', { name: 'Invert MRI colormap' }));
+      await userEvent.click(screen.getByRole('button', { name: /expand.*mri/i }));
+      await userEvent.click(screen.getByRole('switch', { name: /invert.*mri/i }));
       expect(nv.volumes[0].colormapInvert).toBe(true);
       expect(nv.updateGLVolume).toHaveBeenCalledOnce();
     });
 
     it('sets colorbarVisible on the NVImage and calls updateGLVolume when colorbar is toggled', async () => {
       const nv = await setup();
-      await userEvent.click(screen.getByRole('button', { name: 'Expand MRI controls' }));
-      await userEvent.click(screen.getByRole('switch', { name: 'Show MRI colorbar' }));
+      await userEvent.click(screen.getByRole('button', { name: /expand.*mri/i }));
+      await userEvent.click(screen.getByRole('switch', { name: /mri.*colorbar/i }));
       expect(nv.volumes[0].colorbarVisible).toBe(true);
       expect(nv.updateGLVolume).toHaveBeenCalledOnce();
     });
@@ -813,7 +813,7 @@ describe('NiiViewer', () => {
       const nv = nvRef.current;
       nv.updateGLVolume.mockClear();
       await userEvent.click(
-        screen.getByRole('button', { name: 'Expand Intracranial - Electrodes controls' })
+        screen.getByRole('button', { name: /expand.*intracranial - electrodes/i })
       );
       fireEvent.change(screen.getByLabelText('Intracranial - Electrodes meshXRay'), {
         target: { value: '40' },
@@ -834,9 +834,9 @@ describe('NiiViewer', () => {
 
       // Expand both cards so their meshXRay inputs are in the DOM.
       await userEvent.click(
-        screen.getByRole('button', { name: 'Expand Intracranial - Electrodes controls' })
+        screen.getByRole('button', { name: /expand.*intracranial - electrodes/i })
       );
-      await userEvent.click(screen.getByRole('button', { name: 'Expand Mesh - cortex controls' }));
+      await userEvent.click(screen.getByRole('button', { name: /expand.*mesh - cortex/i }));
 
       fireEvent.change(screen.getByLabelText('Intracranial - Electrodes meshXRay'), {
         target: { value: '25' },
@@ -855,12 +855,12 @@ describe('NiiViewer', () => {
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
 
       await userEvent.click(
-        screen.getByRole('button', { name: 'Expand Intracranial - Electrodes controls' })
+        screen.getByRole('button', { name: /expand.*intracranial - electrodes/i })
       );
-      await userEvent.click(screen.getByRole('button', { name: 'Expand Mesh - cortex controls' }));
+      await userEvent.click(screen.getByRole('button', { name: /expand.*mesh - cortex/i }));
 
       // Toggling one card's visibility is unrelated to meshXRay and shouldn't broadcast anything.
-      await userEvent.click(screen.getByRole('button', { name: 'Hide Mesh - cortex' }));
+      await userEvent.click(screen.getByRole('button', { name: /hide.*mesh - cortex/i }));
 
       expect(screen.getByLabelText('Intracranial - Electrodes meshXRay')).toHaveValue(100);
     });
@@ -1025,7 +1025,7 @@ describe('NiiViewer', () => {
 
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
 
-      await userEvent.click(screen.getByRole('button', { name: 'Expand scan controls' }));
+      await userEvent.click(screen.getByRole('button', { name: /expand.*scan/i }));
       expect(screen.getByLabelText('scan opacity')).toHaveValue(60);
     });
 
@@ -1049,7 +1049,7 @@ describe('NiiViewer', () => {
       expect(loadedUrls).not.toContain('__intracranial-electrodes__');
 
       // Both cards are present — the new volume alongside the untouched connectome.
-      expect(screen.getByRole('button', { name: 'Expand scan controls' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /expand.*scan/i })).toBeInTheDocument();
       expect(screen.getByText('Intracranial')).toBeInTheDocument();
     });
 
@@ -1141,9 +1141,9 @@ describe('NiiViewer', () => {
       const nv = await setup();
 
       // click expand settings on the first volume (=> index = 0 )
-      await userEvent.click(screen.getByRole('button', { name: `Expand MRI controls` }));
+      await userEvent.click(screen.getByRole('button', { name: /expand.*mri/i }));
       // click the delete volume button
-      await userEvent.click(screen.getByRole('button', { name: 'Close MRI volume' }));
+      await userEvent.click(screen.getByRole('button', { name: /close.*mri/i }));
       // expect to only have 1 volume left
       expect(nv.volumes.length).toBe(1);
       // expect the remaining volume to have the right url
@@ -1154,9 +1154,9 @@ describe('NiiViewer', () => {
       const nv = await setup();
 
       // click expand settings on the first volume (=> index = 0 )
-      await userEvent.click(screen.getByRole('button', { name: `Expand MRI controls` }));
+      await userEvent.click(screen.getByRole('button', { name: /expand.*mri/i }));
       // click the delete volume button
-      await userEvent.click(screen.getByRole('button', { name: 'Close MRI volume' }));
+      await userEvent.click(screen.getByRole('button', { name: /close.*mri/i }));
       // expect the settings card to be removed
       expect(screen.queryByText('MRI')).not.toBeInTheDocument();
       // expect the other settings card to still be there
@@ -1252,7 +1252,7 @@ describe('NiiViewer', () => {
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
 
       // Customize the MRI volume's visibility before the connectome refreshes
-      await userEvent.click(screen.getByRole('button', { name: 'Hide MRI' }));
+      await userEvent.click(screen.getByRole('button', { name: /hide.*mri/i }));
 
       const nv = nvRef.current;
       nv.loadVolumes.mockClear();
@@ -1274,7 +1274,7 @@ describe('NiiViewer', () => {
       expect(nv.addMesh).toHaveBeenCalled(); // rebuilt with the new data
       expect(nv.loadVolumes).not.toHaveBeenCalled(); // images untouched, not re-loaded
       // MRI's visibility change survived the connectome refresh
-      expect(screen.getByRole('button', { name: 'Show MRI' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /show.*mri/i })).toBeInTheDocument();
     });
 
     it('toggling the connectome card visibility sets mesh.opacity directly, not nv.setOpacity', async () => {
@@ -1293,7 +1293,9 @@ describe('NiiViewer', () => {
       const mesh = nv.addMesh.mock.calls.at(-1)[0];
       nv.setOpacity.mockClear();
 
-      await userEvent.click(screen.getByRole('button', { name: 'Hide Intracranial - Electrodes' }));
+      await userEvent.click(
+        screen.getByRole('button', { name: /hide.*intracranial - electrodes/i })
+      );
 
       expect(mesh.opacity).toBe(0);
       expect(nv.setOpacity).not.toHaveBeenCalled();
@@ -1333,10 +1335,10 @@ describe('NiiViewer', () => {
       nv.removeVolumeByIndex.mockClear();
 
       await userEvent.click(
-        screen.getByRole('button', { name: 'Expand Intracranial - Electrodes controls' })
+        screen.getByRole('button', { name: /expand.*intracranial - electrodes/i })
       );
       await userEvent.click(
-        screen.getByRole('button', { name: 'Close Intracranial - Electrodes volume' })
+        screen.getByRole('button', { name: /close.*intracranial - electrodes/i })
       );
 
       expect(nv.removeMesh).toHaveBeenCalledWith(mesh);
@@ -1429,7 +1431,7 @@ describe('NiiViewer', () => {
       await userEvent.upload(input, new File(['data'], 'scan.nii'));
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
 
-      expect(screen.getByRole('button', { name: 'Expand scan controls' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /expand.*scan/i })).toBeInTheDocument();
       expect(screen.getByText('Intracranial')).toBeInTheDocument();
     });
   });
@@ -1613,7 +1615,7 @@ describe('NiiViewer', () => {
       const addedMesh = (await mesh)[0];
       nv.setOpacity.mockClear();
 
-      await userEvent.click(screen.getByRole('button', { name: 'Hide Mesh - cortex' }));
+      await userEvent.click(screen.getByRole('button', { name: /hide.*mesh - cortex/i }));
 
       expect(addedMesh.opacity).toBe(0);
       expect(nv.setOpacity).not.toHaveBeenCalled();
@@ -1636,8 +1638,8 @@ describe('NiiViewer', () => {
       const addedMesh = (await nv.addMeshesFromUrl.mock.results.at(-1).value)[0];
       nv.removeVolumeByIndex.mockClear();
 
-      await userEvent.click(screen.getByRole('button', { name: 'Expand Mesh - cortex controls' }));
-      await userEvent.click(screen.getByRole('button', { name: 'Close Mesh - cortex volume' }));
+      await userEvent.click(screen.getByRole('button', { name: /expand.*mesh - cortex/i }));
+      await userEvent.click(screen.getByRole('button', { name: /close.*mesh - cortex/i }));
 
       expect(nv.removeMesh).toHaveBeenCalledWith(addedMesh);
       expect(nv.removeVolumeByIndex).not.toHaveBeenCalled();
@@ -1769,15 +1771,15 @@ describe('NiiViewer', () => {
       const nv = nvRef.current;
       // isEsiVolume defaults to true (volume mode) — switch to connectome mode first, matching
       // the bug report ("closing ESI layer in connectome mode...").
-      await userEvent.click(screen.getByRole('button', { name: 'Expand Layer 1 controls' }));
-      await userEvent.click(screen.getByRole('switch', { name: 'Show Layer 1 as volume' }));
+      await userEvent.click(screen.getByRole('button', { name: /expand.*layer 1/i }));
+      await userEvent.click(screen.getByRole('switch', { name: /layer 1.*volume/i }));
       await waitFor(() => expect(nv.loadConnectomeAsMesh).toHaveBeenCalled());
 
       nv.addVolumesFromUrl.mockClear();
       nv.loadConnectomeAsMesh.mockClear();
 
       // Close (delete) the ESI card while in connectome mode.
-      await userEvent.click(screen.getByRole('button', { name: 'Close Layer 1 volume' }));
+      await userEvent.click(screen.getByRole('button', { name: /close.*layer 1/i }));
 
       // Regression: deleting the card removes its layerSettings entry, but esiLayer itself is
       // owned upstream (e.g. by PatientView) and is untouched by the deletion — so useEsiLayer
@@ -1786,9 +1788,7 @@ describe('NiiViewer', () => {
       // last mode actually used, that's enough on its own to make useEsiLayer rebuild the
       // just-deleted layer as a volume — this asserts that doesn't happen.
       expect(nv.addVolumesFromUrl).not.toHaveBeenCalled();
-      expect(
-        screen.queryByRole('button', { name: 'Expand Layer 1 controls' })
-      ).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /expand.*layer 1/i })).not.toBeInTheDocument();
     });
   });
 });
