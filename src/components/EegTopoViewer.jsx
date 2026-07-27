@@ -58,7 +58,7 @@ function addElectrodeMarkers(nv, markers, calMax, colourBlindMode) {
     nv.addMesh(unmappedMesh);
     // Matte shader ignores surface normals/lighting so node colour renders flat and matches
     // the colormap swatch exactly, instead of Phong's default shading darkening/lightening it.
-    nv.setMeshShader(unmappedMesh.id, 'Matte');
+    nv.setMeshShader(unmappedMesh.id, 'Rim');
   }
   if (matchedNodes.length > 0) {
     const matchedMesh = nv.loadConnectomeAsMesh({
@@ -73,7 +73,7 @@ function addElectrodeMarkers(nv, markers, calMax, colourBlindMode) {
       // No `edges` key — see comment on the unmapped layer above.
     });
     nv.addMesh(matchedMesh);
-    nv.setMeshShader(matchedMesh.id, 'Matte');
+    nv.setMeshShader(matchedMesh.id, 'Harmonic');
   }
 }
 
