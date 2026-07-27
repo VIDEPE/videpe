@@ -12,7 +12,7 @@ import { SplitPane } from '../components/SplitPane';
 import { EEGTypeToggle } from '../components/EEGTypeToggle';
 import { FileDropZone } from '../components/FileDropZone';
 import { filesToLayers } from '../utils/NiiViewer.utils';
-import { buildIntracranialLayer } from '../utils/eegTopographyUtils';
+import { buildElectrodeLayer } from '../utils/eegTopographyUtils';
 import { useEegFileIntake } from '../hooks/useEegFileIntake';
 import { useMontage } from '../hooks/useMontage';
 import { useElectricalSourceImaging } from '../hooks/useElectricalSourceImaging';
@@ -47,7 +47,7 @@ export const PatientView = () => {
 
   // Live EEG/electrode state lifted out of EegViewer — drives the intracranial connectome
   // layer in the Neuroimaging pane. { isIntracranial, matched, voltages } | null.
-  const [intracranialSnapshot, setIntracranialSnapshot] = useState(null);
+  const [electrodeSnapshot, setElectrodeSnapshot] = useState(null);
   // 'eeg' | 'ieeg' — owned here (not EegViewer) so the SplitPane title can show/drive the
   // toggle. EegViewer reports its auto-detection result up via the same setter that the
   // title's click handler uses, then reads the resulting value back down as a prop.
@@ -92,8 +92,8 @@ export const PatientView = () => {
   // EegViewer — null until there's an intracranial recording with at least one
   // position-matched channel. `?? {}` guards the initial (pre-EegViewer-effect) null state.
   const intracranialLayer = useMemo(
-    () => buildIntracranialLayer(intracranialSnapshot ?? {}),
-    [intracranialSnapshot]
+    () => buildElectrodeLayer(electrodeSnapshot ?? {}),
+    [electrodeSnapshot]
   ); // intracranial electrodes
 
   // Whether the Neuroimaging pane currently has anything to show — same condition that
@@ -177,7 +177,7 @@ export const PatientView = () => {
     setLayers([]);
     setNiiHasOwnContent(false);
     resetIntake();
-    setIntracranialSnapshot(null);
+    setElectrodeSnapshot(null);
     resetInverseSolution();
     resetMontage();
     setChannelSnapshot(null);
@@ -193,7 +193,7 @@ export const PatientView = () => {
     setEeg(null);
     resetIntake();
     setRecordingType('eeg');
-    setIntracranialSnapshot(null);
+    setElectrodeSnapshot(null);
     resetInverseSolution();
     resetMontage();
     setChannelSnapshot(null);
@@ -290,7 +290,7 @@ export const PatientView = () => {
               onMontageChange={handleMontageChange}
               onElecPosFile={handleElecPosFile}
               onInverseSolutionFile={handleInverseSolutionFile}
-              onIntracranialSnapshotChange={setIntracranialSnapshot}
+              onElectrodeSnapshotChange={setElectrodeSnapshot}
               onChannelSnapshotChange={setChannelSnapshot}
               onTopoHasContentChange={setTopoHasContent}
             />

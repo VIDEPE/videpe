@@ -94,7 +94,7 @@ export const EegViewer = ({
   inverseSolutionFileName = null, // filename (no extension) of the loaded inverse-solution file — owned by PatientView, passed down
   onElecPosFile,
   onInverseSolutionFile,
-  onIntracranialSnapshotChange,
+  onElectrodeSnapshotChange,
   onChannelSnapshotChange,
   recordingType = 'eeg', // 'eeg' | 'ieeg' — controlled by PatientView, which shows/drives the toggle in the panel title
   onRecordingTypeChange,
@@ -188,7 +188,7 @@ export const EegViewer = ({
     matched,
     channelNames,
     isIntracranial,
-    onIntracranialSnapshotChange,
+    onElectrodeSnapshotChange,
     onChannelSnapshotChange,
   });
 
