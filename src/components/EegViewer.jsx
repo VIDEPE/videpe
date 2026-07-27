@@ -16,6 +16,7 @@ import {
   ListChevronsUpDown,
   ListChevronsDownUp,
   Keyboard,
+  Map,
 } from 'lucide-react';
 import { minMaxDownsample } from '@/utils/downsample';
 import { useEegBuffer } from '@/loaders/eegBuffer';
@@ -150,8 +151,11 @@ export const EegViewer = ({
   const { timestamps, channels, isLoading } = useEegBuffer(provider, startTime, windowSize);
 
   // ── Topography state ─────────────────────────────────────────────────────────
-  const [topoVisible, setTopoVisible] = useState(false);
+  const [topoEnabled, setTopoEnabled] = useState(false);
   const [topoTimepoint, setTopoTimepoint] = useState(null);
+  // Topograph window only opens when the toggle is on (topoEnabled) AND once a EEGplot
+  // click has produced a timepoint to show (topoTimepoint)
+  const topoVisible = topoEnabled && topoTimepoint !== null;
 
   // Electrode-position matching + recording-type (EEG/iEEG) auto-detection — PatientView
   // owns recordingType and shows/drives the EEG/iEEG toggle in the panel title, since this
@@ -192,7 +196,7 @@ export const EegViewer = ({
   // || !voltages?.length skips the load) so PatientView can tell when the 3D scene it's
   // synced to is genuinely empty and disable the cross-panel rotation link accordingly.
   const topoHasContent =
-    topoVisible && !isIntracranial && electrodes?.length > 0 && topoVoltages?.length > 0;
+    topoEnabled && !isIntracranial && electrodes?.length > 0 && topoVoltages?.length > 0;
   useEffect(() => {
     onTopoHasContentChange?.(topoHasContent);
   }, [topoHasContent, onTopoHasContentChange]);
@@ -376,6 +380,25 @@ export const EegViewer = ({
         >
           {/* Left sidebar: Channels controls centered in the available height, Montage pinned to the bottom-left corner */}
           <div className="shrink-0 flex flex-col px-1">
+            <div className="flex flex-col gap-1 absolute pl-7 pt-7">
+              {/* EEG Topography selector*/}
+              <div className="">
+                <button
+                  type="button"
+                  className="button button-icon"
+                  title={`${topoEnabled ? 'Disable Topograph Map' : 'EEG Topograph Map. If enabled: click EEG plot to generate an EEG Topography map at selected timestamp (requires known electrode positions)'}`}
+                  aria-label={`${topoEnabled ? 'Disable' : 'Enable'} Topograph Map`}
+                  aria-pressed={topoEnabled}
+                  onClick={() => setTopoEnabled(!topoEnabled)}
+                >
+                  <Map size={ICON_SIZE} />
+                </button>
+              </div>
+              {/* PLACEHOLDER: 3D Render of electrodes */}
+              <div className=""></div>
+            </div>
+
+            {/* Channel Controls*/}
             <div className="flex-1 flex flex-row items-center">
               <div className="flex flex-row items-center gap-1 py-1 border-border/50 border-1 border-r-0 rounded-tl-md rounded-bl-md">
                 <span className="text-xs text-foreground/60 whitespace-nowrap [writing-mode:vertical-rl] rotate-180 select-none pointer-events-none">
@@ -413,6 +436,7 @@ export const EegViewer = ({
                 </div>
               </div>
             </div>
+            {/* EEG Montage: Settings for chaning the EEG referencing */}
             <div
               className="flex flex-col items-center gap-1 pb-1"
               title="Apply EEG reference montage"
@@ -447,7 +471,7 @@ export const EegViewer = ({
                 ref={containerRef}
                 className="absolute inset-0 overflow-y-auto themed-scrollbar"
                 title={
-                  matched.length > 0 && !topoVisible
+                  matched.length > 0 && topoEnabled && !topoVisible
                     ? 'Click any channel to view the EEG topography for that time point'
                     : undefined
                 }
@@ -508,13 +532,12 @@ export const EegViewer = ({
                           data={displayedData[i]}
                           onCreate={(u) => {
                             {
-                              /* click listener that converts the click's x-position into a timestamp, sets topoTimepoint, and sets topoVisible = true */
+                              /* click listener that converts the click's x-position into a timestamp => sets topoTimepoint */
                             }
                             u.over.addEventListener('click', () => {
                               const t = u.posToVal(u.cursor.left, 'x');
                               if (!isNaN(t)) {
                                 setTopoTimepoint(t);
-                                setTopoVisible(true);
                               }
                             });
                           }}
@@ -815,7 +838,7 @@ export const EegViewer = ({
           channelNames={channelNames}
           voltagesByChannel={topoVoltagesByChannel}
           totalChannels={channelNames.length}
-          onClose={() => setTopoVisible(false)}
+          onClose={() => setTopoEnabled(false)}
           onTopoNvReady={onTopoNvReady}
           isStandardElectrodes={isStandardElectrodes}
           onElecPosFile={onElecPosFile}
