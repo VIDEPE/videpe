@@ -331,11 +331,21 @@ describe('interpolateMeshVoltages', () => {
     expect(out.length).toBe(CUBE_ELECTRODES.length);
   });
 
-  it('vertex at a matched electrode position gets approximately that voltage', () => {
+  it('vertex at a matched electrode position gets exactly that voltage', () => {
     const matched = [{ pos: CUBE_ELECTRODES[0] }];
     const out = interpolateMeshVoltages(CUBE_ELECTRODES, matched, [10]);
-    // Vertex 0 is exactly at CUBE_ELECTRODES[0] → distance 0 → weight dominates
-    expect(out[0]).toBeCloseTo(10);
+    expect(out[0]).toBe(10);
+  });
+
+  it('vertex at a matched electrode gets its own voltage, not blended with a nearby differing neighbour', () => {
+    // A and B are opposite corners of a 2-unit cube edge — 2mm apart, far closer than the
+    // default 30mm sigma. Under the old RBF-only implementation this closeness would pull
+    // A's vertex value most of the way toward B's voltage; the fix looks up matched vertices
+    // by label directly, so A must come back untouched by B.
+    const matched = [{ pos: CUBE_ELECTRODES[0] }, { pos: CUBE_ELECTRODES[1] }]; // A, B
+    const out = interpolateMeshVoltages(CUBE_ELECTRODES, matched, [100, 0]);
+    expect(out[0]).toBe(100);
+    expect(out[1]).toBe(0);
   });
 
   it('returns all zeros when no channels are matched', () => {
