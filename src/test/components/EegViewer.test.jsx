@@ -150,6 +150,16 @@ const renderViewer = async (provider = makeProvider()) => {
 // Helper: get the immediate flex-row container of an input
 const containerOf = (input) => input.closest('div');
 
+// Arms the topography toggle, then simulates a plot click — EegTopoViewer only opens once
+// both are true (see the topoVisible derivation in EegViewer), so tests that need the window
+// open must do the same two-step gesture a real user would.
+const enableTopoAndClick = async () => {
+  await userEvent.click(screen.getByRole('button', { name: /enable topograph map/i }));
+  await act(async () => {
+    capturedClickHandler?.();
+  });
+};
+
 describe('EegViewer — controls presence', () => {
   it('renders the channel count input', async () => {
     await renderViewer();
@@ -606,18 +616,14 @@ describe('EegViewer — topography wiring', () => {
 
   it('clicking a channel plot opens EegTopoViewer', async () => {
     await renderViewer();
-    await act(async () => {
-      capturedClickHandler?.();
-    });
+    await enableTopoAndClick();
     expect(screen.getByTestId('eeg-topo-viewer')).toBeTruthy();
   });
 
   it('closing EegTopoViewer hides it', async () => {
     await renderViewer();
     // Open
-    await act(async () => {
-      capturedClickHandler?.();
-    });
+    await enableTopoAndClick();
     // Close
     await userEvent.click(screen.getByText('Close topo'));
     expect(screen.queryByTestId('eeg-topo-viewer')).toBeNull();
@@ -625,9 +631,7 @@ describe('EegViewer — topography wiring', () => {
 
   it('passes total channel count to EegTopoViewer', async () => {
     await renderViewer();
-    await act(async () => {
-      capturedClickHandler?.();
-    });
+    await enableTopoAndClick();
     // MOCK_ELC has 2 labels matching the test channel names (EEG1, EEG2); total is 3
     expect(screen.getByText(/2\s*\/\s*3\s*channels mapped/i)).toBeTruthy();
   });
@@ -1398,9 +1402,7 @@ describe('EegViewer — topography uses the montaged buffer', () => {
     });
 
     // Open the topography viewer at the mocked click timepoint
-    await act(async () => {
-      capturedClickHandler?.();
-    });
+    await enableTopoAndClick();
     // matched channels are EEG1 (idx0) and EEG2 (idx1); raw values at the clicked
     // sample are EEG1=4, EEG2=7
     expect(screen.getByTestId('topo-voltages').textContent).toBe('4,7');
@@ -1464,9 +1466,7 @@ describe('EegViewer — recording type detection', () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    await act(async () => {
-      capturedClickHandler?.();
-    });
+    await enableTopoAndClick();
 
     expect(global.fetch).toHaveBeenCalled(); // still fetched, just not used for rendering in this mode
     expect(screen.getByText(/0\s*\/\s*3\s*channels mapped/i)).toBeTruthy();
@@ -1482,9 +1482,7 @@ describe('EegViewer — recording type detection', () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    await act(async () => {
-      capturedClickHandler?.();
-    });
+    await enableTopoAndClick();
     expect(screen.getByTestId('topo-is-intracranial')).toHaveTextContent('false');
 
     rerender(
@@ -1541,9 +1539,7 @@ describe('EegViewer — customElectrodes prop', () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    await act(async () => {
-      capturedClickHandler?.();
-    });
+    await enableTopoAndClick();
 
     // Only EEG3 matches the custom template, vs EEG1+EEG2 in the standard one.
     expect(screen.getByText(/1\s*\/\s*3\s*channels mapped/i)).toBeTruthy();
@@ -1563,9 +1559,7 @@ describe('EegViewer — customElectrodes prop', () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    await act(async () => {
-      capturedClickHandler?.();
-    });
+    await enableTopoAndClick();
 
     expect(screen.getByTestId('topo-custom-filename')).toHaveTextContent('my_positions');
   });

@@ -153,7 +153,7 @@ export const EegViewer = ({
   // ── Topography state ─────────────────────────────────────────────────────────
   const [topoEnabled, setTopoEnabled] = useState(false);
   const [topoTimepoint, setTopoTimepoint] = useState(null);
-  // Topograph window only opens when the toggle is on (topoEnabled) AND once a EEGplot 
+  // Topograph window only opens when the toggle is on (topoEnabled) AND once a EEGplot
   // click has produced a timepoint to show (topoTimepoint)
   const topoVisible = topoEnabled && topoTimepoint !== null;
 
