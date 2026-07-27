@@ -17,6 +17,7 @@ import {
   ListChevronsDownUp,
   Keyboard,
   Map,
+  Box,
 } from 'lucide-react';
 import { minMaxDownsample } from '@/utils/downsample';
 import { useEegBuffer } from '@/loaders/eegBuffer';
@@ -99,7 +100,7 @@ export const EegViewer = ({
   onRecordingTypeChange,
   montage = 'none', // 'none' | 'average' | 'median' — controlled by PatientView, which forces 'average' when ESI needs it
   onMontageChange,
-  onTopoHasContentChange, // reports whether the topography NiiVue canvas currently has a mesh to draw — see NiiViewer's onHasContentChange for why PatientView needs this instead of inferring it
+  onTopoHasContentChange, // whether the topography NiiVue canvas currently has a mesh, so PatientView can enable/disable the cross-panel rotation link accordingly
 }) => {
   const { isDarkMode } = useTheme();
   const syncKey = 'eeg-sync'; // shared across all channels to link their interactions
@@ -381,7 +382,7 @@ export const EegViewer = ({
           {/* Left sidebar: Channels controls centered in the available height, Montage pinned to the bottom-left corner */}
           <div className="shrink-0 flex flex-col px-1">
             <div className="flex flex-col gap-1 absolute pl-7 pt-7">
-              {/* EEG Topography selector*/}
+              {/* EEG Topography Toggle*/}
               <div className="">
                 <button
                   type="button"
@@ -394,8 +395,19 @@ export const EegViewer = ({
                   <Map size={ICON_SIZE} />
                 </button>
               </div>
-              {/* PLACEHOLDER: 3D Render of electrodes */}
-              <div className=""></div>
+              {/* 3D Electrode Render Toggle*/}
+              <div className="">
+                <button
+                  type="button"
+                  className="button button-icon"
+                  title={`${topoEnabled ? 'Close 3D Electrode Rendering' : 'Open 3D Electrode Rendering'}`}
+                  aria-label={`${topoEnabled ? 'Hide' : 'Show'} 3D Electrode Rendering`}
+                  aria-pressed={topoEnabled}
+                  onClick={() => {}}
+                >
+                  <Box size={ICON_SIZE} />
+                </button>
+              </div>
             </div>
 
             {/* Channel Controls*/}
