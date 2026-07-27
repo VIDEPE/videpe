@@ -5,7 +5,7 @@ import {
   isImageVolumeLayer,
   syncVolumesAndApplySettings,
   syncMeshesAndApplySettings,
-  INTRACRANIAL_CONNECTOME_URL,
+  ELECTRODE_LAYER_URL,
   ESI_LAYER_URL,
 } from '@/utils/NiiViewer.utils';
 
@@ -69,7 +69,7 @@ export function useLayerLoader({
       setOrderedLayers((prev) => prev.filter((layer) => layer.kind === 'connectome'));
       setLayerSettings((prev) =>
         prev.filter(
-          (setting) => setting.url === INTRACRANIAL_CONNECTOME_URL || setting.url === ESI_LAYER_URL
+          (setting) => setting.url === ELECTRODE_LAYER_URL || setting.url === ESI_LAYER_URL
         )
       );
       setIsLoading(false);

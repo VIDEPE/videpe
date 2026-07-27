@@ -25,7 +25,7 @@ import { applyMontage } from '@/utils/eegViewerUtils';
  *   per-channel snapshot (which isn't limited to position-matched channels).
  * @param {boolean} params.isIntracranial - whether the recording is currently iEEG;
  *   passed through unchanged to both lifted snapshots.
- * @param {(snapshot: {isIntracranial: boolean, matched: Array, voltages: number[]}) => void} params.onIntracranialSnapshotChange
+ * @param {(snapshot: {isIntracranial: boolean, matched: Array, voltages: number[]}) => void} params.onElectrodeSnapshotChange
  *   Called whenever the electrode-matched voltage snapshot changes, so PatientView can
  *   rebuild the intracranial 3D connectome layer.
  * @param {(snapshot: {isIntracranial: boolean, channelNames: string[], voltages: number[]}) => void} params.onChannelSnapshotChange
@@ -48,7 +48,7 @@ export function useTopographySnapshot({
   matched,
   channelNames,
   isIntracranial,
-  onIntracranialSnapshotChange,
+  onElectrodeSnapshotChange,
   onChannelSnapshotChange,
 }) {
   // Apply the selected montage once, shared by the channel plots and the topography snapshot
@@ -84,8 +84,8 @@ export function useTopographySnapshot({
   // intracranial connectome layer for the Neuroimaging pane — fires regardless of
   // whether the topography window itself is open, since the connectome auto-shows.
   useEffect(() => {
-    onIntracranialSnapshotChange?.({ isIntracranial, matched, voltages: topoVoltages });
-  }, [isIntracranial, matched, topoVoltages, onIntracranialSnapshotChange]);
+    onElectrodeSnapshotChange?.({ isIntracranial, matched, voltages: topoVoltages });
+  }, [isIntracranial, matched, topoVoltages, onElectrodeSnapshotChange]);
 
   // Lift all-channel voltages for ESI — fires only when topoTimepoint changes (i.e. on
   // user clicks), NOT on every buffer refresh. Depending on topoVoltagesByChannel would

@@ -53,7 +53,7 @@ vi.mock('@/components/EegViewer', () => ({
       customElectrodes,
       customElecPosFileName,
       inverseSolutionFileName,
-      onIntracranialSnapshotChange,
+      onElectrodeSnapshotChange,
       onChannelSnapshotChange,
       montage,
       onMontageChange,
@@ -73,7 +73,7 @@ vi.mock('@/components/EegViewer', () => ({
           type="button"
           data-testid="trigger-intracranial-change"
           onClick={() =>
-            onIntracranialSnapshotChange?.({
+            onElectrodeSnapshotChange?.({
               isIntracranial: true,
               matched: [{ channelIdx: 0, name: 'B1', pos: { label: 'B1', x: 0, y: 0, z: 0 } }],
               voltages: [5],
@@ -146,7 +146,7 @@ vi.mock('@/components/EegViewer', () => ({
           type="button"
           data-testid="trigger-intracranial-clear"
           onClick={() =>
-            onIntracranialSnapshotChange?.({ isIntracranial: false, matched: [], voltages: [] })
+            onElectrodeSnapshotChange?.({ isIntracranial: false, matched: [], voltages: [] })
           }
         >
           trigger-intracranial-clear

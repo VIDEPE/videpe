@@ -4,7 +4,7 @@ import {
   getCurrentMeshXRay,
   makeLayerMergeUpdater,
   makeSettingsMergeUpdater,
-  INTRACRANIAL_CONNECTOME_URL,
+  ELECTRODE_LAYER_URL,
 } from '@/utils/NiiViewer.utils';
 import { EEG_NODE_POS_KEY, EEG_NODE_NEG_KEY } from '@/utils/eegColormaps';
 
@@ -80,12 +80,12 @@ export function useIntracranialConnectome({
         ? null
         : intracranialLayer;
     setOrderedLayers(
-      makeLayerMergeUpdater(effectiveIntracranialLayer, INTRACRANIAL_CONNECTOME_URL)
+      makeLayerMergeUpdater(effectiveIntracranialLayer, ELECTRODE_LAYER_URL)
     );
     setLayerSettings(
       makeSettingsMergeUpdater(
         effectiveIntracranialLayer,
-        INTRACRANIAL_CONNECTOME_URL,
+        ELECTRODE_LAYER_URL,
         undefined,
         getCurrentMeshXRay(orderedLayers, layerSettings)
       )
@@ -135,7 +135,7 @@ export function useIntracranialConnectome({
     // data refreshes by the sync effect above); fall back to the same default that effect
     // would compute if it hasn't run yet this render pass (e.g. the connectome's first
     // appearance, before orderedLayers/layerSettings have caught up).
-    const existingIndex = orderedLayers.findIndex((l) => l.url === INTRACRANIAL_CONNECTOME_URL); // its current position in the card list, if it has one yet
+    const existingIndex = orderedLayers.findIndex((l) => l.url === ELECTRODE_LAYER_URL); // its current position in the card list, if it has one yet
     const settings =
       layerSettings[existingIndex] ?? // its existing settings, preserved across this rebuild
       getInitialLayerSettings(
