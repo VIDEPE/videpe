@@ -16,6 +16,7 @@ import {
   ListChevronsUpDown,
   ListChevronsDownUp,
   Keyboard,
+  Map,
 } from 'lucide-react';
 import { minMaxDownsample } from '@/utils/downsample';
 import { useEegBuffer } from '@/loaders/eegBuffer';
@@ -376,6 +377,27 @@ export const EegViewer = ({
         >
           {/* Left sidebar: Channels controls centered in the available height, Montage pinned to the bottom-left corner */}
           <div className="shrink-0 flex flex-col px-1">
+            <div className="flex flex-col gap-1 absolute pl-7 pt-7">
+              {/* EEG Topography selector*/}
+              <div className="">
+                <button
+                  type="button"
+                  className="button button-icon"
+                  title={`${topoVisible ? 'Disable Topograph Map': "EEG Topograph Map. If enabled: click EEG plot to generate an EEG Topography map at selected timestamp (requires known electrode positions)"}`}
+                  aria-label={`${topoVisible ? 'Disable': 'Enable' } Topograph Map`}
+                  aria-pressed={topoVisible}
+                  onClick={() => setTopoVisible(!topoVisible) }
+                  >
+                  <Map size={ICON_SIZE} />
+                </button>
+              </div>
+              {/* PLACEHOLDER: 3D Render of electrodes */}
+              <div className="">
+                
+              </div>
+            </div>
+
+            {/* Channel Controls*/}
             <div className="flex-1 flex flex-row items-center">
               <div className="flex flex-row items-center gap-1 py-1 border-border/50 border-1 border-r-0 rounded-tl-md rounded-bl-md">
                 <span className="text-xs text-foreground/60 whitespace-nowrap [writing-mode:vertical-rl] rotate-180 select-none pointer-events-none">
@@ -413,6 +435,7 @@ export const EegViewer = ({
                 </div>
               </div>
             </div>
+            {/* EEG Montage: Settings for chaning the EEG referencing */}
             <div
               className="flex flex-col items-center gap-1 pb-1"
               title="Apply EEG reference montage"
@@ -514,7 +537,6 @@ export const EegViewer = ({
                               const t = u.posToVal(u.cursor.left, 'x');
                               if (!isNaN(t)) {
                                 setTopoTimepoint(t);
-                                setTopoVisible(true);
                               }
                             });
                           }}
@@ -806,7 +828,7 @@ export const EegViewer = ({
       </div>
 
       {/* Floating topography viewer — position:fixed so it overlays the whole page */}
-      {topoVisible && (
+      {(topoVisible && topoTimepoint !== null) && (
         <EegTopoViewer
           nvRef={nvRef_eegtopo}
           electrodes={electrodes}
