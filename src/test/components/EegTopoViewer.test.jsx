@@ -13,8 +13,9 @@ const mockNvInstance = {
   updateGLVolume: vi.fn(),
   setSliceType: vi.fn(),
   addColormap: vi.fn(),
+  setMeshShader: vi.fn(),
   // Electrode marker layers are built via nv.loadConnectomeAsMesh(json) + nv.addMesh(mesh);
-  // the mock just needs to hand back something identifiable, not a real connectome mesh.
+  // the mock just needs to hand back something Fidentifiable, not a real connectome mesh.
   loadConnectomeAsMesh: vi
     .fn()
     .mockImplementation((json) => ({ id: json.name, nodes: json.nodes })),
@@ -222,8 +223,10 @@ describe('EegTopoViewer', () => {
       await act(async () => resolvers[0](makeMesh('stale-mesh')));
       expect(mockNvInstance.addMesh).not.toHaveBeenCalled();
 
-      // The current (second) load resolving is the only one that should add meshes —
-      // the cortex mesh plus its unmapped/matched electrode marker layers.
+      // The current (second) load resolving is the only one that should add meshes: the
+      // cortex mesh, plus the two electrode marker layers from addElectrodeMarkers — one
+      // for unmapped template dots (Fp2, the ELECTRODES entry absent from MATCHED) and one
+      // for matched, voltage-coloured dots (Fp1 and Cz). 3 calls total.
       await act(async () => resolvers[1](makeMesh('current-mesh')));
       expect(mockNvInstance.addMesh).toHaveBeenCalledTimes(3);
       expect(mockNvInstance.addMesh.mock.calls[0][0].id).toBe('current-mesh');
