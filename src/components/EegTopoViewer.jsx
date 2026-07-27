@@ -26,6 +26,8 @@ import { EyeDashed } from 'lucide-react';
 import { EegMatrixViewer } from './EegMatrixViewer';
 import { cn } from '@/utils/utils';
 
+// ─── Electrode marker layer builder ────────────────────────────────────────
+
 // Marker sizes in mm radius (sizeValue × nodeScale) — unmapped electrodes are small dots
 // that trace out the template grid; matched electrodes are larger and colour-coded by voltage.
 const UNMAPPED_NODE_SCALE = 1.5;
@@ -56,9 +58,7 @@ function addElectrodeMarkers(nv, markers, calMax, colourBlindMode) {
       // that has one, even an empty array, which would draw an extra, meaningless bar.
     });
     nv.addMesh(unmappedMesh);
-    // Matte shader ignores surface normals/lighting so node colour renders flat and matches
-    // the colormap swatch exactly, instead of Phong's default shading darkening/lightening it.
-    nv.setMeshShader(unmappedMesh.id, 'Rim');
+    nv.setMeshShader(unmappedMesh.id, 'Rim'); // Rim gives a muted appearance to unmapped electrode positions
   }
   if (matchedNodes.length > 0) {
     const matchedMesh = nv.loadConnectomeAsMesh({
@@ -73,9 +73,11 @@ function addElectrodeMarkers(nv, markers, calMax, colourBlindMode) {
       // No `edges` key — see comment on the unmapped layer above.
     });
     nv.addMesh(matchedMesh);
-    nv.setMeshShader(matchedMesh.id, 'Harmonic');
+    nv.setMeshShader(matchedMesh.id, 'Harmonic'); // Harmonic is a balance vs too shiny phong and matte
   }
 }
+
+// ─── Window sizing constants ────────────────────────────────────────────────
 
 // Default/minimum window size in px — default matches the previous fixed w-96 h-80 (24rem x 20rem)
 const DEFAULT_TOPO_SIZE = { width: 375, height: 360 };
@@ -98,15 +100,19 @@ export function EegTopoViewer({
   voltagesByChannel,
   customFileName = null, // filename (no extension) of the loaded custom positions file — owned by PatientView, passed down
 }) {
+  // ─── Refs ───────────────────────────────────────────────────────────────────
   const canvasRef = useRef(null);
   const fileInputRef = useRef(null);
+  const dragOffset = useRef(null);
+  const meshLoadRef = useRef(null); // tracks the in-flight load so StrictMode's double-invoke can't add two meshes (and so two colorbars)
+
+  // ─── State ──────────────────────────────────────────────────────────────────
   const [isMaximized, setIsMaximized] = useState(false);
   const [position, setPosition] = useState({ x: 80, y: 80 });
   const [size, setSize] = useState(DEFAULT_TOPO_SIZE);
   const [colourBlindMode, setColourBlindMode] = useState(false);
-  const dragOffset = useRef(null);
-  const meshLoadRef = useRef(null); // tracks the in-flight load so StrictMode's double-invoke can't add two meshes (and so two colorbars)
 
+  // ─── Hooks: NiiVue lifecycle ──────────────────────────────────────────────────
   // Initialise NiiVue once on mount — skipped entirely in intracranial mode, which
   // renders a plain HTML matrix instead of a 3D canvas, so there's nothing to attach to.
   useEffect(() => {
@@ -130,6 +136,7 @@ export function EegTopoViewer({
     onTopoNvReady?.();
   }, [nvRef, onTopoNvReady, isIntracranial]);
 
+  // ─── Derived values ─────────────────────────────────────────────────────────
   // The convex-hull triangulation only depends on the electrode template, not on the
   // per-timepoint voltages — caching it here avoids re-triangulating on every topo
   // timepoint click, when only the voltage interpolation below actually needs to change.
@@ -139,6 +146,7 @@ export function EegTopoViewer({
     [electrodes, isIntracranial]
   );
 
+  // ─── Hooks: mesh loading ──────────────────────────────────────────────────────
   // Rebuild and reload the mesh whenever electrodes, matched channels, voltages, or
   // re-referencing mode change. Clears any previously loaded mesh first.
   useEffect(() => {
@@ -198,6 +206,7 @@ export function EegTopoViewer({
     loadMesh();
   }, [nvRef, electrodeMesh, electrodes, matched, voltages, colourBlindMode, isIntracranial]);
 
+  // ─── Handlers: window drag/resize ──────────────────────────────────────────────
   // Drag the floating window by its title bar. Position is clamped to the viewport so the
   // window (and its title bar drag handle) can never be dragged out of view and get stranded.
   const handleDragStart = useCallback(
@@ -264,6 +273,7 @@ export function EegTopoViewer({
     [size, position]
   );
 
+  // ─── Render helpers ─────────────────────────────────────────────────────────
   const resizeCursor = {
     n: 'cursor-ns-resize',
     s: 'cursor-ns-resize',
@@ -288,6 +298,7 @@ export function EegTopoViewer({
     sw: 'bottom-0 left-0 w-2.5 h-2.5',
   };
 
+  // ─── Render ─────────────────────────────────────────────────────────────────
   return (
     <div
       className={

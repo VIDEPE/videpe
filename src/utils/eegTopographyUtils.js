@@ -5,6 +5,9 @@ import convexHull from 'convex-hull';
 import { parseElectrodeContactName } from './intracranialDetection';
 import { INTRACRANIAL_CONNECTOME_URL } from '@/utils/NiiViewer.utils';
 
+// ─── Channel matching ───────────────────────────────────────────────────────
+// Maps raw EEG channel names onto parsed electrode template positions.
+
 // Strips recording-type prefixes ("EEG ", "MEG ") and reference suffixes ("-Ref", "-A1", " Ref", etc.)
 // so that "EEG Fp1-Ref" normalises to "fp1" for lookup.
 export function normalizeChannelName(name) {
@@ -44,6 +47,10 @@ export function matchChannelsToPositions(channelNames, electrodes) {
 
   return { matched, unmatchedNames };
 }
+
+// ─── Scalp mesh geometry & voltage interpolation ───────────────────────────
+// Builds the triangulated scalp surface and colours it (and per-electrode
+// markers) from matched channel voltages.
 
 /**
  * Build a triangulated mesh from electrode positions using their convex hull.
@@ -184,6 +191,10 @@ export function buildEegMesh(electrodes, matched, voltages, sigma = 30) {
   const scalars = interpolateMeshVoltages(electrodes, matched, voltages, sigma);
   return { vertices, indices, scalars };
 }
+
+// ─── Intracranial electrode matrix & connectome ────────────────────────────
+// Groups intracranial contacts into probe shafts for the matrix view and the
+// 3D connectome layer.
 
 /**
  * Groups intracranial channel names by parsed electrode group and contact number,
