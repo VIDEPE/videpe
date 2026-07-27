@@ -108,11 +108,14 @@ export function gaussianRBF(queryXYZ, matchedXYZ, voltages, sigma = 30) {
 
 /**
  * Compute a per-vertex scalar (voltage) for every vertex in the electrode mesh.
- * Vertices that sit at a matched electrode get a weight-dominated value from that
- * electrode; all other vertices are filled by Gaussian RBF from the matched set.
+ * Vertices that sit at a matched electrode take that electrode's recorded voltage
+ * directly, so the mesh surface matches the electrode marker colour exactly there —
+ * gaussianRBF is a weighted average, not a true interpolant, so running a matched
+ * vertex through it would blend its own voltage with its neighbours' and mute any
+ * spike. All other (unmatched) vertices are still filled in by Gaussian RBF.
  *
  * @param {{ label, x, y, z }[]} electrodes  - full electrode list (determines vertex order)
- * @param {{ pos: { x, y, z } }[]} matched   - matched channel entries from matchChannelsToPositions
+ * @param {{ pos: { label, x, y, z } }[]} matched - matched channel entries from matchChannelsToPositions
  * @param {number[]} voltages                 - voltage per matched entry (same order as matched)
  * @param {number} sigma                      - Gaussian falloff in mm
  * @returns {Float32Array}
@@ -122,12 +125,15 @@ export function interpolateMeshVoltages(electrodes, matched, voltages, sigma = 3
   const scalars = new Float32Array(electrodes.length);
 
   for (let i = 0; i < electrodes.length; i++) {
-    scalars[i] = gaussianRBF(
-      [electrodes[i].x, electrodes[i].y, electrodes[i].z],
-      matchedXYZ,
-      voltages,
-      sigma
-    );
+    const electrode = electrodes[i];
+    // check if the current electrode has been matched to a electrode position
+    // returns an index when found and -1 when no match is found
+    const matchedIndex = matched.findIndex((m) => m.pos.label === electrode.label);
+
+    scalars[i] =
+      matchedIndex === -1 // if no match => interpolate, if there is a match => take voltage
+        ? gaussianRBF([electrode.x, electrode.y, electrode.z], matchedXYZ, voltages, sigma)
+        : voltages[matchedIndex];
   }
 
   return scalars;
