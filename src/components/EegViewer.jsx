@@ -151,8 +151,11 @@ export const EegViewer = ({
   const { timestamps, channels, isLoading } = useEegBuffer(provider, startTime, windowSize);
 
   // ── Topography state ─────────────────────────────────────────────────────────
-  const [topoVisible, setTopoVisible] = useState(false);
+  const [topoEnabled, setTopoEnabled] = useState(false);
   const [topoTimepoint, setTopoTimepoint] = useState(null);
+  // Topograph window only opens when the toggle is on (topoEnabled) AND once a EEGplot 
+  // click has produced a timepoint to show (topoTimepoint)
+  const topoVisible = topoEnabled && topoTimepoint !== null;
 
   // Electrode-position matching + recording-type (EEG/iEEG) auto-detection — PatientView
   // owns recordingType and shows/drives the EEG/iEEG toggle in the panel title, since this
@@ -193,7 +196,7 @@ export const EegViewer = ({
   // || !voltages?.length skips the load) so PatientView can tell when the 3D scene it's
   // synced to is genuinely empty and disable the cross-panel rotation link accordingly.
   const topoHasContent =
-    topoVisible && !isIntracranial && electrodes?.length > 0 && topoVoltages?.length > 0;
+    topoEnabled && !isIntracranial && electrodes?.length > 0 && topoVoltages?.length > 0;
   useEffect(() => {
     onTopoHasContentChange?.(topoHasContent);
   }, [topoHasContent, onTopoHasContentChange]);
@@ -383,18 +386,16 @@ export const EegViewer = ({
                 <button
                   type="button"
                   className="button button-icon"
-                  title={`${topoVisible ? 'Disable Topograph Map': "EEG Topograph Map. If enabled: click EEG plot to generate an EEG Topography map at selected timestamp (requires known electrode positions)"}`}
-                  aria-label={`${topoVisible ? 'Disable': 'Enable' } Topograph Map`}
-                  aria-pressed={topoVisible}
-                  onClick={() => setTopoVisible(!topoVisible) }
-                  >
+                  title={`${topoEnabled ? 'Disable Topograph Map' : 'EEG Topograph Map. If enabled: click EEG plot to generate an EEG Topography map at selected timestamp (requires known electrode positions)'}`}
+                  aria-label={`${topoEnabled ? 'Disable' : 'Enable'} Topograph Map`}
+                  aria-pressed={topoEnabled}
+                  onClick={() => setTopoEnabled(!topoEnabled)}
+                >
                   <Map size={ICON_SIZE} />
                 </button>
               </div>
               {/* PLACEHOLDER: 3D Render of electrodes */}
-              <div className="">
-                
-              </div>
+              <div className=""></div>
             </div>
 
             {/* Channel Controls*/}
@@ -470,7 +471,7 @@ export const EegViewer = ({
                 ref={containerRef}
                 className="absolute inset-0 overflow-y-auto themed-scrollbar"
                 title={
-                  matched.length > 0 && !topoVisible
+                  matched.length > 0 && topoEnabled && !topoVisible
                     ? 'Click any channel to view the EEG topography for that time point'
                     : undefined
                 }
@@ -531,7 +532,7 @@ export const EegViewer = ({
                           data={displayedData[i]}
                           onCreate={(u) => {
                             {
-                              /* click listener that converts the click's x-position into a timestamp, sets topoTimepoint, and sets topoVisible = true */
+                              /* click listener that converts the click's x-position into a timestamp => sets topoTimepoint */
                             }
                             u.over.addEventListener('click', () => {
                               const t = u.posToVal(u.cursor.left, 'x');
@@ -828,7 +829,7 @@ export const EegViewer = ({
       </div>
 
       {/* Floating topography viewer — position:fixed so it overlays the whole page */}
-      {(topoVisible && topoTimepoint !== null) && (
+      {topoVisible && (
         <EegTopoViewer
           nvRef={nvRef_eegtopo}
           electrodes={electrodes}
@@ -837,7 +838,7 @@ export const EegViewer = ({
           channelNames={channelNames}
           voltagesByChannel={topoVoltagesByChannel}
           totalChannels={channelNames.length}
-          onClose={() => setTopoVisible(false)}
+          onClose={() => setTopoEnabled(false)}
           onTopoNvReady={onTopoNvReady}
           isStandardElectrodes={isStandardElectrodes}
           onElecPosFile={onElecPosFile}

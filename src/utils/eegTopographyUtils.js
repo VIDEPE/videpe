@@ -52,7 +52,7 @@ export function matchChannelsToPositions(channelNames, electrodes) {
  *
  * @param {{ label, x, y, z }[]} electrodes
  * @returns {{ vertices: Float32Array, indices: Uint32Array }}
-*/
+ */
 export function buildElectrodeMesh(electrodes) {
   const points = electrodes.map((e) => [e.x, e.y, e.z]);
   const faces = convexHull(points);
@@ -88,7 +88,7 @@ export function buildElectrodeMesh(electrodes) {
  * @param {number[]} voltages                    - voltage per matched electrode
  * @param {number} sigma                         - falloff in mm (default 30mm ≈ 2 electrode spacings)
  * @returns {number}
-*/
+ */
 export function gaussianRBF(queryXYZ, matchedXYZ, voltages, sigma = 30) {
   let weightedSum = 0;
   let weightSum = 0;
@@ -116,7 +116,7 @@ export function gaussianRBF(queryXYZ, matchedXYZ, voltages, sigma = 30) {
  * @param {number[]} voltages                 - voltage per matched entry (same order as matched)
  * @param {number} sigma                      - Gaussian falloff in mm
  * @returns {Float32Array}
-*/
+ */
 export function interpolateMeshVoltages(electrodes, matched, voltages, sigma = 30) {
   const matchedXYZ = matched.map((m) => [m.pos.x, m.pos.y, m.pos.z]);
   const scalars = new Float32Array(electrodes.length);
@@ -143,7 +143,7 @@ export function interpolateMeshVoltages(electrodes, matched, voltages, sigma = 3
  * @param {{ pos: { label, x, y, z } }[]} matched - matched channels from matchChannelsToPositions
  * @param {number[]} voltages                 - voltage per matched entry (same order as matched)
  * @returns {{ label, x, y, z, isMatched, value }[]}
-*/
+ */
 export function buildElectrodeMarkers(electrodes, matched, voltages) {
   const voltageByLabel = new Map();
   matched.forEach((m, i) => voltageByLabel.set(m.pos.label, voltages[i] ?? 0));
@@ -172,7 +172,7 @@ export function buildElectrodeMarkers(electrodes, matched, voltages) {
  * @param {number[]} voltages                 - re-referenced voltage per matched channel
  * @param {number} sigma                      - Gaussian falloff in mm (default 30)
  * @returns {{ vertices: Float32Array, indices: Uint32Array, scalars: Float32Array }}
-*/
+ */
 export function buildEegMesh(electrodes, matched, voltages, sigma = 30) {
   const { vertices, indices } = buildElectrodeMesh(electrodes);
   const scalars = interpolateMeshVoltages(electrodes, matched, voltages, sigma);
@@ -193,7 +193,7 @@ export function buildEegMesh(electrodes, matched, voltages, sigma = 30) {
  * @returns {{
  *   groups: { group: string, contacts: { contact: number, channelIdx: number, voltage: number }[] }[],
  *   unparsed: { channelIdx: number, name: string }[]
-*/
+ */
 export function buildIntracranialMatrix(channelNames, voltages) {
   const groupMap = new Map(); // electrode group -> its contacts, accumulated in channel order
   const unparsed = [];
@@ -231,7 +231,7 @@ export function buildIntracranialMatrix(channelNames, voltages) {
  * @returns {{
  *   nodes: { name, x, y, z, colorValue, sizeValue }[],
  *   edges: { first: number, second: number, colorValue: number }[]
-*/
+ */
 export function buildIntracranialConnectome(matched, voltages) {
   // One node per matched contact — node index i corresponds to matched[i]/voltages[i].
   const nodes = matched.map((m, i) => ({
@@ -277,7 +277,7 @@ export function buildIntracranialConnectome(matched, voltages) {
  *
  * @param {{ isIntracranial: boolean, matched: object[], voltages: number[] }} args
  * @returns {object | null}
-*/
+ */
 export function buildIntracranialLayer({ isIntracranial, matched, voltages }) {
   if (!isIntracranial || !matched?.length) return null; // nothing to render yet
 
