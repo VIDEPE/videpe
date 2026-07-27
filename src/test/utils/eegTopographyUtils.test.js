@@ -241,7 +241,6 @@ import {
   buildElectrodeMesh,
   gaussianRBF,
   interpolateMeshVoltages,
-  buildEegMesh,
 } from '@/utils/eegTopographyUtils';
 
 // 8 corners of a cube — guaranteed non-coplanar, convex hull gives 12 triangles
@@ -346,10 +345,6 @@ describe('interpolateMeshVoltages', () => {
 });
 
 // ---------------------------------------------------------------------------
-// buildEegMesh
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
 // buildElectrodeMarkers
 // ---------------------------------------------------------------------------
 
@@ -393,35 +388,6 @@ describe('buildElectrodeMarkers', () => {
     const markers = buildElectrodeMarkers(ELECTRODES, matched, [-12.3]);
     const cz = markers.find((m) => m.label === 'Cz');
     expect(cz.value).toBeCloseTo(-12.3);
-  });
-});
-
-describe('buildEegMesh', () => {
-  const matched = CUBE_ELECTRODES.slice(0, 3).map((el) => ({ pos: el }));
-  const voltages = [10, -5, 3];
-
-  it('returns vertices, indices, and scalars', () => {
-    const result = buildEegMesh(CUBE_ELECTRODES, matched, voltages);
-    expect(result).toHaveProperty('vertices');
-    expect(result).toHaveProperty('indices');
-    expect(result).toHaveProperty('scalars');
-  });
-
-  it('vertices is a Float32Array with 3 values per electrode', () => {
-    const { vertices } = buildEegMesh(CUBE_ELECTRODES, matched, voltages);
-    expect(vertices).toBeInstanceOf(Float32Array);
-    expect(vertices.length).toBe(CUBE_ELECTRODES.length * 3);
-  });
-
-  it('scalars has one value per electrode', () => {
-    const { scalars } = buildEegMesh(CUBE_ELECTRODES, matched, voltages);
-    expect(scalars).toBeInstanceOf(Float32Array);
-    expect(scalars.length).toBe(CUBE_ELECTRODES.length);
-  });
-
-  it('indices length is a multiple of 3', () => {
-    const { indices } = buildEegMesh(CUBE_ELECTRODES, matched, voltages);
-    expect(indices.length % 3).toBe(0);
   });
 });
 

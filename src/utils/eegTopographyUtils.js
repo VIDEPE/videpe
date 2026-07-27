@@ -174,24 +174,6 @@ export function buildElectrodeMarkers(electrodes, matched, voltages) {
   });
 }
 
-/**
- * Assemble the full mesh data for a single EEG timepoint.
- * Returns raw arrays rather than an ArrayBuffer so this function stays
- * framework-free and testable — the caller (EegTopoWindow) passes the result
- * to NVMeshUtilities.createMZ3() to get the buffer NiiVue loads.
- *
- * @param {{ label, x, y, z }[]} electrodes  - full electrode list from parseElcElectrodePositions
- * @param {{ pos: { x, y, z } }[]} matched   - matched channels from matchChannelsToPositions
- * @param {number[]} voltages                 - re-referenced voltage per matched channel
- * @param {number} sigma                      - Gaussian falloff in mm (default 30)
- * @returns {{ vertices: Float32Array, indices: Uint32Array, scalars: Float32Array }}
- */
-export function buildEegMesh(electrodes, matched, voltages, sigma = 30) {
-  const { vertices, indices } = buildElectrodeMesh(electrodes);
-  const scalars = interpolateMeshVoltages(electrodes, matched, voltages, sigma);
-  return { vertices, indices, scalars };
-}
-
 // ─── Intracranial electrode matrix & connectome ────────────────────────────
 // Groups intracranial contacts into probe shafts for the matrix view and the
 // 3D connectome layer.
