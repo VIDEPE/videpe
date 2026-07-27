@@ -43,35 +43,37 @@ function addElectrodeMarkers(nv, markers, calMax, colourBlindMode) {
     .map((m) => ({ name: m.label, x: m.x, y: m.y, z: m.z, colorValue: m.value, sizeValue: 1 }));
 
   if (unmappedNodes.length > 0) {
-    nv.addMesh(
-      nv.loadConnectomeAsMesh({
-        name: 'eeg-electrodes-unmapped',
-        nodeColormap: EEG_NODE_UNMAPPED_KEY,
-        nodeColormapNegative: EEG_NODE_UNMAPPED_KEY,
-        nodeMinColor: 0,
-        nodeMaxColor: 0, // forces every node to the same flat colour, regardless of colorValue
-        nodeScale: UNMAPPED_NODE_SCALE,
-        showLegend: false,
-        nodes: unmappedNodes,
-        // No `edges` key — NiiVue adds an edge colormap colorbar entry for any connectome
-        // that has one, even an empty array, which would draw an extra, meaningless bar.
-      })
-    );
+    const unmappedMesh = nv.loadConnectomeAsMesh({
+      name: 'eeg-electrodes-unmapped',
+      nodeColormap: EEG_NODE_UNMAPPED_KEY,
+      nodeColormapNegative: EEG_NODE_UNMAPPED_KEY,
+      nodeMinColor: 0,
+      nodeMaxColor: 0, // forces every node to the same flat colour, regardless of colorValue
+      nodeScale: UNMAPPED_NODE_SCALE,
+      showLegend: false,
+      nodes: unmappedNodes,
+      // No `edges` key — NiiVue adds an edge colormap colorbar entry for any connectome
+      // that has one, even an empty array, which would draw an extra, meaningless bar.
+    });
+    nv.addMesh(unmappedMesh);
+    // Matte shader ignores surface normals/lighting so node colour renders flat and matches
+    // the colormap swatch exactly, instead of Phong's default shading darkening/lightening it.
+    nv.setMeshShader(unmappedMesh.id, 'Matte');
   }
   if (matchedNodes.length > 0) {
-    nv.addMesh(
-      nv.loadConnectomeAsMesh({
-        name: 'eeg-electrodes-matched',
-        nodeColormap: colourBlindMode ? EEG_NODE_POS_COLOURBLIND_KEY : EEG_NODE_POS_KEY,
-        nodeColormapNegative: colourBlindMode ? EEG_NODE_NEG_COLOURBLIND_KEY : EEG_NODE_NEG_KEY,
-        nodeMinColor: 0,
-        nodeMaxColor: calMax,
-        nodeScale: MATCHED_NODE_SCALE,
-        showLegend: false,
-        nodes: matchedNodes,
-        // No `edges` key — see comment on the unmapped layer above.
-      })
-    );
+    const matchedMesh = nv.loadConnectomeAsMesh({
+      name: 'eeg-electrodes-matched',
+      nodeColormap: colourBlindMode ? EEG_NODE_POS_COLOURBLIND_KEY : EEG_NODE_POS_KEY,
+      nodeColormapNegative: colourBlindMode ? EEG_NODE_NEG_COLOURBLIND_KEY : EEG_NODE_NEG_KEY,
+      nodeMinColor: 0,
+      nodeMaxColor: calMax,
+      nodeScale: MATCHED_NODE_SCALE,
+      showLegend: false,
+      nodes: matchedNodes,
+      // No `edges` key — see comment on the unmapped layer above.
+    });
+    nv.addMesh(matchedMesh);
+    nv.setMeshShader(matchedMesh.id, 'Matte');
   }
 }
 
