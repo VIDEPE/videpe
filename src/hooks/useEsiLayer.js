@@ -15,7 +15,7 @@ import { EEG_NODE_POS_KEY } from '@/utils/eegColormaps';
  * Merges the ESI (Electrical Source Imaging) source-power layer into orderedLayers/
  * layerSettings by its sentinel URL, and builds/rebuilds/removes the NiiVue object
  * representing it whenever its data or the Connectome/Volume toggle changes. Same
- * merge-then-rebuild pattern as useIntracranialConnectome, but branches between two NiiVue
+ * merge-then-rebuild pattern as useElectrodeConnectome, but branches between two NiiVue
  * object kinds — a connectome mesh or an NVImage volume — depending on `isEsiVolumeMode`.
  *
  * @param {Object} params
@@ -83,7 +83,7 @@ export function useEsiLayer({
   }, []);
 
   // Merges the separately-tracked esiLayer prop into orderedLayers/layerSettings — same
-  // pattern as the intracranialLayer merge effect, keyed on ESI_LAYER_URL.
+  // pattern as the electrodeLayer merge effect, keyed on ESI_LAYER_URL.
   useEffect(() => {
     const activeEsiLayer = esiLayer
       ? isEsiVolumeMode
@@ -109,7 +109,7 @@ export function useEsiLayer({
 
   // Builds/rebuilds/removes the ESI source-power mesh (connectome mode) or NVImage volume
   // (volume mode) whenever esiLayer's data or the Connectome/Volume toggle changes. Same
-  // rebuild-on-change pattern as the intracranialLayer build effect, but branches between the
+  // rebuild-on-change pattern as the electrodeLayer build effect, but branches between the
   // two NiiVue object kinds depending on which one activeEsiLayer resolves to.
   useEffect(() => {
     const nv = nvRef.current; // guard — nothing to do before NiiVue has attached to a canvas

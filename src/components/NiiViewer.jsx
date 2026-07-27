@@ -33,7 +33,7 @@ import { useRowResize } from '@/hooks/useRowResize';
 import { useSharedNiiVueInstance } from '@/hooks/useSharedNiiVueInstance';
 import { useLoadingToast } from '@/hooks/useLoadingToast';
 import { useLayerLoader } from '@/hooks/useLayerLoader';
-import { useIntracranialConnectome } from '@/hooks/useIntracranialConnectome';
+import { useElectrodeConnectome as useElectrodeConnectome } from '@/hooks/useElectrodeConnectome';
 import { useEsiLayer } from '@/hooks/useEsiLayer';
 
 // Re-exported so existing imports (e.g. NiiViewer.test.jsx) keep working — the implementations
@@ -101,7 +101,7 @@ function applyVolumeSettingChange({
 }
 
 // Connectome layers (intracranial electrodes / ESI connectome mode) aren't in nv.volumes at
-// all — they're a mesh, built/tracked by useIntracranialConnectome/useEsiLayer — so settings
+// all — they're a mesh, built/tracked by useElectrodeConnectome/useEsiLayer — so settings
 // are applied to the mesh object directly instead of through nv.setOpacity/setColormap.
 function applyConnectomeSettingChange({
   layer,
@@ -192,13 +192,13 @@ function applyFileMeshSettingChange({
 export const NiiViewer = ({
   nvRef,
   layers = [], // image volumes/meshes loaded from files — e.g. .nii/.mgz/.gii/.ply/.obj drops
-  intracranialLayer = null, // kept separate from `layers` so a voltage-driven refresh never resets other layers' settings
+  electrodeLayer = null, // kept separate from `layers` so a voltage-driven refresh never resets other layers' settings
   esiLayer = null, // same pattern — ESI source power connectome/volume layer
   onViewReady,
   onNiiNvReady,
   onHasContentChange, // reports orderedLayers.length > 0 — lets the parent see layers
   // dropped into this component's own dropzone, which never touch the layers/
-  // intracranialLayer/esiLayer props, so it doesn't wrongly unmount this viewer when those go empty/null together.
+  // electrodeLayer/esiLayer props, so it doesn't wrongly unmount this viewer when those go empty/null together.
   onHas3DExtentChange, // reports whether the scene has a volume/mesh (non-connectome) — gates the cross-panel rotation sync; see the effect below
   isFullscreen = false,
 }) => {
@@ -264,8 +264,8 @@ export const NiiViewer = ({
   });
   // Merges the intracranial electrode connectome into the card list and builds/rebuilds its mesh.
   const { intracranialMeshRef, clearIntracranialMesh, dismissIntracranialLayer } =
-    useIntracranialConnectome({
-      intracranialLayer,
+    useElectrodeConnectome({
+      electrodeLayer,
       nvRef,
       orderedLayers,
       layerSettings,

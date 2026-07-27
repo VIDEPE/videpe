@@ -900,7 +900,7 @@ describe('NiiViewer', () => {
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
       render(
-        <NiiViewer nvRef={nvRef} layers={[meshLayer]} intracranialLayer={makeIntracranialLayer()} />
+        <NiiViewer nvRef={nvRef} layers={[meshLayer]} electrodeLayer={makeIntracranialLayer()} />
       );
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
 
@@ -913,7 +913,7 @@ describe('NiiViewer', () => {
     it('writes to nv.opts.meshXRay (not a top-level nv property) and calls updateGLVolume', async () => {
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
-      render(<NiiViewer nvRef={nvRef} layers={[]} intracranialLayer={makeIntracranialLayer()} />);
+      render(<NiiViewer nvRef={nvRef} layers={[]} electrodeLayer={makeIntracranialLayer()} />);
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
 
       const nv = nvRef.current;
@@ -934,7 +934,7 @@ describe('NiiViewer', () => {
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
       render(
-        <NiiViewer nvRef={nvRef} layers={[meshLayer]} intracranialLayer={makeIntracranialLayer()} />
+        <NiiViewer nvRef={nvRef} layers={[meshLayer]} electrodeLayer={makeIntracranialLayer()} />
       );
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
 
@@ -955,7 +955,7 @@ describe('NiiViewer', () => {
     it('does not reset nv.opts.meshXRay back to the default when a second mesh is dropped in after the user has already customized it', async () => {
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
-      render(<NiiViewer nvRef={nvRef} layers={[]} intracranialLayer={makeIntracranialLayer()} />);
+      render(<NiiViewer nvRef={nvRef} layers={[]} electrodeLayer={makeIntracranialLayer()} />);
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
 
       await userEvent.click(
@@ -977,7 +977,7 @@ describe('NiiViewer', () => {
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
       render(
-        <NiiViewer nvRef={nvRef} layers={[meshLayer]} intracranialLayer={makeIntracranialLayer()} />
+        <NiiViewer nvRef={nvRef} layers={[meshLayer]} electrodeLayer={makeIntracranialLayer()} />
       );
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
 
@@ -1115,7 +1115,7 @@ describe('NiiViewer', () => {
       // layers prop never changes here — the connectome is what keeps the component
       // mounted, and the new volume below arrives only through the component's own
       // "Drop additional files" zone, bypassing `layers` entirely.
-      render(<NiiViewer nvRef={nvRef} layers={[]} intracranialLayer={makeIntracranialLayer()} />);
+      render(<NiiViewer nvRef={nvRef} layers={[]} electrodeLayer={makeIntracranialLayer()} />);
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
       expect(screen.getByRole('button', { name: 'Axial view' })).toBeDisabled();
 
@@ -1159,7 +1159,7 @@ describe('NiiViewer', () => {
     it('does not pass the connectome to nv.loadVolumes and clears the spinner when adding a file while a connectome is loaded', async () => {
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
-      render(<NiiViewer nvRef={nvRef} layers={[]} intracranialLayer={makeIntracranialLayer()} />);
+      render(<NiiViewer nvRef={nvRef} layers={[]} electrodeLayer={makeIntracranialLayer()} />);
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
 
       const nv = nvRef.current;
@@ -1321,10 +1321,10 @@ describe('NiiViewer', () => {
   });
 
   describe('connectome layer (intracranial electrodes)', () => {
-    it('builds and adds a connectome mesh via loadConnectomeAsMesh + addMesh when intracranialLayer is provided', async () => {
+    it('builds and adds a connectome mesh via loadConnectomeAsMesh + addMesh when electrodeLayer is provided', async () => {
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
-      render(<NiiViewer nvRef={nvRef} layers={[]} intracranialLayer={makeIntracranialLayer()} />);
+      render(<NiiViewer nvRef={nvRef} layers={[]} electrodeLayer={makeIntracranialLayer()} />);
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
 
       const nv = nvRef.current;
@@ -1339,7 +1339,7 @@ describe('NiiViewer', () => {
         <NiiViewer
           nvRef={nvRef}
           layers={[{ type: 'MRI', url: '/mri.nii' }]}
-          intracranialLayer={makeIntracranialLayer()}
+          electrodeLayer={makeIntracranialLayer()}
         />
       );
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
@@ -1356,7 +1356,7 @@ describe('NiiViewer', () => {
       const nvRef = { current: new Niivue() };
       const mriLayer = { type: 'MRI', url: '/mri.nii' };
       render(
-        <NiiViewer nvRef={nvRef} layers={[mriLayer]} intracranialLayer={makeIntracranialLayer()} />
+        <NiiViewer nvRef={nvRef} layers={[mriLayer]} electrodeLayer={makeIntracranialLayer()} />
       );
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
 
@@ -1366,15 +1366,15 @@ describe('NiiViewer', () => {
       expect(nvRef.current.loadVolumes).toHaveBeenCalledWith([mriLayer]);
     });
 
-    it('rebuilds the mesh when intracranialLayer data changes, without resetting other layers settings or reloading images', async () => {
+    it('rebuilds the mesh when electrodeLayer data changes, without resetting other layers settings or reloading images', async () => {
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
       // Held in a variable and reused across the rerender below — mirrors how PatientView's
       // own image-volumes state keeps the same array reference across EEG voltage updates;
-      // only the separately-tracked intracranialLayer prop changes.
+      // only the separately-tracked electrodeLayer prop changes.
       const mriLayers = [{ type: 'MRI', url: '/mri.nii' }];
       const { rerender } = render(
-        <NiiViewer nvRef={nvRef} layers={mriLayers} intracranialLayer={makeIntracranialLayer()} />
+        <NiiViewer nvRef={nvRef} layers={mriLayers} electrodeLayer={makeIntracranialLayer()} />
       );
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
 
@@ -1391,7 +1391,7 @@ describe('NiiViewer', () => {
         <NiiViewer
           nvRef={nvRef}
           layers={mriLayers}
-          intracranialLayer={makeIntracranialLayer({
+          electrodeLayer={makeIntracranialLayer({
             nodes: [{ name: 'B1', x: 0, y: 0, z: 0, colorValue: -5, sizeValue: 1 }],
           })}
         />
@@ -1411,7 +1411,7 @@ describe('NiiViewer', () => {
         <NiiViewer
           nvRef={nvRef}
           layers={[{ type: 'MRI', url: '/mri.nii' }]}
-          intracranialLayer={makeIntracranialLayer()}
+          electrodeLayer={makeIntracranialLayer()}
         />
       );
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
@@ -1475,18 +1475,18 @@ describe('NiiViewer', () => {
       });
     });
 
-    it('removes the mesh and its card when intracranialLayer becomes null', async () => {
+    it('removes the mesh and its card when electrodeLayer becomes null', async () => {
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
       const { rerender } = render(
-        <NiiViewer nvRef={nvRef} layers={[]} intracranialLayer={makeIntracranialLayer()} />
+        <NiiViewer nvRef={nvRef} layers={[]} electrodeLayer={makeIntracranialLayer()} />
       );
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
 
       const nv = nvRef.current;
       const mesh = nv.addMesh.mock.calls.at(-1)[0];
 
-      rerender(<NiiViewer nvRef={nvRef} layers={[]} intracranialLayer={null} />);
+      rerender(<NiiViewer nvRef={nvRef} layers={[]} electrodeLayer={null} />);
 
       expect(nv.removeMesh).toHaveBeenCalledWith(mesh);
       expect(screen.queryByText('Intracranial - Electrodes')).not.toBeInTheDocument();
@@ -1499,7 +1499,7 @@ describe('NiiViewer', () => {
         <NiiViewer
           nvRef={nvRef}
           layers={[{ type: 'MRI', url: '/mri.nii' }]}
-          intracranialLayer={makeIntracranialLayer()}
+          electrodeLayer={makeIntracranialLayer()}
         />
       );
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
@@ -1522,14 +1522,14 @@ describe('NiiViewer', () => {
     it('does not resurrect the intracranial card immediately after it is deleted', async () => {
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
-      // intracranialLayer is passed as a stable prop, matching how PatientView keeps re-deriving
+      // electrodeLayer is passed as a stable prop, matching how PatientView keeps re-deriving
       // the same object reference between voltage updates — this is what a naive delete would
       // race against, since the layer itself never goes away on its own.
       render(
         <NiiViewer
           nvRef={nvRef}
           layers={[{ type: 'MRI', url: '/mri.nii' }]}
-          intracranialLayer={makeIntracranialLayer()}
+          electrodeLayer={makeIntracranialLayer()}
         />
       );
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
@@ -1551,7 +1551,7 @@ describe('NiiViewer', () => {
         <NiiViewer
           nvRef={nvRef}
           layers={[{ type: 'MRI', url: '/mri.nii' }]}
-          intracranialLayer={makeIntracranialLayer()}
+          electrodeLayer={makeIntracranialLayer()}
         />
       );
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
@@ -1573,7 +1573,7 @@ describe('NiiViewer', () => {
         <NiiViewer
           nvRef={nvRef}
           layers={[{ type: 'MRI', url: '/mri.nii' }]}
-          intracranialLayer={makeIntracranialLayer()}
+          electrodeLayer={makeIntracranialLayer()}
         />
       );
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
@@ -1583,7 +1583,7 @@ describe('NiiViewer', () => {
 
       // Imaging-only reset: layers clears but the connectome stays, so the component
       // never unmounts — the early-return branch must clear nv directly instead.
-      rerender(<NiiViewer nvRef={nvRef} layers={[]} intracranialLayer={makeIntracranialLayer()} />);
+      rerender(<NiiViewer nvRef={nvRef} layers={[]} electrodeLayer={makeIntracranialLayer()} />);
 
       expect(nv.volumes.length).toBe(0);
       expect(nv.meshes.length).toBe(1); // connectome mesh is untouched by this reset
@@ -1596,7 +1596,7 @@ describe('NiiViewer', () => {
         <NiiViewer
           nvRef={nvRef}
           layers={[{ type: 'MRI', url: '/mri.nii' }]}
-          intracranialLayer={makeIntracranialLayer()}
+          electrodeLayer={makeIntracranialLayer()}
         />
       );
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
@@ -1604,7 +1604,7 @@ describe('NiiViewer', () => {
 
       // Same imaging-only reset as above — this time checking the rendered card list,
       // which previously kept showing the MRI card even after its volume was removed.
-      rerender(<NiiViewer nvRef={nvRef} layers={[]} intracranialLayer={makeIntracranialLayer()} />);
+      rerender(<NiiViewer nvRef={nvRef} layers={[]} electrodeLayer={makeIntracranialLayer()} />);
 
       expect(screen.queryByText('MRI')).not.toBeInTheDocument();
       expect(screen.getByText('Intracranial')).toBeInTheDocument();
@@ -1615,13 +1615,13 @@ describe('NiiViewer', () => {
       const nvRef = { current: new Niivue() };
       // StrictMode double-invokes updater functions passed to setState (for purity
       // checking) — this used to duplicate the connectome's settings entry the first time
-      // it was merged in (see the comment on the intracranialLayer merge effect), silently
+      // it was merged in (see the comment on the electrodeLayer merge effect), silently
       // misaligning orderedLayers/layerSettings by one. That misalignment only surfaced
       // later, as a crash here when adding an image volume via the internal drop zone —
       // exactly the repro reported: EEG + electrode positions loaded first, then an MRI.
       render(
         <StrictMode>
-          <NiiViewer nvRef={nvRef} layers={[]} intracranialLayer={makeIntracranialLayer()} />
+          <NiiViewer nvRef={nvRef} layers={[]} electrodeLayer={makeIntracranialLayer()} />
         </StrictMode>
       );
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
@@ -1648,7 +1648,7 @@ describe('NiiViewer', () => {
         <NiiViewer
           nvRef={nvRef}
           layers={[]}
-          intracranialLayer={makeIntracranialLayer()}
+          electrodeLayer={makeIntracranialLayer()}
           onHas3DExtentChange={onHas3DExtentChange}
         />
       );
@@ -1665,7 +1665,7 @@ describe('NiiViewer', () => {
         <NiiViewer
           nvRef={nvRef}
           layers={[{ type: 'MRI', url: '/mri.nii' }]}
-          intracranialLayer={makeIntracranialLayer()}
+          electrodeLayer={makeIntracranialLayer()}
           onHas3DExtentChange={onHas3DExtentChange}
         />
       );
@@ -1682,7 +1682,7 @@ describe('NiiViewer', () => {
         <NiiViewer
           nvRef={nvRef}
           layers={[{ type: 'MRI', url: '/mri.nii' }]}
-          intracranialLayer={makeIntracranialLayer()}
+          electrodeLayer={makeIntracranialLayer()}
           onHas3DExtentChange={onHas3DExtentChange}
         />
       );
@@ -1695,7 +1695,7 @@ describe('NiiViewer', () => {
         <NiiViewer
           nvRef={nvRef}
           layers={[]}
-          intracranialLayer={makeIntracranialLayer()}
+          electrodeLayer={makeIntracranialLayer()}
           onHas3DExtentChange={onHas3DExtentChange}
         />
       );
@@ -1923,7 +1923,7 @@ describe('NiiViewer', () => {
         <NiiViewer
           nvRef={nvRef}
           layers={[{ type: 'MRI', url: '/mri.nii' }]}
-          intracranialLayer={makeIntracranialLayer()}
+          electrodeLayer={makeIntracranialLayer()}
         />
       );
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());

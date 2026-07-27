@@ -181,7 +181,7 @@ vi.mock('@/components/NiiViewer', () => ({
     <div data-testid="nii-viewer">
       {/* Simulates NiiViewer reporting that it holds layers loaded straight into its own
           internal dropzone — layers PatientView has no other visibility into (they never
-          touch the `layers`/intracranialLayer/esiLayer props). */}
+          touch the `layers`/electrodeLayer/esiLayer props). */}
       <button
         type="button"
         data-testid="trigger-nii-has-content"
@@ -1294,7 +1294,7 @@ describe('PatientView — intracranial connectome layer', () => {
     await userEvent.click(screen.getByTestId('trigger-intracranial-change'));
 
     expect(screen.getByTestId('nii-viewer')).toBeInTheDocument();
-    expect(NiiViewer.mock.lastCall[0].intracranialLayer).toMatchObject({ kind: 'connectome' });
+    expect(NiiViewer.mock.lastCall[0].electrodeLayer).toMatchObject({ kind: 'connectome' });
   });
 
   it('keeps NiiViewer mounted (and its other layers intact) when switching out of iEEG mode drops the connectome layer', async () => {
@@ -1306,7 +1306,7 @@ describe('PatientView — intracranial connectome layer', () => {
     expect(screen.getByTestId('nii-viewer')).toBeInTheDocument();
 
     // User drops a volume straight into NiiViewer's own dropzone — PatientView's `layers`
-    // state never sees it, so intracranialLayer/esiLayer/layers.length are the only signal
+    // state never sees it, so electrodeLayer/esiLayer/layers.length are the only signal
     // it has, unless NiiViewer itself reports that it now holds content.
     await userEvent.click(screen.getByTestId('trigger-nii-has-content'));
 
@@ -1315,7 +1315,7 @@ describe('PatientView — intracranial connectome layer', () => {
     await userEvent.click(screen.getByTestId('trigger-intracranial-clear'));
 
     expect(screen.getByTestId('nii-viewer')).toBeInTheDocument();
-    expect(NiiViewer.mock.lastCall[0].intracranialLayer).toBeNull();
+    expect(NiiViewer.mock.lastCall[0].electrodeLayer).toBeNull();
   });
 
   it('clears the connectome layer on reset', async () => {

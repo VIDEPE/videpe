@@ -38,7 +38,7 @@ export const PatientView = () => {
   const [layers, setLayers] = useState([]); // image volumes/meshes loaded from files
   // Whether NiiViewer holds layers dropped into its own internal dropzone — those never
   // touch `layers` above, so this prevents wrongly unmounting NiiViewer (and discarding
-  // them) when e.g. switching out of iEEG mode clears intracranialLayer.
+  // them) when e.g. switching out of iEEG mode clears electrodeLayer.
   const [niiHasOwnContent, setNiiHasOwnContent] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const eegReadyResolveRef = useRef(null); // set before demo load; EegViewer calls it when charts are ready
@@ -91,7 +91,7 @@ export const PatientView = () => {
   // Derives the Neuroimaging pane's connectome layer from the EEG state lifted out of
   // EegViewer — null until there's an intracranial recording with at least one
   // position-matched channel. `?? {}` guards the initial (pre-EegViewer-effect) null state.
-  const intracranialLayer = useMemo(
+  const electrodeLayer = useMemo(
     () => buildElectrodeLayer(electrodeSnapshot ?? {}),
     [electrodeSnapshot]
   ); // intracranial electrodes
@@ -99,7 +99,7 @@ export const PatientView = () => {
   // Whether the Neuroimaging pane currently has anything to show — same condition that
   // decides whether NiiViewer is mounted at all (below) and whether its reset button appears.
   const niiViewerHasContent =
-    layers.length > 0 || Boolean(intracranialLayer) || Boolean(esiLayer) || niiHasOwnContent;
+    layers.length > 0 || Boolean(electrodeLayer) || Boolean(esiLayer) || niiHasOwnContent;
 
   // when both these flags are true, then the two plots can be synchronised
   const [niiNvReady, setNiiNvReady] = useState(false); // flag when the NiiViewer canvas is initialised
@@ -324,7 +324,7 @@ export const PatientView = () => {
             <NiiViewer
               nvRef={nvRef_niiviewer}
               layers={layers}
-              intracranialLayer={intracranialLayer}
+              electrodeLayer={electrodeLayer}
               esiLayer={esiLayer}
               onHasContentChange={setNiiHasOwnContent}
               onHas3DExtentChange={setNiiHas3DExtent}
