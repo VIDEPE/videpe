@@ -197,6 +197,27 @@ describe('EegTopoViewer', () => {
       expect(NVMesh.loadFromUrl).not.toHaveBeenCalled();
     });
 
+    it('applies a shader to each electrode marker layer, using a different shader for unmapped vs matched', async () => {
+      await act(async () => render(<EegTopoViewer {...defaultProps} />));
+
+      // Mesh names come from addElectrodeMarkers's loadConnectomeAsMesh calls; the mock
+      // loadConnectomeAsMesh hands the `name` back as `id`, so these are the mesh ids
+      // setMeshShader should have been called with.
+      const unmappedCall = mockNvInstance.setMeshShader.mock.calls.find(
+        ([id]) => id === 'eeg-electrodes-unmapped'
+      );
+      const matchedCall = mockNvInstance.setMeshShader.mock.calls.find(
+        ([id]) => id === 'eeg-electrodes-matched'
+      );
+
+      // Regression guard for the mesh/node colour-mismatch bug: both marker layers must get
+      // an explicit (non-default) shader, and the two layers must not share the same one —
+      // the specific shader names are a styling choice, not something to pin down here.
+      expect(unmappedCall).toBeTruthy();
+      expect(matchedCall).toBeTruthy();
+      expect(unmappedCall[1]).not.toBe(matchedCall[1]);
+    });
+
     it('ignores a stale load that resolves after a newer one has started (StrictMode double-invoke guard)', async () => {
       // Without this guard, React StrictMode's mount->cleanup->mount double-invoke (or a
       // fast voltage change while a load is still in flight) lets the older, superseded

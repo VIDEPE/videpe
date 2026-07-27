@@ -161,6 +161,12 @@ const enableTopoAndClick = async () => {
 };
 
 describe('EegViewer — controls presence', () => {
+  it('renders the EEG topography toggle button', async () => {
+    await renderViewer();
+    const input = screen.getByRole('button', { name: /topograph map/i });
+    expect(input).toBeInTheDocument();
+  });
+
   it('renders the channel count input', async () => {
     await renderViewer();
     const input = screen.getByRole('spinbutton', { name: /number of channels/i });
@@ -612,6 +618,16 @@ describe('EegViewer — topography wiring', () => {
   it('does not show EegTopoViewer on initial render', async () => {
     await renderViewer();
     expect(screen.queryByTestId('eeg-topo-viewer')).toBeNull();
+  });
+
+  it('toggles aria-pressed and label when clicked', async () => {
+    await renderViewer();
+    const button = screen.getByRole('button', { name: /enable topograph map/i });
+    expect(button).toHaveAttribute('aria-pressed', 'false');
+
+    await userEvent.click(button);
+    expect(button).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: /disable topograph map/i })).toBeInTheDocument();
   });
 
   it('clicking a channel plot opens EegTopoViewer', async () => {
