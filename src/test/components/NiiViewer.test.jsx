@@ -65,8 +65,8 @@ const SLICE_TYPE_OPTIONS = [
 const makeIntracranialLayer = (overrides = {}) => ({
   url: '__electrodes__',
   name: 'Electrodes',
-  type: 'Intracranial',
-  subtype: 'Electrodes',
+  type: 'Electrodes',
+  subtype: 'Intracranial EEG',
   kind: 'connectome',
   nodes: [
     { name: 'B1', x: 0, y: 0, z: 0, colorValue: 1, sizeValue: 1 },
@@ -80,8 +80,8 @@ const makeIntracranialLayer = (overrides = {}) => ({
 const makeSurfaceEegLayer = (overrides = {}) => ({
   url: '__electrodes__',
   name: 'Electrodes',
-  type: 'Surface EEG',
-  subtype: 'Electrodes',
+  type: 'Electrodes',
+  subtype: 'Surface EEG',
   kind: 'connectome',
   nodes: [{ name: 'B1', x: 0, y: 0, z: 0, colorValue: 1, sizeValue: 1 }],
   edges: [],
@@ -934,9 +934,9 @@ describe('NiiViewer', () => {
       const nv = nvRef.current;
       nv.updateGLVolume.mockClear();
       await userEvent.click(
-        screen.getByRole('button', { name: /expand.*intracranial - electrodes/i })
+        screen.getByRole('button', { name: /expand.*electrodes - intracranial eeg/i })
       );
-      fireEvent.change(screen.getByLabelText('Intracranial - Electrodes meshXRay'), {
+      fireEvent.change(screen.getByLabelText('Electrodes - Intracranial EEG meshXRay'), {
         target: { value: '40' },
       });
 
@@ -955,15 +955,15 @@ describe('NiiViewer', () => {
 
       // Expand both cards so their meshXRay inputs are in the DOM.
       await userEvent.click(
-        screen.getByRole('button', { name: /expand.*intracranial - electrodes/i })
+        screen.getByRole('button', { name: /expand.*electrodes - intracranial eeg/i })
       );
       await userEvent.click(screen.getByRole('button', { name: /expand.*mesh - cortex/i }));
 
-      fireEvent.change(screen.getByLabelText('Intracranial - Electrodes meshXRay'), {
+      fireEvent.change(screen.getByLabelText('Electrodes - Intracranial EEG meshXRay'), {
         target: { value: '25' },
       });
 
-      expect(screen.getByLabelText('Intracranial - Electrodes meshXRay')).toHaveValue(25);
+      expect(screen.getByLabelText('Electrodes - Intracranial EEG meshXRay')).toHaveValue(25);
       expect(screen.getByLabelText('Mesh - cortex meshXRay')).toHaveValue(25);
     });
 
@@ -974,9 +974,9 @@ describe('NiiViewer', () => {
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
 
       await userEvent.click(
-        screen.getByRole('button', { name: /expand.*intracranial - electrodes/i })
+        screen.getByRole('button', { name: /expand.*electrodes - intracranial eeg/i })
       );
-      fireEvent.change(screen.getByLabelText('Intracranial - Electrodes meshXRay'), {
+      fireEvent.change(screen.getByLabelText('Electrodes - Intracranial EEG meshXRay'), {
         target: { value: '30' },
       });
       expect(nvRef.current.opts.meshXRay).toBe(0.3);
@@ -997,14 +997,14 @@ describe('NiiViewer', () => {
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
 
       await userEvent.click(
-        screen.getByRole('button', { name: /expand.*intracranial - electrodes/i })
+        screen.getByRole('button', { name: /expand.*electrodes - intracranial eeg/i })
       );
       await userEvent.click(screen.getByRole('button', { name: /expand.*mesh - cortex/i }));
 
       // Toggling one card's visibility is unrelated to meshXRay and shouldn't broadcast anything.
       await userEvent.click(screen.getByRole('button', { name: /hide.*mesh - cortex/i }));
 
-      expect(screen.getByLabelText('Intracranial - Electrodes meshXRay')).toHaveValue(100);
+      expect(screen.getByLabelText('Electrodes - Intracranial EEG meshXRay')).toHaveValue(100);
     });
   });
 
@@ -1192,7 +1192,7 @@ describe('NiiViewer', () => {
 
       // Both cards are present — the new volume alongside the untouched connectome.
       expect(screen.getByRole('button', { name: /expand.*scan/i })).toBeInTheDocument();
-      expect(screen.getByText('Intracranial')).toBeInTheDocument();
+      expect(screen.getByText('Electrodes')).toBeInTheDocument();
     });
 
     it('does not leave a settings card when a dropped volume fails to load', async () => {
@@ -1356,11 +1356,11 @@ describe('NiiViewer', () => {
     );
 
     it.each([
-      ['Intracranial', makeIntracranialLayer],
+      ['Intracranial EEG', makeIntracranialLayer],
       ['Surface EEG', makeSurfaceEegLayer],
     ])(
       'renders a card for a %s connectome layer in ImagingControls alongside image volumes',
-      async (label, makeLayer) => {
+      async (subtype, makeLayer) => {
         const { Niivue } = await import('@niivue/niivue');
         const nvRef = { current: new Niivue() };
         render(
@@ -1377,8 +1377,8 @@ describe('NiiViewer', () => {
         // type and subtype render as separate text nodes (see "renders subtype with a dash
         // prefix" in ImagingControls.test.jsx for the same pattern), so query them separately.
         expect(screen.getByText('MRI')).toBeInTheDocument();
-        expect(screen.getByText(label)).toBeInTheDocument();
-        expect(screen.getByText('- Electrodes')).toBeInTheDocument();
+        expect(screen.getByText('Electrodes')).toBeInTheDocument();
+        expect(screen.getByText(`- ${subtype}`)).toBeInTheDocument();
       }
     );
 
@@ -1471,7 +1471,7 @@ describe('NiiViewer', () => {
       nv.setOpacity.mockClear();
 
       await userEvent.click(
-        screen.getByRole('button', { name: /hide.*intracranial - electrodes/i })
+        screen.getByRole('button', { name: /hide.*electrodes - intracranial eeg/i })
       );
 
       expect(mesh.opacity).toBe(0);
@@ -1539,7 +1539,7 @@ describe('NiiViewer', () => {
       rerender(<NiiViewer nvRef={nvRef} layers={[]} electrodeLayer={null} />);
 
       expect(nv.removeMesh).toHaveBeenCalledWith(mesh);
-      expect(screen.queryByText('Intracranial - Electrodes')).not.toBeInTheDocument();
+      expect(screen.queryByText('Electrodes - Intracranial EEG')).not.toBeInTheDocument();
     });
 
     it('deleting the connectome card calls nv.removeMesh, not nv.removeVolumeByIndex', async () => {
@@ -1559,10 +1559,10 @@ describe('NiiViewer', () => {
       nv.removeVolumeByIndex.mockClear();
 
       await userEvent.click(
-        screen.getByRole('button', { name: /expand.*intracranial - electrodes/i })
+        screen.getByRole('button', { name: /expand.*electrodes - intracranial eeg/i })
       );
       await userEvent.click(
-        screen.getByRole('button', { name: /close.*intracranial - electrodes/i })
+        screen.getByRole('button', { name: /close.*electrodes - intracranial eeg/i })
       );
 
       expect(nv.removeMesh).toHaveBeenCalledWith(mesh);
@@ -1585,13 +1585,13 @@ describe('NiiViewer', () => {
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
 
       await userEvent.click(
-        screen.getByRole('button', { name: /expand.*intracranial - electrodes/i })
+        screen.getByRole('button', { name: /expand.*electrodes - intracranial eeg/i })
       );
       await userEvent.click(
-        screen.getByRole('button', { name: /close.*intracranial - electrodes/i })
+        screen.getByRole('button', { name: /close.*electrodes - intracranial eeg/i })
       );
 
-      expect(screen.queryByText('Intracranial - Electrodes')).not.toBeInTheDocument();
+      expect(screen.queryByText('Electrodes - Intracranial EEG')).not.toBeInTheDocument();
     });
 
     it('clears volumes and meshes from the shared nv instance when the component unmounts', async () => {
@@ -1657,7 +1657,7 @@ describe('NiiViewer', () => {
       rerender(<NiiViewer nvRef={nvRef} layers={[]} electrodeLayer={makeIntracranialLayer()} />);
 
       expect(screen.queryByText('MRI')).not.toBeInTheDocument();
-      expect(screen.getByText('Intracranial')).toBeInTheDocument();
+      expect(screen.getByText('Electrodes')).toBeInTheDocument();
     });
 
     it('does not crash when adding an image volume right after mounting with a connectome already present, under StrictMode', async () => {
@@ -1681,7 +1681,7 @@ describe('NiiViewer', () => {
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
 
       expect(screen.getByRole('button', { name: /expand.*scan/i })).toBeInTheDocument();
-      expect(screen.getByText('Intracranial')).toBeInTheDocument();
+      expect(screen.getByText('Electrodes')).toBeInTheDocument();
     });
   });
 
@@ -1979,7 +1979,7 @@ describe('NiiViewer', () => {
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
 
       const mriLabel = screen.getByText('MRI');
-      const connectomeLabel = screen.getByText('- Electrodes');
+      const connectomeLabel = screen.getByText('- Intracranial EEG');
       expect(
         mriLabel.compareDocumentPosition(connectomeLabel) & Node.DOCUMENT_POSITION_FOLLOWING
       ).toBeTruthy();

@@ -307,23 +307,23 @@ export function buildElectrodeLayer({ isIntracranial, matched, voltages }) {
   if (!matched?.length) return null; // nothing to render yet
 
   // declare variables
-  let nodes, edges, type;
+  let nodes, edges, subtype;
 
   if (isIntracranial) {
     ({ nodes, edges } = buildIntracranialConnectome(matched, voltages));
-    type = 'Intracranial';
+    subtype = 'Intracranial EEG';
   } else {
     ({ nodes, edges } = buildSurfaceEegConnectome(matched, voltages));
-    type = 'Surface EEG';
+    subtype = 'Surface EEG';
   }
 
   const calMax = Math.max(1e-6, ...voltages.map((v) => Math.abs(v))); // symmetric colour range; floor avoids div-by-zero downstream
 
   return {
     url: ELECTRODE_LAYER_URL,
-    name: `${type} Electrodes`,
-    type: type,
-    subtype: 'Electrodes',
+    name: `${subtype} Electrodes`,
+    type: 'Electrodes',
+    subtype: subtype,
     kind: 'connectome',
     nodes,
     edges,
