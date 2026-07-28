@@ -183,13 +183,14 @@ export const PatientView = () => {
     resetMontage();
     setChannelSnapshot(null);
     setRecordingType('eeg');
+    setElectrodeRenderEnabled(false);
   };
 
   // SplitPane's left (EEG) panel reset button — clears only the EEG side (recording,
   // pending files, electrode positions, inverse solution/montage/ESI, recording type).
   // Leaves `layers`/`niiHasOwnContent` untouched, so any imaging data already loaded in
-  // the Neuroimaging panel survives; the intracranial connectome layer built from EEG
-  // state does get cleared, via setIntracranialSnapshot(null) below.
+  // the Neuroimaging panel survives; the electrode connectome layer built from EEG
+  // state does get cleared, via setElectrodeSnapshot(null) below.
   const handleEegReset = () => {
     setEeg(null);
     resetIntake();
@@ -198,6 +199,7 @@ export const PatientView = () => {
     resetInverseSolution();
     resetMontage();
     setChannelSnapshot(null);
+    setElectrodeRenderEnabled(false);
   };
 
   // SplitPane's right (Neuroimaging) panel reset button — clears only the imaging volumes
