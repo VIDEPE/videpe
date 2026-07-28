@@ -276,7 +276,7 @@ export function buildIntracranialConnectome(matched, voltages) {
  *   nodes: { name, x, y, z, colorValue, sizeValue }[],
  *   edges: { first: number, second: number, colorValue: number }[]
  */
-export function buildSurfaceEegConnectome (matched, voltages) {
+export function buildSurfaceEegConnectome(matched, voltages) {
   // One node per matched contact — node index i corresponds to matched[i]/voltages[i].
   const nodes = matched.map((m, i) => ({
     name: m.name,
@@ -305,18 +305,18 @@ export function buildSurfaceEegConnectome (matched, voltages) {
  */
 export function buildElectrodeLayer({ isIntracranial, matched, voltages }) {
   if (!matched?.length) return null; // nothing to render yet
-  
+
   // declare variables
-  let nodes, edges, type
+  let nodes, edges, type;
 
   if (isIntracranial) {
-     ({ nodes, edges } = buildIntracranialConnectome(matched, voltages));
-    type = 'Intracranial'
-  }  else {
+    ({ nodes, edges } = buildIntracranialConnectome(matched, voltages));
+    type = 'Intracranial';
+  } else {
     ({ nodes, edges } = buildSurfaceEegConnectome(matched, voltages));
-    type = 'Surface EEG'
+    type = 'Surface EEG';
   }
-  
+
   const calMax = Math.max(1e-6, ...voltages.map((v) => Math.abs(v))); // symmetric colour range; floor avoids div-by-zero downstream
 
   return {

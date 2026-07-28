@@ -33,7 +33,7 @@ import { useRowResize } from '@/hooks/useRowResize';
 import { useSharedNiiVueInstance } from '@/hooks/useSharedNiiVueInstance';
 import { useLoadingToast } from '@/hooks/useLoadingToast';
 import { useLayerLoader } from '@/hooks/useLayerLoader';
-import { useElectrodeConnectome as useElectrodeConnectome } from '@/hooks/useElectrodeConnectome';
+import { useElectrodeConnectome } from '@/hooks/useElectrodeConnectome';
 import { useEsiLayer } from '@/hooks/useEsiLayer';
 
 // Re-exported so existing imports (e.g. NiiViewer.test.jsx) keep working — the implementations
@@ -100,7 +100,7 @@ function applyVolumeSettingChange({
   }
 }
 
-// Connectome layers (intracranial electrodes / ESI connectome mode) aren't in nv.volumes at
+// Connectome layers (electrodes / ESI connectome mode) aren't in nv.volumes at
 // all — they're a mesh, built/tracked by useElectrodeConnectome/useEsiLayer — so settings
 // are applied to the mesh object directly instead of through nv.setOpacity/setColormap.
 function applyConnectomeSettingChange({
@@ -110,11 +110,11 @@ function applyConnectomeSettingChange({
   settings,
   nv,
   esiMeshRef,
-  intracranialMeshRef,
+  electrodeMeshRef,
   thresholdRafRef,
   meshXRayRafRef,
 }) {
-  const mesh = layer.url === ESI_LAYER_URL ? esiMeshRef.current : intracranialMeshRef.current;
+  const mesh = layer.url === ESI_LAYER_URL ? esiMeshRef.current : electrodeMeshRef.current;
   if (!mesh) return;
 
   // ImagingControls only renders an Opacity slider for image volumes (`{isImageVolume && (...)}`)
@@ -262,16 +262,15 @@ export const NiiViewer = ({
     setIsLoading,
     onViewReady,
   });
-  // Merges the intracranial electrode connectome into the card list and builds/rebuilds its mesh.
-  const { intracranialMeshRef, clearIntracranialMesh, dismissIntracranialLayer } =
-    useElectrodeConnectome({
-      electrodeLayer,
-      nvRef,
-      orderedLayers,
-      layerSettings,
-      setOrderedLayers,
-      setLayerSettings,
-    });
+  // Merges the electrode connectome into the card list and builds/rebuilds its mesh.
+  const { electrodeMeshRef, clearElectrodeMesh, dismissElectrodeLayer } = useElectrodeConnectome({
+    electrodeLayer,
+    nvRef,
+    orderedLayers,
+    layerSettings,
+    setOrderedLayers,
+    setLayerSettings,
+  });
   // Merges the ESI source-power layer into the card list and builds/rebuilds its mesh or volume.
   const { esiMeshRef, clearEsiMesh, clearEsiVolume, dismissEsiLayer } = useEsiLayer({
     esiLayer,
@@ -351,7 +350,7 @@ export const NiiViewer = ({
           settings,
           nv,
           esiMeshRef,
-          intracranialMeshRef,
+          electrodeMeshRef,
           thresholdRafRef,
           meshXRayRafRef,
         });
@@ -380,7 +379,7 @@ export const NiiViewer = ({
         });
       }
     },
-    [layerSettings, orderedLayers, nvRef, esiMeshRef, intracranialMeshRef]
+    [layerSettings, orderedLayers, nvRef, esiMeshRef, electrodeMeshRef]
   );
 
   // Loads files dropped into this component's own drop zone, appending them alongside whatever's already loaded.
@@ -491,8 +490,8 @@ export const NiiViewer = ({
         // its own mesh, owned by its own hook (mutating `.current` directly isn't allowed
         // from outside that hook, hence the clear* functions).
         const isEsi = layer.url === ESI_LAYER_URL;
-        const meshRef = isEsi ? esiMeshRef : intracranialMeshRef;
-        const clearMesh = isEsi ? clearEsiMesh : clearIntracranialMesh;
+        const meshRef = isEsi ? esiMeshRef : electrodeMeshRef;
+        const clearMesh = isEsi ? clearEsiMesh : clearElectrodeMesh;
         if (meshRef.current) {
           nv.removeMesh(meshRef.current);
           clearMesh();
@@ -500,7 +499,7 @@ export const NiiViewer = ({
         // Both layers are owned upstream and untouched by this deletion — dismiss so each
         // hook's merge effect doesn't mistake the deleted entry for a fresh first appearance.
         if (isEsi) dismissEsiLayer();
-        else dismissIntracranialLayer();
+        else dismissElectrodeLayer();
       } else if (layer?.kind === 'mesh') {
         // File meshes live in nv.meshes, tracked by fileMeshesRef — drop it from both.
         const mesh = fileMeshesRef.current.get(layer.url);
@@ -527,12 +526,12 @@ export const NiiViewer = ({
       layerSettings,
       nvRef,
       esiMeshRef,
-      intracranialMeshRef,
+      electrodeMeshRef,
       clearEsiMesh,
       clearEsiVolume,
-      clearIntracranialMesh,
+      clearElectrodeMesh,
       dismissEsiLayer,
-      dismissIntracranialLayer,
+      dismissElectrodeLayer,
     ]
   );
 
@@ -558,7 +557,7 @@ export const NiiViewer = ({
   }, [orderedLayers, onHasContentChange]);
 
   // Reports whether the 3D scene has a usable spatial extent — i.e. at least one image
-  // volume or surface mesh. A connectome-only scene (intracranial electrodes and/or the ESI
+  // volume or surface mesh. A connectome-only scene (electrodes and/or the ESI
   // layer in connectome mode) leaves NiiVue's scene extent at zero, which makes its per-frame
   // sync() crash (createOnLocationChange → toFixed(Infinity)) if another instance is broadcast-
   // linked to it. PatientView uses this to keep the cross-panel rotation link off whenever this

@@ -28,7 +28,7 @@ export const TYPE_COLORMAP_DEFAULTS = {
   'Electrical Source Imaging': 'inferno',
 };
 
-// Every other layer is identified by its file's blob: URL. 
+// Every other layer is identified by its file's blob: URL.
 // The electrode connectome isn't loaded from a file — it's built in memory from EEG
 // data — so it has no real URL. This fixed string stands in for one, letting the
 // connectome be tracked, reordered, and deleted the same way as any other layer.

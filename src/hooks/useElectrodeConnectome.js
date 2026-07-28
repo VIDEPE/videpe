@@ -29,14 +29,14 @@ import { EEG_NODE_POS_KEY, EEG_NODE_NEG_KEY } from '@/utils/eegColormaps';
  * @param {Function} params.setLayerSettings - React setState for `layerSettings`; called with
  *   a merge-updater function each time `electrodeLayer` changes.
  * @returns {Object}
- *   - `intracranialMeshRef` (RefObject) — the current connectome mesh in the scene, or null if
+ *   - `electrodeMeshRef` (RefObject) — the current connectome mesh in the scene, or null if
  *     none — read-only from outside this hook; needed by the caller's own handleSettingChange
  *     to mutate mesh properties directly (connectome meshes aren't indexed in `nv.volumes`).
- *   - `clearIntracranialMesh` (Function) — call after the caller itself removes the mesh from
+ *   - `clearElectrodeMesh` (Function) — call after the caller itself removes the mesh from
  *     nv (e.g. in handleDeleteLayer) to reset the ref to null; mutating `.current` from outside
  *     this hook isn't allowed, so this is the sanctioned way to clear it externally.
- *   - `dismissIntracranialLayer` (Function) — call from handleDeleteLayer alongside
- *     clearIntracranialMesh so the merge effect stops resurrecting the just-deleted card until
+ *   - `dismissElectrodeLayer` (Function) — call from handleDeleteLayer alongside
+ *     clearElectrodeMesh so the merge effect stops resurrecting the just-deleted card until
  *     electrodeLayer actually changes upstream (the next voltage update).
  */
 export function useElectrodeConnectome({
@@ -47,70 +47,79 @@ export function useElectrodeConnectome({
   setOrderedLayers,
   setLayerSettings,
 }) {
-  const intracranialMeshRef = useRef(null); // current intracranial connectome mesh in the scene
-  const lastIntracranialLayerRef = useRef(null); // guards against rebuilding on unrelated re-renders
+  const electrodeMeshRef = useRef(null); // current intracranial connectome mesh in the scene
+  const lastElectrodeLayerRef = useRef(null); // guards against rebuilding on unrelated re-renders
   // The specific electrodeLayer object dismissed via handleDeleteLayer, if any. Not a boolean:
   // electrodeLayer is a prop that PatientView keeps recomputing from live EEG data, so a plain
   // "dismissed = true" flag could never be un-set. Storing the reference lets the merge effect
   // below tell "still that same stale layer" from "genuinely new data" by identity — the
   // dismissal auto-expires the moment a new object arrives, no explicit undo needed.
-  const dismissedIntracranialLayerRef = useRef(null);
+  const dismissedElectrodeLayerRef = useRef(null);
 
-  // Sanctioned way for the caller to reset intracranialMeshRef after it removes the mesh from
+  // Sanctioned way for the caller to reset electrodeMeshRef after it removes the mesh from
   // nv itself (e.g. handleDeleteLayer) — external code can read `.current` but isn't allowed to
   // write it directly, since the ref is owned by this hook.
-  const clearIntracranialMesh = useCallback(() => {
-    intracranialMeshRef.current = null;
+  const clearElectrodeMesh = useCallback(() => {
+    electrodeMeshRef.current = null;
   }, []);
-  // Snapshots whichever object is currently on screen (lastIntracranialLayerRef, kept current by
+  // Snapshots whichever object is currently on screen (lastElectrodeLayerRef, kept current by
   // the build effect below) as dismissed, so the merge effect recognizes and ignores it.
-  const dismissIntracranialLayer = useCallback(() => {
-    dismissedIntracranialLayerRef.current = lastIntracranialLayerRef.current;
+  const dismissElectrodeLayer = useCallback(() => {
+    dismissedElectrodeLayerRef.current = lastElectrodeLayerRef.current;
   }, []);
 
-  // Merges electrodeLayer into orderedLayers/layerSettings by its sentinel URL so it
-  // appears in the ImagingControls card list without disturbing other layers' settings on
-  // every voltage-driven refresh. Two independent setState calls (not nested) — nesting
-  // caused StrictMode's double-invoke to append the settings entry twice, misaligning
-  // the arrays and crashing handleNiiFiles. Each updater is idempotent on its own.
+  // Keeps the ImagingControls card list in sync with electrodeLayer. This effect only touches
+  // React state (orderedLayers/layerSettings) — it doesn't touch the 3D scene itself; building/
+  // removing the actual NiiVue mesh is the separate effect below.
   useEffect(() => {
-    // Treat a just-dismissed layer as absent until electrodeLayer actually changes upstream.
-    const effectiveIntracranialLayer =
-      electrodeLayer && electrodeLayer === dismissedIntracranialLayerRef.current
+    // electrodeLayer keeps recomputing from live EEG data (a new object on every voltage
+    // update), so just deleting its card wouldn't stop it coming back on the next click.
+    // dismissElectrodeLayer() (called from handleDeleteLayer) remembers *that exact object* as
+    // dismissed, so until a genuinely new electrodeLayer arrives, treat it as if there were none.
+    const effectiveElectrodeLayer =
+      electrodeLayer && electrodeLayer === dismissedElectrodeLayerRef.current
         ? null
         : electrodeLayer;
-    setOrderedLayers(
-      makeLayerMergeUpdater(effectiveIntracranialLayer, ELECTRODE_LAYER_URL)
-    );
+
+    // Add/update/remove the one card matching ELECTRODE_LAYER_URL, leaving every other card
+    // (image volumes, ESI, file meshes...) untouched.
+    setOrderedLayers(makeLayerMergeUpdater(effectiveElectrodeLayer, ELECTRODE_LAYER_URL));
+    // Same for its settings entry (opacity/visibility/etc.), carrying over the scene's current
+    // meshXRay value so a newly (re)appearing card doesn't reset that shared setting.
     setLayerSettings(
       makeSettingsMergeUpdater(
-        effectiveIntracranialLayer,
+        effectiveElectrodeLayer,
         ELECTRODE_LAYER_URL,
         undefined,
         getCurrentMeshXRay(orderedLayers, layerSettings)
       )
     );
+    // The two setState calls above are separate, not nested — nesting made StrictMode's
+    // double-invoke add the settings entry twice, misaligning the two arrays and crashing
+    // handleNiiFiles.
   }, [electrodeLayer, orderedLayers, layerSettings, setOrderedLayers, setLayerSettings]);
 
+  // Builds/rebuilds/removes the actual NiiVue mesh in the 3D scene whenever electrodeLayer
+  // changes — the counterpart to the effect above, which only manages the card list state.
   useEffect(() => {
     const nv = nvRef.current; // guard clause — nothing to do before NiiVue has attached to a canvas
     if (!nv) return;
 
     if (!electrodeLayer) {
       // No connectome to show anymore (e.g. positions/EEG cleared) — tear down the existing mesh, if any.
-      if (intracranialMeshRef.current) {
-        nv.removeMesh(intracranialMeshRef.current); // drop it from the 3D scene
-        intracranialMeshRef.current = null; // nothing left to track
-        lastIntracranialLayerRef.current = null; // so a future re-add isn't mistaken for "unchanged"
+      if (electrodeMeshRef.current) {
+        nv.removeMesh(electrodeMeshRef.current); // drop it from the 3D scene
+        electrodeMeshRef.current = null; // nothing left to track
+        lastElectrodeLayerRef.current = null; // so a future re-add isn't mistaken for "unchanged"
         nv.updateGLVolume(); // redraw without it
       }
       return;
     }
 
-    if (electrodeLayer === lastIntracranialLayerRef.current) return; // unrelated re-render (e.g. another layer's settings changed)
-    lastIntracranialLayerRef.current = electrodeLayer; // remember what this rebuild is based on
+    if (electrodeLayer === lastElectrodeLayerRef.current) return; // unrelated re-render (e.g. another layer's settings changed)
+    lastElectrodeLayerRef.current = electrodeLayer; // remember what this rebuild is based on
 
-    if (intracranialMeshRef.current) nv.removeMesh(intracranialMeshRef.current); // drop the stale mesh before building its replacement
+    if (electrodeMeshRef.current) nv.removeMesh(electrodeMeshRef.current); // drop the stale mesh before building its replacement
 
     // Build the new connectome mesh in memory — not yet added to the scene.
     const mesh = nv.loadConnectomeAsMesh({
@@ -152,9 +161,13 @@ export function useElectrodeConnectome({
     nv.opts.meshXRay = settings.meshXRay;
 
     nv.addMesh(mesh); // actually add it to the 3D scene
-    intracranialMeshRef.current = mesh; // track it so the next change/removal can find it
+    electrodeMeshRef.current = mesh; // track it so the next change/removal can find it
     nv.updateGLVolume(); // redraw with the new mesh visible
   }, [electrodeLayer, orderedLayers, layerSettings, nvRef]);
 
-  return { intracranialMeshRef, clearIntracranialMesh, dismissIntracranialLayer };
+  return {
+    electrodeMeshRef: electrodeMeshRef,
+    clearElectrodeMesh: clearElectrodeMesh,
+    dismissElectrodeLayer: dismissElectrodeLayer,
+  };
 }
