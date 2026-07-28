@@ -95,13 +95,13 @@ export const StatusLed = ({
   return (
     <span
       className={cn(
-        'flex items-center gap-1.5 leading-none shrink-0 whitespace-nowrap',
+        'flex items-center gap-1.5 leading-none shrink-0 whitespace-nowrap cursor-help',
         disabled && (isDarkMode ? 'text-foreground/20' : 'text-foreground/40')
       )}
       title={title}
     >
       <span
-        className={cn('h-2 w-2 rounded-full shrink-0', dotColor)}
+        className={cn('h-2 w-2 rounded-full shrink-0 cursor-help', dotColor)}
         style={{ boxShadow: glow }}
         aria-hidden="true"
       />
