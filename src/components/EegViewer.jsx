@@ -400,9 +400,9 @@ export const EegViewer = ({
                 <button
                   type="button"
                   className="button button-icon"
-                  title={`${topoEnabled ? 'Close 3D Electrode Rendering' : 'Open 3D Electrode Rendering'}`}
-                  aria-label={`${topoEnabled ? 'Hide' : 'Show'} 3D Electrode Rendering`}
-                  aria-pressed={topoEnabled}
+                  title={`${electrodeRenderEnabled ? 'Close 3D Electrode Rendering' : 'Open 3D Electrode Rendering'}`}
+                  aria-label={`${electrodeRenderEnabled ? 'Hide' : 'Show'} 3D Electrode Rendering`}
+                  aria-pressed={electrodeRenderEnabled}
                   onClick={() => {}}
                 >
                   <Box size={ICON_SIZE} />

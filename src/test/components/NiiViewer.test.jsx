@@ -63,9 +63,24 @@ const SLICE_TYPE_OPTIONS = [
 ];
 
 const makeIntracranialLayer = (overrides = {}) => ({
-  url: '__intracranial-electrodes__',
-  name: 'Intracranial Electrodes',
+  url: '__electrodes__',
+  name: 'Electrodes',
   type: 'Intracranial',
+  subtype: 'Electrodes',
+  kind: 'connectome',
+  nodes: [
+    { name: 'B1', x: 0, y: 0, z: 0, colorValue: 1, sizeValue: 1 },
+    { name: 'B2', x: 1, y: 0, z: 0, colorValue: 1, sizeValue: 1 },
+  ],
+  edges: [{ first: 0, second: 1, colorValue: 1 }],
+  calMax: 1,
+  ...overrides,
+});
+
+const makeSurfaceEegLayer = (overrides = {}) => ({
+  url: '__electrodes__',
+  name: 'Electrodes',
+  type: 'Surface EEG',
   subtype: 'Electrodes',
   kind: 'connectome',
   nodes: [{ name: 'B1', x: 0, y: 0, z: 0, colorValue: 1, sizeValue: 1 }],
@@ -1320,36 +1335,71 @@ describe('NiiViewer', () => {
     });
   });
 
-  describe('connectome layer (intracranial electrodes)', () => {
-    it('builds and adds a connectome mesh via loadConnectomeAsMesh + addMesh when electrodeLayer is provided', async () => {
-      const { Niivue } = await import('@niivue/niivue');
-      const nvRef = { current: new Niivue() };
-      render(<NiiViewer nvRef={nvRef} layers={[]} electrodeLayer={makeIntracranialLayer()} />);
-      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+  describe('connectome layer (electrodes)', () => {
+    it.each([
+      ['Intracranial', makeIntracranialLayer],
+      ['Surface EEG', makeSurfaceEegLayer],
+    ])(
+      'builds and adds a connectome mesh via loadConnectomeAsMesh + addMesh for a %s electrodeLayer',
+      async (_label, makeLayer) => {
+        const { Niivue } = await import('@niivue/niivue');
+        const nvRef = { current: new Niivue() };
+        render(<NiiViewer nvRef={nvRef} layers={[]} electrodeLayer={makeLayer()} />);
+        await waitFor(() =>
+          expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument()
+        );
 
-      const nv = nvRef.current;
-      expect(nv.loadConnectomeAsMesh).toHaveBeenCalled();
-      expect(nv.addMesh).toHaveBeenCalled();
-    });
+        const nv = nvRef.current;
+        expect(nv.loadConnectomeAsMesh).toHaveBeenCalled();
+        expect(nv.addMesh).toHaveBeenCalled();
+      }
+    );
 
-    it('renders a card for the connectome layer in ImagingControls alongside image volumes', async () => {
-      const { Niivue } = await import('@niivue/niivue');
-      const nvRef = { current: new Niivue() };
-      render(
-        <NiiViewer
-          nvRef={nvRef}
-          layers={[{ type: 'MRI', url: '/mri.nii' }]}
-          electrodeLayer={makeIntracranialLayer()}
-        />
-      );
-      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+    it.each([
+      ['Intracranial', makeIntracranialLayer],
+      ['Surface EEG', makeSurfaceEegLayer],
+    ])(
+      'renders a card for a %s connectome layer in ImagingControls alongside image volumes',
+      async (label, makeLayer) => {
+        const { Niivue } = await import('@niivue/niivue');
+        const nvRef = { current: new Niivue() };
+        render(
+          <NiiViewer
+            nvRef={nvRef}
+            layers={[{ type: 'MRI', url: '/mri.nii' }]}
+            electrodeLayer={makeLayer()}
+          />
+        );
+        await waitFor(() =>
+          expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument()
+        );
 
-      // type and subtype render as separate text nodes (see "renders subtype with a dash
-      // prefix" in ImagingControls.test.jsx for the same pattern), so query them separately.
-      expect(screen.getByText('MRI')).toBeInTheDocument();
-      expect(screen.getByText('Intracranial')).toBeInTheDocument();
-      expect(screen.getByText('- Electrodes')).toBeInTheDocument();
-    });
+        // type and subtype render as separate text nodes (see "renders subtype with a dash
+        // prefix" in ImagingControls.test.jsx for the same pattern), so query them separately.
+        expect(screen.getByText('MRI')).toBeInTheDocument();
+        expect(screen.getByText(label)).toBeInTheDocument();
+        expect(screen.getByText('- Electrodes')).toBeInTheDocument();
+      }
+    );
+
+    it.each([
+      ['Intracranial', makeIntracranialLayer, [{ first: 0, second: 1, colorValue: 1 }]],
+      ['Surface EEG', makeSurfaceEegLayer, []],
+    ])(
+      'passes %s edges through to loadConnectomeAsMesh unchanged',
+      async (_label, makeLayer, expectedEdges) => {
+        const { Niivue } = await import('@niivue/niivue');
+        const nvRef = { current: new Niivue() };
+        render(<NiiViewer nvRef={nvRef} layers={[]} electrodeLayer={makeLayer()} />);
+        await waitFor(() =>
+          expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument()
+        );
+
+        expect(nvRef.current.loadConnectomeAsMesh).toHaveBeenLastCalledWith(
+          expect.objectContaining({ edges: expectedEdges })
+        );
+      }
+    );
 
     it('never passes the connectome through nv.loadVolumes', async () => {
       const { Niivue } = await import('@niivue/niivue');
@@ -1929,7 +1979,7 @@ describe('NiiViewer', () => {
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
 
       const mriLabel = screen.getByText('MRI');
-      const connectomeLabel = screen.getByText('Intracranial');
+      const connectomeLabel = screen.getByText('- Electrodes');
       expect(
         mriLabel.compareDocumentPosition(connectomeLabel) & Node.DOCUMENT_POSITION_FOLLOWING
       ).toBeTruthy();
