@@ -1453,6 +1453,83 @@ describe('PatientView — electrodeRenderEnabled toggle', () => {
   });
 });
 
+describe('PatientView — esiEnabled toggle', () => {
+  const loadEegAndInverseSolution = async () => {
+    checkEegFiles.mockReturnValue({
+      formatName: 'BrainVision',
+      complete: true,
+      missing: [],
+      warning: null,
+    });
+    detectAndLoadEEG.mockResolvedValue({
+      channelNames: ['1', '2'],
+      fs: 256,
+      tMax: 10,
+      getChunk: vi.fn(),
+    });
+    await act(async () => {
+      await getEegOnFiles()([
+        makeFile('sub01.vhdr'),
+        makeFile('sub01.eeg'),
+        makeFile('sub-19_inversefilters.mat'),
+      ]);
+    });
+  };
+
+  beforeEach(() => {
+    FileDropZone.mockClear();
+    NiiViewer.mockClear();
+    EegViewer.mockClear();
+    checkEegFiles.mockClear();
+    electricalSourceImaging.mockReset();
+    electricalSourceImaging.mockReturnValue({
+      sourcePowerConnectomes: { fake: 'connectome' },
+      sourcePowerVolume: { fake: 'volume' },
+    });
+  });
+
+  it('defaults to off — no ESI layer even once a channel snapshot arrives', async () => {
+    renderPatientView();
+    await loadEegAndInverseSolution();
+
+    expect(screen.getByTestId('eeg-esi-enabled')).toHaveTextContent('false');
+
+    await userEvent.click(screen.getByTestId('trigger-channel-snapshot'));
+
+    // Inverse solution + Average montage + a channel snapshot are all present, but the
+    // toggle was never turned on — nothing should render.
+    expect(screen.queryByTestId('nii-viewer')).not.toBeInTheDocument();
+  });
+
+  it('turning the toggle on shows the ESI layer from already-reported channel data', async () => {
+    renderPatientView();
+    await loadEegAndInverseSolution();
+    await userEvent.click(screen.getByTestId('trigger-channel-snapshot'));
+    expect(screen.queryByTestId('nii-viewer')).not.toBeInTheDocument(); // still off
+
+    await userEvent.click(screen.getByTestId('enable-esi'));
+
+    expect(screen.getByTestId('eeg-esi-enabled')).toHaveTextContent('true');
+    expect(screen.getByTestId('nii-viewer')).toBeInTheDocument();
+    expect(NiiViewer.mock.lastCall[0].esiLayer).toBeTruthy();
+  });
+
+  it('turning the toggle off removes the ESI layer without needing new channel data', async () => {
+    renderPatientView();
+    await loadEegAndInverseSolution();
+    await userEvent.click(screen.getByTestId('enable-esi'));
+    await userEvent.click(screen.getByTestId('trigger-channel-snapshot'));
+    expect(NiiViewer.mock.lastCall[0].esiLayer).toBeTruthy();
+
+    await userEvent.click(screen.getByTestId('disable-esi'));
+
+    // Nothing else is loaded, so clearing the toggle drops NiiViewer's only reason to be
+    // mounted at all — same as the electrodeRenderEnabled toggle-off case above.
+    expect(screen.getByTestId('eeg-esi-enabled')).toHaveTextContent('false');
+    expect(screen.queryByTestId('nii-viewer')).not.toBeInTheDocument();
+  });
+});
+
 // Regression tests for the "can't rotate 3D view after removing the linked 3D render" bug:
 // NiiVue's sync() runs every frame while dragging and calls createOnLocationChange() on the
 // broadcast-linked instance, which throws (toFixed(Infinity), aborting the still-focused

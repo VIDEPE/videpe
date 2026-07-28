@@ -57,7 +57,7 @@ export function useElectricalSourceImaging({
   channelSnapshot,
   montage,
   setMontage,
-  enabled,
+  esiEnabled,
 }) {
   const [inverseSolution, setInverseSolution] = useState(null);
   const [inverseSolutionFileName, setInverseSolutionFileName] = useState(null);
@@ -130,10 +130,10 @@ export function useElectricalSourceImaging({
 
   const esiLayer = useMemo(
     () =>
-      montage === 'average' && enabled
+      montage === 'average' && esiEnabled
         ? electricalSourceImaging(inverseSolution, channelSnapshot)
         : null,
-    [inverseSolution, channelSnapshot, montage, enabled]
+    [inverseSolution, channelSnapshot, montage, esiEnabled]
   ); // ESI source power — { sourcePowerConnectomes, sourcePowerVolume } | null | [] — only valid under the Average montage while the ESI toggle is on
 
   // Montage is a controlled prop on EegViewer so it can be forced to 'average' above
