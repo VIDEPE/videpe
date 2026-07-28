@@ -201,6 +201,16 @@ code {
     background: var(--color-background);
     color: var(--color-primary);
   }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+
+    &:hover {
+      box-shadow: none;
+      transform: none;
+    }
+  }
 }
 
 /* Icon-only variant: tighter padding, no shadow — for dense control toolbars */

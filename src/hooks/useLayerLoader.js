@@ -5,7 +5,7 @@ import {
   isImageVolumeLayer,
   syncVolumesAndApplySettings,
   syncMeshesAndApplySettings,
-  INTRACRANIAL_CONNECTOME_URL,
+  ELECTRODE_LAYER_URL,
   ESI_LAYER_URL,
 } from '@/utils/NiiViewer.utils';
 
@@ -16,7 +16,7 @@ import {
  * loadingLayersRef has two guards: (1) same reference at the top → StrictMode double-invoke,
  * bail before touching nv; (2) stale reference in the async callback → a newer load superseded
  * this one, don't update state. Connectome layers are intentionally excluded from deps — their
- * own merge effects (see useIntracranialConnectome/useEsiLayer) handle them.
+ * own merge effects (see useElectrodeConnectome/useEsiLayer) handle them.
  *
  * @param {Object} params
  * @param {Array} params.layers - image volume/mesh layers to load, e.g. from the `layers` prop
@@ -69,7 +69,7 @@ export function useLayerLoader({
       setOrderedLayers((prev) => prev.filter((layer) => layer.kind === 'connectome'));
       setLayerSettings((prev) =>
         prev.filter(
-          (setting) => setting.url === INTRACRANIAL_CONNECTOME_URL || setting.url === ESI_LAYER_URL
+          (setting) => setting.url === ELECTRODE_LAYER_URL || setting.url === ESI_LAYER_URL
         )
       );
       setIsLoading(false);

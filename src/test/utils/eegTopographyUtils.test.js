@@ -402,15 +402,15 @@ describe('buildElectrodeMarkers', () => {
 });
 
 // ---------------------------------------------------------------------------
-// buildIntracranialMatrix / buildIntracranialConnectome / buildIntracranialLayer
+// buildIntracranialMatrix / buildIntracranialConnectome / buildElectrodeLayer
 // ---------------------------------------------------------------------------
 
 import {
   buildIntracranialMatrix,
   buildIntracranialConnectome,
-  buildIntracranialLayer,
+  buildElectrodeLayer,
 } from '@/utils/eegTopographyUtils';
-import { INTRACRANIAL_CONNECTOME_URL } from '@/utils/NiiViewer.utils';
+import { ELECTRODE_LAYER_URL } from '@/utils/NiiViewer.utils';
 
 describe('buildIntracranialMatrix', () => {
   it('groups channels by electrode group, sorted by contact number ascending', () => {
@@ -504,32 +504,38 @@ describe('buildIntracranialConnectome', () => {
   });
 });
 
-describe('buildIntracranialLayer', () => {
+describe('buildElectrodeLayer', () => {
   const matched = [
     { channelIdx: 0, name: 'B1', pos: { label: 'B1', x: 0, y: 0, z: 0 } },
     { channelIdx: 1, name: 'B2', pos: { label: 'B2', x: 1, y: 1, z: 1 } },
   ];
 
-  it('returns null when not intracranial', () => {
-    expect(buildIntracranialLayer({ isIntracranial: false, matched, voltages: [1, 2] })).toBeNull();
-  });
-
   it('returns null when there are no matched (positioned) channels yet', () => {
-    expect(buildIntracranialLayer({ isIntracranial: true, matched: [], voltages: [] })).toBeNull();
+    expect(buildElectrodeLayer({ isIntracranial: true, matched: [], voltages: [] })).toBeNull();
   });
 
-  it('returns a well-formed connectome volume entry otherwise', () => {
-    const volume = buildIntracranialLayer({ isIntracranial: true, matched, voltages: [10, -4] });
+  it('returns a well-formed intracranial connectome (nodes+edges) volume entry when intracranial = true', () => {
+    const volume = buildElectrodeLayer({ isIntracranial: true, matched, voltages: [10, -4] });
     expect(volume).toMatchObject({
-      url: INTRACRANIAL_CONNECTOME_URL,
+      url: ELECTRODE_LAYER_URL,
       kind: 'connectome',
     });
     expect(volume.nodes).toHaveLength(2);
     expect(volume.edges).toHaveLength(1);
   });
 
+  it('returns a well-formed surfaceEEG connectome (only nodes) volume entry when intracranial = false', () => {
+    const volume = buildElectrodeLayer({ isIntracranial: false, matched, voltages: [10, -4] });
+    expect(volume).toMatchObject({
+      url: ELECTRODE_LAYER_URL,
+      kind: 'connectome',
+    });
+    expect(volume.nodes).toHaveLength(2);
+    expect(volume.edges).toHaveLength(0);
+  });
+
   it('sets calMax to the maximum absolute voltage', () => {
-    const volume = buildIntracranialLayer({ isIntracranial: true, matched, voltages: [10, -25] });
+    const volume = buildElectrodeLayer({ isIntracranial: true, matched, voltages: [10, -25] });
     expect(volume.calMax).toBe(25);
   });
 });

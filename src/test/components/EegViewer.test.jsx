@@ -1470,13 +1470,38 @@ describe('EegViewer — recording type detection', () => {
   // only cover what that hook test can't: how EegViewer wires the resulting isIntracranial
   // state into its children (EegTopoViewer).
 
-  it('keeps matched empty for an intracranial recordingType with no custom positions, even though standard_1005 was fetched', async () => {
+  it('disables the topo toggle for an intracranial recordingType with no known electrode positions at all', async () => {
     const provider = makeIntracranialProvider();
+    render(
+      <EegViewer provider={provider} channelNames={provider.channelNames} recordingType="ieeg" />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Nothing can ever be mapped without positions — the toggle must stay disabled rather
+    // than let the user open a permanently-empty topo window.
+    expect(screen.getByRole('button', { name: /topograph map/i })).toBeDisabled();
+  });
+
+  it('keeps matched empty for an intracranial recordingType whose custom positions do not match any channel, even though standard_1005 was fetched', async () => {
+    const provider = makeIntracranialProvider();
+    // A position file is loaded (so the topo toggle is enabled), but none of its labels
+    // match this recording's channel names — mirrors loading the wrong patient's/montage's
+    // position file, as opposed to no file at all (which is covered by the "disables the
+    // topo toggle" test above and can no longer reach this code path via the UI).
+    const customElectrodes = [{ label: 'X1', x: 0, y: 0, z: 0 }];
     // recordingType is normally fed back down as a prop by the parent in response to the
     // onRecordingTypeChange callback above (see PatientView) — passed directly here to
     // exercise the same isIntracranial-driven behavior without reimplementing that parent.
     render(
-      <EegViewer provider={provider} channelNames={provider.channelNames} recordingType="ieeg" />
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        recordingType="ieeg"
+        customElectrodes={customElectrodes}
+      />
     );
     await act(async () => {
       await Promise.resolve();
@@ -1509,14 +1534,14 @@ describe('EegViewer — recording type detection', () => {
 });
 
 describe('EegViewer — lifted electrode state callback', () => {
-  it('calls onIntracranialSnapshotChange with the current mode, matched channels, and voltages', async () => {
-    const onIntracranialSnapshotChange = vi.fn();
+  it('calls onElectrodeSnapshotChange with the current mode, matched channels, and voltages', async () => {
+    const onElectrodeSnapshotChange = vi.fn();
     const provider = makeProvider();
     render(
       <EegViewer
         provider={provider}
         channelNames={provider.channelNames}
-        onIntracranialSnapshotChange={onIntracranialSnapshotChange}
+        onElectrodeSnapshotChange={onElectrodeSnapshotChange}
       />
     );
     await act(async () => {
@@ -1524,16 +1549,16 @@ describe('EegViewer — lifted electrode state callback', () => {
       await Promise.resolve();
     });
 
-    expect(onIntracranialSnapshotChange).toHaveBeenCalledWith(
+    expect(onElectrodeSnapshotChange).toHaveBeenCalledWith(
       expect.objectContaining({ isIntracranial: false, voltages: [] })
     );
 
-    onIntracranialSnapshotChange.mockClear();
+    onElectrodeSnapshotChange.mockClear();
     await act(async () => {
       capturedClickHandler?.();
     });
 
-    expect(onIntracranialSnapshotChange).toHaveBeenLastCalledWith(
+    expect(onElectrodeSnapshotChange).toHaveBeenLastCalledWith(
       expect.objectContaining({ isIntracranial: false, voltages: [4, 7] })
     );
   });

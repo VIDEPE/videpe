@@ -28,11 +28,11 @@ export const TYPE_COLORMAP_DEFAULTS = {
   'Electrical Source Imaging': 'inferno',
 };
 
-// Every other layer is identified by its file's blob: URL. The intracranial
-// electrode connectome isn't loaded from a file — it's built in memory from EEG
+// Every other layer is identified by its file's blob: URL.
+// The electrode connectome isn't loaded from a file — it's built in memory from EEG
 // data — so it has no real URL. This fixed string stands in for one, letting the
 // connectome be tracked, reordered, and deleted the same way as any other layer.
-export const INTRACRANIAL_CONNECTOME_URL = '__intracranial-electrodes__';
+export const ELECTRODE_LAYER_URL = '__electrodes__';
 
 // Same sentinel-URL pattern for the ESI source-power connectome/volume layer.
 export const ESI_LAYER_URL = '__esi-source-power__';

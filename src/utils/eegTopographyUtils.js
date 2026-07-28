@@ -3,7 +3,7 @@
 
 import convexHull from 'convex-hull';
 import { parseElectrodeContactName } from './intracranialDetection';
-import { INTRACRANIAL_CONNECTOME_URL } from '@/utils/NiiViewer.utils';
+import { ELECTRODE_LAYER_URL } from '@/utils/NiiViewer.utils';
 
 // ─── Channel matching ───────────────────────────────────────────────────────
 // Maps raw EEG channel names onto parsed electrode template positions.
@@ -268,6 +268,32 @@ export function buildIntracranialConnectome(matched, voltages) {
 }
 
 /**
+ * Builds connectome nodes (one per matched electrode contact, colored by voltage)
+ *
+ * @param {{ channelIdx, name, pos: { x, y, z } }[]} matched - from matchChannelsToPositions
+ * @param {number[]} voltages  - one per matched entry (same order as matched)
+ * @returns {{
+ *   nodes: { name, x, y, z, colorValue, sizeValue }[],
+ *   edges: { first: number, second: number, colorValue: number }[]
+ */
+export function buildSurfaceEegConnectome(matched, voltages) {
+  // One node per matched contact — node index i corresponds to matched[i]/voltages[i].
+  const nodes = matched.map((m, i) => ({
+    name: m.name,
+    x: m.pos.x,
+    y: m.pos.y,
+    z: m.pos.z,
+    colorValue: voltages[i] ?? 0,
+    sizeValue: 1,
+  }));
+
+  // Surface EEG doesn't need edges connecting the nodes
+  const edges = [];
+
+  return { nodes, edges };
+}
+
+/**
  * Pure derivation of the Neuroimaging pane's "connectome volume" layer entry from
  * the EEG state lifted out of EegViewer. Returns null when there's nothing to show
  * yet (not an intracranial recording, or no position-matched channels), so
@@ -277,17 +303,27 @@ export function buildIntracranialConnectome(matched, voltages) {
  * @param {{ isIntracranial: boolean, matched: object[], voltages: number[] }} args
  * @returns {object | null}
  */
-export function buildIntracranialLayer({ isIntracranial, matched, voltages }) {
-  if (!isIntracranial || !matched?.length) return null; // nothing to render yet
+export function buildElectrodeLayer({ isIntracranial, matched, voltages }) {
+  if (!matched?.length) return null; // nothing to render yet
 
-  const { nodes, edges } = buildIntracranialConnectome(matched, voltages);
+  // declare variables
+  let nodes, edges, subtype;
+
+  if (isIntracranial) {
+    ({ nodes, edges } = buildIntracranialConnectome(matched, voltages));
+    subtype = 'Intracranial EEG';
+  } else {
+    ({ nodes, edges } = buildSurfaceEegConnectome(matched, voltages));
+    subtype = 'Surface EEG';
+  }
+
   const calMax = Math.max(1e-6, ...voltages.map((v) => Math.abs(v))); // symmetric colour range; floor avoids div-by-zero downstream
 
   return {
-    url: INTRACRANIAL_CONNECTOME_URL,
-    name: 'Intracranial Electrodes',
-    type: 'Intracranial',
-    subtype: 'Electrodes',
+    url: ELECTRODE_LAYER_URL,
+    name: `${subtype} Electrodes`,
+    type: 'Electrodes',
+    subtype: subtype,
     kind: 'connectome',
     nodes,
     edges,

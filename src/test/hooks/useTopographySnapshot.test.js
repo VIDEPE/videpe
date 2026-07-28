@@ -22,7 +22,7 @@ const setup = (overrides = {}) =>
       matched,
       channelNames,
       isIntracranial: false,
-      onIntracranialSnapshotChange: vi.fn(),
+      onElectrodeSnapshotChange: vi.fn(),
       onChannelSnapshotChange: vi.fn(),
       ...overrides,
     },
@@ -71,20 +71,20 @@ describe('useTopographySnapshot — voltage snapshots', () => {
 });
 
 describe('useTopographySnapshot — lifted snapshots', () => {
-  it('calls onIntracranialSnapshotChange on mount, regardless of topoTimepoint', () => {
-    const onIntracranialSnapshotChange = vi.fn();
-    setup({ onIntracranialSnapshotChange, topoTimepoint: null });
-    expect(onIntracranialSnapshotChange).toHaveBeenCalledWith({
+  it('calls onElectrodeSnapshotChange on mount, regardless of topoTimepoint', () => {
+    const onElectrodeSnapshotChange = vi.fn();
+    setup({ onElectrodeSnapshotChange, topoTimepoint: null });
+    expect(onElectrodeSnapshotChange).toHaveBeenCalledWith({
       isIntracranial: false,
       matched,
       voltages: [],
     });
   });
 
-  it('re-calls onIntracranialSnapshotChange when the voltage snapshot changes', () => {
-    const onIntracranialSnapshotChange = vi.fn();
-    const { rerender } = setup({ onIntracranialSnapshotChange, topoTimepoint: null });
-    onIntracranialSnapshotChange.mockClear();
+  it('re-calls onElectrodeSnapshotChange when the voltage snapshot changes', () => {
+    const onElectrodeSnapshotChange = vi.fn();
+    const { rerender } = setup({ onElectrodeSnapshotChange, topoTimepoint: null });
+    onElectrodeSnapshotChange.mockClear();
 
     rerender({
       channels,
@@ -95,11 +95,11 @@ describe('useTopographySnapshot — lifted snapshots', () => {
       matched,
       channelNames,
       isIntracranial: false,
-      onIntracranialSnapshotChange,
+      onElectrodeSnapshotChange,
       onChannelSnapshotChange: vi.fn(),
     });
 
-    expect(onIntracranialSnapshotChange).toHaveBeenCalledWith({
+    expect(onElectrodeSnapshotChange).toHaveBeenCalledWith({
       isIntracranial: false,
       matched,
       voltages: [3, 7],
@@ -138,7 +138,7 @@ describe('useTopographySnapshot — lifted snapshots', () => {
       matched,
       channelNames,
       isIntracranial: false,
-      onIntracranialSnapshotChange: vi.fn(),
+      onElectrodeSnapshotChange: vi.fn(),
       onChannelSnapshotChange,
     });
 

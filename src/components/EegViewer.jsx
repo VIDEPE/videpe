@@ -17,6 +17,7 @@ import {
   ListChevronsDownUp,
   Keyboard,
   Map,
+  Box,
 } from 'lucide-react';
 import { minMaxDownsample } from '@/utils/downsample';
 import { useEegBuffer } from '@/loaders/eegBuffer';
@@ -93,13 +94,15 @@ export const EegViewer = ({
   inverseSolutionFileName = null, // filename (no extension) of the loaded inverse-solution file — owned by PatientView, passed down
   onElecPosFile,
   onInverseSolutionFile,
-  onIntracranialSnapshotChange,
+  onElectrodeSnapshotChange,
   onChannelSnapshotChange,
   recordingType = 'eeg', // 'eeg' | 'ieeg' — controlled by PatientView, which shows/drives the toggle in the panel title
   onRecordingTypeChange,
   montage = 'none', // 'none' | 'average' | 'median' — controlled by PatientView, which forces 'average' when ESI needs it
   onMontageChange,
-  onTopoHasContentChange, // reports whether the topography NiiVue canvas currently has a mesh to draw — see NiiViewer's onHasContentChange for why PatientView needs this instead of inferring it
+  onTopoHasContentChange, // whether the topography NiiVue canvas currently has a mesh, so PatientView can enable/disable the cross-panel rotation link accordingly
+  electrodeRenderEnabled, // boolean — owned by PatientView => whether electrode 3D render is enabled
+  onElectrodeRenderChange, // handle for electrodeRender changes
 }) => {
   const { isDarkMode } = useTheme();
   const syncKey = 'eeg-sync'; // shared across all channels to link their interactions
@@ -150,7 +153,7 @@ export const EegViewer = ({
   // keeps the previous buffer's data on screen until the new one arrives (no flash).
   const { timestamps, channels, isLoading } = useEegBuffer(provider, startTime, windowSize);
 
-  // ── Topography state ─────────────────────────────────────────────────────────
+  // ── Topography state ─────────────────────────────────────────────────────────────────────
   const [topoEnabled, setTopoEnabled] = useState(false);
   const [topoTimepoint, setTopoTimepoint] = useState(null);
   // Topograph window only opens when the toggle is on (topoEnabled) AND once a EEGplot
@@ -187,7 +190,7 @@ export const EegViewer = ({
     matched,
     channelNames,
     isIntracranial,
-    onIntracranialSnapshotChange,
+    onElectrodeSnapshotChange,
     onChannelSnapshotChange,
   });
 
@@ -381,21 +384,44 @@ export const EegViewer = ({
           {/* Left sidebar: Channels controls centered in the available height, Montage pinned to the bottom-left corner */}
           <div className="shrink-0 flex flex-col px-1">
             <div className="flex flex-col gap-1 absolute pl-7 pt-7">
-              {/* EEG Topography selector*/}
+              {/* EEG Topography Toggle*/}
               <div className="">
                 <button
                   type="button"
                   className="button button-icon"
-                  title={`${topoEnabled ? 'Disable Topograph Map' : 'EEG Topograph Map. If enabled: click EEG plot to generate an EEG Topography map at selected timestamp (requires known electrode positions)'}`}
+                  title={
+                    electrodes?.length > 0
+                      ? `${topoEnabled ? 'Close Topograph Map' : 'EEG Topograph Map. If enabled: click EEG plot to generate an EEG Topography map at selected timestamp (requires known electrode positions)'}`
+                      : 'EEG Topograph Map. Requires known electrode positions'
+                  }
                   aria-label={`${topoEnabled ? 'Disable' : 'Enable'} Topograph Map`}
                   aria-pressed={topoEnabled}
+                  disabled={!electrodes?.length}
                   onClick={() => setTopoEnabled(!topoEnabled)}
                 >
                   <Map size={ICON_SIZE} />
                 </button>
               </div>
-              {/* PLACEHOLDER: 3D Render of electrodes */}
-              <div className=""></div>
+              {/* 3D Electrode Render Toggle*/}
+              <div className="">
+                <button
+                  type="button"
+                  className="button button-icon"
+                  title={
+                    electrodes?.length > 0 && !isStandardElectrodes
+                      ? `${electrodeRenderEnabled ? 'Close 3D Electrode Rendering' : 'Open 3D Electrode Rendering'}`
+                      : isIntracranial
+                        ? '3D Electrode Rendering. Requires known electrode positions'
+                        : "3D Electrode Rendering. Requires a patient-specific electrode position file — the standard 10-05 template is only an indicative layout, not this patient's actual head geometry"
+                  }
+                  aria-label={`${electrodeRenderEnabled ? 'Hide' : 'Show'} 3D Electrode Rendering`}
+                  aria-pressed={electrodeRenderEnabled}
+                  disabled={!electrodes?.length || isStandardElectrodes}
+                  onClick={() => onElectrodeRenderChange(!electrodeRenderEnabled)}
+                >
+                  <Box size={ICON_SIZE} />
+                </button>
+              </div>
             </div>
 
             {/* Channel Controls*/}
