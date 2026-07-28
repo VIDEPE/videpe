@@ -31,6 +31,10 @@ import { electricalSourceImaging } from '../utils/electricalSourceImagingUtils';
  *   The raw montage setter from useMontage. Called here to force the montage to
  *   'average' when an inverse solution becomes active in EEG mode, and by
  *   `handleMontageChange` to apply the user's own montage selection.
+ * @param {boolean} params.esiEnabled
+ *   Whether the ESI toggle in EegViewer is currently on. `esiLayer` is only computed
+ *   while this is true — mirrors PatientView's electrodeRenderEnabled gating of
+ *   electrodeLayer.
  * @returns {Object} The current ESI state, plus the functions needed to drive it:
  *   - `inverseSolution` (object|null) — the parsed FieldTrip inverse-solution data, or
  *     `null` if none has been loaded.
@@ -38,7 +42,8 @@ import { electricalSourceImaging } from '../utils/electricalSourceImagingUtils';
  *     loaded inverse-solution file, or `null` if none.
  *   - `esiLayer` (object|null) — the computed ESI source-power layer
  *     ({ sourcePowerConnectomes, sourcePowerVolume }), or `null` when there's nothing to
- *     show (no inverse solution, montage isn't Average, or no channel data yet).
+ *     show (no inverse solution, montage isn't Average, no channel data yet, or
+ *     `esiEnabled` is false).
  *   - `handleInverseSolutionFile` (file: File) => Promise<void> — parses and activates
  *     a single inverse-solution (.mat) file.
  *   - `handleMontageChange` (newMontage: string) => void — applies the user's montage
@@ -52,6 +57,7 @@ export function useElectricalSourceImaging({
   channelSnapshot,
   montage,
   setMontage,
+  enabled,
 }) {
   const [inverseSolution, setInverseSolution] = useState(null);
   const [inverseSolutionFileName, setInverseSolutionFileName] = useState(null);
@@ -124,9 +130,11 @@ export function useElectricalSourceImaging({
 
   const esiLayer = useMemo(
     () =>
-      montage === 'average' ? electricalSourceImaging(inverseSolution, channelSnapshot) : null,
-    [inverseSolution, channelSnapshot, montage]
-  ); // ESI source power — { sourcePowerConnectomes, sourcePowerVolume } | null | [] — only valid under the Average montage
+      montage === 'average' && enabled
+        ? electricalSourceImaging(inverseSolution, channelSnapshot)
+        : null,
+    [inverseSolution, channelSnapshot, montage, enabled]
+  ); // ESI source power — { sourcePowerConnectomes, sourcePowerVolume } | null | [] — only valid under the Average montage while the ESI toggle is on
 
   // Montage is a controlled prop on EegViewer so it can be forced to 'average' above
   // when adding an inverse solution file.

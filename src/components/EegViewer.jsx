@@ -18,6 +18,7 @@ import {
   Keyboard,
   Map,
   Box,
+  LocateFixed,
 } from 'lucide-react';
 import { minMaxDownsample } from '@/utils/downsample';
 import { useEegBuffer } from '@/loaders/eegBuffer';
@@ -103,6 +104,8 @@ export const EegViewer = ({
   onTopoHasContentChange, // whether the topography NiiVue canvas currently has a mesh, so PatientView can enable/disable the cross-panel rotation link accordingly
   electrodeRenderEnabled, // boolean — owned by PatientView => whether electrode 3D render is enabled
   onElectrodeRenderChange, // handle for electrodeRender changes
+  esiEnabled, // boolean — owned by PatientView => whether the Electrical Source Imaging layer is shown
+  onEsiEnabledChange, // handle for esiEnabled changes
 }) => {
   const { isDarkMode } = useTheme();
   const syncKey = 'eeg-sync'; // shared across all channels to link their interactions
@@ -420,6 +423,26 @@ export const EegViewer = ({
                   onClick={() => onElectrodeRenderChange(!electrodeRenderEnabled)}
                 >
                   <Box size={ICON_SIZE} />
+                </button>
+              </div>
+              {/* Electrical Source Imaging (ESI) Toggle*/}
+              <div className="">
+                <button
+                  type="button"
+                  className="button button-icon"
+                  title={
+                    inverseSolutionFileName && !isIntracranial
+                      ? `${esiEnabled ? 'Disable Electrical Source Imaging' : 'Electrical Source Imaging. If enabled: click EEG plot to compute source power at selected timestamp'}`
+                      : isIntracranial
+                        ? 'Electrical Source Imaging. Not available for iEEG'
+                        : 'Electrical Source Imaging. Requires a loaded inverse solution'
+                  }
+                  aria-label={`${esiEnabled ? 'Disable' : 'Enable'} Electrical Source Imaging`}
+                  aria-pressed={esiEnabled}
+                  disabled={!inverseSolutionFileName || isIntracranial}
+                  onClick={() => onEsiEnabledChange(!esiEnabled)}
+                >
+                  <LocateFixed size={ICON_SIZE} />
                 </button>
               </div>
             </div>

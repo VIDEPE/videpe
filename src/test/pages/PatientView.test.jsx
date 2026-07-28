@@ -63,6 +63,8 @@ vi.mock('@/components/EegViewer', () => ({
       onTopoHasContentChange,
       electrodeRenderEnabled,
       onElectrodeRenderChange,
+      esiEnabled,
+      onEsiEnabledChange,
     }) => (
       <div data-testid="eeg-viewer">
         <span data-testid="eeg-custom-electrodes-count">{customElectrodes?.length ?? 0}</span>
@@ -70,6 +72,7 @@ vi.mock('@/components/EegViewer', () => ({
         <span data-testid="eeg-inverse-solution-filename">{inverseSolutionFileName ?? ''}</span>
         <span data-testid="eeg-montage">{montage}</span>
         <span data-testid="eeg-electrode-render-enabled">{String(electrodeRenderEnabled)}</span>
+        <span data-testid="eeg-esi-enabled">{String(esiEnabled)}</span>
         {/* Simulates clicking the 3D electrode-render toggle button in EegViewer's panel */}
         <button
           type="button"
@@ -84,6 +87,13 @@ vi.mock('@/components/EegViewer', () => ({
           onClick={() => onElectrodeRenderChange?.(false)}
         >
           disable-electrode-render
+        </button>
+        {/* Simulates clicking the ESI toggle button in EegViewer's panel */}
+        <button type="button" data-testid="enable-esi" onClick={() => onEsiEnabledChange?.(true)}>
+          enable-esi
+        </button>
+        <button type="button" data-testid="disable-esi" onClick={() => onEsiEnabledChange?.(false)}>
+          disable-esi
         </button>
         {/* Simulates EegViewer reporting live intracranial electrode/voltage state, the way it
           would after detecting an intracranial recording and matching a position file. */}
@@ -1252,6 +1262,7 @@ describe('PatientView — ESI requires the Average montage', () => {
   it('hides the ESI layer and toasts when the montage is switched away from Average', async () => {
     renderPatientView();
     await loadEegAndInverseSolution();
+    await userEvent.click(screen.getByTestId('enable-esi'));
     await userEvent.click(screen.getByTestId('trigger-channel-snapshot'));
     expect(NiiViewer.mock.lastCall[0].esiLayer).toBeTruthy();
 
@@ -1266,6 +1277,7 @@ describe('PatientView — ESI requires the Average montage', () => {
   it('shows the ESI layer again when the montage is switched back to Average', async () => {
     renderPatientView();
     await loadEegAndInverseSolution();
+    await userEvent.click(screen.getByTestId('enable-esi'));
     await userEvent.click(screen.getByTestId('trigger-channel-snapshot'));
     await userEvent.click(screen.getByTestId('set-montage-none'));
     expect(NiiViewer.mock.lastCall[0].esiLayer).toBeNull();

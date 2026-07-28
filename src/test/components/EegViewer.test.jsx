@@ -653,6 +653,80 @@ describe('EegViewer — topography wiring', () => {
   });
 });
 
+// ── ESI toggle wiring ──────────────────────────────────────────────────────────
+
+describe('EegViewer — ESI toggle wiring', () => {
+  it('is disabled with no inverse solution loaded', async () => {
+    await renderViewer();
+    const button = screen.getByRole('button', { name: /enable electrical source imaging/i });
+    expect(button).toBeDisabled();
+  });
+
+  it('is enabled once an inverse solution is loaded, and toggles aria-pressed/label when clicked', async () => {
+    const provider = makeProvider();
+    const onEsiEnabledChange = vi.fn();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        inverseSolutionFileName="my_inverse_solution"
+        esiEnabled={false}
+        onEsiEnabledChange={onEsiEnabledChange}
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const button = screen.getByRole('button', { name: /enable electrical source imaging/i });
+    expect(button).toBeEnabled();
+    expect(button).toHaveAttribute('aria-pressed', 'false');
+
+    await userEvent.click(button);
+    expect(onEsiEnabledChange).toHaveBeenCalledWith(true);
+  });
+
+  it('reflects esiEnabled=true via aria-pressed and label', async () => {
+    const provider = makeProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        inverseSolutionFileName="my_inverse_solution"
+        esiEnabled={true}
+        onEsiEnabledChange={() => {}}
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const button = screen.getByRole('button', { name: /disable electrical source imaging/i });
+    expect(button).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('stays disabled in iEEG mode even with an inverse solution loaded', async () => {
+    const provider = makeIntracranialProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        recordingType="ieeg"
+        inverseSolutionFileName="my_inverse_solution"
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const button = screen.getByRole('button', { name: /enable electrical source imaging/i });
+    expect(button).toBeDisabled();
+  });
+});
+
 describe('EegViewer — range controls', () => {
   it('zoom in button halves the plot y-range', async () => {
     const { default: UplotReactMock } = await import('uplot-react');
