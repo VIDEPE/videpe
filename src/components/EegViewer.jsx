@@ -101,6 +101,8 @@ export const EegViewer = ({
   montage = 'none', // 'none' | 'average' | 'median' — controlled by PatientView, which forces 'average' when ESI needs it
   onMontageChange,
   onTopoHasContentChange, // whether the topography NiiVue canvas currently has a mesh, so PatientView can enable/disable the cross-panel rotation link accordingly
+  electrodeRenderEnabled, // boolean — owned by PatientView => whether electrode 3D render is enabled
+  onElectrodeRenderChange, // handle for electrodeRender changes
 }) => {
   const { isDarkMode } = useTheme();
   const syncKey = 'eeg-sync'; // shared across all channels to link their interactions
@@ -151,7 +153,7 @@ export const EegViewer = ({
   // keeps the previous buffer's data on screen until the new one arrives (no flash).
   const { timestamps, channels, isLoading } = useEegBuffer(provider, startTime, windowSize);
 
-  // ── Topography state ─────────────────────────────────────────────────────────
+  // ── Topography state ─────────────────────────────────────────────────────────────────────
   const [topoEnabled, setTopoEnabled] = useState(false);
   const [topoTimepoint, setTopoTimepoint] = useState(null);
   // Topograph window only opens when the toggle is on (topoEnabled) AND once a EEGplot
@@ -403,7 +405,7 @@ export const EegViewer = ({
                   title={`${electrodeRenderEnabled ? 'Close 3D Electrode Rendering' : 'Open 3D Electrode Rendering'}`}
                   aria-label={`${electrodeRenderEnabled ? 'Hide' : 'Show'} 3D Electrode Rendering`}
                   aria-pressed={electrodeRenderEnabled}
-                  onClick={() => {}}
+                  onClick={() => onElectrodeRenderChange(!electrodeRenderEnabled)}
                 >
                   <Box size={ICON_SIZE} />
                 </button>

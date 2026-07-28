@@ -166,8 +166,8 @@ export function useElectrodeConnectome({
   }, [electrodeLayer, orderedLayers, layerSettings, nvRef]);
 
   return {
-    electrodeMeshRef: electrodeMeshRef,
-    clearElectrodeMesh: clearElectrodeMesh,
-    dismissElectrodeLayer: dismissElectrodeLayer,
+    electrodeMeshRef,
+    clearElectrodeMesh,
+    dismissElectrodeLayer,
   };
 }

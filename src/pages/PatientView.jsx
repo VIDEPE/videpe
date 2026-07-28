@@ -53,6 +53,7 @@ export const PatientView = () => {
   // title's click handler uses, then reads the resulting value back down as a prop.
   const [recordingType, setRecordingType] = useState('eeg');
   const [channelSnapshot, setChannelSnapshot] = useState(null); // { isIntracranial, channelNames, voltages } lifted from EegViewer on each click
+  const [electrodeRenderEnabled, setElectrodeRenderEnabled] = useState(false); // boolean to enable/disable the 3D rendering of the electrodes
 
   const { montage, setMontage, resetMontage } = useMontage();
 
@@ -293,6 +294,8 @@ export const PatientView = () => {
               onElectrodeSnapshotChange={setElectrodeSnapshot}
               onChannelSnapshotChange={setChannelSnapshot}
               onTopoHasContentChange={setTopoHasContent}
+              electrodeRenderEnabled={electrodeRenderEnabled}
+              onElectrodeRenderChange={setElectrodeRenderEnabled}
             />
           ) : (
             <div className="h-full p-2">
@@ -331,6 +334,7 @@ export const PatientView = () => {
               isFullscreen={maximizedPanel === 'right'}
               onViewReady={() => niiReadyResolveRef.current?.()}
               onNiiNvReady={() => setNiiNvReady(true)}
+              onElectrodeLayerDismissed={() => setElectrodeRenderEnabled(false)}
             />
           ) : (
             <div className="h-full p-2">

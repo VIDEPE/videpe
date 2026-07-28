@@ -25,6 +25,7 @@ import {
   syncVolumesAndApplySettings,
   syncMeshesAndApplySettings,
   ESI_LAYER_URL,
+  ELECTRODE_LAYER_URL,
 } from '../utils/NiiViewer.utils';
 import { ImagingControls } from './ImagingControls';
 import { FileDropZone } from '../components/FileDropZone';
@@ -201,6 +202,7 @@ export const NiiViewer = ({
   // electrodeLayer/esiLayer props, so it doesn't wrongly unmount this viewer when those go empty/null together.
   onHas3DExtentChange, // reports whether the scene has a volume/mesh (non-connectome) — gates the cross-panel rotation sync; see the effect below
   isFullscreen = false,
+  onElectrodeLayerDismissed,
 }) => {
   // ─── State ─────────────────────────────────────────────────────────────────
   const [layerSettings, setLayerSettings] = useState(() => getInitialLayerSettings(layers));
@@ -486,20 +488,22 @@ export const NiiViewer = ({
       const layer = orderedLayers[index];
 
       if (layer?.kind === 'connectome') {
-        // Dispatch to the right mesh ref/clear-fn pair by URL — each connectome layer tracks
-        // its own mesh, owned by its own hook (mutating `.current` directly isn't allowed
-        // from outside that hook, hence the clear* functions).
-        const isEsi = layer.url === ESI_LAYER_URL;
-        const meshRef = isEsi ? esiMeshRef : electrodeMeshRef;
-        const clearMesh = isEsi ? clearEsiMesh : clearElectrodeMesh;
-        if (meshRef.current) {
-          nv.removeMesh(meshRef.current);
-          clearMesh();
+        // Dispatch by URL — each connectome layer tracks its own mesh, owned by its own hook
+        // (mutating `.current` directly isn't allowed from outside that hook, hence clear*Mesh).
+        if (layer.url === ESI_LAYER_URL) {
+          if (esiMeshRef.current) {
+            nv.removeMesh(esiMeshRef.current);
+            clearEsiMesh();
+          }
+          dismissEsiLayer();
+        } else if (layer.url === ELECTRODE_LAYER_URL) {
+          if (electrodeMeshRef.current) {
+            nv.removeMesh(electrodeMeshRef.current);
+            clearElectrodeMesh();
+          }
+          dismissElectrodeLayer();
+          onElectrodeLayerDismissed?.(); // tells PatientView to flip the electrode toggle off
         }
-        // Both layers are owned upstream and untouched by this deletion — dismiss so each
-        // hook's merge effect doesn't mistake the deleted entry for a fresh first appearance.
-        if (isEsi) dismissEsiLayer();
-        else dismissElectrodeLayer();
       } else if (layer?.kind === 'mesh') {
         // File meshes live in nv.meshes, tracked by fileMeshesRef — drop it from both.
         const mesh = fileMeshesRef.current.get(layer.url);
