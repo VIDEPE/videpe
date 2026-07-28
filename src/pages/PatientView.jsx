@@ -93,11 +93,9 @@ export const PatientView = () => {
   // If snapshot is empty it generates a white bulb connectome
   // if there is a electrode snapshot taken from the uPlots,
   // then the voltage is represented in the node colour
-  const electrodeLayer = useMemo( () => {
+  const electrodeLayer = useMemo(() => {
     return electrodeRenderEnabled ? buildElectrodeLayer(electrodeSnapshot ?? {}) : null;
-  },
-    [electrodeRenderEnabled,electrodeSnapshot]
-  );
+  }, [electrodeRenderEnabled, electrodeSnapshot]);
 
   // Whether the Neuroimaging pane currently has anything to show — same condition that
   // decides whether NiiViewer is mounted at all (below) and whether its reset button appears.

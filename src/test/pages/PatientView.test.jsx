@@ -61,12 +61,30 @@ vi.mock('@/components/EegViewer', () => ({
       onInverseSolutionFile,
       onTopoNvReady,
       onTopoHasContentChange,
+      electrodeRenderEnabled,
+      onElectrodeRenderChange,
     }) => (
       <div data-testid="eeg-viewer">
         <span data-testid="eeg-custom-electrodes-count">{customElectrodes?.length ?? 0}</span>
         <span data-testid="eeg-custom-filename">{customElecPosFileName ?? ''}</span>
         <span data-testid="eeg-inverse-solution-filename">{inverseSolutionFileName ?? ''}</span>
         <span data-testid="eeg-montage">{montage}</span>
+        <span data-testid="eeg-electrode-render-enabled">{String(electrodeRenderEnabled)}</span>
+        {/* Simulates clicking the 3D electrode-render toggle button in EegViewer's panel */}
+        <button
+          type="button"
+          data-testid="enable-electrode-render"
+          onClick={() => onElectrodeRenderChange?.(true)}
+        >
+          enable-electrode-render
+        </button>
+        <button
+          type="button"
+          data-testid="disable-electrode-render"
+          onClick={() => onElectrodeRenderChange?.(false)}
+        >
+          disable-electrode-render
+        </button>
         {/* Simulates EegViewer reporting live intracranial electrode/voltage state, the way it
           would after detecting an intracranial recording and matching a position file. */}
         <button
@@ -177,41 +195,53 @@ vi.mock('@/components/EegViewer', () => ({
   ),
 }));
 vi.mock('@/components/NiiViewer', () => ({
-  NiiViewer: vi.fn(({ onHasContentChange, onHas3DExtentChange, onNiiNvReady }) => (
-    <div data-testid="nii-viewer">
-      {/* Simulates NiiViewer reporting that it holds layers loaded straight into its own
+  NiiViewer: vi.fn(
+    ({ onHasContentChange, onHas3DExtentChange, onNiiNvReady, onElectrodeLayerDismissed }) => (
+      <div data-testid="nii-viewer">
+        {/* Simulates NiiViewer reporting that it holds layers loaded straight into its own
           internal dropzone — layers PatientView has no other visibility into (they never
           touch the `layers`/electrodeLayer/esiLayer props). */}
-      <button
-        type="button"
-        data-testid="trigger-nii-has-content"
-        onClick={() => onHasContentChange?.(true)}
-      >
-        trigger-nii-has-content
-      </button>
-      {/* Simulates NiiViewer's NiiVue canvas attaching */}
-      <button type="button" data-testid="trigger-nii-nv-ready" onClick={() => onNiiNvReady?.()}>
-        trigger-nii-nv-ready
-      </button>
-      {/* Simulates NiiViewer reporting whether its 3D scene has a usable spatial extent —
+        <button
+          type="button"
+          data-testid="trigger-nii-has-content"
+          onClick={() => onHasContentChange?.(true)}
+        >
+          trigger-nii-has-content
+        </button>
+        {/* Simulates the user deleting the electrode-connectome card from NiiViewer's layer
+          list — real NiiViewer calls this from handleDeleteLayer so PatientView can flip
+          the 3D electrode-render toggle back off. */}
+        <button
+          type="button"
+          data-testid="trigger-electrode-layer-dismissed"
+          onClick={() => onElectrodeLayerDismissed?.()}
+        >
+          trigger-electrode-layer-dismissed
+        </button>
+        {/* Simulates NiiViewer's NiiVue canvas attaching */}
+        <button type="button" data-testid="trigger-nii-nv-ready" onClick={() => onNiiNvReady?.()}>
+          trigger-nii-nv-ready
+        </button>
+        {/* Simulates NiiViewer reporting whether its 3D scene has a usable spatial extent —
           true once a volume/mesh is present, false when only connectome layers remain (e.g.
           after resetting the imaging panel down to just an ESI connectome). */}
-      <button
-        type="button"
-        data-testid="trigger-nii-has-3d-extent"
-        onClick={() => onHas3DExtentChange?.(true)}
-      >
-        trigger-nii-has-3d-extent
-      </button>
-      <button
-        type="button"
-        data-testid="trigger-nii-no-3d-extent"
-        onClick={() => onHas3DExtentChange?.(false)}
-      >
-        trigger-nii-no-3d-extent
-      </button>
-    </div>
-  )),
+        <button
+          type="button"
+          data-testid="trigger-nii-has-3d-extent"
+          onClick={() => onHas3DExtentChange?.(true)}
+        >
+          trigger-nii-has-3d-extent
+        </button>
+        <button
+          type="button"
+          data-testid="trigger-nii-no-3d-extent"
+          onClick={() => onHas3DExtentChange?.(false)}
+        >
+          trigger-nii-no-3d-extent
+        </button>
+      </div>
+    )
+  ),
 }));
 vi.mock('@/components/FileDropZone', () => ({ FileDropZone: vi.fn(() => null) }));
 
@@ -1283,7 +1313,7 @@ describe('PatientView — intracranial connectome layer', () => {
     detectAndLoadEEG.mockResolvedValue({ channelNames: ['B1'], fs: 1, tMax: 1, getChunk: vi.fn() });
   });
 
-  it('shows NiiViewer with a connectome layer once EegViewer reports intracranial electrode data, even with no imaging volumes loaded', async () => {
+  it('shows NiiViewer with a connectome layer once EegViewer reports intracranial electrode data and the 3D toggle is on, even with no imaging volumes loaded', async () => {
     renderPatientView();
     await act(async () => {
       await getEegOnFiles()([makeFile('sub01.vhdr'), makeFile('sub01.eeg')]);
@@ -1291,6 +1321,7 @@ describe('PatientView — intracranial connectome layer', () => {
 
     expect(screen.queryByTestId('nii-viewer')).not.toBeInTheDocument(); // no imaging volumes yet
 
+    await userEvent.click(screen.getByTestId('enable-electrode-render'));
     await userEvent.click(screen.getByTestId('trigger-intracranial-change'));
 
     expect(screen.getByTestId('nii-viewer')).toBeInTheDocument();
@@ -1302,6 +1333,7 @@ describe('PatientView — intracranial connectome layer', () => {
     await act(async () => {
       await getEegOnFiles()([makeFile('sub01.vhdr'), makeFile('sub01.eeg')]);
     });
+    await userEvent.click(screen.getByTestId('enable-electrode-render'));
     await userEvent.click(screen.getByTestId('trigger-intracranial-change'));
     expect(screen.getByTestId('nii-viewer')).toBeInTheDocument();
 
@@ -1323,11 +1355,88 @@ describe('PatientView — intracranial connectome layer', () => {
     await act(async () => {
       await getEegOnFiles()([makeFile('sub01.vhdr'), makeFile('sub01.eeg')]);
     });
+    await userEvent.click(screen.getByTestId('enable-electrode-render'));
     await userEvent.click(screen.getByTestId('trigger-intracranial-change'));
     expect(screen.getByTestId('nii-viewer')).toBeInTheDocument();
 
     await userEvent.click(getDemoResetButton()); // Reset
 
+    expect(screen.queryByTestId('nii-viewer')).not.toBeInTheDocument();
+  });
+});
+
+describe('PatientView — electrodeRenderEnabled toggle', () => {
+  beforeEach(() => {
+    FileDropZone.mockClear();
+    NiiViewer.mockClear();
+    EegViewer.mockClear();
+    checkEegFiles.mockReturnValue({
+      formatName: 'BrainVision',
+      complete: true,
+      missing: [],
+      warning: null,
+    });
+    detectAndLoadEEG.mockResolvedValue({ channelNames: ['B1'], fs: 1, tMax: 1, getChunk: vi.fn() });
+  });
+
+  it('defaults to off — no connectome layer even once intracranial data arrives', async () => {
+    renderPatientView();
+    await act(async () => {
+      await getEegOnFiles()([makeFile('sub01.vhdr'), makeFile('sub01.eeg')]);
+    });
+
+    expect(screen.getByTestId('eeg-electrode-render-enabled')).toHaveTextContent('false');
+
+    await userEvent.click(screen.getByTestId('trigger-intracranial-change'));
+
+    // Electrode data is present, but the toggle was never turned on — nothing should render.
+    expect(screen.queryByTestId('nii-viewer')).not.toBeInTheDocument();
+  });
+
+  it('turning the toggle on builds the connectome layer from already-reported electrode data', async () => {
+    renderPatientView();
+    await act(async () => {
+      await getEegOnFiles()([makeFile('sub01.vhdr'), makeFile('sub01.eeg')]);
+    });
+    await userEvent.click(screen.getByTestId('trigger-intracranial-change'));
+    expect(screen.queryByTestId('nii-viewer')).not.toBeInTheDocument(); // still off
+
+    await userEvent.click(screen.getByTestId('enable-electrode-render'));
+
+    expect(screen.getByTestId('eeg-electrode-render-enabled')).toHaveTextContent('true');
+    expect(screen.getByTestId('nii-viewer')).toBeInTheDocument();
+    expect(NiiViewer.mock.lastCall[0].electrodeLayer).toMatchObject({ kind: 'connectome' });
+  });
+
+  it('turning the toggle off removes the connectome layer without needing new electrode data', async () => {
+    renderPatientView();
+    await act(async () => {
+      await getEegOnFiles()([makeFile('sub01.vhdr'), makeFile('sub01.eeg')]);
+    });
+    await userEvent.click(screen.getByTestId('enable-electrode-render'));
+    await userEvent.click(screen.getByTestId('trigger-intracranial-change'));
+    expect(screen.getByTestId('nii-viewer')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByTestId('disable-electrode-render'));
+
+    expect(screen.getByTestId('eeg-electrode-render-enabled')).toHaveTextContent('false');
+    expect(screen.queryByTestId('nii-viewer')).not.toBeInTheDocument();
+  });
+
+  it('deleting the electrode-connectome card in NiiViewer flips the toggle back off', async () => {
+    renderPatientView();
+    await act(async () => {
+      await getEegOnFiles()([makeFile('sub01.vhdr'), makeFile('sub01.eeg')]);
+    });
+    await userEvent.click(screen.getByTestId('enable-electrode-render'));
+    await userEvent.click(screen.getByTestId('trigger-intracranial-change'));
+    expect(screen.getByTestId('eeg-electrode-render-enabled')).toHaveTextContent('true');
+
+    await userEvent.click(screen.getByTestId('trigger-electrode-layer-dismissed'));
+
+    // Nothing else is loaded, so clearing the toggle drops NiiViewer's only reason to be
+    // mounted at all — same as disabling the toggle directly.
+    expect(screen.getByTestId('eeg-electrode-render-enabled')).toHaveTextContent('false');
     expect(screen.queryByTestId('nii-viewer')).not.toBeInTheDocument();
   });
 });
