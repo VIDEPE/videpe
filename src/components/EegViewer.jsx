@@ -389,9 +389,14 @@ export const EegViewer = ({
                 <button
                   type="button"
                   className="button button-icon"
-                  title={`${topoEnabled ? 'Disable Topograph Map' : 'EEG Topograph Map. If enabled: click EEG plot to generate an EEG Topography map at selected timestamp (requires known electrode positions)'}`}
+                  title={
+                    electrodes?.length > 0
+                      ? `${topoEnabled ? 'Close Topograph Map' : 'EEG Topograph Map. If enabled: click EEG plot to generate an EEG Topography map at selected timestamp (requires known electrode positions)'}`
+                      : 'EEG Topograph Map. Requires known electrode positions'
+                  }
                   aria-label={`${topoEnabled ? 'Disable' : 'Enable'} Topograph Map`}
                   aria-pressed={topoEnabled}
+                  disabled={!electrodes?.length}
                   onClick={() => setTopoEnabled(!topoEnabled)}
                 >
                   <Map size={ICON_SIZE} />
@@ -402,9 +407,16 @@ export const EegViewer = ({
                 <button
                   type="button"
                   className="button button-icon"
-                  title={`${electrodeRenderEnabled ? 'Close 3D Electrode Rendering' : 'Open 3D Electrode Rendering'}`}
+                  title={
+                    electrodes?.length > 0 && !isStandardElectrodes
+                      ? `${electrodeRenderEnabled ? 'Close 3D Electrode Rendering' : 'Open 3D Electrode Rendering'}`
+                      : isIntracranial
+                        ? '3D Electrode Rendering. Requires known electrode positions'
+                        : "3D Electrode Rendering. Requires a patient-specific electrode position file — the standard 10-05 template is only an indicative layout, not this patient's actual head geometry"
+                  }
                   aria-label={`${electrodeRenderEnabled ? 'Hide' : 'Show'} 3D Electrode Rendering`}
                   aria-pressed={electrodeRenderEnabled}
+                  disabled={!electrodes?.length || isStandardElectrodes}
                   onClick={() => onElectrodeRenderChange(!electrodeRenderEnabled)}
                 >
                   <Box size={ICON_SIZE} />
