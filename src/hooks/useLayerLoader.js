@@ -35,6 +35,8 @@ import {
  *   flight, false once it settles (success or failure).
  * @param {Function} [params.onViewReady] - called once a non-empty load finishes without error,
  *   so the caller can react to the scene actually having content.
+ * @param {Function} [params.onLoadError] - called once a non-empty load finishes with an error,
+ *   so PatientView knows whether to reset the neuroimaging FileDropZone.
  * @returns {void} — side-effecting only, nothing to read back.
  */
 export function useLayerLoader({
@@ -45,6 +47,7 @@ export function useLayerLoader({
   setLayerSettings,
   setIsLoading,
   onViewReady,
+  onLoadError,
 }) {
   const loadingLayersRef = useRef(null); // guards nv.loadVolumes against StrictMode double-invoke
 
@@ -110,10 +113,22 @@ export function useLayerLoader({
       if (meshResult.status === 'rejected') meshLayers.forEach((l) => failedUrls.add(l.url));
 
       if (failedUrls.size > 0) {
-        setOrderedLayers((prev) => prev.filter((l) => !failedUrls.has(l.url)));
-        setLayerSettings((prev) => prev.filter((s) => !failedUrls.has(s.url)));
-        const reason = volumeResult.reason ?? meshResult.reason;
-        toast.error(`Failed to load image: ${reason.message}`);
+        setOrderedLayers((prev) => prev.filter((layer) => !failedUrls.has(layer.url)));
+        setLayerSettings((prev) => prev.filter((setting) => !failedUrls.has(setting.url)));
+        // One toast per failed layer, named by file rather than by its abstract blob: url
+        // Each NiiVue loader is all-or-nothing, so every layer in a failed category is reported
+        // (volume failure and mesh failure can have different reasons => don't share error message).
+        if (volumeResult.status === 'rejected') {
+          imageLayers.forEach((layer) =>
+            toast.error(`Failed to load image ${layer.name}:\n${volumeResult.reason.message}`)
+          );
+        }
+        if (meshResult.status === 'rejected') {
+          meshLayers.forEach((layer) =>
+            toast.error(`Failed to load image ${layer.name}:\n${meshResult.reason.message}`)
+          );
+        }
+        onLoadError?.(failedUrls);
       } else {
         onViewReady?.();
       }

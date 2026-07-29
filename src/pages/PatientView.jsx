@@ -221,6 +221,16 @@ export const PatientView = () => {
     setNiiHasOwnContent(false);
   };
 
+  // Called by NiiViewer/useLayerLoader when one or more layers passed via `layers` failed to
+  // load. NiiViewer already drops the failed layers from its own local orderedLayers/
+  // layerSettings, but that state is internal to NiiViewer — without this, PatientView's own
+  // `layers` stays non-empty forever, keeping niiViewerHasContent true and NiiViewer mounted in
+  // a permanently broken state instead of reverting to the dropzone. Only removes the failed
+  // urls (not a full reset) so a load that's a partial success keeps showing what did load.
+  const handleLoadError = (failedUrls) => {
+    setLayers((prev) => prev.filter((layer) => !failedUrls.has(layer.url)));
+  };
+
   return (
     <FullWidthLayout>
       {/* Top bar: 3-column flex row so the title is always geometrically between the left buttons and right toggle */}
@@ -349,6 +359,7 @@ export const PatientView = () => {
               onViewReady={() => niiReadyResolveRef.current?.()}
               onNiiNvReady={() => setNiiNvReady(true)}
               onElectrodeLayerDismissed={() => setElectrodeRenderEnabled(false)}
+              onLoadError={handleLoadError}
             />
           ) : (
             <div className="h-full p-2">
