@@ -59,6 +59,8 @@ export const getInitialLayerSettings = (
     visible: true, // eye-toggle state — hidden layers get their opacity forced to 0 downstream
     opacity: startIndex + index === 0 ? 1.0 : 0.6, // first loaded layer is fully opaque, others slightly transparent by default
     meshXRay: currentMeshXRay, // shared across all mesh/connectome layers
+    nodeScale: 4, // connectome-only — radius multiplier for node spheres, per-layer (unlike meshXRay)
+    edgeScale: 0.5, // connectome-only — radius multiplier for edge tubes, per-layer (unlike meshXRay)
     colormap: TYPE_COLORMAP_DEFAULTS[layer.type] ?? 'gray', // NiiVue colormap key, defaulted by modality
     invert: false, // flips the colormap direction (dark-to-light vs light-to-dark)
     showColorbar: false, // whether this layer's colorbar legend is drawn on the canvas
