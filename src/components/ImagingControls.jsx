@@ -4,7 +4,38 @@ import { Eye, EyeOff, ChevronDown, ChevronUp, GripVertical, Lock } from 'lucide-
 import { DragDropProvider } from '@dnd-kit/react';
 import { useSortable } from '@dnd-kit/react/sortable';
 import { X } from 'lucide-react';
-import { ESI_LAYER_URL, isImageVolumeLayer } from '@/utils/NiiViewer.utils';
+import {
+  ESI_LAYER_URL,
+  isImageVolumeLayer,
+  DEFAULT_NODE_SCALE,
+  DEFAULT_EDGE_SCALE,
+} from '@/utils/NiiViewer.utils';
+
+// Bounds for the connectome Node/Edge size sliders. Node radius = node.sizeValue (0-1, data-
+// driven — see convertSourcePowersToConnectome) × nodeScale, so nodeScale is a plain multiplier,
+// not a 0-1 fraction like opacity — this range just covers a sensible on-screen sphere size.
+// Edge radius follows the same pattern from a typically-larger colorValue, hence the smaller range.
+const NODE_SCALE_STEP = 0.1;
+const NODE_SCALE_MIN = NODE_SCALE_STEP; // 0 makes NiiVue drop the mesh's 3D render entirely, not just shrink nodes to invisible
+const NODE_SCALE_MAX = 10;
+const EDGE_SCALE_STEP = 0.05;
+const EDGE_SCALE_MIN = EDGE_SCALE_STEP; // same NiiVue quirk as NODE_SCALE_MIN
+const EDGE_SCALE_MAX = 4;
+
+// Where a slider's default value sits along its track, as a 0-100 percent — used to place the
+// DefaultMarker tick so users can see where to drag back to.
+const scaleToPercent = (value, min, max) => ((value - min) / (max - min)) * 100;
+
+// A small tick mark on a slider track showing where its default value sits, so a user who's
+// dragged it away from the default can see where to put it back. pointer-events-none so it
+// never intercepts drags meant for the track/thumb underneath.
+const DefaultMarker = ({ percent }) => (
+  <div
+    className="absolute top-1/2 h-3.5 w-px -translate-x-1/2 -translate-y-1/2 bg-foreground/50 pointer-events-none"
+    style={{ left: `${percent}%` }}
+    aria-hidden="true"
+  />
+);
 
 const COLORMAP_OPTIONS = [
   { value: 'gray', label: 'Grayscale' },
@@ -134,6 +165,12 @@ function SortableSettingsCard({
     setMeshXRayStr(String(clamped));
     onSettingChange(index, 'meshXRay', clamped / 100);
   };
+
+  // Node/Edge sliders are only meaningful when this connectome actually has that data — e.g.
+  // ESI connectomes always have edges: [] (source points have no connecting structure), and a
+  // fully-below-threshold electrode connectome can have zero nodes.
+  const hasNodes = isConnectome && layer.nodes?.length > 0;
+  const hasEdges = isConnectome && layer.edges?.length > 0;
 
   // Local string state — allows typing a partial value (e.g. empty string) without breaking
   // the numeric threshold. cal_min/cal_max are 0-1 fractions of this layer's own data range
@@ -356,6 +393,70 @@ function SortableSettingsCard({
                     aria-label={`${label} meshXRay`}
                   />
                   <span className="text-foreground pl-0.5 select-none pointer-events-none">%</span>
+                </div>
+              </div>
+            )}
+
+            {/* Node/Edge size — connectome-only, side by side to save vertical space. Each is
+                disabled (greyed out) when this connectome has none of that data — e.g. ESI
+                always has zero edges, and an electrode connectome can end up with zero nodes. */}
+            {isConnectome && (
+              <div className="flex items-center gap-3">
+                <div
+                  className={`flex-1 flex items-center gap-2 min-w-0 ${hasNodes ? '' : 'opacity-30'}`}
+                  title="Adjust the size of connectome node spheres"
+                >
+                  <span className="w-21 shrink-0 text-foreground select-none pointer-events-none">
+                    Node Size
+                  </span>
+                  <Slider.Root
+                    className="relative flex-1 min-w-0 h-4 flex touch-none select-none items-center"
+                    min={NODE_SCALE_MIN}
+                    max={NODE_SCALE_MAX}
+                    step={NODE_SCALE_STEP}
+                    value={[settings.nodeScale]}
+                    disabled={!hasNodes}
+                    onValueChange={([val]) => onSettingChange(index, 'nodeScale', val)}
+                  >
+                    <Slider.Track className="relative h-1 grow rounded bg-border">
+                      <Slider.Range className="absolute h-full rounded bg-primary" />
+                      <DefaultMarker
+                        percent={scaleToPercent(DEFAULT_NODE_SCALE, NODE_SCALE_MIN, NODE_SCALE_MAX)}
+                      />
+                    </Slider.Track>
+                    <Slider.Thumb
+                      className="block h-3 w-3 rounded-full bg-primary cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:cursor-not-allowed"
+                      aria-label={`${label} node size slider`}
+                    />
+                  </Slider.Root>
+                </div>
+                <div
+                  className={`flex-1 flex items-center gap-2 min-w-0 ${hasEdges ? '' : 'opacity-30'}`}
+                  title="Adjust the size of connectome edge tubes"
+                >
+                  <span className="w-21 shrink-0 text-foreground select-none pointer-events-none">
+                    Edge Size
+                  </span>
+                  <Slider.Root
+                    className="relative flex-1 min-w-0 h-4 flex touch-none select-none items-center"
+                    min={EDGE_SCALE_MIN}
+                    max={EDGE_SCALE_MAX}
+                    step={EDGE_SCALE_STEP}
+                    value={[settings.edgeScale]}
+                    disabled={!hasEdges}
+                    onValueChange={([val]) => onSettingChange(index, 'edgeScale', val)}
+                  >
+                    <Slider.Track className="relative h-1 grow rounded bg-border">
+                      <Slider.Range className="absolute h-full rounded bg-primary" />
+                      <DefaultMarker
+                        percent={scaleToPercent(DEFAULT_EDGE_SCALE, EDGE_SCALE_MIN, EDGE_SCALE_MAX)}
+                      />
+                    </Slider.Track>
+                    <Slider.Thumb
+                      className="block h-3 w-3 rounded-full bg-primary cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:cursor-not-allowed"
+                      aria-label={`${label} edge size slider`}
+                    />
+                  </Slider.Root>
                 </div>
               </div>
             )}

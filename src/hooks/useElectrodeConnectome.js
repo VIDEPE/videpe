@@ -121,29 +121,11 @@ export function useElectrodeConnectome({
 
     if (electrodeMeshRef.current) nv.removeMesh(electrodeMeshRef.current); // drop the stale mesh before building its replacement
 
-    // Build the new connectome mesh in memory — not yet added to the scene.
-    const mesh = nv.loadConnectomeAsMesh({
-      name: electrodeLayer.name,
-      nodeColormap: EEG_NODE_POS_KEY,
-      nodeColormapNegative: EEG_NODE_NEG_KEY,
-      nodeMinColor: 0,
-      nodeMaxColor: electrodeLayer.calMax,
-      nodeScale: 4,
-      edgeColormap: EEG_NODE_POS_KEY,
-      edgeColormapNegative: EEG_NODE_NEG_KEY,
-      edgeMin: 0,
-      edgeMax: electrodeLayer.calMax,
-      edgeScale: 0.5,
-      showLegend: false,
-      colorbarVisible: false, // suppresses the node+edge colorbar entries NiiVue would otherwise add for a populated `edges` array
-      nodes: electrodeLayer.nodes,
-      edges: electrodeLayer.edges,
-    });
-
-    // Apply whatever opacity/visibility is already set for this layer (preserved across
-    // data refreshes by the sync effect above); fall back to the same default that effect
-    // would compute if it hasn't run yet this render pass (e.g. the connectome's first
-    // appearance, before orderedLayers/layerSettings have caught up).
+    // Apply whatever opacity/visibility/nodeScale/edgeScale is already set for this layer
+    // (preserved across data refreshes); fall back to the same default that would be computed
+    // if it hasn't run yet this render pass (e.g. the connectome's first appearance, before
+    // orderedLayers/layerSettings have caught up). Computed before the mesh below so its
+    // nodeScale/edgeScale can seed loadConnectomeAsMesh rather than resetting to the default.
     const existingIndex = orderedLayers.findIndex((l) => l.url === ELECTRODE_LAYER_URL); // its current position in the card list, if it has one yet
     const settings =
       layerSettings[existingIndex] ?? // its existing settings, preserved across this rebuild
@@ -153,6 +135,26 @@ export function useElectrodeConnectome({
         undefined,
         getCurrentMeshXRay(orderedLayers, layerSettings)
       )[0]; // or computed fresh on first appearance
+
+    // Build the new connectome mesh in memory — not yet added to the scene.
+    const mesh = nv.loadConnectomeAsMesh({
+      name: electrodeLayer.name,
+      nodeColormap: EEG_NODE_POS_KEY,
+      nodeColormapNegative: EEG_NODE_NEG_KEY,
+      nodeMinColor: 0,
+      nodeMaxColor: electrodeLayer.calMax,
+      nodeScale: settings.nodeScale,
+      edgeColormap: EEG_NODE_POS_KEY,
+      edgeColormapNegative: EEG_NODE_NEG_KEY,
+      edgeMin: 0,
+      edgeMax: electrodeLayer.calMax,
+      edgeScale: settings.edgeScale,
+      showLegend: false,
+      colorbarVisible: false, // suppresses the node+edge colorbar entries NiiVue would otherwise add for a populated `edges` array
+      nodes: electrodeLayer.nodes,
+      edges: electrodeLayer.edges,
+    });
+
     mesh.opacity = settings.visible ? settings.opacity : 0; // 0 opacity is how a hidden mesh is represented, same convention as image volumes
     // nv.opts.meshXRay is a scene-global NiiVue option, not a per-mesh property, and NiiVue's
     // own default (0) doesn't match this app's default (1, see getInitialLayerSettings) — apply

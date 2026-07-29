@@ -189,12 +189,12 @@ export function useEsiLayer({
         nodeColormapNegative: EEG_NODE_POS_KEY, // unused — power is always ≥ 0
         nodeMinColor: esiCalMin,
         nodeMaxColor: esiCalMax,
-        nodeScale: 4,
+        nodeScale: settings.nodeScale,
         edgeColormap: EEG_NODE_POS_KEY,
         edgeColormapNegative: EEG_NODE_POS_KEY,
         edgeMin: esiCalMin,
         edgeMax: esiCalMax,
-        edgeScale: 0.5,
+        edgeScale: settings.edgeScale,
         showLegend: false,
         colorbarVisible: false, // suppresses the colorbar entry NiiVue would otherwise add
         nodes: visibleNodes,

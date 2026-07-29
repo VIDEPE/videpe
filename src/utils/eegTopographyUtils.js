@@ -259,7 +259,7 @@ export function buildIntracranialConnectome(matched, voltages) {
       edges.push({
         first: sorted[i].nodeIndex,
         second: sorted[i + 1].nodeIndex,
-        colorValue: (sorted[i].voltage + sorted[i + 1].voltage) / 2, // edges carry no real data — just shade by their endpoints
+        colorValue: (sorted[i].voltage + sorted[i + 1].voltage) / 2, // edges carry no real data — just shade by the average of their endpoints
       });
     }
   }

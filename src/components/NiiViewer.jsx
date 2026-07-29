@@ -114,6 +114,7 @@ function applyConnectomeSettingChange({
   electrodeMeshRef,
   thresholdRafRef,
   meshXRayRafRef,
+  nodeScaleRafRef,
 }) {
   const mesh = layer.url === ESI_LAYER_URL ? esiMeshRef.current : electrodeMeshRef.current;
   if (!mesh) return;
@@ -152,6 +153,17 @@ function applyConnectomeSettingChange({
         nv.updateGLVolume();
       });
     }
+  } else if (key === 'nodeScale' || key === 'edgeScale') {
+    // Throttle to one GL redraw per frame — cancels any pending rAF so only the latest drag value redraws
+    if (nodeScaleRafRef.current) cancelAnimationFrame(nodeScaleRafRef.current);
+    nodeScaleRafRef.current = requestAnimationFrame(() => {
+      // Like nodeMinColor/edgeMin above, node/edge radii are only recomputed when the
+      // color/size buffers are rebuilt — mutating mesh.nodeScale/edgeScale alone has no visual
+      // effect until mesh.updateMesh(gl) recomputes them.
+      mesh[key] = value;
+      mesh.updateMesh(nv.gl);
+      nv.updateGLVolume();
+    });
   }
   // colormap/invert/showColorbar: ImagingControls doesn't render those controls for this
   // kind, so there's nothing to apply here.
@@ -234,6 +246,7 @@ export const NiiViewer = ({
   const opacityRafRef = useRef(null); // rAF id — cancelled on each drag so only the latest value redraws
   const thresholdRafRef = useRef(null); // rAF id — cancelled on each drag so only the latest value redraws
   const meshXRayRafRef = useRef(null); // rAF id — cancelled on each drag so only the latest value redraws
+  const nodeScaleRafRef = useRef(null); // rAF id — shared by nodeScale/edgeScale (only one slider can be dragged at a time), cancelled on each drag so only the latest value redraws
   const settingsCommitRafRef = useRef(null); // rAF id — throttles the layerSettings React commit itself to once per frame, so it matches the once-per-frame GL redraw above instead of re-rendering the whole card list on every Radix onValueChange tick
   const fileMeshesRef = useRef(new Map()); // url → NVMesh for surface meshes loaded from files; keyed by url since nv.meshes also holds connectome meshes
 
@@ -386,6 +399,7 @@ export const NiiViewer = ({
           electrodeMeshRef,
           thresholdRafRef,
           meshXRayRafRef,
+          nodeScaleRafRef,
         });
       } else if (layer.kind === 'mesh') {
         applyFileMeshSettingChange({
