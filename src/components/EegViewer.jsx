@@ -173,6 +173,15 @@ export const EegViewer = ({
   // click has produced a timepoint to show (topoTimepoint)
   const topoVisible = topoEnabled && topoTimepoint !== null;
 
+  // Px position (from the plot area's left edge) of the vertical marker for topoTimepoint — the
+  // timestamp the electrode voltage snapshot was taken at, shared by the topography, ESI, and
+  // 3D-render views. Null hides the marker: no snapshot yet, or it's scrolled outside the window.
+  const snapshotMarkerLeft =
+    topoTimepoint !== null && topoTimepoint >= startTime && topoTimepoint <= startTime + windowSize
+      ? Y_AXIS_WIDTH +
+        ((topoTimepoint - startTime) / windowSize) * (plotWidth - Y_AXIS_WIDTH - PLOT_RIGHT_PAD)
+      : null;
+
   // Electrode-position matching + recording-type (EEG/iEEG) auto-detection — PatientView
   // owns recordingType and shows/drives the EEG/iEEG toggle in the panel title, since this
   // component no longer renders it itself.
@@ -539,6 +548,7 @@ export const EegViewer = ({
                 {/* Wait for first measurements before rendering — avoids zero-size flash */}
                 {plotWidth > 0 &&
                   plotHeight > 0 &&
+                  // Channel divider line
                   channelNames.map((name, i) => (
                     <div
                       key={name}
@@ -568,6 +578,16 @@ export const EegViewer = ({
                             : 'rgba(0,0,0,0.25)',
                         }}
                       />
+                      {/* Snapshot marker — vertical line at the timepoint behind the current topography/ESI/3D-render voltages */}
+                      {snapshotMarkerLeft !== null && (
+                        <div
+                          className="absolute pointer-events-none top-0 bottom-0 w-0.5"
+                          style={{
+                            left: snapshotMarkerLeft,
+                            backgroundColor: 'var(--c-secondary)',
+                          }}
+                        />
+                      )}
                       {/* Canvas wrapper — absolutely positioned to center the taller canvas in the lane */}
                       <div
                         style={{
