@@ -4,7 +4,12 @@ import { Eye, EyeOff, ChevronDown, ChevronUp, GripVertical, Lock } from 'lucide-
 import { DragDropProvider } from '@dnd-kit/react';
 import { useSortable } from '@dnd-kit/react/sortable';
 import { X } from 'lucide-react';
-import { ESI_LAYER_URL, isImageVolumeLayer } from '@/utils/NiiViewer.utils';
+import {
+  ESI_LAYER_URL,
+  isImageVolumeLayer,
+  DEFAULT_NODE_SCALE,
+  DEFAULT_EDGE_SCALE,
+} from '@/utils/NiiViewer.utils';
 
 // Bounds for the connectome Node/Edge size sliders. Node radius = node.sizeValue (0-1, data-
 // driven — see convertSourcePowersToConnectome) × nodeScale, so nodeScale is a plain multiplier,
@@ -16,6 +21,21 @@ const NODE_SCALE_MAX = 10;
 const EDGE_SCALE_STEP = 0.1;
 const EDGE_SCALE_MIN = EDGE_SCALE_STEP; // same NiiVue quirk as NODE_SCALE_MIN
 const EDGE_SCALE_MAX = 2;
+
+// Where a slider's default value sits along its track, as a 0-100 percent — used to place the
+// DefaultMarker tick so users can see where to drag back to.
+const scaleToPercent = (value, min, max) => ((value - min) / (max - min)) * 100;
+
+// A small tick mark on a slider track showing where its default value sits, so a user who's
+// dragged it away from the default can see where to put it back. pointer-events-none so it
+// never intercepts drags meant for the track/thumb underneath.
+const DefaultMarker = ({ percent }) => (
+  <div
+    className="absolute top-1/2 h-3 w-px -translate-x-1/2 -translate-y-1/2 bg-foreground/50 pointer-events-none"
+    style={{ left: `${percent}%` }}
+    aria-hidden="true"
+  />
+);
 
 const COLORMAP_OPTIONS = [
   { value: 'gray', label: 'Grayscale' },
@@ -383,7 +403,7 @@ function SortableSettingsCard({
             {isConnectome && (
               <div className="flex items-center gap-3">
                 <div
-                  className={`flex-1 flex items-center gap-2 min-w-0 ${hasNodes ? '' : 'opacity-40'}`}
+                  className={`flex-1 flex items-center gap-2 min-w-0 ${hasNodes ? '' : 'opacity-30'}`}
                   title="Adjust the size of connectome node spheres"
                 >
                   <span className="w-21 shrink-0 text-foreground select-none pointer-events-none">
@@ -400,6 +420,9 @@ function SortableSettingsCard({
                   >
                     <Slider.Track className="relative h-1 grow rounded bg-border">
                       <Slider.Range className="absolute h-full rounded bg-primary" />
+                      <DefaultMarker
+                        percent={scaleToPercent(DEFAULT_NODE_SCALE, NODE_SCALE_MIN, NODE_SCALE_MAX)}
+                      />
                     </Slider.Track>
                     <Slider.Thumb
                       className="block h-3 w-3 rounded-full bg-primary cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:cursor-not-allowed"
@@ -408,7 +431,7 @@ function SortableSettingsCard({
                   </Slider.Root>
                 </div>
                 <div
-                  className={`flex-1 flex items-center gap-2 min-w-0 ${hasEdges ? '' : 'opacity-40'}`}
+                  className={`flex-1 flex items-center gap-2 min-w-0 ${hasEdges ? '' : 'opacity-30'}`}
                   title="Adjust the size of connectome edge tubes"
                 >
                   <span className="w-21 shrink-0 text-foreground select-none pointer-events-none">
@@ -425,6 +448,9 @@ function SortableSettingsCard({
                   >
                     <Slider.Track className="relative h-1 grow rounded bg-border">
                       <Slider.Range className="absolute h-full rounded bg-primary" />
+                      <DefaultMarker
+                        percent={scaleToPercent(DEFAULT_EDGE_SCALE, EDGE_SCALE_MIN, EDGE_SCALE_MAX)}
+                      />
                     </Slider.Track>
                     <Slider.Thumb
                       className="block h-3 w-3 rounded-full bg-primary cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:cursor-not-allowed"
