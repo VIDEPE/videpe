@@ -38,6 +38,7 @@ const EEG_LOADING_TOAST_ID = 'eeg-buffer-loading'; // fixed id so the loading/su
 const Y_AXIS_WIDTH = 60; // px for the y-axis area (channel name + tick space) — must match x-axis strip left padding
 const PLOT_RIGHT_PAD = 20; // px right padding — must match in both channel plots and x-axis strip so ticks align
 const OVERDRAW = 2; // canvas height multiplier — peaks bleed ±50% into adjacent lanes instead of clipping
+const X_AXIS_GRID_SPACE = 60; // Min px between vertical gridlines — shared by the channel plots and the x-axis =>uPlot uses it to pick an increment (1,2,5,10,etc)
 const MIN_CHANNEL_AREA_HEIGHT = 120; // px floor for the channel-plot scroll area. Below this the whole viewer overflows and the pane's scroll container takes over (mirrors NiiViewer's MIN_CANVAS_HEIGHT) instead of letting the x-axis/scrubber/controls/dropzone overlap
 const MIN_PLOT_ROW_HEIGHT = 350; // px floor for the uPlot area
 const ICON_SIZE = 22; // default size for lucide icons in the controls, used to compute input widths
@@ -60,7 +61,8 @@ const buildChannelOptions = ({
   startTime,
   yScale,
 }) => {
-  const stroke = isDarkMode ? 'rgb(255, 255, 255)' : 'rgba(0, 0, 0, 0.8)';
+  const stroke = isDarkMode ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.8)';
+  const gridColor = isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)';
 
   return {
     width,
@@ -75,7 +77,15 @@ const buildChannelOptions = ({
       y: { range: [-yScale * OVERDRAW, yScale * OVERDRAW] },
     },
     axes: [
-      { show: false },
+      {
+        show: true, // must be true for uPlot to draw the grid at all; everything but the grid itself is hidden below
+        size: 0, // no reserved vertical space below plot for the tick marks/labels — labels live in the fixed x-axis strip instead
+        ticks: { show: false }, // no little perpendicular tick mark poking out the axis baseline
+        border: { show: false }, // no solid baseline along axis
+        values: () => [], // no tick labels (an empty array skips uPlot's label-draw loop entirely)
+        space: X_AXIS_GRID_SPACE, // keeps the same min tick spacing as the x-axis strip so gridlines line up with its labels
+        grid: { show: true, stroke: gridColor, width: 1 },
+      },
       { show: false }, // y-axis hidden; left padding below takes its place
     ],
     series: [{}, { stroke, width: 1 }],
@@ -607,7 +617,16 @@ export const EegViewer = ({
                     height: X_AXIS_HEIGHT,
                     cursor: { sync: { key: syncKey } },
                     scales: { x: { time: false, range: [startTime, startTime + windowSize] } },
-                    axes: [{ stroke: axisColor, size: 40, grid: { show: false } }, { show: false }],
+                    axes: [
+                      // space matches the channel plots' hidden grid axis so tick labels line up with the gridlines above
+                      {
+                        stroke: axisColor,
+                        size: 40,
+                        space: X_AXIS_GRID_SPACE,
+                        grid: { show: false },
+                      },
+                      { show: false },
+                    ],
                     series: [{}],
                     legend: { show: false },
                     padding: [0, PLOT_RIGHT_PAD, 0, Y_AXIS_WIDTH],
