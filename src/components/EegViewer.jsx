@@ -38,6 +38,7 @@ const EEG_LOADING_TOAST_ID = 'eeg-buffer-loading'; // fixed id so the loading/su
 const Y_AXIS_WIDTH = 60; // px for the y-axis area (channel name + tick space) — must match x-axis strip left padding
 const PLOT_RIGHT_PAD = 20; // px right padding — must match in both channel plots and x-axis strip so ticks align
 const OVERDRAW = 2; // canvas height multiplier — peaks bleed ±50% into adjacent lanes instead of clipping
+const X_AXIS_GRID_SPACE = 60; // Min px between vertical gridlines — shared by the channel plots and the x-axis =>uPlot uses it to pick an increment (1,2,5,10,etc)
 const MIN_CHANNEL_AREA_HEIGHT = 120; // px floor for the channel-plot scroll area. Below this the whole viewer overflows and the pane's scroll container takes over (mirrors NiiViewer's MIN_CANVAS_HEIGHT) instead of letting the x-axis/scrubber/controls/dropzone overlap
 const MIN_PLOT_ROW_HEIGHT = 350; // px floor for the uPlot area
 const ICON_SIZE = 22; // default size for lucide icons in the controls, used to compute input widths
@@ -60,7 +61,8 @@ const buildChannelOptions = ({
   startTime,
   yScale,
 }) => {
-  const stroke = isDarkMode ? 'rgb(255, 255, 255)' : 'rgba(0, 0, 0, 0.8)';
+  const stroke = isDarkMode ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.8)';
+  const gridColor = isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)';
 
   return {
     width,
@@ -75,7 +77,15 @@ const buildChannelOptions = ({
       y: { range: [-yScale * OVERDRAW, yScale * OVERDRAW] },
     },
     axes: [
-      { show: false },
+      {
+        show: true, // must be true for uPlot to draw the grid at all; everything but the grid itself is hidden below
+        size: 0, // no reserved vertical space below plot for the tick marks/labels — labels live in the fixed x-axis strip instead
+        ticks: { show: false }, // no little perpendicular tick mark poking out the axis baseline
+        border: { show: false }, // no solid baseline along axis
+        values: () => [], // no tick labels (an empty array skips uPlot's label-draw loop entirely)
+        space: X_AXIS_GRID_SPACE, // keeps the same min tick spacing as the x-axis strip so gridlines line up with its labels
+        grid: { show: true, stroke: gridColor, width: 1 },
+      },
       { show: false }, // y-axis hidden; left padding below takes its place
     ],
     series: [{}, { stroke, width: 1 }],
@@ -162,6 +172,15 @@ export const EegViewer = ({
   // Topograph window only opens when the toggle is on (topoEnabled) AND once a EEGplot
   // click has produced a timepoint to show (topoTimepoint)
   const topoVisible = topoEnabled && topoTimepoint !== null;
+
+  // Px position (from the plot area's left edge) of the vertical marker for topoTimepoint — the
+  // timestamp the electrode voltage snapshot was taken at, shared by the topography, ESI, and
+  // 3D-render views. Null hides the marker: no snapshot yet, or it's scrolled outside the window.
+  const snapshotMarkerLeft =
+    topoTimepoint !== null && topoTimepoint >= startTime && topoTimepoint <= startTime + windowSize
+      ? Y_AXIS_WIDTH +
+        ((topoTimepoint - startTime) / windowSize) * (plotWidth - Y_AXIS_WIDTH - PLOT_RIGHT_PAD)
+      : null;
 
   // Electrode-position matching + recording-type (EEG/iEEG) auto-detection — PatientView
   // owns recordingType and shows/drives the EEG/iEEG toggle in the panel title, since this
@@ -518,7 +537,7 @@ export const EegViewer = ({
                 lane so contentRect.width is stable and no horizontal scrollbar ever appears */}
               <div
                 ref={containerRef}
-                className="absolute inset-0 overflow-y-auto themed-scrollbar"
+                className="absolute top-2 left-0 bottom-0 right-0 overflow-y-auto themed-scrollbar"
                 title={
                   matched.length > 0 && topoEnabled && !topoVisible
                     ? 'Click any channel to view the EEG topography for that time point'
@@ -527,74 +546,92 @@ export const EegViewer = ({
                 style={{ scrollbarGutter: 'stable' }}
               >
                 {/* Wait for first measurements before rendering — avoids zero-size flash */}
-                {plotWidth > 0 &&
-                  plotHeight > 0 &&
-                  channelNames.map((name, i) => (
-                    <div
-                      key={name}
-                      style={{
-                        height: plotHeight,
-                        overflow: 'visible',
-                        borderBottom: `1px solid ${isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}`,
-                      }}
-                      className="relative"
-                    >
-                      <span
-                        className="absolute left-0 top-1/2 -translate-y-1/2 text-xs text-center pointer-events-none select-none z-10 px-0.5 truncate"
-                        style={{ width: Y_AXIS_WIDTH }}
-                      >
-                        {name}
-                      </span>
-                      {/* Zero-line at y=0, aligned with the plot area (not drawn by uPlot to avoid grid issues) */}
+                {plotWidth > 0 && plotHeight > 0 && (
+                  <div className="relative">
+                    {/* Snapshot marker — one continuous vertical line spanning every channel, at the
+                        timepoint for the current topography/ESI/3D-render voltages. Rendered once
+                        here (rather than per-row) so there's no seam at each row's border, and placed
+                        before the rows so it paints behind their canvases like the zero-line does. */}
+                    {snapshotMarkerLeft !== null && (
                       <div
-                        className="absolute pointer-events-none"
+                        data-testid="snapshot-marker"
+                        className="absolute pointer-events-none top-0 bottom-0 w-0.25"
                         style={{
-                          top: '50%',
-                          left: Y_AXIS_WIDTH,
-                          right: PLOT_RIGHT_PAD,
-                          height: 1,
-                          backgroundColor: isDarkMode
-                            ? 'rgba(255,255,255,0.25)'
-                            : 'rgba(0,0,0,0.25)',
+                          left: snapshotMarkerLeft,
+                          backgroundColor: 'var(--c-secondary)',
                         }}
                       />
-                      {/* Canvas wrapper — absolutely positioned to center the taller canvas in the lane */}
+                    )}
+                    {channelNames.map((name, i) => (
+                      // Channel divider below each channel
                       <div
+                        key={name}
                         style={{
-                          position: 'absolute',
-                          top: -((plotHeight * (OVERDRAW - 1)) / 2),
-                          left: 0,
+                          height: plotHeight,
+                          overflow: 'visible',
+                          borderBottom: `1px solid ${isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}`,
                         }}
+                        className="relative"
                       >
-                        <UplotReact
-                          options={buildChannelOptions({
-                            channelIndex: i,
-                            totalChannels: channelNames.length,
-                            isDarkMode,
-                            syncKey,
-                            width: plotWidth,
-                            height: plotHeight * OVERDRAW,
-                            windowSize,
-                            startTime,
-                            yScale,
-                          })}
-                          data={displayedData[i]}
-                          onCreate={(u) => {
-                            {
-                              /* click listener that converts the click's x-position into a timestamp => sets topoTimepoint */
-                            }
-                            u.over.addEventListener('click', () => {
-                              const t = u.posToVal(u.cursor.left, 'x');
-                              if (!isNaN(t)) {
-                                setTopoTimepoint(t);
-                              }
-                            });
+                        {/* Channel name label */}
+                        <span
+                          className="absolute left-0 top-1/2 -translate-y-1/2 text-xs text-center pointer-events-none select-none z-10 px-0.5 truncate"
+                          style={{ width: Y_AXIS_WIDTH }}
+                        >
+                          {name}
+                        </span>
+                        {/* Zero-line at y=0, aligned with the plot area (not drawn by uPlot to avoid grid issues) */}
+                        <div
+                          className="absolute pointer-events-none"
+                          style={{
+                            top: '50%',
+                            left: Y_AXIS_WIDTH,
+                            right: PLOT_RIGHT_PAD,
+                            height: 1,
+                            backgroundColor: isDarkMode
+                              ? 'rgba(255,255,255,0.25)'
+                              : 'rgba(0,0,0,0.25)',
                           }}
-                          onDelete={() => {}}
                         />
+                        {/* Canvas wrapper — absolutely positioned to center the taller canvas in the lane */}
+                        <div
+                          style={{
+                            position: 'absolute',
+                            top: -((plotHeight * (OVERDRAW - 1)) / 2),
+                            left: 0,
+                          }}
+                        >
+                          <UplotReact
+                            options={buildChannelOptions({
+                              channelIndex: i,
+                              totalChannels: channelNames.length,
+                              isDarkMode,
+                              syncKey,
+                              width: plotWidth,
+                              height: plotHeight * OVERDRAW,
+                              windowSize,
+                              startTime,
+                              yScale,
+                            })}
+                            data={displayedData[i]}
+                            onCreate={(u) => {
+                              {
+                                /* click listener that converts the click's x-position into a timestamp => sets topoTimepoint */
+                              }
+                              u.over.addEventListener('click', () => {
+                                const t = u.posToVal(u.cursor.left, 'x');
+                                if (!isNaN(t)) {
+                                  setTopoTimepoint(t);
+                                }
+                              });
+                            }}
+                            onDelete={() => {}}
+                          />
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -607,7 +644,16 @@ export const EegViewer = ({
                     height: X_AXIS_HEIGHT,
                     cursor: { sync: { key: syncKey } },
                     scales: { x: { time: false, range: [startTime, startTime + windowSize] } },
-                    axes: [{ stroke: axisColor, size: 40, grid: { show: false } }, { show: false }],
+                    axes: [
+                      // space matches the channel plots' hidden grid axis so tick labels line up with the gridlines above
+                      {
+                        stroke: axisColor,
+                        size: 40,
+                        space: X_AXIS_GRID_SPACE,
+                        grid: { show: false },
+                      },
+                      { show: false },
+                    ],
                     series: [{}],
                     legend: { show: false },
                     padding: [0, PLOT_RIGHT_PAD, 0, Y_AXIS_WIDTH],
