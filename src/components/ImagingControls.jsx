@@ -10,12 +10,12 @@ import { ESI_LAYER_URL, isImageVolumeLayer } from '@/utils/NiiViewer.utils';
 // driven — see convertSourcePowersToConnectome) × nodeScale, so nodeScale is a plain multiplier,
 // not a 0-1 fraction like opacity — this range just covers a sensible on-screen sphere size.
 // Edge radius follows the same pattern from a typically-larger colorValue, hence the smaller range.
-const NODE_SCALE_MIN = 0;
-const NODE_SCALE_MAX = 10;
 const NODE_SCALE_STEP = 0.5;
-const EDGE_SCALE_MIN = 0;
-const EDGE_SCALE_MAX = 2;
+const NODE_SCALE_MIN = NODE_SCALE_STEP; // 0 makes NiiVue drop the mesh's 3D render entirely, not just shrink nodes to invisible
+const NODE_SCALE_MAX = 10;
 const EDGE_SCALE_STEP = 0.1;
+const EDGE_SCALE_MIN = EDGE_SCALE_STEP; // same NiiVue quirk as NODE_SCALE_MIN
+const EDGE_SCALE_MAX = 2;
 
 const COLORMAP_OPTIONS = [
   { value: 'gray', label: 'Grayscale' },

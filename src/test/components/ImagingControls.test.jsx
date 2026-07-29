@@ -600,6 +600,29 @@ describe('ImagingControls', () => {
       expect(onSettingChange).toHaveBeenCalledWith(0, 'edgeScale', 0.6);
     });
 
+    it('cannot be dragged down to 0 — NiiVue drops the whole mesh render at nodeScale/edgeScale 0', async () => {
+      const { onSettingChange } = await setup(
+        makeIntracranialLayer(),
+        makeSettings({ nodeScale: 1, edgeScale: 0.3 })
+      );
+
+      // Home jumps a Radix slider straight to its floor (the `min` prop) — the strongest
+      // check that 0 is unreachable, not just that a single ArrowLeft step avoids it.
+      const nodeSlider = screen.getByLabelText('Intracranial - Electrodes node size slider');
+      nodeSlider.focus();
+      fireEvent.keyDown(nodeSlider, { key: 'Home' });
+      expect(nodeSlider).toHaveAttribute('aria-valuemin', '0.5');
+      expect(onSettingChange).toHaveBeenCalledWith(0, 'nodeScale', 0.5);
+      expect(onSettingChange).not.toHaveBeenCalledWith(0, 'nodeScale', 0);
+
+      const edgeSlider = screen.getByLabelText('Intracranial - Electrodes edge size slider');
+      edgeSlider.focus();
+      fireEvent.keyDown(edgeSlider, { key: 'Home' });
+      expect(edgeSlider).toHaveAttribute('aria-valuemin', '0.1');
+      expect(onSettingChange).toHaveBeenCalledWith(0, 'edgeScale', 0.1);
+      expect(onSettingChange).not.toHaveBeenCalledWith(0, 'edgeScale', 0);
+    });
+
     it('disables the Node slider when the connectome has no nodes', async () => {
       await setup(makeIntracranialLayer({ nodes: [] }), makeSettings());
 
