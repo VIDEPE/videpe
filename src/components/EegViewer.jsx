@@ -554,6 +554,7 @@ export const EegViewer = ({
                         before the rows so it paints behind their canvases like the zero-line does. */}
                     {snapshotMarkerLeft !== null && (
                       <div
+                        data-testid="snapshot-marker"
                         className="absolute pointer-events-none top-0 bottom-0 w-0.25"
                         style={{
                           left: snapshotMarkerLeft,
@@ -562,6 +563,7 @@ export const EegViewer = ({
                       />
                     )}
                     {channelNames.map((name, i) => (
+                      // Channel divider below each channel
                       <div
                         key={name}
                         style={{

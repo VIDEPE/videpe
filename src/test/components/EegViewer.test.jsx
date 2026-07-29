@@ -580,17 +580,38 @@ describe('EegViewer — plot rendering', () => {
     }
   });
 
-  it('all channel plots hide their x-axis (it is shown in the fixed strip instead)', async () => {
+  it('all channel plots suppress x-axis ticks/labels/border (labels are shown in the fixed strip instead)', async () => {
     const { default: UplotReactMock } = await import('uplot-react');
     UplotReactMock.mockClear();
 
     await renderViewer();
 
-    // The first N calls are channel plots (axes[0].show === false).
-    // The next call is the fixed x-axis strip (axes[0].show is undefined/truthy).
+    // The first N calls are channel plots. Their x-axis is enabled (axes[0].show === true) only
+    // so uPlot draws the vertical gridlines — every other visible part (ticks, border, reserved
+    // size, labels) is suppressed. The fixed x-axis strip (the next call) shows the real ticks/labels.
     const channelCalls = UplotReactMock.mock.calls.slice(0, channelNames.length);
-    const xAxisVisibility = channelCalls.map((call) => call[0].options.axes[0].show);
-    expect(xAxisVisibility).toEqual([false, false, false]);
+    for (const call of channelCalls) {
+      const axis = call[0].options.axes[0];
+      expect(axis.size).toBe(0);
+      expect(axis.ticks.show).toBe(false);
+      expect(axis.border.show).toBe(false);
+      expect(axis.values()).toEqual([]);
+    }
+  });
+
+  it('there is a vertical snapshot marker line rendered when clicking a plot', async () => {
+    const { default: UplotReactMock } = await import('uplot-react');
+    UplotReactMock.mockClear();
+
+    await renderViewer();
+
+    expect(screen.queryByTestId('snapshot-marker')).not.toBeInTheDocument();
+
+    await act(async () => {
+      capturedClickHandler?.();
+    });
+
+    expect(screen.getByTestId('snapshot-marker')).toBeInTheDocument();
   });
 
   it('all channels receive the same initial y-range', async () => {
