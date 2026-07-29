@@ -63,6 +63,8 @@ vi.mock('@/components/EegViewer', () => ({
       onTopoHasContentChange,
       electrodeRenderEnabled,
       onElectrodeRenderChange,
+      esiEnabled,
+      onEsiEnabledChange,
     }) => (
       <div data-testid="eeg-viewer">
         <span data-testid="eeg-custom-electrodes-count">{customElectrodes?.length ?? 0}</span>
@@ -70,6 +72,7 @@ vi.mock('@/components/EegViewer', () => ({
         <span data-testid="eeg-inverse-solution-filename">{inverseSolutionFileName ?? ''}</span>
         <span data-testid="eeg-montage">{montage}</span>
         <span data-testid="eeg-electrode-render-enabled">{String(electrodeRenderEnabled)}</span>
+        <span data-testid="eeg-esi-enabled">{String(esiEnabled)}</span>
         {/* Simulates clicking the 3D electrode-render toggle button in EegViewer's panel */}
         <button
           type="button"
@@ -84,6 +87,13 @@ vi.mock('@/components/EegViewer', () => ({
           onClick={() => onElectrodeRenderChange?.(false)}
         >
           disable-electrode-render
+        </button>
+        {/* Simulates clicking the ESI toggle button in EegViewer's panel */}
+        <button type="button" data-testid="enable-esi" onClick={() => onEsiEnabledChange?.(true)}>
+          enable-esi
+        </button>
+        <button type="button" data-testid="disable-esi" onClick={() => onEsiEnabledChange?.(false)}>
+          disable-esi
         </button>
         {/* Simulates EegViewer reporting live intracranial electrode/voltage state, the way it
           would after detecting an intracranial recording and matching a position file. */}
@@ -1252,6 +1262,7 @@ describe('PatientView — ESI requires the Average montage', () => {
   it('hides the ESI layer and toasts when the montage is switched away from Average', async () => {
     renderPatientView();
     await loadEegAndInverseSolution();
+    await userEvent.click(screen.getByTestId('enable-esi'));
     await userEvent.click(screen.getByTestId('trigger-channel-snapshot'));
     expect(NiiViewer.mock.lastCall[0].esiLayer).toBeTruthy();
 
@@ -1266,6 +1277,7 @@ describe('PatientView — ESI requires the Average montage', () => {
   it('shows the ESI layer again when the montage is switched back to Average', async () => {
     renderPatientView();
     await loadEegAndInverseSolution();
+    await userEvent.click(screen.getByTestId('enable-esi'));
     await userEvent.click(screen.getByTestId('trigger-channel-snapshot'));
     await userEvent.click(screen.getByTestId('set-montage-none'));
     expect(NiiViewer.mock.lastCall[0].esiLayer).toBeNull();
@@ -1437,6 +1449,83 @@ describe('PatientView — electrodeRenderEnabled toggle', () => {
     // Nothing else is loaded, so clearing the toggle drops NiiViewer's only reason to be
     // mounted at all — same as disabling the toggle directly.
     expect(screen.getByTestId('eeg-electrode-render-enabled')).toHaveTextContent('false');
+    expect(screen.queryByTestId('nii-viewer')).not.toBeInTheDocument();
+  });
+});
+
+describe('PatientView — esiEnabled toggle', () => {
+  const loadEegAndInverseSolution = async () => {
+    checkEegFiles.mockReturnValue({
+      formatName: 'BrainVision',
+      complete: true,
+      missing: [],
+      warning: null,
+    });
+    detectAndLoadEEG.mockResolvedValue({
+      channelNames: ['1', '2'],
+      fs: 256,
+      tMax: 10,
+      getChunk: vi.fn(),
+    });
+    await act(async () => {
+      await getEegOnFiles()([
+        makeFile('sub01.vhdr'),
+        makeFile('sub01.eeg'),
+        makeFile('sub-19_inversefilters.mat'),
+      ]);
+    });
+  };
+
+  beforeEach(() => {
+    FileDropZone.mockClear();
+    NiiViewer.mockClear();
+    EegViewer.mockClear();
+    checkEegFiles.mockClear();
+    electricalSourceImaging.mockReset();
+    electricalSourceImaging.mockReturnValue({
+      sourcePowerConnectomes: { fake: 'connectome' },
+      sourcePowerVolume: { fake: 'volume' },
+    });
+  });
+
+  it('defaults to off — no ESI layer even once a channel snapshot arrives', async () => {
+    renderPatientView();
+    await loadEegAndInverseSolution();
+
+    expect(screen.getByTestId('eeg-esi-enabled')).toHaveTextContent('false');
+
+    await userEvent.click(screen.getByTestId('trigger-channel-snapshot'));
+
+    // Inverse solution + Average montage + a channel snapshot are all present, but the
+    // toggle was never turned on — nothing should render.
+    expect(screen.queryByTestId('nii-viewer')).not.toBeInTheDocument();
+  });
+
+  it('turning the toggle on shows the ESI layer from already-reported channel data', async () => {
+    renderPatientView();
+    await loadEegAndInverseSolution();
+    await userEvent.click(screen.getByTestId('trigger-channel-snapshot'));
+    expect(screen.queryByTestId('nii-viewer')).not.toBeInTheDocument(); // still off
+
+    await userEvent.click(screen.getByTestId('enable-esi'));
+
+    expect(screen.getByTestId('eeg-esi-enabled')).toHaveTextContent('true');
+    expect(screen.getByTestId('nii-viewer')).toBeInTheDocument();
+    expect(NiiViewer.mock.lastCall[0].esiLayer).toBeTruthy();
+  });
+
+  it('turning the toggle off removes the ESI layer without needing new channel data', async () => {
+    renderPatientView();
+    await loadEegAndInverseSolution();
+    await userEvent.click(screen.getByTestId('enable-esi'));
+    await userEvent.click(screen.getByTestId('trigger-channel-snapshot'));
+    expect(NiiViewer.mock.lastCall[0].esiLayer).toBeTruthy();
+
+    await userEvent.click(screen.getByTestId('disable-esi'));
+
+    // Nothing else is loaded, so clearing the toggle drops NiiViewer's only reason to be
+    // mounted at all — same as the electrodeRenderEnabled toggle-off case above.
+    expect(screen.getByTestId('eeg-esi-enabled')).toHaveTextContent('false');
     expect(screen.queryByTestId('nii-viewer')).not.toBeInTheDocument();
   });
 });

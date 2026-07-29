@@ -54,6 +54,7 @@ export const PatientView = () => {
   const [recordingType, setRecordingType] = useState('eeg');
   const [channelSnapshot, setChannelSnapshot] = useState(null); // { isIntracranial, channelNames, voltages } lifted from EegViewer on each click
   const [electrodeRenderEnabled, setElectrodeRenderEnabled] = useState(false); // boolean to enable/disable the 3D rendering of the electrodes
+  const [esiEnabled, setEsiEnabled] = useState(false); // boolean to enable/disable showing the Electrical Source Imaging layer — same gating pattern as electrodeRenderEnabled
 
   const { montage, setMontage, resetMontage } = useMontage();
 
@@ -63,7 +64,14 @@ export const PatientView = () => {
     handleInverseSolutionFile,
     handleMontageChange,
     resetInverseSolution,
-  } = useElectricalSourceImaging({ eeg, recordingType, channelSnapshot, montage, setMontage });
+  } = useElectricalSourceImaging({
+    eeg,
+    recordingType,
+    channelSnapshot,
+    montage,
+    setMontage,
+    esiEnabled,
+  });
 
   const {
     pendingEegFiles,
@@ -184,6 +192,7 @@ export const PatientView = () => {
     setChannelSnapshot(null);
     setRecordingType('eeg');
     setElectrodeRenderEnabled(false);
+    setEsiEnabled(false);
   };
 
   // SplitPane's left (EEG) panel reset button — clears only the EEG side (recording,
@@ -200,6 +209,7 @@ export const PatientView = () => {
     resetMontage();
     setChannelSnapshot(null);
     setElectrodeRenderEnabled(false);
+    setEsiEnabled(false);
   };
 
   // SplitPane's right (Neuroimaging) panel reset button — clears only the imaging volumes
@@ -298,6 +308,8 @@ export const PatientView = () => {
               onTopoHasContentChange={setTopoHasContent}
               electrodeRenderEnabled={electrodeRenderEnabled}
               onElectrodeRenderChange={setElectrodeRenderEnabled}
+              esiEnabled={esiEnabled}
+              onEsiEnabledChange={setEsiEnabled}
             />
           ) : (
             <div className="h-full p-2">
