@@ -768,6 +768,19 @@ describe('NiiViewer', () => {
       await waitFor(() => expect(onLoadError).toHaveBeenCalledWith(new Set(['/mri.nii'])));
     });
 
+    it('does not show the "Imaging data loaded!" success toast when a layer passed via the layers prop fails to load', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      nvRef.current.loadVolumes = vi.fn().mockRejectedValue(new Error('Image type not supported'));
+      const { default: toast } = await import('react-hot-toast');
+      toast.success.mockClear();
+
+      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'MRI', url: '/mri.nii' }]} />);
+
+      await waitFor(() => expect(toast.error).toHaveBeenCalled());
+      expect(toast.success).not.toHaveBeenCalled();
+    });
+
     it('names the failed file in the toast when a volume layer fails to load', async () => {
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
@@ -1331,6 +1344,69 @@ describe('NiiViewer', () => {
         expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/failed to load/i))
       );
       expect(screen.queryByText('Mesh')).not.toBeInTheDocument();
+    });
+
+    it('does not show the "Imaging data loaded!" success toast when a dropped volume fails to load', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const { default: toast } = await import('react-hot-toast');
+      render(<NiiViewer nvRef={nvRef} layers={[]} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      nvRef.current.loadVolumes.mockRejectedValueOnce(new Error('Image type not supported'));
+      toast.error.mockClear();
+      toast.success.mockClear();
+
+      const input = document.querySelector('input[type="file"]');
+      await userEvent.upload(input, new File(['data'], 'scan.nii'));
+
+      await waitFor(() => expect(toast.error).toHaveBeenCalled());
+      expect(toast.success).not.toHaveBeenCalled();
+    });
+
+    it('names the failed file in the toast when a dropped volume fails to load', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const { default: toast } = await import('react-hot-toast');
+      render(<NiiViewer nvRef={nvRef} layers={[]} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      nvRef.current.loadVolumes.mockRejectedValueOnce(new Error('Image type not supported'));
+      toast.error.mockClear();
+
+      // Uses an accepted extension (.nii) — the failure is injected via the mocked rejection
+      // above, not via an unsupported extension. The hidden <input>'s accept attribute is only
+      // enforced by userEvent.upload's file-picker simulation (matching real <input> behavior);
+      // a real unsupported file reaches this handler via drag-and-drop instead, which bypasses
+      // accept entirely (FileDropZone's handleDrop reads e.dataTransfer.files directly).
+      const input = document.querySelector('input[type="file"]');
+      await userEvent.upload(input, new File(['data'], 'scan.nii'));
+
+      await waitFor(() =>
+        expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('scan.nii'))
+      );
+    });
+
+    it('shows one toast per layer kind — not a single combined toast — when a dropped volume and a dropped mesh both fail to load', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const { default: toast } = await import('react-hot-toast');
+      render(<NiiViewer nvRef={nvRef} layers={[]} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      nvRef.current.loadVolumes.mockRejectedValueOnce(new Error('Network error'));
+      nvRef.current.addMeshesFromUrl.mockRejectedValueOnce(new Error('Mesh type not supported'));
+      toast.error.mockClear();
+
+      const input = document.querySelector('input[type="file"]');
+      await userEvent.upload(input, [
+        new File(['data'], 'scan.nii'),
+        new File(['data'], 'corrupt.gii'),
+      ]);
+
+      await waitFor(() => expect(toast.error).toHaveBeenCalledTimes(2));
+      expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('scan.nii'));
+      expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('corrupt.gii'));
     });
   });
 

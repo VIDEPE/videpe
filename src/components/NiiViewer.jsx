@@ -209,6 +209,13 @@ export const NiiViewer = ({
   const [layerSettings, setLayerSettings] = useState(() => getInitialLayerSettings(layers));
   const [orderedLayers, setOrderedLayers] = useState(layers); // mirrors `layers` + any merged connectome layers; user-reorderable
   const [isLoading, setIsLoading] = useState(true);
+  // Whether the load that just finished (or is about to start) ended in an error — isLoading
+  // alone can't distinguish success from failure (it's just "in flight" vs "not"), so this is
+  // what tells useLoadingToast below not to show its misleading "Imaging data loaded!" success
+  // toast right alongside the real error toast(s) for the same failure. Reset to false whenever
+  // a new `layers` prop load starts (see the effect below) or handleNiiFiles starts a new
+  // internal-dropzone load, then flipped true by whichever failure branch actually hits.
+  const [hasLoadError, setHasLoadError] = useState(false);
   const [activeSliceType, setActiveSliceType] = useState(SLICE_TYPE.MULTIPLANAR);
   // Connectome/Volume toggle for the ESI layer, split into two values, both read by the ESI
   // effects below: isEsiVolumeMode normally just mirrors the layerSettings entry, but that entry
@@ -251,8 +258,30 @@ export const NiiViewer = ({
     fileMeshesRef,
     onHas3DExtentChange,
   });
-  // Loading/success toast tracking isLoading.
-  useLoadingToast(isLoading, NII_LOADING_TOAST_ID);
+  // Loading/success toast tracking isLoading, suppressed in favor of the error toast(s) below
+  // when the load that just finished failed.
+  useLoadingToast(isLoading, NII_LOADING_TOAST_ID, hasLoadError);
+
+  // A new `layers` prop value means useLayerLoader below is about to start a new load (or clear
+  // down to empty, which isn't a failure either) — reset ahead of that so a stale hasLoadError
+  // from a previous failed load doesn't wrongly suppress this one's success toast. Can't derive
+  // this at render instead: hasLoadError's whole purpose is to persist past this point, through
+  // the async load that follows, until the matching success/failure callback fires.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setHasLoadError(false);
+  }, [layers]);
+
+  // Wraps the parent-facing onLoadError so this component also learns locally that its current
+  // load failed (for the toast-suppression above), without changing what the parent itself
+  // receives.
+  const handleLayerLoadError = useCallback(
+    (failedUrls) => {
+      setHasLoadError(true);
+      onLoadError?.(failedUrls);
+    },
+    [onLoadError]
+  );
 
   // ─── Hooks: layer loading/syncing ────────────────────────────────────────────
   // Loads image volumes/meshes into nv whenever the `layers` prop changes.
@@ -264,7 +293,7 @@ export const NiiViewer = ({
     setLayerSettings,
     setIsLoading,
     onViewReady,
-    onLoadError,
+    onLoadError: handleLayerLoadError,
   });
   // Merges the electrode connectome into the card list and builds/rebuilds its mesh.
   const { electrodeMeshRef, clearElectrodeMesh, dismissElectrodeLayer } = useElectrodeConnectome({
@@ -390,6 +419,7 @@ export const NiiViewer = ({
   const handleNiiFiles = async (files) => {
     if (!nvRef.current) return;
     setIsLoading(true);
+    setHasLoadError(false); // this internal-dropzone path never touches `layers`, so the effect above won't reset it
     const newLayers = filesToLayers(files);
     const allLayers = [...orderedLayers, ...newLayers];
     // startIndex ensures new layers get 0.6 opacity rather than being treated as the first;
@@ -430,13 +460,30 @@ export const NiiViewer = ({
     if (volumeResult.status === 'rejected')
       newLayers.filter(isImageVolumeLayer).forEach((l) => failedUrls.add(l.url));
     if (meshResult.status === 'rejected')
-      newLayers.filter((l) => l.kind === 'mesh').forEach((l) => failedUrls.add(l.url));
+      newLayers.filter((layer) => layer.kind === 'mesh').forEach((l) => failedUrls.add(l.url));
 
     if (failedUrls.size > 0) {
       setOrderedLayers((prev) => prev.filter((l) => !failedUrls.has(l.url)));
       setLayerSettings((prev) => prev.filter((s) => !failedUrls.has(s.url)));
-      const reason = volumeResult.reason ?? meshResult.reason;
-      toast.error({`Failed to load image: ${reason.message}`});
+      setHasLoadError(true); // suppresses useLoadingToast's success toast once setIsLoading(false) below fires
+      // One toast per failed layer, named by file rather than by its opaque blob: url — mirrors
+      // useLayerLoader's failure handling (see its comment) for the same reason: each NiiVue
+      // loader is all-or-nothing, so every layer in a failed category is reported, and a volume
+      // failure and a mesh failure can have different reasons so they can't share one message.
+      if (volumeResult.status === 'rejected') {
+        newLayers
+          .filter(isImageVolumeLayer)
+          .forEach((layer) =>
+            toast.error(`Failed to load image ${layer.name}:\n${volumeResult.reason.message}`)
+          );
+      }
+      if (meshResult.status === 'rejected') {
+        newLayers
+          .filter((l) => l.kind === 'mesh')
+          .forEach((layer) =>
+            toast.error(`Failed to load image ${layer.name}:\n${meshResult.reason.message}`)
+          );
+      }
     }
     requestAnimationFrame(() => setIsLoading(false)); // wait one frame before clearing spinner
   };
