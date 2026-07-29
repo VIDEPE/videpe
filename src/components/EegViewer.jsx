@@ -537,7 +537,7 @@ export const EegViewer = ({
                 lane so contentRect.width is stable and no horizontal scrollbar ever appears */}
               <div
                 ref={containerRef}
-                className="absolute inset-0 overflow-y-auto themed-scrollbar"
+                className="absolute top-2 left-0 bottom-0 right-0 overflow-y-auto themed-scrollbar"
                 title={
                   matched.length > 0 && topoEnabled && !topoVisible
                     ? 'Click any channel to view the EEG topography for that time point'
@@ -554,7 +554,7 @@ export const EegViewer = ({
                         before the rows so it paints behind their canvases like the zero-line does. */}
                     {snapshotMarkerLeft !== null && (
                       <div
-                        className="absolute pointer-events-none top-0 bottom-0 w-0.5"
+                        className="absolute pointer-events-none top-0 bottom-0 w-0.25"
                         style={{
                           left: snapshotMarkerLeft,
                           backgroundColor: 'var(--c-secondary)',
