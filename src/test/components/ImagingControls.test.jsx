@@ -592,12 +592,12 @@ describe('ImagingControls', () => {
       const nodeSlider = screen.getByLabelText('Intracranial - Electrodes node size slider');
       nodeSlider.focus();
       fireEvent.keyDown(nodeSlider, { key: 'ArrowRight' });
-      expect(onSettingChange).toHaveBeenCalledWith(0, 'nodeScale', 4.5);
+      expect(onSettingChange).toHaveBeenCalledWith(0, 'nodeScale', 4.1);
 
       const edgeSlider = screen.getByLabelText('Intracranial - Electrodes edge size slider');
       edgeSlider.focus();
       fireEvent.keyDown(edgeSlider, { key: 'ArrowRight' });
-      expect(onSettingChange).toHaveBeenCalledWith(0, 'edgeScale', 0.6);
+      expect(onSettingChange).toHaveBeenCalledWith(0, 'edgeScale', 0.55);
     });
 
     it('cannot be dragged down to 0 — NiiVue drops the whole mesh render at nodeScale/edgeScale 0', async () => {
@@ -611,15 +611,15 @@ describe('ImagingControls', () => {
       const nodeSlider = screen.getByLabelText('Intracranial - Electrodes node size slider');
       nodeSlider.focus();
       fireEvent.keyDown(nodeSlider, { key: 'Home' });
-      expect(nodeSlider).toHaveAttribute('aria-valuemin', '0.5');
-      expect(onSettingChange).toHaveBeenCalledWith(0, 'nodeScale', 0.5);
+      expect(nodeSlider).toHaveAttribute('aria-valuemin', '0.1');
+      expect(onSettingChange).toHaveBeenCalledWith(0, 'nodeScale', 0.1);
       expect(onSettingChange).not.toHaveBeenCalledWith(0, 'nodeScale', 0);
 
       const edgeSlider = screen.getByLabelText('Intracranial - Electrodes edge size slider');
       edgeSlider.focus();
       fireEvent.keyDown(edgeSlider, { key: 'Home' });
-      expect(edgeSlider).toHaveAttribute('aria-valuemin', '0.1');
-      expect(onSettingChange).toHaveBeenCalledWith(0, 'edgeScale', 0.1);
+      expect(edgeSlider).toHaveAttribute('aria-valuemin', '0.05');
+      expect(onSettingChange).toHaveBeenCalledWith(0, 'edgeScale', 0.05);
       expect(onSettingChange).not.toHaveBeenCalledWith(0, 'edgeScale', 0);
     });
 
