@@ -15,12 +15,12 @@ import {
 // driven — see convertSourcePowersToConnectome) × nodeScale, so nodeScale is a plain multiplier,
 // not a 0-1 fraction like opacity — this range just covers a sensible on-screen sphere size.
 // Edge radius follows the same pattern from a typically-larger colorValue, hence the smaller range.
-const NODE_SCALE_STEP = 0.5;
+const NODE_SCALE_STEP = 0.1;
 const NODE_SCALE_MIN = NODE_SCALE_STEP; // 0 makes NiiVue drop the mesh's 3D render entirely, not just shrink nodes to invisible
 const NODE_SCALE_MAX = 10;
-const EDGE_SCALE_STEP = 0.1;
+const EDGE_SCALE_STEP = 0.05;
 const EDGE_SCALE_MIN = EDGE_SCALE_STEP; // same NiiVue quirk as NODE_SCALE_MIN
-const EDGE_SCALE_MAX = 2;
+const EDGE_SCALE_MAX = 4;
 
 // Where a slider's default value sits along its track, as a 0-100 percent — used to place the
 // DefaultMarker tick so users can see where to drag back to.
@@ -31,7 +31,7 @@ const scaleToPercent = (value, min, max) => ((value - min) / (max - min)) * 100;
 // never intercepts drags meant for the track/thumb underneath.
 const DefaultMarker = ({ percent }) => (
   <div
-    className="absolute top-1/2 h-3 w-px -translate-x-1/2 -translate-y-1/2 bg-foreground/50 pointer-events-none"
+    className="absolute top-1/2 h-3.5 w-px -translate-x-1/2 -translate-y-1/2 bg-foreground/50 pointer-events-none"
     style={{ left: `${percent}%` }}
     aria-hidden="true"
   />
