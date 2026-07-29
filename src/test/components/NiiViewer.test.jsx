@@ -736,6 +736,82 @@ describe('NiiViewer', () => {
       expect(screen.queryByText('MRI')).not.toBeInTheDocument();
     });
 
+    it("calls onLoadError with the failed layer's url when a layer passed via the layers prop fails to load", async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      Niivue.mockImplementationOnce(function () {
+        return {
+          attachToCanvas: vi.fn(),
+          loadVolumes: vi.fn().mockRejectedValue(new Error('Image type not supported')),
+          setOpacity: vi.fn(),
+          setColormap: vi.fn(),
+          addColormap: vi.fn(),
+          updateGLVolume: vi.fn(),
+          setSliceType: vi.fn(),
+          setMultiplanarLayout: vi.fn(),
+          setCornerOrientationText: vi.fn(),
+          opts: { isColorbar: false, multiplanarShowRender: null, multiplanarEqualSize: true },
+          sliceTypeMultiplanar: 1,
+          volumes: [],
+        };
+      });
+
+      const nvRef = { current: new Niivue() };
+      const onLoadError = vi.fn();
+      render(
+        <NiiViewer
+          nvRef={nvRef}
+          layers={[{ type: 'MRI', url: '/mri.nii' }]}
+          onLoadError={onLoadError}
+        />
+      );
+
+      await waitFor(() => expect(onLoadError).toHaveBeenCalledWith(new Set(['/mri.nii'])));
+    });
+
+    it('names the failed file in the toast when a volume layer fails to load', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      nvRef.current.loadVolumes = vi.fn().mockRejectedValue(new Error('Network error'));
+      const { default: toast } = await import('react-hot-toast');
+      toast.error.mockClear();
+
+      render(
+        <NiiViewer
+          nvRef={nvRef}
+          layers={[{ type: 'MRI', url: '/mri.nii', name: 'sub-01_T1w.nii' }]}
+        />
+      );
+
+      await waitFor(() =>
+        expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('sub-01_T1w.nii'))
+      );
+    });
+
+    it('shows one toast per layer kind — not a single combined toast — when both a volume and a mesh fail to load', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      nvRef.current.loadVolumes = vi.fn().mockRejectedValue(new Error('Network error'));
+      nvRef.current.addMeshesFromUrl = vi
+        .fn()
+        .mockRejectedValue(new Error('Mesh type not supported'));
+      const { default: toast } = await import('react-hot-toast');
+      toast.error.mockClear();
+
+      render(
+        <NiiViewer
+          nvRef={nvRef}
+          layers={[
+            { type: 'MRI', url: '/mri.nii', name: 'sub-01_T1w.nii' },
+            { kind: 'mesh', url: '/cortex.gii', name: 'cortex.gii' },
+          ]}
+        />
+      );
+
+      await waitFor(() => expect(toast.error).toHaveBeenCalledTimes(2));
+      expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('sub-01_T1w.nii'));
+      expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('cortex.gii'));
+    });
+
     it('calls nv.setColormap when the colormap setting changes', async () => {
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };

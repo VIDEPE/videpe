@@ -206,7 +206,14 @@ vi.mock('@/components/EegViewer', () => ({
 }));
 vi.mock('@/components/NiiViewer', () => ({
   NiiViewer: vi.fn(
-    ({ onHasContentChange, onHas3DExtentChange, onNiiNvReady, onElectrodeLayerDismissed }) => (
+    ({
+      layers,
+      onHasContentChange,
+      onHas3DExtentChange,
+      onNiiNvReady,
+      onElectrodeLayerDismissed,
+      onLoadError,
+    }) => (
       <div data-testid="nii-viewer">
         {/* Simulates NiiViewer reporting that it holds layers loaded straight into its own
           internal dropzone — layers PatientView has no other visibility into (they never
@@ -217,6 +224,18 @@ vi.mock('@/components/NiiViewer', () => ({
           onClick={() => onHasContentChange?.(true)}
         >
           trigger-nii-has-content
+        </button>
+        {/* Simulates real NiiViewer/useLayerLoader reporting that every layer passed via the
+          `layers` prop failed to load (e.g. an unsupported/corrupt file) — PatientView uses
+          this to drop the failed layers back out of its own `layers` state so the panel
+          reverts to the dropzone instead of staying stuck on a broken, permanently-mounted
+          NiiViewer. */}
+        <button
+          type="button"
+          data-testid="trigger-nii-load-error"
+          onClick={() => onLoadError?.(new Set((layers ?? []).map((l) => l.url)))}
+        >
+          trigger-nii-load-error
         </button>
         {/* Simulates the user deleting the electrode-connectome card from NiiViewer's layer
           list — real NiiViewer calls this from handleDeleteLayer so PatientView can flip
@@ -672,6 +691,57 @@ describe('PatientView — imaging file-type detection', () => {
     });
 
     expect(NiiViewer.mock.lastCall[0].layers[0].type).toBe('SPECT');
+  });
+});
+
+describe('PatientView — imaging load-failure recovery', () => {
+  beforeEach(() => {
+    FileDropZone.mockClear();
+    NiiViewer.mockClear();
+    checkEegFiles.mockReturnValue({
+      formatName: null,
+      complete: false,
+      missing: null,
+      warning: null,
+    });
+  });
+
+  // NiiViewer optimistically mounts as soon as a file is dropped (before the real NiiVue
+  // instance has actually loaded it — see the "shows a loading spinner" tests in
+  // NiiViewer.test.jsx). NiiViewer/useLayerLoader should report a failed load back up via
+  // onLoadError (simulated here by the mock's trigger-nii-load-error button — see the mock
+  // above). Previously PatientView had no handler for this, so a failed load (an
+  // unsupported filetype, a corrupt file, ...) left `layers` permanently non-empty and
+  // NiiViewer stuck mounted in a broken state instead of reverting to the dropzone.
+  it('reverts to the imaging dropzone once NiiViewer reports the dropped file failed to load', async () => {
+    renderPatientView();
+
+    await act(async () => {
+      await getNiiOnFiles()([makeFile('sub-01_T1w.nii')]);
+    });
+    expect(screen.getByTestId('nii-viewer')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByTestId('trigger-nii-load-error'));
+
+    expect(screen.queryByTestId('nii-viewer')).not.toBeInTheDocument();
+  });
+
+  it('keeps NiiViewer mounted with only the still-successful layers when one of several dropped files fails to load', async () => {
+    renderPatientView();
+
+    await act(async () => {
+      await getNiiOnFiles()([makeFile('sub-01_T1w.nii'), makeFile('sub-01_pet.nii.gz')]);
+    });
+    expect(NiiViewer.mock.lastCall[0].layers).toHaveLength(2);
+    const failedUrl = NiiViewer.mock.lastCall[0].layers[0].url;
+
+    await act(async () => {
+      NiiViewer.mock.lastCall[0].onLoadError(new Set([failedUrl]));
+    });
+
+    expect(screen.getByTestId('nii-viewer')).toBeInTheDocument();
+    expect(NiiViewer.mock.lastCall[0].layers).toHaveLength(1);
+    expect(NiiViewer.mock.lastCall[0].layers[0].name).toBe('sub-01_pet.nii.gz');
   });
 });
 

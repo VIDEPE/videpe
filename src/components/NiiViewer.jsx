@@ -203,6 +203,7 @@ export const NiiViewer = ({
   onHas3DExtentChange, // reports whether the scene has a volume/mesh (non-connectome) — gates the cross-panel rotation sync; see the effect below
   isFullscreen = false,
   onElectrodeLayerDismissed,
+  onLoadError,
 }) => {
   // ─── State ─────────────────────────────────────────────────────────────────
   const [layerSettings, setLayerSettings] = useState(() => getInitialLayerSettings(layers));
@@ -263,6 +264,7 @@ export const NiiViewer = ({
     setLayerSettings,
     setIsLoading,
     onViewReady,
+    onLoadError,
   });
   // Merges the electrode connectome into the card list and builds/rebuilds its mesh.
   const { electrodeMeshRef, clearElectrodeMesh, dismissElectrodeLayer } = useElectrodeConnectome({
@@ -434,7 +436,7 @@ export const NiiViewer = ({
       setOrderedLayers((prev) => prev.filter((l) => !failedUrls.has(l.url)));
       setLayerSettings((prev) => prev.filter((s) => !failedUrls.has(s.url)));
       const reason = volumeResult.reason ?? meshResult.reason;
-      toast.error(`Failed to load image: ${reason.message}`);
+      toast.error({`Failed to load image: ${reason.message}`});
     }
     requestAnimationFrame(() => setIsLoading(false)); // wait one frame before clearing spinner
   };
