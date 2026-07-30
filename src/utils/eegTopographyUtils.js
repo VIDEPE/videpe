@@ -3,7 +3,10 @@
 
 import convexHull from 'convex-hull';
 import { parseElectrodeContactName } from './intracranialDetection';
-import { INTRACRANIAL_CONNECTOME_URL } from '@/utils/NiiViewer.utils';
+import { ELECTRODE_LAYER_URL } from '@/utils/NiiViewer.utils';
+
+// ─── Channel matching ───────────────────────────────────────────────────────
+// Maps raw EEG channel names onto parsed electrode template positions.
 
 // Strips recording-type prefixes ("EEG ", "MEG ") and reference suffixes ("-Ref", "-A1", " Ref", etc.)
 // so that "EEG Fp1-Ref" normalises to "fp1" for lookup.
@@ -45,12 +48,18 @@ export function matchChannelsToPositions(channelNames, electrodes) {
   return { matched, unmatchedNames };
 }
 
-// Build a triangulated mesh from electrode positions using their convex hull.
-// Vertex order in the output matches the input electrodes array, so
-// electrodes[i] corresponds to vertices[i*3 .. i*3+2].
-//
-// @param {{ label, x, y, z }[]} electrodes
-// @returns {{ vertices: Float32Array, indices: Uint32Array }}
+// ─── Scalp mesh geometry & voltage interpolation ───────────────────────────
+// Builds the triangulated scalp surface and colours it (and per-electrode
+// markers) from matched channel voltages.
+
+/**
+ * Build a triangulated mesh from electrode positions using their convex hull.
+ * Vertex order in the output matches the input electrodes array, so
+ * electrodes[i] corresponds to vertices[i*3 .. i*3+2].
+ *
+ * @param {{ label, x, y, z }[]} electrodes
+ * @returns {{ vertices: Float32Array, indices: Uint32Array }}
+ */
 export function buildElectrodeMesh(electrodes) {
   const points = electrodes.map((e) => [e.x, e.y, e.z]);
   const faces = convexHull(points);
@@ -76,15 +85,17 @@ export function buildElectrodeMesh(electrodes) {
   return { vertices, indices };
 }
 
-// Gaussian radial basis interpolation at a single 3D query point.
-// Uses Euclidean distance in MNI mm space — no unit-sphere projection needed
-// since electrode positions from .elc already follow the actual head shape.
-//
-// @param {[number,number,number]} queryXYZ
-// @param {[number,number,number][]} matchedXYZ  - positions of matched electrodes
-// @param {number[]} voltages                    - voltage per matched electrode
-// @param {number} sigma                         - falloff in mm (default 30mm ≈ 2 electrode spacings)
-// @returns {number}
+/**
+ * Gaussian radial basis interpolation at a single 3D query point.
+ * Uses Euclidean distance in MNI mm space — no unit-sphere projection needed
+ * since electrode positions from .elc already follow the actual head shape.
+ *
+ * @param {[number,number,number]} queryXYZ
+ * @param {[number,number,number][]} matchedXYZ  - positions of matched electrodes
+ * @param {number[]} voltages                    - voltage per matched electrode
+ * @param {number} sigma                         - falloff in mm (default 30mm ≈ 2 electrode spacings)
+ * @returns {number}
+ */
 export function gaussianRBF(queryXYZ, matchedXYZ, voltages, sigma = 30) {
   let weightedSum = 0;
   let weightSum = 0;
@@ -102,40 +113,50 @@ export function gaussianRBF(queryXYZ, matchedXYZ, voltages, sigma = 30) {
   return weightSum > 0 ? weightedSum / weightSum : 0;
 }
 
-// Compute a per-vertex scalar (voltage) for every vertex in the electrode mesh.
-// Vertices that sit at a matched electrode get a weight-dominated value from that
-// electrode; all other vertices are filled by Gaussian RBF from the matched set.
-//
-// @param {{ label, x, y, z }[]} electrodes  - full electrode list (determines vertex order)
-// @param {{ pos: { x, y, z } }[]} matched   - matched channel entries from matchChannelsToPositions
-// @param {number[]} voltages                 - voltage per matched entry (same order as matched)
-// @param {number} sigma                      - Gaussian falloff in mm
-// @returns {Float32Array}
+/**
+ * Compute a per-vertex scalar (voltage) for every vertex in the electrode mesh.
+ * Vertices that sit at a matched electrode take that electrode's recorded voltage
+ * directly, so the mesh surface matches the electrode marker colour exactly there —
+ * gaussianRBF is a weighted average, not a true interpolant, so running a matched
+ * vertex through it would blend its own voltage with its neighbours' and mute any
+ * spike. All other (unmatched) vertices are still filled in by Gaussian RBF.
+ *
+ * @param {{ label, x, y, z }[]} electrodes  - full electrode list (determines vertex order)
+ * @param {{ pos: { label, x, y, z } }[]} matched - matched channel entries from matchChannelsToPositions
+ * @param {number[]} voltages                 - voltage per matched entry (same order as matched)
+ * @param {number} sigma                      - Gaussian falloff in mm
+ * @returns {Float32Array}
+ */
 export function interpolateMeshVoltages(electrodes, matched, voltages, sigma = 30) {
   const matchedXYZ = matched.map((m) => [m.pos.x, m.pos.y, m.pos.z]);
   const scalars = new Float32Array(electrodes.length);
 
   for (let i = 0; i < electrodes.length; i++) {
-    scalars[i] = gaussianRBF(
-      [electrodes[i].x, electrodes[i].y, electrodes[i].z],
-      matchedXYZ,
-      voltages,
-      sigma
-    );
+    const electrode = electrodes[i];
+    // check if the current electrode has been matched to a electrode position
+    // returns an index when found and -1 when no match is found
+    const matchedIndex = matched.findIndex((m) => m.pos.label === electrode.label);
+
+    scalars[i] =
+      matchedIndex === -1 // if no match => interpolate, if there is a match => take voltage
+        ? gaussianRBF([electrode.x, electrode.y, electrode.z], matchedXYZ, voltages, sigma)
+        : voltages[matchedIndex];
   }
 
   return scalars;
 }
 
-// Build one marker per template electrode for rendering individual electrode
-// positions alongside the interpolated mesh surface. Matched electrodes carry
-// their real, signed voltage so they can be highlighted distinctly from the
-// rest of the template grid, which has no recorded data to show.
-//
-// @param {{ label, x, y, z }[]} electrodes  - full electrode list from the template
-// @param {{ pos: { label, x, y, z } }[]} matched - matched channels from matchChannelsToPositions
-// @param {number[]} voltages                 - voltage per matched entry (same order as matched)
-// @returns {{ label, x, y, z, isMatched, value }[]}
+/**
+ * Build one marker per template electrode for rendering individual electrode
+ * positions alongside the interpolated mesh surface. Matched electrodes carry
+ * their real, signed voltage so they can be highlighted distinctly from the
+ * rest of the template grid, which has no recorded data to show.
+ *
+ * @param {{ label, x, y, z }[]} electrodes  - full electrode list from the template
+ * @param {{ pos: { label, x, y, z } }[]} matched - matched channels from matchChannelsToPositions
+ * @param {number[]} voltages                 - voltage per matched entry (same order as matched)
+ * @returns {{ label, x, y, z, isMatched, value }[]}
+ */
 export function buildElectrodeMarkers(electrodes, matched, voltages) {
   const voltageByLabel = new Map();
   matched.forEach((m, i) => voltageByLabel.set(m.pos.label, voltages[i] ?? 0));
@@ -153,36 +174,25 @@ export function buildElectrodeMarkers(electrodes, matched, voltages) {
   });
 }
 
-// Assemble the full mesh data for a single EEG timepoint.
-// Returns raw arrays rather than an ArrayBuffer so this function stays
-// framework-free and testable — the caller (EegTopoWindow) passes the result
-// to NVMeshUtilities.createMZ3() to get the buffer NiiVue loads.
-//
-// @param {{ label, x, y, z }[]} electrodes  - full electrode list from parseElcElectrodePositions
-// @param {{ pos: { x, y, z } }[]} matched   - matched channels from matchChannelsToPositions
-// @param {number[]} voltages                 - re-referenced voltage per matched channel
-// @param {number} sigma                      - Gaussian falloff in mm (default 30)
-// @returns {{ vertices: Float32Array, indices: Uint32Array, scalars: Float32Array }}
-export function buildEegMesh(electrodes, matched, voltages, sigma = 30) {
-  const { vertices, indices } = buildElectrodeMesh(electrodes);
-  const scalars = interpolateMeshVoltages(electrodes, matched, voltages, sigma);
-  return { vertices, indices, scalars };
-}
+// ─── Intracranial electrode matrix & connectome ────────────────────────────
+// Groups intracranial contacts into probe shafts for the matrix view and the
+// 3D connectome layer.
 
-// Groups intracranial channel names by parsed electrode group and contact number,
-// sorted ascending within each group — the row/column structure the intracranial
-// topography matrix renders. Needs only channel names + a voltage per channel
-// index, no electrode positions, since this view has no position-file gate.
-// Channels that don't fit the group+contact shape (e.g. "ECG") aren't dropped —
-// they're returned separately in `unparsed` so the caller can still surface them,
-// just not as a matrix row/column.
-//
-// @param {string[]} channelNames
-// @param {number[]} voltages  - one per channelNames index
-// @returns {{
-//   groups: { group: string, contacts: { contact: number, channelIdx: number, voltage: number }[] }[],
-//   unparsed: { channelIdx: number, name: string }[]
-// }}
+/**
+ * Groups intracranial channel names by parsed electrode group and contact number,
+ * sorted ascending within each group — the row/column structure the intracranial
+ * topography matrix renders. Needs only channel names + a voltage per channel
+ * index, no electrode positions, since this view has no position-file gate.
+ * Channels that don't fit the group+contact shape (e.g. "ECG") aren't dropped —
+ * they're returned separately in `unparsed` so the caller can still surface them,
+ * just not as a matrix row/column.
+ *
+ * @param {string[]} channelNames
+ * @param {number[]} voltages  - one per channelNames index
+ * @returns {{
+ *   groups: { group: string, contacts: { contact: number, channelIdx: number, voltage: number }[] }[],
+ *   unparsed: { channelIdx: number, name: string }[]
+ */
 export function buildIntracranialMatrix(channelNames, voltages) {
   const groupMap = new Map(); // electrode group -> its contacts, accumulated in channel order
   const unparsed = [];
@@ -208,18 +218,19 @@ export function buildIntracranialMatrix(channelNames, voltages) {
   return { groups, unparsed };
 }
 
-// Builds connectome nodes (one per matched intracranial electrode contact, colored
-// by voltage) and edges connecting consecutive *existing* contacts within the same
-// electrode group — one polyline per physical probe shaft. Contacts are connected
-// in sorted-contact-number order among the matched set, so a missing contact (e.g.
-// no channel for B3) is skipped rather than breaking the shaft into two pieces.
-//
-// @param {{ channelIdx, name, pos: { x, y, z } }[]} matched - from matchChannelsToPositions
-// @param {number[]} voltages  - one per matched entry (same order as matched)
-// @returns {{
-//   nodes: { name, x, y, z, colorValue, sizeValue }[],
-//   edges: { first: number, second: number, colorValue: number }[]
-// }}
+/**
+ * Builds connectome nodes (one per matched intracranial electrode contact, colored
+ * by voltage) and edges connecting consecutive *existing* contacts within the same
+ * electrode group — one polyline per physical probe shaft. Contacts are connected
+ * in sorted-contact-number order among the matched set, so a missing contact (e.g.
+ * no channel for B3) is skipped rather than breaking the shaft into two pieces.
+ *
+ * @param {{ channelIdx, name, pos: { x, y, z } }[]} matched - from matchChannelsToPositions
+ * @param {number[]} voltages  - one per matched entry (same order as matched)
+ * @returns {{
+ *   nodes: { name, x, y, z, colorValue, sizeValue }[],
+ *   edges: { first: number, second: number, colorValue: number }[]
+ */
 export function buildIntracranialConnectome(matched, voltages) {
   // One node per matched contact — node index i corresponds to matched[i]/voltages[i].
   const nodes = matched.map((m, i) => ({
@@ -248,7 +259,7 @@ export function buildIntracranialConnectome(matched, voltages) {
       edges.push({
         first: sorted[i].nodeIndex,
         second: sorted[i + 1].nodeIndex,
-        colorValue: (sorted[i].voltage + sorted[i + 1].voltage) / 2, // edges carry no real data — just shade by their endpoints
+        colorValue: 1, // fix colorvalue of edges to have them fixed size and color (still scalable with sliders edgeScale)
       });
     }
   }
@@ -256,25 +267,63 @@ export function buildIntracranialConnectome(matched, voltages) {
   return { nodes, edges };
 }
 
-// Pure derivation of the Neuroimaging pane's "connectome volume" layer entry from
-// the EEG state lifted out of EegViewer. Returns null when there's nothing to show
-// yet (not an intracranial recording, or no position-matched channels), so
-// PatientView.jsx can stay a thin orchestrator with no electrode-specific logic
-// of its own.
-//
-// @param {{ isIntracranial: boolean, matched: object[], voltages: number[] }} args
-// @returns {object | null}
-export function buildIntracranialLayer({ isIntracranial, matched, voltages }) {
-  if (!isIntracranial || !matched?.length) return null; // nothing to render yet
+/**
+ * Builds connectome nodes (one per matched electrode contact, colored by voltage)
+ *
+ * @param {{ channelIdx, name, pos: { x, y, z } }[]} matched - from matchChannelsToPositions
+ * @param {number[]} voltages  - one per matched entry (same order as matched)
+ * @returns {{
+ *   nodes: { name, x, y, z, colorValue, sizeValue }[],
+ *   edges: { first: number, second: number, colorValue: number }[]
+ */
+export function buildSurfaceEegConnectome(matched, voltages) {
+  // One node per matched contact — node index i corresponds to matched[i]/voltages[i].
+  const nodes = matched.map((m, i) => ({
+    name: m.name,
+    x: m.pos.x,
+    y: m.pos.y,
+    z: m.pos.z,
+    colorValue: voltages[i] ?? 0,
+    sizeValue: 1,
+  }));
 
-  const { nodes, edges } = buildIntracranialConnectome(matched, voltages);
+  // Surface EEG doesn't need edges connecting the nodes
+  const edges = [];
+
+  return { nodes, edges };
+}
+
+/**
+ * Pure derivation of the Neuroimaging pane's "connectome volume" layer entry from
+ * the EEG state lifted out of EegViewer. Returns null when there's nothing to show
+ * yet (not an intracranial recording, or no position-matched channels), so
+ * PatientView.jsx can stay a thin orchestrator with no electrode-specific logic
+ * of its own.
+ *
+ * @param {{ isIntracranial: boolean, matched: object[], voltages: number[] }} args
+ * @returns {object | null}
+ */
+export function buildElectrodeLayer({ isIntracranial, matched, voltages }) {
+  if (!matched?.length) return null; // nothing to render yet
+
+  // declare variables
+  let nodes, edges, subtype;
+
+  if (isIntracranial) {
+    ({ nodes, edges } = buildIntracranialConnectome(matched, voltages));
+    subtype = 'Intracranial EEG';
+  } else {
+    ({ nodes, edges } = buildSurfaceEegConnectome(matched, voltages));
+    subtype = 'Surface EEG';
+  }
+
   const calMax = Math.max(1e-6, ...voltages.map((v) => Math.abs(v))); // symmetric colour range; floor avoids div-by-zero downstream
 
   return {
-    url: INTRACRANIAL_CONNECTOME_URL,
-    name: 'Intracranial Electrodes',
-    type: 'Intracranial',
-    subtype: 'Electrodes',
+    url: ELECTRODE_LAYER_URL,
+    name: `${subtype} Electrodes`,
+    type: 'Electrodes',
+    subtype: subtype,
     kind: 'connectome',
     nodes,
     edges,

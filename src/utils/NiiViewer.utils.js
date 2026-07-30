@@ -28,11 +28,11 @@ export const TYPE_COLORMAP_DEFAULTS = {
   'Electrical Source Imaging': 'inferno',
 };
 
-// Every other layer is identified by its file's blob: URL. The intracranial
-// electrode connectome isn't loaded from a file — it's built in memory from EEG
+// Every other layer is identified by its file's blob: URL.
+// The electrode connectome isn't loaded from a file — it's built in memory from EEG
 // data — so it has no real URL. This fixed string stands in for one, letting the
 // connectome be tracked, reordered, and deleted the same way as any other layer.
-export const INTRACRANIAL_CONNECTOME_URL = '__intracranial-electrodes__';
+export const ELECTRODE_LAYER_URL = '__electrodes__';
 
 // Same sentinel-URL pattern for the ESI source-power connectome/volume layer.
 export const ESI_LAYER_URL = '__esi-source-power__';
@@ -42,6 +42,11 @@ export const ESI_LAYER_URL = '__esi-source-power__';
 // reorderable, since meshes/connectomes have no z-order and are pinned to the bottom. The ESI
 // layer follows its current kind — 'volume' in Volume mode, 'connectome' in Connectome mode.
 export const isImageVolumeLayer = (layer) => layer.kind !== 'connectome' && layer.kind !== 'mesh';
+
+// Connectome node/edge scale defaults — exported so ImagingControls can mark each slider's
+// reset point without the marker and the actual default drifting apart from each other.
+export const DEFAULT_NODE_SCALE = 4;
+export const DEFAULT_EDGE_SCALE = 0.5;
 
 // Returns default display settings, one per layer. Settings are keyed by the layer's url
 // (not array position, which shifts as layers are added/reordered). startIndex is where
@@ -59,6 +64,8 @@ export const getInitialLayerSettings = (
     visible: true, // eye-toggle state — hidden layers get their opacity forced to 0 downstream
     opacity: startIndex + index === 0 ? 1.0 : 0.6, // first loaded layer is fully opaque, others slightly transparent by default
     meshXRay: currentMeshXRay, // shared across all mesh/connectome layers
+    nodeScale: DEFAULT_NODE_SCALE, // connectome-only — radius multiplier for node spheres, per-layer (unlike meshXRay)
+    edgeScale: DEFAULT_EDGE_SCALE, // connectome-only — radius multiplier for edge tubes, per-layer (unlike meshXRay)
     colormap: TYPE_COLORMAP_DEFAULTS[layer.type] ?? 'gray', // NiiVue colormap key, defaulted by modality
     invert: false, // flips the colormap direction (dark-to-light vs light-to-dark)
     showColorbar: false, // whether this layer's colorbar legend is drawn on the canvas

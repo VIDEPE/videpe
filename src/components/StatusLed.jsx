@@ -32,6 +32,10 @@ import { useTheme } from '@/components/ThemeContext';
  *   (thresholds live with the caller, not here). Only affects color when matchCount/
  *   totalCount are both provided — LEDs with no match concept (e.g. Inverse Solution)
  *   always read green while active, never amber
+ * @param {boolean} [highlighted=false] - forces the red (off) dot to glow like an active LED
+ *   while true — used to draw the eye to this LED while the user hovers a toggle that's
+ *   disabled because this file is missing. No effect when the dot isn't red (already
+ *   communicating an on/good-match state) or when disabled.
  */
 export const StatusLed = ({
   label,
@@ -40,6 +44,7 @@ export const StatusLed = ({
   matchCount,
   totalCount,
   isGoodMatch = false,
+  highlighted = false,
 }) => {
   // isDarkMode is the one source of truth that actually reflects the app's theme toggle.
   const { isDarkMode } = useTheme();
@@ -63,25 +68,34 @@ export const StatusLed = ({
         ? isDarkMode
           ? 'bg-blue-400'
           : 'bg-blue-500'
-        : isDarkMode
-          ? 'bg-red-400/70'
-          : 'bg-red-500/70';
-  // Subtle glow only when on (green/amber) or a good auto-match (blue) — off (red) stays a flat dot
+        : highlighted
+          ? isDarkMode
+            ? 'bg-red-500'
+            : 'bg-red-600'
+          : isDarkMode
+            ? 'bg-red-500/50'
+            : 'bg-red-600/50';
+  // Subtle glow only when on (green/amber) or a good auto-match (blue) — off (red) stays a flat
+  // dot, unless `highlighted` asks it to glow red too (see prop doc above).
   const glow = disabled
     ? 'none'
     : isActive
       ? isActiveGood
         ? isDarkMode
-          ? '0 0 4px 1px rgba(74,222,128,0.7)'
-          : '0 0 4px 1px rgba(34,197,94,0.7)'
+          ? '0 0 4px 1.5px rgba(74,222,128,0.7)'
+          : '0 0 4px 1.5px rgba(34,197,94,0.7)'
         : isDarkMode
-          ? '0 0 4px 1px rgba(251,191,36,0.7)'
-          : '0 0 4px 1px rgba(245,158,11,0.7)'
+          ? '0 0 4px 1.5px rgba(251,191,36,0.7)'
+          : '0 0 4px 1.5px rgba(245,158,11,0.7)'
       : hasMatchInfo && isGoodMatch
         ? isDarkMode
-          ? '0 0 4px 1px rgba(96,165,250,0.7)'
-          : '0 0 4px 1px rgba(59,130,246,0.7)'
-        : 'none';
+          ? '0 0 4px 1.5px rgba(96,165,250,0.7)'
+          : '0 0 4px 1.5px rgba(59,130,246,0.7)'
+        : highlighted
+          ? isDarkMode
+            ? '0 0 4px 1.5px rgba(248, 78, 78, 0.7)'
+            : '0 0 4px 1.5px rgba(235, 47, 47, 0.7)'
+          : 'none';
   const matchSuffix = hasMatchInfo ? ` (${matchCount}/${totalCount} channels matched)` : '';
   const title = disabled
     ? `${label} is not applicable for iEEG recordings`
@@ -95,13 +109,13 @@ export const StatusLed = ({
   return (
     <span
       className={cn(
-        'flex items-center gap-1.5 leading-none shrink-0 whitespace-nowrap',
+        'flex items-center gap-1.5 leading-none shrink-0 whitespace-nowrap cursor-help',
         disabled && (isDarkMode ? 'text-foreground/20' : 'text-foreground/40')
       )}
       title={title}
     >
       <span
-        className={cn('h-2 w-2 rounded-full shrink-0', dotColor)}
+        className={cn('h-2 w-2 rounded-full shrink-0 cursor-help', dotColor)}
         style={{ boxShadow: glow }}
         aria-hidden="true"
       />

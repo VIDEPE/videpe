@@ -12,7 +12,7 @@ import { SplitPane } from '../components/SplitPane';
 import { EEGTypeToggle } from '../components/EEGTypeToggle';
 import { FileDropZone } from '../components/FileDropZone';
 import { filesToLayers } from '../utils/NiiViewer.utils';
-import { buildIntracranialLayer } from '../utils/eegTopographyUtils';
+import { buildElectrodeLayer } from '../utils/eegTopographyUtils';
 import { useEegFileIntake } from '../hooks/useEegFileIntake';
 import { useMontage } from '../hooks/useMontage';
 import { useElectricalSourceImaging } from '../hooks/useElectricalSourceImaging';
@@ -38,7 +38,7 @@ export const PatientView = () => {
   const [layers, setLayers] = useState([]); // image volumes/meshes loaded from files
   // Whether NiiViewer holds layers dropped into its own internal dropzone — those never
   // touch `layers` above, so this prevents wrongly unmounting NiiViewer (and discarding
-  // them) when e.g. switching out of iEEG mode clears intracranialLayer.
+  // them) when e.g. switching out of iEEG mode clears electrodeLayer.
   const [niiHasOwnContent, setNiiHasOwnContent] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const eegReadyResolveRef = useRef(null); // set before demo load; EegViewer calls it when charts are ready
@@ -47,12 +47,14 @@ export const PatientView = () => {
 
   // Live EEG/electrode state lifted out of EegViewer — drives the intracranial connectome
   // layer in the Neuroimaging pane. { isIntracranial, matched, voltages } | null.
-  const [intracranialSnapshot, setIntracranialSnapshot] = useState(null);
+  const [electrodeSnapshot, setElectrodeSnapshot] = useState(null);
   // 'eeg' | 'ieeg' — owned here (not EegViewer) so the SplitPane title can show/drive the
   // toggle. EegViewer reports its auto-detection result up via the same setter that the
   // title's click handler uses, then reads the resulting value back down as a prop.
   const [recordingType, setRecordingType] = useState('eeg');
   const [channelSnapshot, setChannelSnapshot] = useState(null); // { isIntracranial, channelNames, voltages } lifted from EegViewer on each click
+  const [electrodeRenderEnabled, setElectrodeRenderEnabled] = useState(false); // boolean to enable/disable the 3D rendering of the electrodes
+  const [esiEnabled, setEsiEnabled] = useState(false); // boolean to enable/disable showing the Electrical Source Imaging layer — same gating pattern as electrodeRenderEnabled
 
   const { montage, setMontage, resetMontage } = useMontage();
 
@@ -62,7 +64,14 @@ export const PatientView = () => {
     handleInverseSolutionFile,
     handleMontageChange,
     resetInverseSolution,
-  } = useElectricalSourceImaging({ eeg, recordingType, channelSnapshot, montage, setMontage });
+  } = useElectricalSourceImaging({
+    eeg,
+    recordingType,
+    channelSnapshot,
+    montage,
+    setMontage,
+    esiEnabled,
+  });
 
   const {
     pendingEegFiles,
@@ -88,18 +97,18 @@ export const PatientView = () => {
     niiReadyResolveRef,
   });
 
-  // Derives the Neuroimaging pane's connectome layer from the EEG state lifted out of
-  // EegViewer — null until there's an intracranial recording with at least one
-  // position-matched channel. `?? {}` guards the initial (pre-EegViewer-effect) null state.
-  const intracranialLayer = useMemo(
-    () => buildIntracranialLayer(intracranialSnapshot ?? {}),
-    [intracranialSnapshot]
-  ); // intracranial electrodes
+  // Build the electrode layer if the toggle is on.
+  // If snapshot is empty it generates a white bulb connectome
+  // if there is a electrode snapshot taken from the uPlots,
+  // then the voltage is represented in the node colour
+  const electrodeLayer = useMemo(() => {
+    return electrodeRenderEnabled ? buildElectrodeLayer(electrodeSnapshot ?? {}) : null;
+  }, [electrodeRenderEnabled, electrodeSnapshot]);
 
   // Whether the Neuroimaging pane currently has anything to show — same condition that
   // decides whether NiiViewer is mounted at all (below) and whether its reset button appears.
   const niiViewerHasContent =
-    layers.length > 0 || Boolean(intracranialLayer) || Boolean(esiLayer) || niiHasOwnContent;
+    layers.length > 0 || Boolean(electrodeLayer) || Boolean(esiLayer) || niiHasOwnContent;
 
   // when both these flags are true, then the two plots can be synchronised
   const [niiNvReady, setNiiNvReady] = useState(false); // flag when the NiiViewer canvas is initialised
@@ -177,26 +186,30 @@ export const PatientView = () => {
     setLayers([]);
     setNiiHasOwnContent(false);
     resetIntake();
-    setIntracranialSnapshot(null);
+    setElectrodeSnapshot(null);
     resetInverseSolution();
     resetMontage();
     setChannelSnapshot(null);
     setRecordingType('eeg');
+    setElectrodeRenderEnabled(false);
+    setEsiEnabled(false);
   };
 
   // SplitPane's left (EEG) panel reset button — clears only the EEG side (recording,
   // pending files, electrode positions, inverse solution/montage/ESI, recording type).
   // Leaves `layers`/`niiHasOwnContent` untouched, so any imaging data already loaded in
-  // the Neuroimaging panel survives; the intracranial connectome layer built from EEG
-  // state does get cleared, via setIntracranialSnapshot(null) below.
+  // the Neuroimaging panel survives; the electrode connectome layer built from EEG
+  // state does get cleared, via setElectrodeSnapshot(null) below.
   const handleEegReset = () => {
     setEeg(null);
     resetIntake();
     setRecordingType('eeg');
-    setIntracranialSnapshot(null);
+    setElectrodeSnapshot(null);
     resetInverseSolution();
     resetMontage();
     setChannelSnapshot(null);
+    setElectrodeRenderEnabled(false);
+    setEsiEnabled(false);
   };
 
   // SplitPane's right (Neuroimaging) panel reset button — clears only the imaging volumes
@@ -206,6 +219,16 @@ export const PatientView = () => {
   const handleNiiReset = () => {
     setLayers([]);
     setNiiHasOwnContent(false);
+  };
+
+  // Called by NiiViewer/useLayerLoader when one or more layers passed via `layers` failed to
+  // load. NiiViewer already drops the failed layers from its own local orderedLayers/
+  // layerSettings, but that state is internal to NiiViewer — without this, PatientView's own
+  // `layers` stays non-empty forever, keeping niiViewerHasContent true and NiiViewer mounted in
+  // a permanently broken state instead of reverting to the dropzone. Only removes the failed
+  // urls (not a full reset) so a load that's a partial success keeps showing what did load.
+  const handleLoadError = (failedUrls) => {
+    setLayers((prev) => prev.filter((layer) => !failedUrls.has(layer.url)));
   };
 
   return (
@@ -290,9 +313,13 @@ export const PatientView = () => {
               onMontageChange={handleMontageChange}
               onElecPosFile={handleElecPosFile}
               onInverseSolutionFile={handleInverseSolutionFile}
-              onIntracranialSnapshotChange={setIntracranialSnapshot}
+              onElectrodeSnapshotChange={setElectrodeSnapshot}
               onChannelSnapshotChange={setChannelSnapshot}
               onTopoHasContentChange={setTopoHasContent}
+              electrodeRenderEnabled={electrodeRenderEnabled}
+              onElectrodeRenderChange={setElectrodeRenderEnabled}
+              esiEnabled={esiEnabled}
+              onEsiEnabledChange={setEsiEnabled}
             />
           ) : (
             <div className="h-full p-2">
@@ -324,13 +351,15 @@ export const PatientView = () => {
             <NiiViewer
               nvRef={nvRef_niiviewer}
               layers={layers}
-              intracranialLayer={intracranialLayer}
+              electrodeLayer={electrodeLayer}
               esiLayer={esiLayer}
               onHasContentChange={setNiiHasOwnContent}
               onHas3DExtentChange={setNiiHas3DExtent}
               isFullscreen={maximizedPanel === 'right'}
               onViewReady={() => niiReadyResolveRef.current?.()}
               onNiiNvReady={() => setNiiNvReady(true)}
+              onElectrodeLayerDismissed={() => setElectrodeRenderEnabled(false)}
+              onLoadError={handleLoadError}
             />
           ) : (
             <div className="h-full p-2">

@@ -15,7 +15,7 @@ import { EEG_NODE_POS_KEY } from '@/utils/eegColormaps';
  * Merges the ESI (Electrical Source Imaging) source-power layer into orderedLayers/
  * layerSettings by its sentinel URL, and builds/rebuilds/removes the NiiVue object
  * representing it whenever its data or the Connectome/Volume toggle changes. Same
- * merge-then-rebuild pattern as useIntracranialConnectome, but branches between two NiiVue
+ * merge-then-rebuild pattern as useElectrodeConnectome, but branches between two NiiVue
  * object kinds — a connectome mesh or an NVImage volume — depending on `isEsiVolumeMode`.
  *
  * @param {Object} params
@@ -83,7 +83,7 @@ export function useEsiLayer({
   }, []);
 
   // Merges the separately-tracked esiLayer prop into orderedLayers/layerSettings — same
-  // pattern as the intracranialLayer merge effect, keyed on ESI_LAYER_URL.
+  // pattern as the electrodeLayer merge effect, keyed on ESI_LAYER_URL.
   useEffect(() => {
     const activeEsiLayer = esiLayer
       ? isEsiVolumeMode
@@ -109,7 +109,7 @@ export function useEsiLayer({
 
   // Builds/rebuilds/removes the ESI source-power mesh (connectome mode) or NVImage volume
   // (volume mode) whenever esiLayer's data or the Connectome/Volume toggle changes. Same
-  // rebuild-on-change pattern as the intracranialLayer build effect, but branches between the
+  // rebuild-on-change pattern as the electrodeLayer build effect, but branches between the
   // two NiiVue object kinds depending on which one activeEsiLayer resolves to.
   useEffect(() => {
     const nv = nvRef.current; // guard — nothing to do before NiiVue has attached to a canvas
@@ -140,7 +140,18 @@ export function useEsiLayer({
       return;
     }
 
-    if (activeEsiLayer === lastEsiLayerRef.current) return; // unrelated re-render — data/mode hasn't changed
+    // If the data hasn't changed, and (only for connectome mode) the thing we built is still
+    // really there — do nothing. Otherwise, rebuild. "Still there" means: does NiiVue's live
+    // list (nv.meshes) still contain the specific mesh object we think we built? On first
+    // mount, React briefly mounts, tears down, and mounts again (StrictMode) — the teardown
+    // step secretly removes the mesh, even though the data still looks unchanged. Volume mode
+    // skips this check: its load is async, so it finishes on its own after the remount either
+    // way — checking here would instead trigger a second, duplicate load.
+    if (activeEsiLayer === lastEsiLayerRef.current) {
+      const stillInScene =
+        activeEsiLayer.kind !== 'connectome' || nv.meshes.includes(esiMeshRef.current);
+      if (stillInScene) return;
+    }
 
     if (activeEsiLayer.kind !== 'connectome') {
       // If other image volumes (e.g. the MRI) are known in orderedLayers but still loading
@@ -189,12 +200,12 @@ export function useEsiLayer({
         nodeColormapNegative: EEG_NODE_POS_KEY, // unused — power is always ≥ 0
         nodeMinColor: esiCalMin,
         nodeMaxColor: esiCalMax,
-        nodeScale: 4,
+        nodeScale: settings.nodeScale,
         edgeColormap: EEG_NODE_POS_KEY,
         edgeColormapNegative: EEG_NODE_POS_KEY,
         edgeMin: esiCalMin,
         edgeMax: esiCalMax,
-        edgeScale: 0.5,
+        edgeScale: settings.edgeScale,
         showLegend: false,
         colorbarVisible: false, // suppresses the colorbar entry NiiVue would otherwise add
         nodes: visibleNodes,

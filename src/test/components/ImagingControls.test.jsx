@@ -9,6 +9,8 @@ const makeSettings = (overrides = {}) => ({
   visible: true,
   opacity: 1.0,
   meshXRay: 1,
+  nodeScale: 4,
+  edgeScale: 0.5,
   colormap: 'gray',
   invert: false,
   showColorbar: false,
@@ -534,6 +536,115 @@ describe('ImagingControls', () => {
 
       expect(screen.getByLabelText('Mesh - cortex meshXRay slider')).toBeInTheDocument();
       expect(screen.queryByLabelText('Mesh - cortex opacity slider')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Node/Edge size controls', () => {
+    const makeIntracranialLayer = (overrides = {}) => ({
+      kind: 'connectome',
+      type: 'Intracranial',
+      subtype: 'Electrodes',
+      url: '__intracranial-electrodes__',
+      nodes: [{ name: 'A1', x: 0, y: 0, z: 0, colorValue: 1, sizeValue: 1 }],
+      edges: [{ first: 0, second: 1, colorValue: 1 }],
+      ...overrides,
+    });
+
+    // setup does two things: renders one connectome layer and expands it.
+    const setup = async (layer, settings, onSettingChange = vi.fn()) => {
+      renderControls([layer], [settings], onSettingChange);
+      await userEvent.click(
+        screen.getByRole('button', { name: /expand.*intracranial - electrodes/i })
+      );
+      return { onSettingChange };
+    };
+
+    it('renders Node and Edge size sliders for a connectome layer with nodes and edges', async () => {
+      await setup(makeIntracranialLayer(), makeSettings());
+
+      expect(
+        screen.getByLabelText('Intracranial - Electrodes node size slider')
+      ).toBeInTheDocument();
+      expect(
+        screen.getByLabelText('Intracranial - Electrodes edge size slider')
+      ).toBeInTheDocument();
+    });
+
+    it('reflects current nodeScale/edgeScale as aria-valuenow', async () => {
+      await setup(makeIntracranialLayer(), makeSettings({ nodeScale: 6, edgeScale: 1.2 }));
+
+      expect(screen.getByLabelText('Intracranial - Electrodes node size slider')).toHaveAttribute(
+        'aria-valuenow',
+        '6'
+      );
+      expect(screen.getByLabelText('Intracranial - Electrodes edge size slider')).toHaveAttribute(
+        'aria-valuenow',
+        '1.2'
+      );
+    });
+
+    it('slider arrow-key change calls onSettingChange with the new nodeScale/edgeScale value', async () => {
+      const { onSettingChange } = await setup(
+        makeIntracranialLayer(),
+        makeSettings({ nodeScale: 4, edgeScale: 0.5 })
+      );
+
+      const nodeSlider = screen.getByLabelText('Intracranial - Electrodes node size slider');
+      nodeSlider.focus();
+      fireEvent.keyDown(nodeSlider, { key: 'ArrowRight' });
+      expect(onSettingChange).toHaveBeenCalledWith(0, 'nodeScale', 4.1);
+
+      const edgeSlider = screen.getByLabelText('Intracranial - Electrodes edge size slider');
+      edgeSlider.focus();
+      fireEvent.keyDown(edgeSlider, { key: 'ArrowRight' });
+      expect(onSettingChange).toHaveBeenCalledWith(0, 'edgeScale', 0.55);
+    });
+
+    it('cannot be dragged down to 0 — NiiVue drops the whole mesh render at nodeScale/edgeScale 0', async () => {
+      const { onSettingChange } = await setup(
+        makeIntracranialLayer(),
+        makeSettings({ nodeScale: 1, edgeScale: 0.3 })
+      );
+
+      // Home jumps a Radix slider straight to its floor (the `min` prop) — the strongest
+      // check that 0 is unreachable, not just that a single ArrowLeft step avoids it.
+      const nodeSlider = screen.getByLabelText('Intracranial - Electrodes node size slider');
+      nodeSlider.focus();
+      fireEvent.keyDown(nodeSlider, { key: 'Home' });
+      expect(nodeSlider).toHaveAttribute('aria-valuemin', '0.1');
+      expect(onSettingChange).toHaveBeenCalledWith(0, 'nodeScale', 0.1);
+      expect(onSettingChange).not.toHaveBeenCalledWith(0, 'nodeScale', 0);
+
+      const edgeSlider = screen.getByLabelText('Intracranial - Electrodes edge size slider');
+      edgeSlider.focus();
+      fireEvent.keyDown(edgeSlider, { key: 'Home' });
+      expect(edgeSlider).toHaveAttribute('aria-valuemin', '0.05');
+      expect(onSettingChange).toHaveBeenCalledWith(0, 'edgeScale', 0.05);
+      expect(onSettingChange).not.toHaveBeenCalledWith(0, 'edgeScale', 0);
+    });
+
+    it('disables the Node slider when the connectome has no nodes', async () => {
+      await setup(makeIntracranialLayer({ nodes: [] }), makeSettings());
+
+      expect(screen.getByLabelText('Intracranial - Electrodes node size slider')).toHaveAttribute(
+        'data-disabled'
+      );
+    });
+
+    it('disables the Edge slider when the connectome has no edges (e.g. ESI layers)', async () => {
+      await setup(makeIntracranialLayer({ edges: [] }), makeSettings());
+
+      expect(screen.getByLabelText('Intracranial - Electrodes edge size slider')).toHaveAttribute(
+        'data-disabled'
+      );
+    });
+
+    it('does not render for an image-volume layer', async () => {
+      renderControls([makeVolume('MRI', '/mri.nii')], [makeSettings()]);
+      await userEvent.click(screen.getByRole('button', { name: /expand.*mri/i }));
+
+      expect(screen.queryByLabelText('MRI node size slider')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('MRI edge size slider')).not.toBeInTheDocument();
     });
   });
 

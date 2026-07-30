@@ -150,7 +150,23 @@ const renderViewer = async (provider = makeProvider()) => {
 // Helper: get the immediate flex-row container of an input
 const containerOf = (input) => input.closest('div');
 
+// Arms the topography toggle, then simulates a plot click — EegTopoViewer only opens once
+// both are true (see the topoVisible derivation in EegViewer), so tests that need the window
+// open must do the same two-step gesture a real user would.
+const enableTopoAndClick = async () => {
+  await userEvent.click(screen.getByRole('button', { name: /enable topograph map/i }));
+  await act(async () => {
+    capturedClickHandler?.();
+  });
+};
+
 describe('EegViewer — controls presence', () => {
+  it('renders the EEG topography toggle button', async () => {
+    await renderViewer();
+    const input = screen.getByRole('button', { name: /topograph map/i });
+    expect(input).toBeInTheDocument();
+  });
+
   it('renders the channel count input', async () => {
     await renderViewer();
     const input = screen.getByRole('spinbutton', { name: /number of channels/i });
@@ -564,17 +580,38 @@ describe('EegViewer — plot rendering', () => {
     }
   });
 
-  it('all channel plots hide their x-axis (it is shown in the fixed strip instead)', async () => {
+  it('all channel plots suppress x-axis ticks/labels/border (labels are shown in the fixed strip instead)', async () => {
     const { default: UplotReactMock } = await import('uplot-react');
     UplotReactMock.mockClear();
 
     await renderViewer();
 
-    // The first N calls are channel plots (axes[0].show === false).
-    // The next call is the fixed x-axis strip (axes[0].show is undefined/truthy).
+    // The first N calls are channel plots. Their x-axis is enabled (axes[0].show === true) only
+    // so uPlot draws the vertical gridlines — every other visible part (ticks, border, reserved
+    // size, labels) is suppressed. The fixed x-axis strip (the next call) shows the real ticks/labels.
     const channelCalls = UplotReactMock.mock.calls.slice(0, channelNames.length);
-    const xAxisVisibility = channelCalls.map((call) => call[0].options.axes[0].show);
-    expect(xAxisVisibility).toEqual([false, false, false]);
+    for (const call of channelCalls) {
+      const axis = call[0].options.axes[0];
+      expect(axis.size).toBe(0);
+      expect(axis.ticks.show).toBe(false);
+      expect(axis.border.show).toBe(false);
+      expect(axis.values()).toEqual([]);
+    }
+  });
+
+  it('there is a vertical snapshot marker line rendered when clicking a plot', async () => {
+    const { default: UplotReactMock } = await import('uplot-react');
+    UplotReactMock.mockClear();
+
+    await renderViewer();
+
+    expect(screen.queryByTestId('snapshot-marker')).not.toBeInTheDocument();
+
+    await act(async () => {
+      capturedClickHandler?.();
+    });
+
+    expect(screen.getByTestId('snapshot-marker')).toBeInTheDocument();
   });
 
   it('all channels receive the same initial y-range', async () => {
@@ -604,20 +641,26 @@ describe('EegViewer — topography wiring', () => {
     expect(screen.queryByTestId('eeg-topo-viewer')).toBeNull();
   });
 
+  it('toggles aria-pressed and label when clicked', async () => {
+    await renderViewer();
+    const button = screen.getByRole('button', { name: /enable topograph map/i });
+    expect(button).toHaveAttribute('aria-pressed', 'false');
+
+    await userEvent.click(button);
+    expect(button).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: /disable topograph map/i })).toBeInTheDocument();
+  });
+
   it('clicking a channel plot opens EegTopoViewer', async () => {
     await renderViewer();
-    await act(async () => {
-      capturedClickHandler?.();
-    });
+    await enableTopoAndClick();
     expect(screen.getByTestId('eeg-topo-viewer')).toBeTruthy();
   });
 
   it('closing EegTopoViewer hides it', async () => {
     await renderViewer();
     // Open
-    await act(async () => {
-      capturedClickHandler?.();
-    });
+    await enableTopoAndClick();
     // Close
     await userEvent.click(screen.getByText('Close topo'));
     expect(screen.queryByTestId('eeg-topo-viewer')).toBeNull();
@@ -625,11 +668,83 @@ describe('EegViewer — topography wiring', () => {
 
   it('passes total channel count to EegTopoViewer', async () => {
     await renderViewer();
-    await act(async () => {
-      capturedClickHandler?.();
-    });
+    await enableTopoAndClick();
     // MOCK_ELC has 2 labels matching the test channel names (EEG1, EEG2); total is 3
     expect(screen.getByText(/2\s*\/\s*3\s*channels mapped/i)).toBeTruthy();
+  });
+});
+
+// ── ESI toggle wiring ──────────────────────────────────────────────────────────
+
+describe('EegViewer — ESI toggle wiring', () => {
+  it('is disabled with no inverse solution loaded', async () => {
+    await renderViewer();
+    const button = screen.getByRole('button', { name: /enable electrical source imaging/i });
+    expect(button).toBeDisabled();
+  });
+
+  it('is enabled once an inverse solution is loaded, and toggles aria-pressed/label when clicked', async () => {
+    const provider = makeProvider();
+    const onEsiEnabledChange = vi.fn();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        inverseSolutionFileName="my_inverse_solution"
+        esiEnabled={false}
+        onEsiEnabledChange={onEsiEnabledChange}
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const button = screen.getByRole('button', { name: /enable electrical source imaging/i });
+    expect(button).toBeEnabled();
+    expect(button).toHaveAttribute('aria-pressed', 'false');
+
+    await userEvent.click(button);
+    expect(onEsiEnabledChange).toHaveBeenCalledWith(true);
+  });
+
+  it('reflects esiEnabled=true via aria-pressed and label', async () => {
+    const provider = makeProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        inverseSolutionFileName="my_inverse_solution"
+        esiEnabled={true}
+        onEsiEnabledChange={() => {}}
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const button = screen.getByRole('button', { name: /disable electrical source imaging/i });
+    expect(button).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('stays disabled in iEEG mode even with an inverse solution loaded', async () => {
+    const provider = makeIntracranialProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        recordingType="ieeg"
+        inverseSolutionFileName="my_inverse_solution"
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const button = screen.getByRole('button', { name: /enable electrical source imaging/i });
+    expect(button).toBeDisabled();
   });
 });
 
@@ -1398,9 +1513,7 @@ describe('EegViewer — topography uses the montaged buffer', () => {
     });
 
     // Open the topography viewer at the mocked click timepoint
-    await act(async () => {
-      capturedClickHandler?.();
-    });
+    await enableTopoAndClick();
     // matched channels are EEG1 (idx0) and EEG2 (idx1); raw values at the clicked
     // sample are EEG1=4, EEG2=7
     expect(screen.getByTestId('topo-voltages').textContent).toBe('4,7');
@@ -1452,11 +1565,8 @@ describe('EegViewer — recording type detection', () => {
   // only cover what that hook test can't: how EegViewer wires the resulting isIntracranial
   // state into its children (EegTopoViewer).
 
-  it('keeps matched empty for an intracranial recordingType with no custom positions, even though standard_1005 was fetched', async () => {
+  it('disables the topo toggle for an intracranial recordingType with no known electrode positions at all', async () => {
     const provider = makeIntracranialProvider();
-    // recordingType is normally fed back down as a prop by the parent in response to the
-    // onRecordingTypeChange callback above (see PatientView) — passed directly here to
-    // exercise the same isIntracranial-driven behavior without reimplementing that parent.
     render(
       <EegViewer provider={provider} channelNames={provider.channelNames} recordingType="ieeg" />
     );
@@ -1464,9 +1574,35 @@ describe('EegViewer — recording type detection', () => {
       await Promise.resolve();
       await Promise.resolve();
     });
+
+    // Nothing can ever be mapped without positions — the toggle must stay disabled rather
+    // than let the user open a permanently-empty topo window.
+    expect(screen.getByRole('button', { name: /topograph map/i })).toBeDisabled();
+  });
+
+  it('keeps matched empty for an intracranial recordingType whose custom positions do not match any channel, even though standard_1005 was fetched', async () => {
+    const provider = makeIntracranialProvider();
+    // A position file is loaded (so the topo toggle is enabled), but none of its labels
+    // match this recording's channel names — mirrors loading the wrong patient's/montage's
+    // position file, as opposed to no file at all (which is covered by the "disables the
+    // topo toggle" test above and can no longer reach this code path via the UI).
+    const customElectrodes = [{ label: 'X1', x: 0, y: 0, z: 0 }];
+    // recordingType is normally fed back down as a prop by the parent in response to the
+    // onRecordingTypeChange callback above (see PatientView) — passed directly here to
+    // exercise the same isIntracranial-driven behavior without reimplementing that parent.
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        recordingType="ieeg"
+        customElectrodes={customElectrodes}
+      />
+    );
     await act(async () => {
-      capturedClickHandler?.();
+      await Promise.resolve();
+      await Promise.resolve();
     });
+    await enableTopoAndClick();
 
     expect(global.fetch).toHaveBeenCalled(); // still fetched, just not used for rendering in this mode
     expect(screen.getByText(/0\s*\/\s*3\s*channels mapped/i)).toBeTruthy();
@@ -1482,9 +1618,7 @@ describe('EegViewer — recording type detection', () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    await act(async () => {
-      capturedClickHandler?.();
-    });
+    await enableTopoAndClick();
     expect(screen.getByTestId('topo-is-intracranial')).toHaveTextContent('false');
 
     rerender(
@@ -1495,14 +1629,14 @@ describe('EegViewer — recording type detection', () => {
 });
 
 describe('EegViewer — lifted electrode state callback', () => {
-  it('calls onIntracranialSnapshotChange with the current mode, matched channels, and voltages', async () => {
-    const onIntracranialSnapshotChange = vi.fn();
+  it('calls onElectrodeSnapshotChange with the current mode, matched channels, and voltages', async () => {
+    const onElectrodeSnapshotChange = vi.fn();
     const provider = makeProvider();
     render(
       <EegViewer
         provider={provider}
         channelNames={provider.channelNames}
-        onIntracranialSnapshotChange={onIntracranialSnapshotChange}
+        onElectrodeSnapshotChange={onElectrodeSnapshotChange}
       />
     );
     await act(async () => {
@@ -1510,16 +1644,16 @@ describe('EegViewer — lifted electrode state callback', () => {
       await Promise.resolve();
     });
 
-    expect(onIntracranialSnapshotChange).toHaveBeenCalledWith(
+    expect(onElectrodeSnapshotChange).toHaveBeenCalledWith(
       expect.objectContaining({ isIntracranial: false, voltages: [] })
     );
 
-    onIntracranialSnapshotChange.mockClear();
+    onElectrodeSnapshotChange.mockClear();
     await act(async () => {
       capturedClickHandler?.();
     });
 
-    expect(onIntracranialSnapshotChange).toHaveBeenLastCalledWith(
+    expect(onElectrodeSnapshotChange).toHaveBeenLastCalledWith(
       expect.objectContaining({ isIntracranial: false, voltages: [4, 7] })
     );
   });
@@ -1541,9 +1675,7 @@ describe('EegViewer — customElectrodes prop', () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    await act(async () => {
-      capturedClickHandler?.();
-    });
+    await enableTopoAndClick();
 
     // Only EEG3 matches the custom template, vs EEG1+EEG2 in the standard one.
     expect(screen.getByText(/1\s*\/\s*3\s*channels mapped/i)).toBeTruthy();
@@ -1563,9 +1695,7 @@ describe('EegViewer — customElectrodes prop', () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    await act(async () => {
-      capturedClickHandler?.();
-    });
+    await enableTopoAndClick();
 
     expect(screen.getByTestId('topo-custom-filename')).toHaveTextContent('my_positions');
   });
@@ -1637,7 +1767,7 @@ describe('EegViewer — persistent electrode position dropzone', () => {
     // usable topography, so the count is shown but the LED reads red, not blue.
     const led = screen.getByTitle('Using standard_1005 template (2/3 channels matched)');
     expect(led).toBeInTheDocument();
-    expect(led.querySelector('span')).toHaveClass('bg-red-500/70');
+    expect(led.querySelector('span')).toHaveClass('bg-red-600/50');
     expect(screen.getByText('Inverse Solution')).toBeInTheDocument();
     expect(screen.getByTitle('No inverse solution loaded')).toBeInTheDocument();
   });
@@ -1654,7 +1784,7 @@ describe('EegViewer — persistent electrode position dropzone', () => {
 
     const led = screen.getByTitle('Using standard_1005 template (0/2 channels matched)');
     expect(led).toBeInTheDocument();
-    expect(led.querySelector('span')).toHaveClass('bg-red-500/70');
+    expect(led.querySelector('span')).toHaveClass('bg-red-600/50');
   });
 
   // Real high-density recordings (e.g. the demo dataset) can share only a handful of
@@ -1672,7 +1802,7 @@ describe('EegViewer — persistent electrode position dropzone', () => {
 
     const led = screen.getByTitle('Using standard_1005 template (1/3 channels matched)');
     expect(led).toBeInTheDocument();
-    expect(led.querySelector('span')).toHaveClass('bg-red-500/70');
+    expect(led.querySelector('span')).toHaveClass('bg-red-600/50');
   });
 
   it('shows the electrode position LED as auto-matched (blue) when the standard template match meets the minimum threshold', async () => {
@@ -1905,5 +2035,106 @@ describe('EegViewer — persistent electrode position dropzone', () => {
     expect(onElecPosFile).not.toHaveBeenCalled();
     expect(onInverseSolutionFile).not.toHaveBeenCalled();
     expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('sub-01_T1w.nii'));
+  });
+});
+
+// hoveredLedHighlight only ever tracks one of 'electrodePosition' | 'inverseSolution' | null —
+// these tests drive it through the toggle wrapper divs' onMouseEnter/onMouseLeave (rather than
+// asserting the state variable directly, which isn't exposed) and observe it through the LED's
+// dot class, the same way a user would perceive it.
+describe('EegViewer — hovering a disabled toggle highlights the LED that explains why', () => {
+  it('highlights the Electrode Position LED red while hovering the disabled topo toggle, and reverts on unhover', async () => {
+    const provider = makeIntracranialProvider();
+    render(
+      <EegViewer provider={provider} channelNames={provider.channelNames} recordingType="ieeg" />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const topoButton = screen.getByRole('button', { name: /topograph map/i });
+    expect(topoButton).toBeDisabled();
+    const led = screen.getByTitle('No electrode position loaded').querySelector('span');
+    expect(led).toHaveClass('bg-red-600/50');
+
+    // The handler lives on the toggle's wrapper div, not the (disabled) button itself.
+    await userEvent.hover(topoButton.parentElement);
+    expect(led).toHaveClass('bg-red-600');
+    expect(led).not.toHaveClass('bg-red-600/50');
+
+    await userEvent.unhover(topoButton.parentElement);
+    expect(led).toHaveClass('bg-red-600/50');
+  });
+
+  it('highlights the Electrode Position LED red while hovering the disabled 3D-render toggle', async () => {
+    const provider = makeIntracranialProvider();
+    render(
+      <EegViewer provider={provider} channelNames={provider.channelNames} recordingType="ieeg" />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const renderButton = screen.getByRole('button', { name: /3d electrode rendering/i });
+    expect(renderButton).toBeDisabled();
+    const led = screen.getByTitle('No electrode position loaded').querySelector('span');
+
+    await userEvent.hover(renderButton.parentElement);
+    expect(led).toHaveClass('bg-red-600');
+
+    await userEvent.unhover(renderButton.parentElement);
+    expect(led).toHaveClass('bg-red-600/50');
+  });
+
+  it('highlights the Inverse Solution LED red while hovering the disabled ESI toggle, leaving the Electrode Position LED untouched', async () => {
+    await renderViewer();
+
+    const esiButton = screen.getByRole('button', { name: /electrical source imaging/i });
+    expect(esiButton).toBeDisabled();
+    const inverseLed = screen.getByTitle('No inverse solution loaded').querySelector('span');
+    // Default renderViewer() scenario: standard_1005 matches 2/3 channels — below threshold,
+    // so this LED is already red on its own merits, unrelated to any hover.
+    const electrodeLed = screen
+      .getByTitle('Using standard_1005 template (2/3 channels matched)')
+      .querySelector('span');
+
+    await userEvent.hover(esiButton.parentElement);
+    expect(inverseLed).toHaveClass('bg-red-600');
+    expect(inverseLed).not.toHaveClass('bg-red-600/50');
+    // Only the LED matching the hovered toggle's reason lights up — a highlight isn't
+    // broadcast to every red LED on screen.
+    expect(electrodeLed).toHaveClass('bg-red-600/50');
+    expect(electrodeLed).not.toHaveClass('bg-red-600');
+
+    await userEvent.unhover(esiButton.parentElement);
+    expect(inverseLed).toHaveClass('bg-red-600/50');
+  });
+
+  it('does not highlight the Inverse Solution LED for the iEEG-disabled ESI toggle, since that LED is already greyed out for a different reason', async () => {
+    const provider = makeIntracranialProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        recordingType="ieeg"
+        inverseSolutionFileName="my_inverse_solution"
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const esiButton = screen.getByRole('button', { name: /electrical source imaging/i });
+    expect(esiButton).toBeDisabled();
+    const led = screen
+      .getByTitle('Inverse Solution is not applicable for iEEG recordings')
+      .querySelector('span');
+    expect(led).toHaveClass('bg-foreground/20');
+
+    await userEvent.hover(esiButton.parentElement);
+    expect(led).toHaveClass('bg-foreground/20');
   });
 });

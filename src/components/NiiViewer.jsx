@@ -3,6 +3,7 @@ import { cn } from '../utils/utils';
 import { SLICE_TYPE } from '@niivue/niivue';
 import { move } from '@dnd-kit/helpers';
 import toast from 'react-hot-toast';
+import { BoomBox, Slice } from 'lucide-react';
 
 const NII_LOADING_TOAST_ID = 'nii-viewer-loading'; // fixed id so loading/success toasts update in place rather than stacking
 const MIN_CANVAS_HEIGHT = 350; // px — matches the canvas row's original fixed floor
@@ -25,6 +26,7 @@ import {
   syncVolumesAndApplySettings,
   syncMeshesAndApplySettings,
   ESI_LAYER_URL,
+  ELECTRODE_LAYER_URL,
 } from '../utils/NiiViewer.utils';
 import { ImagingControls } from './ImagingControls';
 import { FileDropZone } from '../components/FileDropZone';
@@ -33,7 +35,7 @@ import { useRowResize } from '@/hooks/useRowResize';
 import { useSharedNiiVueInstance } from '@/hooks/useSharedNiiVueInstance';
 import { useLoadingToast } from '@/hooks/useLoadingToast';
 import { useLayerLoader } from '@/hooks/useLayerLoader';
-import { useIntracranialConnectome } from '@/hooks/useIntracranialConnectome';
+import { useElectrodeConnectome } from '@/hooks/useElectrodeConnectome';
 import { useEsiLayer } from '@/hooks/useEsiLayer';
 
 // Re-exported so existing imports (e.g. NiiViewer.test.jsx) keep working — the implementations
@@ -100,8 +102,8 @@ function applyVolumeSettingChange({
   }
 }
 
-// Connectome layers (intracranial electrodes / ESI connectome mode) aren't in nv.volumes at
-// all — they're a mesh, built/tracked by useIntracranialConnectome/useEsiLayer — so settings
+// Connectome layers (electrodes / ESI connectome mode) aren't in nv.volumes at
+// all — they're a mesh, built/tracked by useElectrodeConnectome/useEsiLayer — so settings
 // are applied to the mesh object directly instead of through nv.setOpacity/setColormap.
 function applyConnectomeSettingChange({
   layer,
@@ -110,11 +112,12 @@ function applyConnectomeSettingChange({
   settings,
   nv,
   esiMeshRef,
-  intracranialMeshRef,
+  electrodeMeshRef,
   thresholdRafRef,
   meshXRayRafRef,
+  nodeScaleRafRef,
 }) {
-  const mesh = layer.url === ESI_LAYER_URL ? esiMeshRef.current : intracranialMeshRef.current;
+  const mesh = layer.url === ESI_LAYER_URL ? esiMeshRef.current : electrodeMeshRef.current;
   if (!mesh) return;
 
   // ImagingControls only renders an Opacity slider for image volumes (`{isImageVolume && (...)}`)
@@ -151,6 +154,17 @@ function applyConnectomeSettingChange({
         nv.updateGLVolume();
       });
     }
+  } else if (key === 'nodeScale' || key === 'edgeScale') {
+    // Throttle to one GL redraw per frame — cancels any pending rAF so only the latest drag value redraws
+    if (nodeScaleRafRef.current) cancelAnimationFrame(nodeScaleRafRef.current);
+    nodeScaleRafRef.current = requestAnimationFrame(() => {
+      // Like nodeMinColor/edgeMin above, node/edge radii are only recomputed when the
+      // color/size buffers are rebuilt — mutating mesh.nodeScale/edgeScale alone has no visual
+      // effect until mesh.updateMesh(gl) recomputes them.
+      mesh[key] = value;
+      mesh.updateMesh(nv.gl);
+      nv.updateGLVolume();
+    });
   }
   // colormap/invert/showColorbar: ImagingControls doesn't render those controls for this
   // kind, so there's nothing to apply here.
@@ -192,21 +206,32 @@ function applyFileMeshSettingChange({
 export const NiiViewer = ({
   nvRef,
   layers = [], // image volumes/meshes loaded from files — e.g. .nii/.mgz/.gii/.ply/.obj drops
-  intracranialLayer = null, // kept separate from `layers` so a voltage-driven refresh never resets other layers' settings
+  electrodeLayer = null, // kept separate from `layers` so a voltage-driven refresh never resets other layers' settings
   esiLayer = null, // same pattern — ESI source power connectome/volume layer
   onViewReady,
   onNiiNvReady,
   onHasContentChange, // reports orderedLayers.length > 0 — lets the parent see layers
   // dropped into this component's own dropzone, which never touch the layers/
-  // intracranialLayer/esiLayer props, so it doesn't wrongly unmount this viewer when those go empty/null together.
+  // electrodeLayer/esiLayer props, so it doesn't wrongly unmount this viewer when those go empty/null together.
   onHas3DExtentChange, // reports whether the scene has a volume/mesh (non-connectome) — gates the cross-panel rotation sync; see the effect below
   isFullscreen = false,
+  onElectrodeLayerDismissed,
+  onLoadError,
 }) => {
   // ─── State ─────────────────────────────────────────────────────────────────
   const [layerSettings, setLayerSettings] = useState(() => getInitialLayerSettings(layers));
   const [orderedLayers, setOrderedLayers] = useState(layers); // mirrors `layers` + any merged connectome layers; user-reorderable
   const [isLoading, setIsLoading] = useState(true);
+  // Whether the load that just finished (or is about to start) ended in an error — isLoading
+  // alone can't distinguish success from failure (it's just "in flight" vs "not"), so this is
+  // what tells useLoadingToast below not to show its misleading "Imaging data loaded!" success
+  // toast right alongside the real error toast(s) for the same failure. Reset to false whenever
+  // a new `layers` prop load starts (see the effect below) or handleNiiFiles starts a new
+  // internal-dropzone load, then flipped true by whichever failure branch actually hits.
+  const [hasLoadError, setHasLoadError] = useState(false);
   const [activeSliceType, setActiveSliceType] = useState(SLICE_TYPE.MULTIPLANAR);
+  const [isRadiologicalConvention, setIsRadiologicalConvention] = useState(false);
+  const [isClipPlaneOn, setIsClipPlaneOn] = useState(false);
   // Connectome/Volume toggle for the ESI layer, split into two values, both read by the ESI
   // effects below: isEsiVolumeMode normally just mirrors the layerSettings entry, but that entry
   // briefly disappears whenever handleDeleteLayer deletes the ESI card — and falling back to a
@@ -224,6 +249,7 @@ export const NiiViewer = ({
   const opacityRafRef = useRef(null); // rAF id — cancelled on each drag so only the latest value redraws
   const thresholdRafRef = useRef(null); // rAF id — cancelled on each drag so only the latest value redraws
   const meshXRayRafRef = useRef(null); // rAF id — cancelled on each drag so only the latest value redraws
+  const nodeScaleRafRef = useRef(null); // rAF id — shared by nodeScale/edgeScale (only one slider can be dragged at a time), cancelled on each drag so only the latest value redraws
   const settingsCommitRafRef = useRef(null); // rAF id — throttles the layerSettings React commit itself to once per frame, so it matches the once-per-frame GL redraw above instead of re-rendering the whole card list on every Radix onValueChange tick
   const fileMeshesRef = useRef(new Map()); // url → NVMesh for surface meshes loaded from files; keyed by url since nv.meshes also holds connectome meshes
 
@@ -248,8 +274,30 @@ export const NiiViewer = ({
     fileMeshesRef,
     onHas3DExtentChange,
   });
-  // Loading/success toast tracking isLoading.
-  useLoadingToast(isLoading, NII_LOADING_TOAST_ID);
+  // Loading/success toast tracking isLoading, suppressed in favor of the error toast(s) below
+  // when the load that just finished failed.
+  useLoadingToast(isLoading, NII_LOADING_TOAST_ID, hasLoadError);
+
+  // A new `layers` prop value means useLayerLoader below is about to start a new load (or clear
+  // down to empty, which isn't a failure either) — reset ahead of that so a stale hasLoadError
+  // from a previous failed load doesn't wrongly suppress this one's success toast. Can't derive
+  // this at render instead: hasLoadError's whole purpose is to persist past this point, through
+  // the async load that follows, until the matching success/failure callback fires.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setHasLoadError(false);
+  }, [layers]);
+
+  // Wraps the parent-facing onLoadError so this component also learns locally that its current
+  // load failed (for the toast-suppression above), without changing what the parent itself
+  // receives.
+  const handleLayerLoadError = useCallback(
+    (failedUrls) => {
+      setHasLoadError(true);
+      onLoadError?.(failedUrls);
+    },
+    [onLoadError]
+  );
 
   // ─── Hooks: layer loading/syncing ────────────────────────────────────────────
   // Loads image volumes/meshes into nv whenever the `layers` prop changes.
@@ -261,17 +309,17 @@ export const NiiViewer = ({
     setLayerSettings,
     setIsLoading,
     onViewReady,
+    onLoadError: handleLayerLoadError,
   });
-  // Merges the intracranial electrode connectome into the card list and builds/rebuilds its mesh.
-  const { intracranialMeshRef, clearIntracranialMesh, dismissIntracranialLayer } =
-    useIntracranialConnectome({
-      intracranialLayer,
-      nvRef,
-      orderedLayers,
-      layerSettings,
-      setOrderedLayers,
-      setLayerSettings,
-    });
+  // Merges the electrode connectome into the card list and builds/rebuilds its mesh.
+  const { electrodeMeshRef, clearElectrodeMesh, dismissElectrodeLayer } = useElectrodeConnectome({
+    electrodeLayer,
+    nvRef,
+    orderedLayers,
+    layerSettings,
+    setOrderedLayers,
+    setLayerSettings,
+  });
   // Merges the ESI source-power layer into the card list and builds/rebuilds its mesh or volume.
   const { esiMeshRef, clearEsiMesh, clearEsiVolume, dismissEsiLayer } = useEsiLayer({
     esiLayer,
@@ -288,6 +336,26 @@ export const NiiViewer = ({
   const handleSliceTypeChange = (sliceType) => {
     setActiveSliceType(sliceType);
     nvRef.current?.setSliceType(sliceType);
+  };
+
+  // Toggles between neurological (left-is-left) and radiological (left-is-right) display convention.
+  const handleRadiologicalConventionToggle = () => {
+    const next = !isRadiologicalConvention;
+    setIsRadiologicalConvention(next);
+    nvRef.current?.setRadiologicalConvention(next);
+  };
+
+  // Toggles nv's clip plane on/off directly via its public setClipPlane API. Depth 2 is
+  // niivue's own "disabled" sentinel (see DEFAULT_DEPTH_AZI_ELEV in its ClipPlaneManager) —
+  // any depth past ~1.8 turns clipping off entirely, whereas depth 0 (its POSTERIOR preset
+  // orientation) shows a clip plane through the volume's center. Only visible in the 3D
+  // render view — clip planes have no effect on 2D slices.
+  const handleClipPlaneToggle = () => {
+    const nv = nvRef.current;
+    if (!nv) return;
+    const next = !isClipPlaneOn;
+    setIsClipPlaneOn(next);
+    nv.setClipPlane(next ? [0, 180, 0] : [2, 0, 0]); // depth 2 is niivue's default "disabled" value
   };
 
   // Applies a single ImagingControls setting change (opacity/colormap/threshold/etc.). Always
@@ -351,9 +419,10 @@ export const NiiViewer = ({
           settings,
           nv,
           esiMeshRef,
-          intracranialMeshRef,
+          electrodeMeshRef,
           thresholdRafRef,
           meshXRayRafRef,
+          nodeScaleRafRef,
         });
       } else if (layer.kind === 'mesh') {
         applyFileMeshSettingChange({
@@ -380,13 +449,14 @@ export const NiiViewer = ({
         });
       }
     },
-    [layerSettings, orderedLayers, nvRef, esiMeshRef, intracranialMeshRef]
+    [layerSettings, orderedLayers, nvRef, esiMeshRef, electrodeMeshRef]
   );
 
   // Loads files dropped into this component's own drop zone, appending them alongside whatever's already loaded.
   const handleNiiFiles = async (files) => {
     if (!nvRef.current) return;
     setIsLoading(true);
+    setHasLoadError(false); // this internal-dropzone path never touches `layers`, so the effect above won't reset it
     const newLayers = filesToLayers(files);
     const allLayers = [...orderedLayers, ...newLayers];
     // startIndex ensures new layers get 0.6 opacity rather than being treated as the first;
@@ -427,13 +497,30 @@ export const NiiViewer = ({
     if (volumeResult.status === 'rejected')
       newLayers.filter(isImageVolumeLayer).forEach((l) => failedUrls.add(l.url));
     if (meshResult.status === 'rejected')
-      newLayers.filter((l) => l.kind === 'mesh').forEach((l) => failedUrls.add(l.url));
+      newLayers.filter((layer) => layer.kind === 'mesh').forEach((l) => failedUrls.add(l.url));
 
     if (failedUrls.size > 0) {
       setOrderedLayers((prev) => prev.filter((l) => !failedUrls.has(l.url)));
       setLayerSettings((prev) => prev.filter((s) => !failedUrls.has(s.url)));
-      const reason = volumeResult.reason ?? meshResult.reason;
-      toast.error(`Failed to load image: ${reason.message}`);
+      setHasLoadError(true); // suppresses useLoadingToast's success toast once setIsLoading(false) below fires
+      // One toast per failed layer, named by file rather than by its opaque blob: url — mirrors
+      // useLayerLoader's failure handling (see its comment) for the same reason: each NiiVue
+      // loader is all-or-nothing, so every layer in a failed category is reported, and a volume
+      // failure and a mesh failure can have different reasons so they can't share one message.
+      if (volumeResult.status === 'rejected') {
+        newLayers
+          .filter(isImageVolumeLayer)
+          .forEach((layer) =>
+            toast.error(`Failed to load image ${layer.name}:\n${volumeResult.reason.message}`)
+          );
+      }
+      if (meshResult.status === 'rejected') {
+        newLayers
+          .filter((l) => l.kind === 'mesh')
+          .forEach((layer) =>
+            toast.error(`Failed to load image ${layer.name}:\n${meshResult.reason.message}`)
+          );
+      }
     }
     requestAnimationFrame(() => setIsLoading(false)); // wait one frame before clearing spinner
   };
@@ -487,20 +574,22 @@ export const NiiViewer = ({
       const layer = orderedLayers[index];
 
       if (layer?.kind === 'connectome') {
-        // Dispatch to the right mesh ref/clear-fn pair by URL — each connectome layer tracks
-        // its own mesh, owned by its own hook (mutating `.current` directly isn't allowed
-        // from outside that hook, hence the clear* functions).
-        const isEsi = layer.url === ESI_LAYER_URL;
-        const meshRef = isEsi ? esiMeshRef : intracranialMeshRef;
-        const clearMesh = isEsi ? clearEsiMesh : clearIntracranialMesh;
-        if (meshRef.current) {
-          nv.removeMesh(meshRef.current);
-          clearMesh();
+        // Dispatch by URL — each connectome layer tracks its own mesh, owned by its own hook
+        // (mutating `.current` directly isn't allowed from outside that hook, hence clear*Mesh).
+        if (layer.url === ESI_LAYER_URL) {
+          if (esiMeshRef.current) {
+            nv.removeMesh(esiMeshRef.current);
+            clearEsiMesh();
+          }
+          dismissEsiLayer();
+        } else if (layer.url === ELECTRODE_LAYER_URL) {
+          if (electrodeMeshRef.current) {
+            nv.removeMesh(electrodeMeshRef.current);
+            clearElectrodeMesh();
+          }
+          dismissElectrodeLayer();
+          onElectrodeLayerDismissed?.(); // tells PatientView to flip the electrode toggle off
         }
-        // Both layers are owned upstream and untouched by this deletion — dismiss so each
-        // hook's merge effect doesn't mistake the deleted entry for a fresh first appearance.
-        if (isEsi) dismissEsiLayer();
-        else dismissIntracranialLayer();
       } else if (layer?.kind === 'mesh') {
         // File meshes live in nv.meshes, tracked by fileMeshesRef — drop it from both.
         const mesh = fileMeshesRef.current.get(layer.url);
@@ -527,16 +616,25 @@ export const NiiViewer = ({
       layerSettings,
       nvRef,
       esiMeshRef,
-      intracranialMeshRef,
+      electrodeMeshRef,
       clearEsiMesh,
       clearEsiVolume,
-      clearIntracranialMesh,
+      clearElectrodeMesh,
       dismissEsiLayer,
-      dismissIntracranialLayer,
+      dismissElectrodeLayer,
     ]
   );
 
   // ─── Effects: UI ────────────────────────────────────────────────────────────
+
+  // Syncs the convention toggle to nv's actual current setting once on mount — nv is long-lived
+  // and shared across remounts (see useSharedNiiVueInstance), so a hardcoded default here could
+  // silently disagree with what's actually being displayed (e.g. after a fullscreen remount).
+  useEffect(() => {
+    if (!nvRef.current) return;
+    setIsRadiologicalConvention(nvRef.current.getRadiologicalConvention());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Force 3D view when there are no image volumes — connectome-only scenes have no slices.
   // Only acts on the "no volumes" side: firing on re-appearance races with an in-flight
@@ -558,7 +656,7 @@ export const NiiViewer = ({
   }, [orderedLayers, onHasContentChange]);
 
   // Reports whether the 3D scene has a usable spatial extent — i.e. at least one image
-  // volume or surface mesh. A connectome-only scene (intracranial electrodes and/or the ESI
+  // volume or surface mesh. A connectome-only scene (electrodes and/or the ESI
   // layer in connectome mode) leaves NiiVue's scene extent at zero, which makes its per-frame
   // sync() crash (createOnLocationChange → toFixed(Infinity)) if another instance is broadcast-
   // linked to it. PatientView uses this to keep the cross-panel rotation link off whenever this
@@ -636,7 +734,7 @@ export const NiiViewer = ({
           )}
           <canvas ref={canvasRef} className="absolute inset-0" />
         </div>
-        <div className="">
+        <div className="flex flex-col gap-2">
           <div
             className={cn(
               'flex flex-col w-8 gap-0.5 pt-2 items-center',
@@ -667,6 +765,43 @@ export const NiiViewer = ({
                 </button>
               );
             })}
+          </div>
+
+          {/* Radio/Clip buttons */}
+          <div
+            className={cn(
+              'flex flex-col w-8 gap-0.5 py-2 items-center',
+              'rounded-r-md border-r-1 border-t-1 border-b-1 border-border'
+            )}
+          >
+            {/* Radiological/neurological display convention toggle. button-icon-xs (rather than
+              size-xs) keeps a single icon glyph circular — size-xs's padding is asymmetric,
+              tuned for the 2-character text labels in the slice-type group above. */}
+            <button
+              type="button"
+              className="button button-icon-xs"
+              onClick={handleRadiologicalConventionToggle}
+              title={
+                isRadiologicalConvention
+                  ? 'Radiological convention — click for neurological'
+                  : 'Neurological convention — click for radiological'
+              }
+              aria-label="Toggle radiological/neurological convention"
+              aria-pressed={isRadiologicalConvention}
+            >
+              <BoomBox size={16} />
+            </button>
+            {/* Clip plane on/off toggle — only visible in the 3D render view (see handleClipPlaneToggle). */}
+            <button
+              type="button"
+              className="button button-icon-xs"
+              onClick={handleClipPlaneToggle}
+              title={isClipPlaneOn ? 'Disable clip plane' : 'Enable clip plane (3D view only)'}
+              aria-label="Toggle clip plane"
+              aria-pressed={isClipPlaneOn}
+            >
+              <Slice size={16} />
+            </button>
           </div>
         </div>
       </div>

@@ -241,7 +241,6 @@ import {
   buildElectrodeMesh,
   gaussianRBF,
   interpolateMeshVoltages,
-  buildEegMesh,
 } from '@/utils/eegTopographyUtils';
 
 // 8 corners of a cube — guaranteed non-coplanar, convex hull gives 12 triangles
@@ -332,11 +331,21 @@ describe('interpolateMeshVoltages', () => {
     expect(out.length).toBe(CUBE_ELECTRODES.length);
   });
 
-  it('vertex at a matched electrode position gets approximately that voltage', () => {
+  it('vertex at a matched electrode position gets exactly that voltage', () => {
     const matched = [{ pos: CUBE_ELECTRODES[0] }];
     const out = interpolateMeshVoltages(CUBE_ELECTRODES, matched, [10]);
-    // Vertex 0 is exactly at CUBE_ELECTRODES[0] → distance 0 → weight dominates
-    expect(out[0]).toBeCloseTo(10);
+    expect(out[0]).toBe(10);
+  });
+
+  it('vertex at a matched electrode gets its own voltage, not blended with a nearby differing neighbour', () => {
+    // A and B are opposite corners of a 2-unit cube edge — 2mm apart, far closer than the
+    // default 30mm sigma. Under the old RBF-only implementation this closeness would pull
+    // A's vertex value most of the way toward B's voltage; the fix looks up matched vertices
+    // by label directly, so A must come back untouched by B.
+    const matched = [{ pos: CUBE_ELECTRODES[0] }, { pos: CUBE_ELECTRODES[1] }]; // A, B
+    const out = interpolateMeshVoltages(CUBE_ELECTRODES, matched, [100, 0]);
+    expect(out[0]).toBe(100);
+    expect(out[1]).toBe(0);
   });
 
   it('returns all zeros when no channels are matched', () => {
@@ -344,10 +353,6 @@ describe('interpolateMeshVoltages', () => {
     expect(Array.from(out).every((v) => v === 0)).toBe(true);
   });
 });
-
-// ---------------------------------------------------------------------------
-// buildEegMesh
-// ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
 // buildElectrodeMarkers
@@ -396,45 +401,16 @@ describe('buildElectrodeMarkers', () => {
   });
 });
 
-describe('buildEegMesh', () => {
-  const matched = CUBE_ELECTRODES.slice(0, 3).map((el) => ({ pos: el }));
-  const voltages = [10, -5, 3];
-
-  it('returns vertices, indices, and scalars', () => {
-    const result = buildEegMesh(CUBE_ELECTRODES, matched, voltages);
-    expect(result).toHaveProperty('vertices');
-    expect(result).toHaveProperty('indices');
-    expect(result).toHaveProperty('scalars');
-  });
-
-  it('vertices is a Float32Array with 3 values per electrode', () => {
-    const { vertices } = buildEegMesh(CUBE_ELECTRODES, matched, voltages);
-    expect(vertices).toBeInstanceOf(Float32Array);
-    expect(vertices.length).toBe(CUBE_ELECTRODES.length * 3);
-  });
-
-  it('scalars has one value per electrode', () => {
-    const { scalars } = buildEegMesh(CUBE_ELECTRODES, matched, voltages);
-    expect(scalars).toBeInstanceOf(Float32Array);
-    expect(scalars.length).toBe(CUBE_ELECTRODES.length);
-  });
-
-  it('indices length is a multiple of 3', () => {
-    const { indices } = buildEegMesh(CUBE_ELECTRODES, matched, voltages);
-    expect(indices.length % 3).toBe(0);
-  });
-});
-
 // ---------------------------------------------------------------------------
-// buildIntracranialMatrix / buildIntracranialConnectome / buildIntracranialLayer
+// buildIntracranialMatrix / buildIntracranialConnectome / buildElectrodeLayer
 // ---------------------------------------------------------------------------
 
 import {
   buildIntracranialMatrix,
   buildIntracranialConnectome,
-  buildIntracranialLayer,
+  buildElectrodeLayer,
 } from '@/utils/eegTopographyUtils';
-import { INTRACRANIAL_CONNECTOME_URL } from '@/utils/NiiViewer.utils';
+import { ELECTRODE_LAYER_URL } from '@/utils/NiiViewer.utils';
 
 describe('buildIntracranialMatrix', () => {
   it('groups channels by electrode group, sorted by contact number ascending', () => {
@@ -494,8 +470,8 @@ describe('buildIntracranialConnectome', () => {
     const matched = matchedFor(['B1', 'B2', 'B3']);
     const { edges } = buildIntracranialConnectome(matched, [0, 0, 0]);
     expect(edges).toEqual([
-      { first: 0, second: 1, colorValue: 0 },
-      { first: 1, second: 2, colorValue: 0 },
+      { first: 0, second: 1, colorValue: 1 },
+      { first: 1, second: 2, colorValue: 1 },
     ]);
   });
 
@@ -521,39 +497,45 @@ describe('buildIntracranialConnectome', () => {
     expect(edges).toHaveLength(0);
   });
 
-  it('sets edge colorValue to the average of its two endpoint voltages', () => {
+  it('sets edge colorValue to a fixed value regardless of endpoint voltages', () => {
     const matched = matchedFor(['B1', 'B2']);
     const { edges } = buildIntracranialConnectome(matched, [10, -4]);
-    expect(edges[0].colorValue).toBeCloseTo(3); // (10 + -4) / 2
+    expect(edges[0].colorValue).toBe(1);
   });
 });
 
-describe('buildIntracranialLayer', () => {
+describe('buildElectrodeLayer', () => {
   const matched = [
     { channelIdx: 0, name: 'B1', pos: { label: 'B1', x: 0, y: 0, z: 0 } },
     { channelIdx: 1, name: 'B2', pos: { label: 'B2', x: 1, y: 1, z: 1 } },
   ];
 
-  it('returns null when not intracranial', () => {
-    expect(buildIntracranialLayer({ isIntracranial: false, matched, voltages: [1, 2] })).toBeNull();
-  });
-
   it('returns null when there are no matched (positioned) channels yet', () => {
-    expect(buildIntracranialLayer({ isIntracranial: true, matched: [], voltages: [] })).toBeNull();
+    expect(buildElectrodeLayer({ isIntracranial: true, matched: [], voltages: [] })).toBeNull();
   });
 
-  it('returns a well-formed connectome volume entry otherwise', () => {
-    const volume = buildIntracranialLayer({ isIntracranial: true, matched, voltages: [10, -4] });
+  it('returns a well-formed intracranial connectome (nodes+edges) volume entry when intracranial = true', () => {
+    const volume = buildElectrodeLayer({ isIntracranial: true, matched, voltages: [10, -4] });
     expect(volume).toMatchObject({
-      url: INTRACRANIAL_CONNECTOME_URL,
+      url: ELECTRODE_LAYER_URL,
       kind: 'connectome',
     });
     expect(volume.nodes).toHaveLength(2);
     expect(volume.edges).toHaveLength(1);
   });
 
+  it('returns a well-formed surfaceEEG connectome (only nodes) volume entry when intracranial = false', () => {
+    const volume = buildElectrodeLayer({ isIntracranial: false, matched, voltages: [10, -4] });
+    expect(volume).toMatchObject({
+      url: ELECTRODE_LAYER_URL,
+      kind: 'connectome',
+    });
+    expect(volume.nodes).toHaveLength(2);
+    expect(volume.edges).toHaveLength(0);
+  });
+
   it('sets calMax to the maximum absolute voltage', () => {
-    const volume = buildIntracranialLayer({ isIntracranial: true, matched, voltages: [10, -25] });
+    const volume = buildElectrodeLayer({ isIntracranial: true, matched, voltages: [10, -25] });
     expect(volume.calMax).toBe(25);
   });
 });

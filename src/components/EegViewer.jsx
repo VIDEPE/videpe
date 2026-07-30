@@ -16,6 +16,9 @@ import {
   ListChevronsUpDown,
   ListChevronsDownUp,
   Keyboard,
+  Map,
+  Box,
+  LocateFixed,
 } from 'lucide-react';
 import { minMaxDownsample } from '@/utils/downsample';
 import { useEegBuffer } from '@/loaders/eegBuffer';
@@ -35,6 +38,7 @@ const EEG_LOADING_TOAST_ID = 'eeg-buffer-loading'; // fixed id so the loading/su
 const Y_AXIS_WIDTH = 60; // px for the y-axis area (channel name + tick space) — must match x-axis strip left padding
 const PLOT_RIGHT_PAD = 20; // px right padding — must match in both channel plots and x-axis strip so ticks align
 const OVERDRAW = 2; // canvas height multiplier — peaks bleed ±50% into adjacent lanes instead of clipping
+const X_AXIS_GRID_SPACE = 60; // Min px between vertical gridlines — shared by the channel plots and the x-axis =>uPlot uses it to pick an increment (1,2,5,10,etc)
 const MIN_CHANNEL_AREA_HEIGHT = 120; // px floor for the channel-plot scroll area. Below this the whole viewer overflows and the pane's scroll container takes over (mirrors NiiViewer's MIN_CANVAS_HEIGHT) instead of letting the x-axis/scrubber/controls/dropzone overlap
 const MIN_PLOT_ROW_HEIGHT = 350; // px floor for the uPlot area
 const ICON_SIZE = 22; // default size for lucide icons in the controls, used to compute input widths
@@ -57,7 +61,8 @@ const buildChannelOptions = ({
   startTime,
   yScale,
 }) => {
-  const stroke = isDarkMode ? 'rgb(255, 255, 255)' : 'rgba(0, 0, 0, 0.8)';
+  const stroke = isDarkMode ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.8)';
+  const gridColor = isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)';
 
   return {
     width,
@@ -72,7 +77,15 @@ const buildChannelOptions = ({
       y: { range: [-yScale * OVERDRAW, yScale * OVERDRAW] },
     },
     axes: [
-      { show: false },
+      {
+        show: true, // must be true for uPlot to draw the grid at all; everything but the grid itself is hidden below
+        size: 0, // no reserved vertical space below plot for the tick marks/labels — labels live in the fixed x-axis strip instead
+        ticks: { show: false }, // no little perpendicular tick mark poking out the axis baseline
+        border: { show: false }, // no solid baseline along axis
+        values: () => [], // no tick labels (an empty array skips uPlot's label-draw loop entirely)
+        space: X_AXIS_GRID_SPACE, // keeps the same min tick spacing as the x-axis strip so gridlines line up with its labels
+        grid: { show: true, stroke: gridColor, width: 1 },
+      },
       { show: false }, // y-axis hidden; left padding below takes its place
     ],
     series: [{}, { stroke, width: 1 }],
@@ -92,13 +105,17 @@ export const EegViewer = ({
   inverseSolutionFileName = null, // filename (no extension) of the loaded inverse-solution file — owned by PatientView, passed down
   onElecPosFile,
   onInverseSolutionFile,
-  onIntracranialSnapshotChange,
+  onElectrodeSnapshotChange,
   onChannelSnapshotChange,
   recordingType = 'eeg', // 'eeg' | 'ieeg' — controlled by PatientView, which shows/drives the toggle in the panel title
   onRecordingTypeChange,
   montage = 'none', // 'none' | 'average' | 'median' — controlled by PatientView, which forces 'average' when ESI needs it
   onMontageChange,
-  onTopoHasContentChange, // reports whether the topography NiiVue canvas currently has a mesh to draw — see NiiViewer's onHasContentChange for why PatientView needs this instead of inferring it
+  onTopoHasContentChange, // whether the topography NiiVue canvas currently has a mesh, so PatientView can enable/disable the cross-panel rotation link accordingly
+  electrodeRenderEnabled, // boolean — owned by PatientView => whether electrode 3D render is enabled
+  onElectrodeRenderChange, // handle for electrodeRender changes
+  esiEnabled, // boolean — owned by PatientView => whether the Electrical Source Imaging layer is shown
+  onEsiEnabledChange, // handle for esiEnabled changes
 }) => {
   const { isDarkMode } = useTheme();
   const syncKey = 'eeg-sync'; // shared across all channels to link their interactions
@@ -149,9 +166,26 @@ export const EegViewer = ({
   // keeps the previous buffer's data on screen until the new one arrives (no flash).
   const { timestamps, channels, isLoading } = useEegBuffer(provider, startTime, windowSize);
 
-  // ── Topography state ─────────────────────────────────────────────────────────
-  const [topoVisible, setTopoVisible] = useState(false);
+  // ── Topography state ─────────────────────────────────────────────────────────────────────
+  const [topoEnabled, setTopoEnabled] = useState(false);
   const [topoTimepoint, setTopoTimepoint] = useState(null);
+
+  // hoveredLedHighlight indicates which StatusLED should light up when the disabled toggle
+  // toggle (Topo/3D render/ESI) is hovered over => gives additional cue to user why it's disabled.
+  // Set on the toggle's wrapper div rather than the <button> itself (disabled buttons don't reliably fire mouse events)
+  const [hoveredLedHighlight, setHoveredLedHighlight] = useState(null); // 'electrodePosition' | 'inverseSolution' | null
+  // Topograph window only opens when the toggle is on (topoEnabled) AND once a EEGplot
+  // click has produced a timepoint to show (topoTimepoint)
+  const topoVisible = topoEnabled && topoTimepoint !== null;
+
+  // Px position (from the plot area's left edge) of the vertical marker for topoTimepoint — the
+  // timestamp the electrode voltage snapshot was taken at, shared by the topography, ESI, and
+  // 3D-render views. Null hides the marker: no snapshot yet, or it's scrolled outside the window.
+  const snapshotMarkerLeft =
+    topoTimepoint !== null && topoTimepoint >= startTime && topoTimepoint <= startTime + windowSize
+      ? Y_AXIS_WIDTH +
+        ((topoTimepoint - startTime) / windowSize) * (plotWidth - Y_AXIS_WIDTH - PLOT_RIGHT_PAD)
+      : null;
 
   // Electrode-position matching + recording-type (EEG/iEEG) auto-detection — PatientView
   // owns recordingType and shows/drives the EEG/iEEG toggle in the panel title, since this
@@ -183,7 +217,7 @@ export const EegViewer = ({
     matched,
     channelNames,
     isIntracranial,
-    onIntracranialSnapshotChange,
+    onElectrodeSnapshotChange,
     onChannelSnapshotChange,
   });
 
@@ -192,7 +226,7 @@ export const EegViewer = ({
   // || !voltages?.length skips the load) so PatientView can tell when the 3D scene it's
   // synced to is genuinely empty and disable the cross-panel rotation link accordingly.
   const topoHasContent =
-    topoVisible && !isIntracranial && electrodes?.length > 0 && topoVoltages?.length > 0;
+    topoEnabled && !isIntracranial && electrodes?.length > 0 && topoVoltages?.length > 0;
   useEffect(() => {
     onTopoHasContentChange?.(topoHasContent);
   }, [topoHasContent, onTopoHasContentChange]);
@@ -376,6 +410,88 @@ export const EegViewer = ({
         >
           {/* Left sidebar: Channels controls centered in the available height, Montage pinned to the bottom-left corner */}
           <div className="shrink-0 flex flex-col px-1">
+            <div className="flex flex-col gap-1 absolute pl-7 pt-7">
+              {/* EEG Topography Toggle*/}
+              <div
+                className=""
+                onMouseEnter={() =>
+                  !electrodes?.length && setHoveredLedHighlight('electrodePosition')
+                }
+                onMouseLeave={() => setHoveredLedHighlight(null)}
+              >
+                <button
+                  type="button"
+                  className="button button-icon"
+                  title={
+                    electrodes?.length > 0
+                      ? `${topoEnabled ? 'Close Topograph Map' : 'EEG Topograph Map. If enabled: click EEG plot to generate an EEG Topography map at selected timestamp (requires known electrode positions)'}`
+                      : 'EEG Topograph Map. Requires known electrode positions'
+                  }
+                  aria-label={`${topoEnabled ? 'Disable' : 'Enable'} Topograph Map`}
+                  aria-pressed={topoEnabled}
+                  disabled={!electrodes?.length}
+                  onClick={() => setTopoEnabled(!topoEnabled)}
+                >
+                  <Map size={ICON_SIZE} />
+                </button>
+              </div>
+              {/* 3D Electrode Render Toggle*/}
+              <div
+                className=""
+                onMouseEnter={() =>
+                  (!electrodes?.length || isStandardElectrodes) &&
+                  setHoveredLedHighlight('electrodePosition')
+                }
+                onMouseLeave={() => setHoveredLedHighlight(null)}
+              >
+                <button
+                  type="button"
+                  className="button button-icon"
+                  title={
+                    electrodes?.length > 0 && !isStandardElectrodes
+                      ? `${electrodeRenderEnabled ? 'Close 3D Electrode Rendering' : 'Open 3D Electrode Rendering'}`
+                      : isIntracranial
+                        ? '3D Electrode Rendering. Requires known electrode positions'
+                        : "3D Electrode Rendering. Requires a patient-specific electrode position file — the standard 10-05 template is only an indicative layout, not this patient's actual head geometry"
+                  }
+                  aria-label={`${electrodeRenderEnabled ? 'Hide' : 'Show'} 3D Electrode Rendering`}
+                  aria-pressed={electrodeRenderEnabled}
+                  disabled={!electrodes?.length || isStandardElectrodes}
+                  onClick={() => onElectrodeRenderChange(!electrodeRenderEnabled)}
+                >
+                  <Box size={ICON_SIZE} />
+                </button>
+              </div>
+              {/* Electrical Source Imaging (ESI) Toggle*/}
+              <div
+                className=""
+                onMouseEnter={() =>
+                  (!inverseSolutionFileName || isIntracranial) &&
+                  setHoveredLedHighlight('inverseSolution')
+                }
+                onMouseLeave={() => setHoveredLedHighlight(null)}
+              >
+                <button
+                  type="button"
+                  className="button button-icon"
+                  title={
+                    inverseSolutionFileName && !isIntracranial
+                      ? `${esiEnabled ? 'Disable Electrical Source Imaging' : 'Electrical Source Imaging. If enabled: click EEG plot to compute source power at selected timestamp'}`
+                      : isIntracranial
+                        ? 'Electrical Source Imaging. Not available for iEEG'
+                        : 'Electrical Source Imaging. Requires a loaded inverse solution'
+                  }
+                  aria-label={`${esiEnabled ? 'Disable' : 'Enable'} Electrical Source Imaging`}
+                  aria-pressed={esiEnabled}
+                  disabled={!inverseSolutionFileName || isIntracranial}
+                  onClick={() => onEsiEnabledChange(!esiEnabled)}
+                >
+                  <LocateFixed size={ICON_SIZE} />
+                </button>
+              </div>
+            </div>
+
+            {/* Channel Controls*/}
             <div className="flex-1 flex flex-row items-center">
               <div className="flex flex-row items-center gap-1 py-1 border-border/50 border-1 border-r-0 rounded-tl-md rounded-bl-md">
                 <span className="text-xs text-foreground/60 whitespace-nowrap [writing-mode:vertical-rl] rotate-180 select-none pointer-events-none">
@@ -413,6 +529,7 @@ export const EegViewer = ({
                 </div>
               </div>
             </div>
+            {/* EEG Montage: Settings for chaning the EEG referencing */}
             <div
               className="flex flex-col items-center gap-1 pb-1"
               title="Apply EEG reference montage"
@@ -445,84 +562,101 @@ export const EegViewer = ({
                 lane so contentRect.width is stable and no horizontal scrollbar ever appears */}
               <div
                 ref={containerRef}
-                className="absolute inset-0 overflow-y-auto themed-scrollbar"
+                className="absolute top-2 left-0 bottom-0 right-0 overflow-y-auto themed-scrollbar"
                 title={
-                  matched.length > 0 && !topoVisible
+                  matched.length > 0 && topoEnabled && !topoVisible
                     ? 'Click any channel to view the EEG topography for that time point'
                     : undefined
                 }
                 style={{ scrollbarGutter: 'stable' }}
               >
                 {/* Wait for first measurements before rendering — avoids zero-size flash */}
-                {plotWidth > 0 &&
-                  plotHeight > 0 &&
-                  channelNames.map((name, i) => (
-                    <div
-                      key={name}
-                      style={{
-                        height: plotHeight,
-                        overflow: 'visible',
-                        borderBottom: `1px solid ${isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}`,
-                      }}
-                      className="relative"
-                    >
-                      <span
-                        className="absolute left-0 top-1/2 -translate-y-1/2 text-xs text-center pointer-events-none select-none z-10 px-0.5 truncate"
-                        style={{ width: Y_AXIS_WIDTH }}
-                      >
-                        {name}
-                      </span>
-                      {/* Zero-line at y=0, aligned with the plot area (not drawn by uPlot to avoid grid issues) */}
+                {plotWidth > 0 && plotHeight > 0 && (
+                  <div className="relative">
+                    {/* Snapshot marker — one continuous vertical line spanning every channel, at the
+                        timepoint for the current topography/ESI/3D-render voltages. Rendered once
+                        here (rather than per-row) so there's no seam at each row's border, and placed
+                        before the rows so it paints behind their canvases like the zero-line does. */}
+                    {snapshotMarkerLeft !== null && (
                       <div
-                        className="absolute pointer-events-none"
+                        data-testid="snapshot-marker"
+                        className="absolute pointer-events-none top-0 bottom-0 w-0.25"
                         style={{
-                          top: '50%',
-                          left: Y_AXIS_WIDTH,
-                          right: PLOT_RIGHT_PAD,
-                          height: 1,
-                          backgroundColor: isDarkMode
-                            ? 'rgba(255,255,255,0.25)'
-                            : 'rgba(0,0,0,0.25)',
+                          left: snapshotMarkerLeft,
+                          backgroundColor: 'var(--c-secondary)',
                         }}
                       />
-                      {/* Canvas wrapper — absolutely positioned to center the taller canvas in the lane */}
+                    )}
+                    {channelNames.map((name, i) => (
+                      // Channel divider below each channel
                       <div
+                        key={name}
                         style={{
-                          position: 'absolute',
-                          top: -((plotHeight * (OVERDRAW - 1)) / 2),
-                          left: 0,
+                          height: plotHeight,
+                          overflow: 'visible',
+                          borderBottom: `1px solid ${isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}`,
                         }}
+                        className="relative"
                       >
-                        <UplotReact
-                          options={buildChannelOptions({
-                            channelIndex: i,
-                            totalChannels: channelNames.length,
-                            isDarkMode,
-                            syncKey,
-                            width: plotWidth,
-                            height: plotHeight * OVERDRAW,
-                            windowSize,
-                            startTime,
-                            yScale,
-                          })}
-                          data={displayedData[i]}
-                          onCreate={(u) => {
-                            {
-                              /* click listener that converts the click's x-position into a timestamp, sets topoTimepoint, and sets topoVisible = true */
-                            }
-                            u.over.addEventListener('click', () => {
-                              const t = u.posToVal(u.cursor.left, 'x');
-                              if (!isNaN(t)) {
-                                setTopoTimepoint(t);
-                                setTopoVisible(true);
-                              }
-                            });
+                        {/* Channel name label */}
+                        <span
+                          className="absolute left-0 top-1/2 -translate-y-1/2 text-xs text-center pointer-events-none select-none z-10 px-0.5 truncate"
+                          style={{ width: Y_AXIS_WIDTH }}
+                        >
+                          {name}
+                        </span>
+                        {/* Zero-line at y=0, aligned with the plot area (not drawn by uPlot to avoid grid issues) */}
+                        <div
+                          className="absolute pointer-events-none"
+                          style={{
+                            top: '50%',
+                            left: Y_AXIS_WIDTH,
+                            right: PLOT_RIGHT_PAD,
+                            height: 1,
+                            backgroundColor: isDarkMode
+                              ? 'rgba(255,255,255,0.25)'
+                              : 'rgba(0,0,0,0.25)',
                           }}
-                          onDelete={() => {}}
                         />
+                        {/* Canvas wrapper — absolutely positioned to center the taller canvas in the lane */}
+                        <div
+                          style={{
+                            position: 'absolute',
+                            top: -((plotHeight * (OVERDRAW - 1)) / 2),
+                            left: 0,
+                          }}
+                        >
+                          <UplotReact
+                            options={buildChannelOptions({
+                              channelIndex: i,
+                              totalChannels: channelNames.length,
+                              isDarkMode,
+                              syncKey,
+                              width: plotWidth,
+                              height: plotHeight * OVERDRAW,
+                              windowSize,
+                              startTime,
+                              yScale,
+                            })}
+                            data={displayedData[i]}
+                            onCreate={(u) => {
+                              {
+                                /* click listener that converts the click's x-position into a timestamp => sets topoTimepoint */
+                              }
+                              u.over.addEventListener('click', () => {
+                                const t = u.posToVal(u.cursor.left, 'x');
+                                if (!isNaN(t)) {
+                                  setTopoTimepoint(t);
+                                }
+                              });
+                            }}
+                            onDelete={() => {}}
+                          />
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -535,7 +669,16 @@ export const EegViewer = ({
                     height: X_AXIS_HEIGHT,
                     cursor: { sync: { key: syncKey } },
                     scales: { x: { time: false, range: [startTime, startTime + windowSize] } },
-                    axes: [{ stroke: axisColor, size: 40, grid: { show: false } }, { show: false }],
+                    axes: [
+                      // space matches the channel plots' hidden grid axis so tick labels line up with the gridlines above
+                      {
+                        stroke: axisColor,
+                        size: 40,
+                        space: X_AXIS_GRID_SPACE,
+                        grid: { show: false },
+                      },
+                      { show: false },
+                    ],
                     series: [{}],
                     legend: { show: false },
                     padding: [0, PLOT_RIGHT_PAD, 0, Y_AXIS_WIDTH],
@@ -785,11 +928,13 @@ export const EegViewer = ({
               matchCount={electrodePositionMatchCount}
               totalCount={electrodePositionTotalCount}
               isGoodMatch={isElectrodePositionMatchGoodForLed}
+              highlighted={hoveredLedHighlight === 'electrodePosition'}
             />
             <StatusLed
               label="Inverse Solution"
               fileName={inverseSolutionFileName}
               disabled={isIntracranial}
+              highlighted={hoveredLedHighlight === 'inverseSolution'}
             />
           </div>
         </FileDropZone>
@@ -815,7 +960,7 @@ export const EegViewer = ({
           channelNames={channelNames}
           voltagesByChannel={topoVoltagesByChannel}
           totalChannels={channelNames.length}
-          onClose={() => setTopoVisible(false)}
+          onClose={() => setTopoEnabled(false)}
           onTopoNvReady={onTopoNvReady}
           isStandardElectrodes={isStandardElectrodes}
           onElecPosFile={onElecPosFile}

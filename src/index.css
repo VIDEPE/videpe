@@ -201,6 +201,16 @@ code {
     background: var(--color-background);
     color: var(--color-primary);
   }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+
+    &:hover {
+      box-shadow: none;
+      transform: none;
+    }
+  }
 }
 
 /* Icon-only variant: tighter padding, no shadow — for dense control toolbars */
@@ -219,6 +229,13 @@ code {
 .size-xs {
   padding: 2px 6px;
   font-size: 11px;
+}
+
+/* Icon-only variant sized for tight sidebars (e.g. NiiViewer's slice-button column) — padding
+   is symmetric so a single icon glyph renders as a circle, unlike .size-xs's asymmetric
+   text padding (wider than tall, tuned for 2-character labels). */
+.button-icon-xs {
+  padding: 6px;
 }
 
 /* ============================================
