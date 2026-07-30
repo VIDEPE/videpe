@@ -27,7 +27,7 @@ describe('StatusLed — no match-count concept (e.g. Inverse Solution)', () => {
     render(<StatusLed label="Inverse Solution" fileName={null} />);
 
     const dot = getDot('No inverse solution loaded');
-    expect(dot).toHaveClass('bg-red-500/70');
+    expect(dot).toHaveClass('bg-red-600/50');
   });
 
   it('shows green and the plain filename when loaded — no amber fallback without a matchCount', () => {
@@ -69,7 +69,7 @@ describe('StatusLed — with a match-count concept (e.g. Electrode Position)', (
     );
 
     const dot = getDot('Using standard_1005 template (1/208 channels matched)');
-    expect(dot).toHaveClass('bg-red-500/70');
+    expect(dot).toHaveClass('bg-red-600/50');
   });
 
   it('shows green and "Custom:" plus the count when a file is loaded and the match is good', () => {

@@ -1767,7 +1767,7 @@ describe('EegViewer — persistent electrode position dropzone', () => {
     // usable topography, so the count is shown but the LED reads red, not blue.
     const led = screen.getByTitle('Using standard_1005 template (2/3 channels matched)');
     expect(led).toBeInTheDocument();
-    expect(led.querySelector('span')).toHaveClass('bg-red-500/70');
+    expect(led.querySelector('span')).toHaveClass('bg-red-600/50');
     expect(screen.getByText('Inverse Solution')).toBeInTheDocument();
     expect(screen.getByTitle('No inverse solution loaded')).toBeInTheDocument();
   });
@@ -1784,7 +1784,7 @@ describe('EegViewer — persistent electrode position dropzone', () => {
 
     const led = screen.getByTitle('Using standard_1005 template (0/2 channels matched)');
     expect(led).toBeInTheDocument();
-    expect(led.querySelector('span')).toHaveClass('bg-red-500/70');
+    expect(led.querySelector('span')).toHaveClass('bg-red-600/50');
   });
 
   // Real high-density recordings (e.g. the demo dataset) can share only a handful of
@@ -1802,7 +1802,7 @@ describe('EegViewer — persistent electrode position dropzone', () => {
 
     const led = screen.getByTitle('Using standard_1005 template (1/3 channels matched)');
     expect(led).toBeInTheDocument();
-    expect(led.querySelector('span')).toHaveClass('bg-red-500/70');
+    expect(led.querySelector('span')).toHaveClass('bg-red-600/50');
   });
 
   it('shows the electrode position LED as auto-matched (blue) when the standard template match meets the minimum threshold', async () => {
@@ -2035,5 +2035,106 @@ describe('EegViewer — persistent electrode position dropzone', () => {
     expect(onElecPosFile).not.toHaveBeenCalled();
     expect(onInverseSolutionFile).not.toHaveBeenCalled();
     expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('sub-01_T1w.nii'));
+  });
+});
+
+// hoveredLedHighlight only ever tracks one of 'electrodePosition' | 'inverseSolution' | null —
+// these tests drive it through the toggle wrapper divs' onMouseEnter/onMouseLeave (rather than
+// asserting the state variable directly, which isn't exposed) and observe it through the LED's
+// dot class, the same way a user would perceive it.
+describe('EegViewer — hovering a disabled toggle highlights the LED that explains why', () => {
+  it('highlights the Electrode Position LED red while hovering the disabled topo toggle, and reverts on unhover', async () => {
+    const provider = makeIntracranialProvider();
+    render(
+      <EegViewer provider={provider} channelNames={provider.channelNames} recordingType="ieeg" />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const topoButton = screen.getByRole('button', { name: /topograph map/i });
+    expect(topoButton).toBeDisabled();
+    const led = screen.getByTitle('No electrode position loaded').querySelector('span');
+    expect(led).toHaveClass('bg-red-600/50');
+
+    // The handler lives on the toggle's wrapper div, not the (disabled) button itself.
+    await userEvent.hover(topoButton.parentElement);
+    expect(led).toHaveClass('bg-red-600');
+    expect(led).not.toHaveClass('bg-red-600/50');
+
+    await userEvent.unhover(topoButton.parentElement);
+    expect(led).toHaveClass('bg-red-600/50');
+  });
+
+  it('highlights the Electrode Position LED red while hovering the disabled 3D-render toggle', async () => {
+    const provider = makeIntracranialProvider();
+    render(
+      <EegViewer provider={provider} channelNames={provider.channelNames} recordingType="ieeg" />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const renderButton = screen.getByRole('button', { name: /3d electrode rendering/i });
+    expect(renderButton).toBeDisabled();
+    const led = screen.getByTitle('No electrode position loaded').querySelector('span');
+
+    await userEvent.hover(renderButton.parentElement);
+    expect(led).toHaveClass('bg-red-600');
+
+    await userEvent.unhover(renderButton.parentElement);
+    expect(led).toHaveClass('bg-red-600/50');
+  });
+
+  it('highlights the Inverse Solution LED red while hovering the disabled ESI toggle, leaving the Electrode Position LED untouched', async () => {
+    await renderViewer();
+
+    const esiButton = screen.getByRole('button', { name: /electrical source imaging/i });
+    expect(esiButton).toBeDisabled();
+    const inverseLed = screen.getByTitle('No inverse solution loaded').querySelector('span');
+    // Default renderViewer() scenario: standard_1005 matches 2/3 channels — below threshold,
+    // so this LED is already red on its own merits, unrelated to any hover.
+    const electrodeLed = screen
+      .getByTitle('Using standard_1005 template (2/3 channels matched)')
+      .querySelector('span');
+
+    await userEvent.hover(esiButton.parentElement);
+    expect(inverseLed).toHaveClass('bg-red-600');
+    expect(inverseLed).not.toHaveClass('bg-red-600/50');
+    // Only the LED matching the hovered toggle's reason lights up — a highlight isn't
+    // broadcast to every red LED on screen.
+    expect(electrodeLed).toHaveClass('bg-red-600/50');
+    expect(electrodeLed).not.toHaveClass('bg-red-600');
+
+    await userEvent.unhover(esiButton.parentElement);
+    expect(inverseLed).toHaveClass('bg-red-600/50');
+  });
+
+  it('does not highlight the Inverse Solution LED for the iEEG-disabled ESI toggle, since that LED is already greyed out for a different reason', async () => {
+    const provider = makeIntracranialProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        recordingType="ieeg"
+        inverseSolutionFileName="my_inverse_solution"
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const esiButton = screen.getByRole('button', { name: /electrical source imaging/i });
+    expect(esiButton).toBeDisabled();
+    const led = screen
+      .getByTitle('Inverse Solution is not applicable for iEEG recordings')
+      .querySelector('span');
+    expect(led).toHaveClass('bg-foreground/20');
+
+    await userEvent.hover(esiButton.parentElement);
+    expect(led).toHaveClass('bg-foreground/20');
   });
 });
