@@ -172,6 +172,7 @@ vi.mock('@niivue/niivue', () => ({
       setSliceType: vi.fn(),
       setMultiplanarLayout: vi.fn(),
       setCornerOrientationText: vi.fn(),
+      setMeshShader: vi.fn(),
       opts: { isColorbar: false, multiplanarShowRender: null, multiplanarEqualSize: true },
       sliceTypeMultiplanar: 1,
       volumes: [],
@@ -1506,6 +1507,20 @@ describe('NiiViewer', () => {
         expect(nv.addMesh).toHaveBeenCalled();
       }
     );
+
+    it.each([
+      ['Intracranial', makeIntracranialLayer],
+      ['Surface EEG', makeSurfaceEegLayer],
+    ])('applies the Harmonic mesh shader to a %s electrodeLayer', async (_label, makeLayer) => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      render(<NiiViewer nvRef={nvRef} layers={[]} electrodeLayer={makeLayer()} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      const nv = nvRef.current;
+      const mesh = nv.addMesh.mock.calls.at(-1)[0];
+      expect(nv.setMeshShader).toHaveBeenCalledWith(mesh.id, 'Harmonic');
+    });
 
     it.each([
       ['Intracranial EEG', makeIntracranialLayer],
