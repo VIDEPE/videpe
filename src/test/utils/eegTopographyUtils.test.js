@@ -470,8 +470,8 @@ describe('buildIntracranialConnectome', () => {
     const matched = matchedFor(['B1', 'B2', 'B3']);
     const { edges } = buildIntracranialConnectome(matched, [0, 0, 0]);
     expect(edges).toEqual([
-      { first: 0, second: 1, colorValue: 0 },
-      { first: 1, second: 2, colorValue: 0 },
+      { first: 0, second: 1, colorValue: 1 },
+      { first: 1, second: 2, colorValue: 1 },
     ]);
   });
 
@@ -497,10 +497,10 @@ describe('buildIntracranialConnectome', () => {
     expect(edges).toHaveLength(0);
   });
 
-  it('sets edge colorValue to the average of its two endpoint voltages', () => {
+  it('sets edge colorValue to a fixed value regardless of endpoint voltages', () => {
     const matched = matchedFor(['B1', 'B2']);
     const { edges } = buildIntracranialConnectome(matched, [10, -4]);
-    expect(edges[0].colorValue).toBeCloseTo(3); // (10 + -4) / 2
+    expect(edges[0].colorValue).toBe(1);
   });
 });
 
