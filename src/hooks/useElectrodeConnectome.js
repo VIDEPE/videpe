@@ -116,7 +116,17 @@ export function useElectrodeConnectome({
       return;
     }
 
-    if (electrodeLayer === lastElectrodeLayerRef.current) return; // unrelated re-render (e.g. another layer's settings changed)
+    // If the data hasn't changed, and the mesh we built is still really there — do nothing.
+    // Otherwise, rebuild. "Still there" means: does NiiVue's live list (nv.meshes) still
+    // contain the specific mesh object we think we built? On first mount, React briefly
+    // mounts, tears down, and mounts again (StrictMode) — the teardown step secretly removes
+    // the mesh, even though the data still looks unchanged.
+    if (
+      electrodeLayer === lastElectrodeLayerRef.current &&
+      nv.meshes.includes(electrodeMeshRef.current)
+    ) {
+      return;
+    }
     lastElectrodeLayerRef.current = electrodeLayer; // remember what this rebuild is based on
 
     if (electrodeMeshRef.current) nv.removeMesh(electrodeMeshRef.current); // drop the stale mesh before building its replacement

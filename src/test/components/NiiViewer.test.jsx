@@ -1508,6 +1508,25 @@ describe('NiiViewer', () => {
       }
     );
 
+    // Regression test: on a scene with nothing else loaded yet, React StrictMode mounts, tears
+    // down, and mounts again — the teardown (useSharedNiiVueInstance's cleanup) wipes
+    // nv.meshes even though electrodeLayer itself never changed. The build effect's old guard
+    // only compared electrodeLayer by reference, so it wrongly treated the second mount as
+    // "nothing to do," leaving the ImagingControls card showing with an empty 3D scene behind
+    // it. See useElectrodeConnectome.js's build effect for the fix.
+    it('still has the connectome mesh in the scene after mounting under StrictMode with nothing else loaded', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      render(
+        <StrictMode>
+          <NiiViewer nvRef={nvRef} layers={[]} electrodeLayer={makeIntracranialLayer()} />
+        </StrictMode>
+      );
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      expect(nvRef.current.meshes).toHaveLength(1);
+    });
+
     it.each([
       ['Intracranial', makeIntracranialLayer],
       ['Surface EEG', makeSurfaceEegLayer],
