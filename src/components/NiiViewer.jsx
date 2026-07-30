@@ -3,6 +3,7 @@ import { cn } from '../utils/utils';
 import { SLICE_TYPE } from '@niivue/niivue';
 import { move } from '@dnd-kit/helpers';
 import toast from 'react-hot-toast';
+import { BoomBox, Slice } from 'lucide-react';
 
 const NII_LOADING_TOAST_ID = 'nii-viewer-loading'; // fixed id so loading/success toasts update in place rather than stacking
 const MIN_CANVAS_HEIGHT = 350; // px — matches the canvas row's original fixed floor
@@ -229,6 +230,8 @@ export const NiiViewer = ({
   // internal-dropzone load, then flipped true by whichever failure branch actually hits.
   const [hasLoadError, setHasLoadError] = useState(false);
   const [activeSliceType, setActiveSliceType] = useState(SLICE_TYPE.MULTIPLANAR);
+  const [isRadiologicalConvention, setIsRadiologicalConvention] = useState(false);
+  const [isClipPlaneOn, setIsClipPlaneOn] = useState(false);
   // Connectome/Volume toggle for the ESI layer, split into two values, both read by the ESI
   // effects below: isEsiVolumeMode normally just mirrors the layerSettings entry, but that entry
   // briefly disappears whenever handleDeleteLayer deletes the ESI card — and falling back to a
@@ -333,6 +336,26 @@ export const NiiViewer = ({
   const handleSliceTypeChange = (sliceType) => {
     setActiveSliceType(sliceType);
     nvRef.current?.setSliceType(sliceType);
+  };
+
+  // Toggles between neurological (left-is-left) and radiological (left-is-right) display convention.
+  const handleRadiologicalConventionToggle = () => {
+    const next = !isRadiologicalConvention;
+    setIsRadiologicalConvention(next);
+    nvRef.current?.setRadiologicalConvention(next);
+  };
+
+  // Toggles nv's clip plane on/off directly via its public setClipPlane API. Depth 2 is
+  // niivue's own "disabled" sentinel (see DEFAULT_DEPTH_AZI_ELEV in its ClipPlaneManager) —
+  // any depth past ~1.8 turns clipping off entirely, whereas depth 0 (its POSTERIOR preset
+  // orientation) shows a clip plane through the volume's center. Only visible in the 3D
+  // render view — clip planes have no effect on 2D slices.
+  const handleClipPlaneToggle = () => {
+    const nv = nvRef.current;
+    if (!nv) return;
+    const next = !isClipPlaneOn;
+    setIsClipPlaneOn(next);
+    nv.setClipPlane(next ? [0, 180, 0] : [2, 0, 0]); // depth 2 is niivue's default "disabled" value
   };
 
   // Applies a single ImagingControls setting change (opacity/colormap/threshold/etc.). Always
@@ -604,6 +627,15 @@ export const NiiViewer = ({
 
   // ─── Effects: UI ────────────────────────────────────────────────────────────
 
+  // Syncs the convention toggle to nv's actual current setting once on mount — nv is long-lived
+  // and shared across remounts (see useSharedNiiVueInstance), so a hardcoded default here could
+  // silently disagree with what's actually being displayed (e.g. after a fullscreen remount).
+  useEffect(() => {
+    if (!nvRef.current) return;
+    setIsRadiologicalConvention(nvRef.current.getRadiologicalConvention());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Force 3D view when there are no image volumes — connectome-only scenes have no slices.
   // Only acts on the "no volumes" side: firing on re-appearance races with an in-flight
   // nv.loadVolumes() and can leave the spinner stuck.
@@ -702,7 +734,7 @@ export const NiiViewer = ({
           )}
           <canvas ref={canvasRef} className="absolute inset-0" />
         </div>
-        <div className="">
+        <div className="flex flex-col gap-2">
           <div
             className={cn(
               'flex flex-col w-8 gap-0.5 pt-2 items-center',
@@ -733,6 +765,43 @@ export const NiiViewer = ({
                 </button>
               );
             })}
+          </div>
+
+          {/* Radio/Clip buttons */}
+          <div
+            className={cn(
+              'flex flex-col w-8 gap-0.5 py-2 items-center',
+              'rounded-r-md border-r-1 border-t-1 border-b-1 border-border'
+            )}
+          >
+            {/* Radiological/neurological display convention toggle. button-icon-xs (rather than
+              size-xs) keeps a single icon glyph circular — size-xs's padding is asymmetric,
+              tuned for the 2-character text labels in the slice-type group above. */}
+            <button
+              type="button"
+              className="button button-icon-xs"
+              onClick={handleRadiologicalConventionToggle}
+              title={
+                isRadiologicalConvention
+                  ? 'Radiological convention — click for neurological'
+                  : 'Neurological convention — click for radiological'
+              }
+              aria-label="Toggle radiological/neurological convention"
+              aria-pressed={isRadiologicalConvention}
+            >
+              <BoomBox size={16} />
+            </button>
+            {/* Clip plane on/off toggle — only visible in the 3D render view (see handleClipPlaneToggle). */}
+            <button
+              type="button"
+              className="button button-icon-xs"
+              onClick={handleClipPlaneToggle}
+              title={isClipPlaneOn ? 'Disable clip plane' : 'Enable clip plane (3D view only)'}
+              aria-label="Toggle clip plane"
+              aria-pressed={isClipPlaneOn}
+            >
+              <Slice size={16} />
+            </button>
           </div>
         </div>
       </div>

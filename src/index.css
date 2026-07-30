@@ -231,6 +231,13 @@ code {
   font-size: 11px;
 }
 
+/* Icon-only variant sized for tight sidebars (e.g. NiiViewer's slice-button column) — padding
+   is symmetric so a single icon glyph renders as a circle, unlike .size-xs's asymmetric
+   text padding (wider than tall, tuned for 2-character labels). */
+.button-icon-xs {
+  padding: 6px;
+}
+
 /* ============================================
    uPlot overrides
    ============================================ */
