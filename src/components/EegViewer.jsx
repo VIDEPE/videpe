@@ -169,6 +169,11 @@ export const EegViewer = ({
   // ── Topography state ─────────────────────────────────────────────────────────────────────
   const [topoEnabled, setTopoEnabled] = useState(false);
   const [topoTimepoint, setTopoTimepoint] = useState(null);
+
+  // hoveredLedHighlight indicates which StatusLED should light up when the disabled toggle
+  // toggle (Topo/3D render/ESI) is hovered over => gives additional cue to user why it's disabled.
+  // Set on the toggle's wrapper div rather than the <button> itself (disabled buttons don't reliably fire mouse events)
+  const [hoveredLedHighlight, setHoveredLedHighlight] = useState(null); // 'electrodePosition' | 'inverseSolution' | null
   // Topograph window only opens when the toggle is on (topoEnabled) AND once a EEGplot
   // click has produced a timepoint to show (topoTimepoint)
   const topoVisible = topoEnabled && topoTimepoint !== null;
@@ -407,7 +412,13 @@ export const EegViewer = ({
           <div className="shrink-0 flex flex-col px-1">
             <div className="flex flex-col gap-1 absolute pl-7 pt-7">
               {/* EEG Topography Toggle*/}
-              <div className="">
+              <div
+                className=""
+                onMouseEnter={() =>
+                  !electrodes?.length && setHoveredLedHighlight('electrodePosition')
+                }
+                onMouseLeave={() => setHoveredLedHighlight(null)}
+              >
                 <button
                   type="button"
                   className="button button-icon"
@@ -425,7 +436,14 @@ export const EegViewer = ({
                 </button>
               </div>
               {/* 3D Electrode Render Toggle*/}
-              <div className="">
+              <div
+                className=""
+                onMouseEnter={() =>
+                  (!electrodes?.length || isStandardElectrodes) &&
+                  setHoveredLedHighlight('electrodePosition')
+                }
+                onMouseLeave={() => setHoveredLedHighlight(null)}
+              >
                 <button
                   type="button"
                   className="button button-icon"
@@ -445,7 +463,14 @@ export const EegViewer = ({
                 </button>
               </div>
               {/* Electrical Source Imaging (ESI) Toggle*/}
-              <div className="">
+              <div
+                className=""
+                onMouseEnter={() =>
+                  (!inverseSolutionFileName || isIntracranial) &&
+                  setHoveredLedHighlight('inverseSolution')
+                }
+                onMouseLeave={() => setHoveredLedHighlight(null)}
+              >
                 <button
                   type="button"
                   className="button button-icon"
@@ -903,11 +928,13 @@ export const EegViewer = ({
               matchCount={electrodePositionMatchCount}
               totalCount={electrodePositionTotalCount}
               isGoodMatch={isElectrodePositionMatchGoodForLed}
+              highlighted={hoveredLedHighlight === 'electrodePosition'}
             />
             <StatusLed
               label="Inverse Solution"
               fileName={inverseSolutionFileName}
               disabled={isIntracranial}
+              highlighted={hoveredLedHighlight === 'inverseSolution'}
             />
           </div>
         </FileDropZone>
