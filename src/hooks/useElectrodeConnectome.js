@@ -147,7 +147,7 @@ export function useElectrodeConnectome({
       edgeColormap: 'gray',
       edgeColormapNegative: 'gray',
       edgeMin: 0,
-      edgeMax: electrodeLayer.calMax,
+      edgeMax: 2, // edges carry a fixed colorValue (see buildIntracranialConnectome) => fix calMax to 2, with colorValue=1 this gives gray edge color
       edgeScale: settings.edgeScale,
       showLegend: false,
       colorbarVisible: false, // suppresses the node+edge colorbar entries NiiVue would otherwise add for a populated `edges` array
@@ -163,6 +163,7 @@ export function useElectrodeConnectome({
     nv.opts.meshXRay = settings.meshXRay;
 
     nv.addMesh(mesh); // actually add it to the 3D scene
+    nv.setMeshShader(mesh.id, 'Harmonic'); // Set Mesh Shader
     electrodeMeshRef.current = mesh; // track it so the next change/removal can find it
     nv.updateGLVolume(); // redraw with the new mesh visible
   }, [electrodeLayer, orderedLayers, layerSettings, nvRef]);
