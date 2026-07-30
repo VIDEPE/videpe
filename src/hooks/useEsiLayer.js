@@ -140,7 +140,18 @@ export function useEsiLayer({
       return;
     }
 
-    if (activeEsiLayer === lastEsiLayerRef.current) return; // unrelated re-render — data/mode hasn't changed
+    // If the data hasn't changed, and (only for connectome mode) the thing we built is still
+    // really there — do nothing. Otherwise, rebuild. "Still there" means: does NiiVue's live
+    // list (nv.meshes) still contain the specific mesh object we think we built? On first
+    // mount, React briefly mounts, tears down, and mounts again (StrictMode) — the teardown
+    // step secretly removes the mesh, even though the data still looks unchanged. Volume mode
+    // skips this check: its load is async, so it finishes on its own after the remount either
+    // way — checking here would instead trigger a second, duplicate load.
+    if (activeEsiLayer === lastEsiLayerRef.current) {
+      const stillInScene =
+        activeEsiLayer.kind !== 'connectome' || nv.meshes.includes(esiMeshRef.current);
+      if (stillInScene) return;
+    }
 
     if (activeEsiLayer.kind !== 'connectome') {
       // If other image volumes (e.g. the MRI) are known in orderedLayers but still loading

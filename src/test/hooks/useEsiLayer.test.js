@@ -201,6 +201,30 @@ describe('useEsiLayer', () => {
       expect(nv.addMesh).not.toHaveBeenCalled();
     });
 
+    // Regression test: React StrictMode mounts, tears down, and mounts again on first mount —
+    // its teardown (useSharedNiiVueInstance's cleanup) wipes nv.meshes even though esiLayer
+    // itself never changed, which used to leave the mesh permanently missing (see
+    // useEsiLayer.js's build effect) since the old guard only compared esiLayer by reference.
+    // Simulated here without StrictMode itself, via the same kind of unrelated re-render the
+    // guard is designed to tolerate (e.g. another layer's settings changing, which changes
+    // orderedLayers/layerSettings — both in the build effect's deps — without touching
+    // esiLayer/isEsiVolumeMode themselves): whatever removed the mesh from nv.meshes, the hook
+    // must notice it's gone and rebuild, not just skip because the ESI data looks unchanged.
+    it('rebuilds the mesh if it goes missing from nv.meshes even on an otherwise-unrelated re-render', () => {
+      const esiLayer = makeEsiLayer();
+      const { result } = renderHook((props) => useHarness(props), {
+        initialProps: { esiLayer, isEsiVolumeMode: false, nvRef },
+      });
+      nv.addMesh.mockClear();
+      nv.meshes = []; // something external (e.g. StrictMode's teardown) removed it
+
+      act(() => {
+        result.current.setOrderedLayers((prev) => [...prev]); // unrelated re-render, new array reference
+      });
+
+      expect(nv.addMesh).toHaveBeenCalled();
+    });
+
     it('tears down the mesh when esiLayer becomes null', () => {
       const esiLayer = makeEsiLayer();
       const { result, rerender } = renderHook((props) => useHarness(props), {
