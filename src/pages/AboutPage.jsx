@@ -273,6 +273,14 @@ export const AboutPage = () => {
                   <li>
                     Slice view buttons for axial, coronal, sagittal, multiplanar, and 3D render
                   </li>
+                  <li>
+                    Radiological/neurological convention toggle and clip plane toggle (3D render
+                    view only)
+                  </li>
+                  <li>
+                    Adjustable node/edge size sliders for connectome layers (ESI and iEEG electrode
+                    connectomes)
+                  </li>
                 </ul>
               </div>
             </div>

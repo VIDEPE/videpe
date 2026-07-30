@@ -1,6 +1,6 @@
 # VIDEPE
 
-![Version](https://img.shields.io/badge/version-0.11.0-blue)
+![Version](https://img.shields.io/badge/version-0.12.0-blue)
 
 **V**isualization & **I**ntegration of **D**ata for **E**pilepsy **P**resurgical **E**valuation
 
@@ -39,6 +39,8 @@ All data processing happens entirely in your browser. No files are ever uploaded
   - Per-layer opacity/mesh xray, colormap, inversion, colorbar and thresholding controls
   - Drag-to-reorder layers, with a modality subtype label shown on each volume
   - Slice view buttons for axial, coronal, sagittal, multiplanar, and 3D render
+  - Radiological/neurological convention toggle and clip plane toggle (3D render view only)
+  - Adjustable node/edge size for connectome layers (ESI and iEEG electrode connectomes)
   - Switches to auto layout when maximised, restores to grid on collapse
 - **Built-in demo** — hit **Load Demo** to instantly load a synthetic EEG recording, electrode positions and inverse solution alongside aligned MRI volumes. No upload, no account, no wait.
 - **Drag & drop file loading** — drop files directly onto either viewer panel. VIDEPE detects the format automatically and guides you when multiple files are required.
