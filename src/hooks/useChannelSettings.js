@@ -14,15 +14,15 @@ import { useState, useEffect, useCallback } from 'react';
 export function useChannelSettings(channelNames, defaultType = 'eeg') {
   const [channelSettings, setChannelSettings] = useState({});
 
-  // Rebuilds channelSettings' keys to exactly match channelNames: carries over prior
-  // settings via prev (so existing edits survive), seeds new channels with defaultType,
-  // and drops channels no longer present. Reads prev instead of the closed-over
-  // channelSettings so this doesn't need to be a dependency — avoiding a self-triggering loop.
+  // Rebuilds channelSettings to match channelNames, and re-applies defaultType to every
+  // channel whenever it changes (e.g. async isIntracranial detection settling, or the
+  // manual EEG/iEEG toggle). bad is preserved from prev — unlike type, it has no "default"
+  // to resync to, so it shouldn't be reset just because defaultType changed.
   useEffect(() => {
     setChannelSettings((prev) => {
       const next = {};
       for (const name of channelNames) {
-        next[name] = prev[name] ?? { type: defaultType, bad: false };
+        next[name] = { type: defaultType, bad: prev[name]?.bad ?? false };
       }
       return next;
     });

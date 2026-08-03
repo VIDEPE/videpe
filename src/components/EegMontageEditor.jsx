@@ -153,12 +153,14 @@ export function EegMontageEditor({
                 borderBottom: `1px solid ${isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}`,
               }}
               className="relative flex items-center gap-2 px-1 py-0.5"
+              title="Channel Name"
             >
               <span className="flex-1 truncate text-sm">{name}</span>
               <select
                 className="text-xs border border-border rounded bg-surface"
                 value={settings.type}
                 onChange={(e) => onChannelTypeChange(name, e.target.value)}
+                title="Channel Type"
               >
                 <option value="eeg">EEG</option>
                 <option value="seeg">SEEG</option>
