@@ -30,10 +30,41 @@ export function EegMontageEditor({
   customFileName = null, // filename (no extension) of the loaded custom positions file — owned by PatientView, passed down
   montage,
   channelSettings, // Record<name, {type, bad}> — live state owned by EegViewer/useChannelSettings
-  onChannelTypeChange, // (name, type) => void
-  onChannelBadChange, // (name, bad) => void
+  onApplyChannelSettings, // (Record<name, {type, bad}>) => void — commits the draft on Apply/OK
 }) {
   const { isDarkMode } = useTheme();
+
+  // Draft channelSettings — this component remounts fresh every time it's opened (EegViewer
+  // conditionally renders it), so seeding draft state from the live prop here naturally
+  // re-snapshots on every open with no extra reset effect needed. Row edits (and later, bulk
+  // edits from the settings section below) only ever touch this draft; nothing reaches the
+  // live channelSettings in EegViewer until Apply/OK explicitly commits it.
+  const [draftChannelSettings, setDraftChannelSettings] = useState(() => channelSettings);
+
+  const setDraftChannelType = useCallback((name, type) => {
+    setDraftChannelSettings((prev) => ({ ...prev, [name]: { ...prev[name], type } }));
+  }, []);
+
+  const setDraftChannelBad = useCallback((name, bad) => {
+    setDraftChannelSettings((prev) => ({ ...prev, [name]: { ...prev[name], bad } }));
+  }, []);
+
+  // The live channelSettings prop only ever changes via a prior Apply/OK (or the seeding
+  // effect in useChannelSettings) — never by draft edits — so comparing against it directly
+  // doubles as "has the draft diverged from what was last applied", no separate snapshot needed.
+  const isModified = useMemo(
+    () => JSON.stringify(draftChannelSettings) !== JSON.stringify(channelSettings),
+    [draftChannelSettings, channelSettings]
+  );
+
+  const handleApply = useCallback(() => {
+    onApplyChannelSettings(draftChannelSettings);
+  }, [draftChannelSettings, onApplyChannelSettings]);
+
+  const handleOk = useCallback(() => {
+    handleApply();
+    onClose();
+  }, [handleApply, onClose]);
 
   // ─── Refs ───────────────────────────────────────────────────────────────────
   const fileInputRef = useRef(null);
@@ -44,8 +75,6 @@ export function EegMontageEditor({
   const [maximizedPanel, setMaximizedPanel] = useState(null); // null | 'left' | 'right'
   const [position, setPosition] = useState({ x: 80, y: 80 });
   const [size, setSize] = useState(DEFAULT_WINDOW_SIZE);
-  const [isApplied, setIsApplied] = useState(false);
-  const [isChanged, setIsChanged] = useState(false);
 
   // ─── Handlers: window drag/resize ──────────────────────────────────────────────
   // Drag the floating window by its title bar. Position is clamped to the viewport so the
@@ -165,7 +194,7 @@ export function EegMontageEditor({
         </div>
         <div className="flex-1 min-h-0 pb-4 overflow-y-auto border-header">
           {channelNames.map((name) => {
-            const settings = channelSettings[name] ?? { type: 'eeg', bad: false };
+            const settings = draftChannelSettings[name] ?? { type: 'eeg', bad: false };
             return (
               <div
                 key={name}
@@ -195,7 +224,7 @@ export function EegMontageEditor({
                 <select
                   className="w-16 text-xs border border-border rounded bg-surface"
                   value={settings.type}
-                  onChange={(e) => onChannelTypeChange(name, e.target.value)}
+                  onChange={(e) => setDraftChannelType(name, e.target.value)}
                 >
                   <option value="eeg">EEG</option>
                   <option value="seeg">SEEG</option>
@@ -207,7 +236,7 @@ export function EegMontageEditor({
                     type="checkbox"
                     className="accent-alert"
                     checked={settings.bad}
-                    onChange={(e) => onChannelBadChange(name, e.target.checked)}
+                    onChange={(e) => setDraftChannelBad(name, e.target.checked)}
                   />
                 </div>
               </div>
@@ -250,7 +279,7 @@ export function EegMontageEditor({
         onMouseDown={handleDragStart}
       >
         <span className="text-sm font-medium text-heading">
-          {isChanged && !isApplied ? 'Montage Editor *' : 'Montage Editor'}
+          {isModified ? 'Montage Editor *' : 'Montage Editor'}
         </span>
         <TrafficLightButtons
           onMaximize={() => setIsMaximized((v) => !v)}
@@ -277,6 +306,24 @@ export function EegMontageEditor({
         left={channelSelectionPane}
         right={montageSelectionPane}
       />
+
+      {/* Footer — Apply/OK commit the draft to EegViewer's live channelSettings; Cancel (and
+          the title bar's red X, via onClose) discard it by simply closing without committing. */}
+      <div className="shrink-0 flex items-center justify-end gap-2 px-3 py-2 border-t border-border bg-surface">
+        <button type="button" className="button" onClick={handleOk}>
+          OK
+        </button>
+        <button
+          type="button"
+          className="text-xs border border-border rounded-full px-3 py-1 bg-surface hover:bg-background"
+          onClick={onClose}
+        >
+          Cancel
+        </button>
+        <button type="button" className="button" onClick={handleApply}>
+          Apply
+        </button>
+      </div>
     </div>
   );
 }

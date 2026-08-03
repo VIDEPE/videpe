@@ -28,16 +28,12 @@ export function useChannelSettings(channelNames, defaultType = 'eeg') {
     });
   }, [channelNames, defaultType]);
 
-  // useCallback([]) keeps these stable across renders for downstream props (EegMontageEditor).
-  // Reading prev rather than closing over channelSettings avoids a stale closure, since with
-  // an empty dependency array these functions are only ever created once.
-  const setChannelType = useCallback((name, type) => {
-    setChannelSettings((prev) => ({ ...prev, [name]: { ...prev[name], type } }));
+  // Wholesale replace — commits a draft edited in EegMontageEditor (Apply/OK). All editing,
+  // single-channel or bulk, happens on that draft so Cancel can discard it uniformly; this
+  // hook only needs to accept the finished result, not expose per-field live setters.
+  const applyChannelSettings = useCallback((next) => {
+    setChannelSettings(next);
   }, []);
 
-  const setChannelBad = useCallback((name, bad) => {
-    setChannelSettings((prev) => ({ ...prev, [name]: { ...prev[name], bad } }));
-  }, []);
-
-  return { channelSettings, setChannelType, setChannelBad };
+  return { channelSettings, applyChannelSettings };
 }

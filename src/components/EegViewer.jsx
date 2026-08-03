@@ -213,7 +213,7 @@ export const EegViewer = ({
 
   // Per-channel type/bad-channel state, edited via the EegMontageEditor window — new
   // channels are seeded from the whole-recording isIntracranial detection above.
-  const { channelSettings, setChannelType, setChannelBad } = useChannelSettings(
+  const { channelSettings, applyChannelSettings } = useChannelSettings(
     channelNames,
     isIntracranial ? 'seeg' : 'eeg'
   );
@@ -998,8 +998,7 @@ export const EegViewer = ({
           customFileName={customElecPosFileName}
           montage={montage}
           channelSettings={channelSettings}
-          onChannelTypeChange={setChannelType}
-          onChannelBadChange={setChannelBad}
+          onApplyChannelSettings={applyChannelSettings}
         />
       )}
     </>
