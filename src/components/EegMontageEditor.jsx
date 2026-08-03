@@ -305,6 +305,7 @@ export function EegMontageEditor({
         onMaximizeChange={setMaximizedPanel}
         left={channelSelectionPane}
         right={montageSelectionPane}
+        defaultSplitPercent={35}
       />
 
       {/* Footer — Apply/OK commit the draft to EegViewer's live channelSettings; Cancel (and

@@ -14,8 +14,9 @@ export const SplitPane = ({
   onLeftReset,
   onRightReset,
   onMaximizeChange,
+  defaultSplitPercent = 50,
 }) => {
-  const [splitPercent, setSplitPercent] = useState(50); // proportion of the first panel (0–100)
+  const [splitPercent, setSplitPercent] = useState(defaultSplitPercent); // proportion of the first panel (0–100)
   const [maximized, setMaximized] = useState(null); // null | 'left' | 'right'
   const [swapped, setSwapped] = useState(false); // whether the left/right (or top/bottom) content is swapped
   const [isDragging, setIsDragging] = useState(false); // true while the divider is being dragged — used to highlight it on touch where active: pseudo-class is unreliable
