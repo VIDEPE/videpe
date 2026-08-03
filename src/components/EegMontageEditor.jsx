@@ -145,69 +145,77 @@ export function EegMontageEditor({
   const matchedChannelNames = useMemo(() => new Set(matched.map((m) => m.name)), [matched]);
 
   const channelSelectionPane = (
-    <div className="h-full flex flex-col p-2 pr-0 bg-background">
-      {/* Column headers — widths mirror each row's controls below so labels stay aligned */}
-      <div className="shrink-0 flex items-center gap-2 px-1 py-0.5 text-xs font-medium text-header border-b border-border">
-        <span className="flex-1">Channel</span>
-        <span className="w-13 text-center" title="Electrode Position Match">
-          Pos
-        </span>
-        <span className="w-8" title="Channel Type">
-          Type
-        </span>
-        <span className="w-11 text-center" title="Bad channel">
-          Bad
-        </span>
-      </div>
-      <div className="flex-1 min-h-0 pb-4 overflow-y-auto border-header">
-        {channelNames.map((name) => {
-          const settings = channelSettings[name] ?? { type: 'eeg', bad: false };
-          return (
-            <div
-              key={name}
-              style={{
-                overflow: 'visible',
-                borderBottom: `1px solid ${isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}`,
-              }}
-              className={cn(
-                'relative flex items-center gap-2 px-1 py-0.5',
-                settings.bad ? (isDarkMode ? 'bg-alert/10' : 'bg-alert/20') : ''
-              )}
-            >
-              {/* Channel name */}
-              <span className={cn('flex-1 truncate text-sm', settings.bad && 'text-alert')}>
-                {name}
-              </span>
-              {/* Electrode Position Match */}
-              <div className="w-4 flex justify-center">
-                <input
-                  type="checkbox"
-                  className="text-xs rounded bg-surface"
-                  checked={matchedChannelNames.has(name)}
-                  disabled={true}
-                ></input>
-              </div>
-              <select
-                className="w-16 text-xs border border-border rounded bg-surface"
-                value={settings.type}
-                onChange={(e) => onChannelTypeChange(name, e.target.value)}
+    <div className="h-full flex flex-col bg-surface">
+      {/* Header + scrollable list — bg-background, so the padding leaves the
+          surrounding bg-surface visible as a border around this section. flex-1 min-h-0
+          claims all remaining height above the fixed-height settings section below. */}
+      <div className="flex-1 min-h-0 flex flex-col pl-2 pt-2 bg-background">
+        {/* Column headers — widths mirror each row's controls below so labels stay aligned */}
+        <div className="shrink-0 flex items-center gap-2 px-1 py-0.5 text-xs font-medium text-header border-b border-border">
+          <span className="flex-1">Channel</span>
+          <span className="w-13 text-center" title="Electrode Position Match">
+            Pos
+          </span>
+          <span className="w-8" title="Channel Type">
+            Type
+          </span>
+          <span className="w-11 text-center" title="Bad channel">
+            Bad
+          </span>
+        </div>
+        <div className="flex-1 min-h-0 pb-4 overflow-y-auto border-header">
+          {channelNames.map((name) => {
+            const settings = channelSettings[name] ?? { type: 'eeg', bad: false };
+            return (
+              <div
+                key={name}
+                style={{
+                  overflow: 'visible',
+                  borderBottom: `1px solid ${isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}`,
+                }}
+                className={cn(
+                  'relative flex items-center gap-2 px-1 py-0.5',
+                  settings.bad ? (isDarkMode ? 'bg-alert/10' : 'bg-alert/20') : ''
+                )}
               >
-                <option value="eeg">EEG</option>
-                <option value="seeg">SEEG</option>
-                <option value="other">Other</option>
-              </select>
-              <div className="w-4 flex justify-center">
-                <input
-                  type="checkbox"
-                  className="accent-alert"
-                  checked={settings.bad}
-                  onChange={(e) => onChannelBadChange(name, e.target.checked)}
-                />
+                {/* Channel name */}
+                <span className={cn('flex-1 truncate text-sm', settings.bad && 'text-alert')}>
+                  {name}
+                </span>
+                {/* Electrode Position Match */}
+                <div className="w-4 flex justify-center">
+                  <input
+                    type="checkbox"
+                    className="text-xs rounded bg-surface"
+                    checked={matchedChannelNames.has(name)}
+                    disabled={true}
+                  ></input>
+                </div>
+                {/* Channel Type */}
+                <select
+                  className="w-16 text-xs border border-border rounded bg-surface"
+                  value={settings.type}
+                  onChange={(e) => onChannelTypeChange(name, e.target.value)}
+                >
+                  <option value="eeg">EEG</option>
+                  <option value="seeg">SEEG</option>
+                  <option value="other">Other</option>
+                </select>
+                {/* Bad Channel */}
+                <div className="w-4 flex justify-center">
+                  <input
+                    type="checkbox"
+                    className="accent-alert"
+                    checked={settings.bad}
+                    onChange={(e) => onChannelBadChange(name, e.target.checked)}
+                  />
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
+      {/* Channel Selection Settings */}
       <div className="h-36 shrink-0 border-t border-border bg-surface">
         <span>PLACEHOLDER SETTINGS</span>
       </div>
