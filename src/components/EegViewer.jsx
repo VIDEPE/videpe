@@ -26,6 +26,7 @@ import { useContainerResize } from '@/hooks/useContainerResize';
 import { useViewportControls } from '@/hooks/useViewportControls';
 import { useScrubberDrag } from '@/hooks/useScrubberDrag';
 import { useElectrodeMatching } from '@/hooks/useElectrodeMatching';
+import { useChannelSettings } from '@/hooks/useChannelSettings';
 import { useTopographySnapshot } from '@/hooks/useTopographySnapshot';
 import { useRowResize } from '@/hooks/useRowResize';
 
@@ -209,6 +210,13 @@ export const EegViewer = ({
     recordingType,
     onRecordingTypeChange,
   });
+
+  // Per-channel type/bad-channel state, edited via the EegMontageEditor window — new
+  // channels are seeded from the whole-recording isIntracranial detection above.
+  const { channelSettings, setChannelType, setChannelBad } = useChannelSettings(
+    channelNames,
+    isIntracranial ? 'seeg' : 'eeg'
+  );
 
   // Montage application + the electrode/channel voltage snapshots at the clicked topography
   // timepoint, lifted up to PatientView for the intracranial connectome and ESI.
@@ -989,6 +997,9 @@ export const EegViewer = ({
           onElecPosFile={onElecPosFile}
           customFileName={customElecPosFileName}
           montage={montage}
+          channelSettings={channelSettings}
+          onChannelTypeChange={setChannelType}
+          onChannelBadChange={setChannelBad}
         />
       )}
     </>

@@ -1,13 +1,16 @@
 import { useRef, useEffect, useMemo, useState, useCallback } from 'react';
-import { TrafficLightButtons } from './TrafficLightButtons';
+import { SplitPane } from '@/components/SplitPane';
+import { useTheme } from '@/components/ThemeContext';
+import { TrafficLightButtons } from '@/components/TrafficLightButtons';
 import {} from '@/utils/eegViewerUtils';
 import { EyeDashed } from 'lucide-react';
 import { cn } from '@/utils/utils';
 
 // ─── EEG Montage settings ────────────────────────────────────────
+// Shared title styling — keeps panes titles visually consistent, with the same height (TrafficLightButtons are 16px tall).
+const PANEL_TITLE_CLASS = 'h-5 flex items-center text-xs font-medium leading-none text-header';
 
 // ─── Window sizing constants ────────────────────────────────────────────────
-
 // Default/minimum window size in px — default matches the previous fixed w-96 h-80 (24rem x 20rem)
 const DEFAULT_WINDOW_SIZE = { width: 1000, height: 800 };
 const MIN_WINDOW_WIDTH = 600;
@@ -26,13 +29,19 @@ export function EegMontageEditor({
   voltagesByChannel,
   customFileName = null, // filename (no extension) of the loaded custom positions file — owned by PatientView, passed down
   montage,
+  channelSettings, // Record<name, {type, bad}> — live state owned by EegViewer/useChannelSettings
+  onChannelTypeChange, // (name, type) => void
+  onChannelBadChange, // (name, bad) => void
 }) {
+  const { isDarkMode } = useTheme();
+
   // ─── Refs ───────────────────────────────────────────────────────────────────
   const fileInputRef = useRef(null);
   const dragOffset = useRef(null);
 
   // ─── State ──────────────────────────────────────────────────────────────────
   const [isMaximized, setIsMaximized] = useState(false);
+  const [maximizedPanel, setMaximizedPanel] = useState(null); // null | 'left' | 'right'
   const [position, setPosition] = useState({ x: 80, y: 80 });
   const [size, setSize] = useState(DEFAULT_WINDOW_SIZE);
   const [isApplied, setIsApplied] = useState(false);
@@ -131,6 +140,49 @@ export function EegMontageEditor({
     sw: 'bottom-0 left-0 w-2.5 h-2.5',
   };
 
+  const channelSelectionPane = (
+    <div className="h-full flex flex-col p-2 pr-0">
+      <div className="flex-1 min-h-0 overflow-y-auto border-header">
+        {channelNames.map((name) => {
+          const settings = channelSettings[name] ?? { type: 'eeg', bad: false };
+          return (
+            <div
+              key={name}
+              style={{
+                overflow: 'visible',
+                borderBottom: `1px solid ${isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}`,
+              }}
+              className="relative flex items-center gap-2 px-1 py-0.5"
+            >
+              <span className="flex-1 truncate text-sm">{name}</span>
+              <select
+                className="text-xs border border-border rounded bg-surface"
+                value={settings.type}
+                onChange={(e) => onChannelTypeChange(name, e.target.value)}
+              >
+                <option value="eeg">EEG</option>
+                <option value="seeg">SEEG</option>
+                <option value="other">Other</option>
+              </select>
+              <label className="flex items-center gap-1 text-xs" title="Bad channel">
+                <input
+                  type="checkbox"
+                  checked={settings.bad}
+                  onChange={(e) => onChannelBadChange(name, e.target.checked)}
+                />
+                Bad
+              </label>
+            </div>
+          );
+        })}
+      </div>
+      <div className="h-36 shrink-0 border-t border-border">
+        <span>PLACEHOLDER SETTINGS</span>
+      </div>
+    </div>
+  );
+
+  const montageSelectionPane = <div></div>;
   // ─── Render ─────────────────────────────────────────────────────────────────
   return (
     <div
@@ -178,6 +230,13 @@ export function EegMontageEditor({
             onMouseDown={(e) => handleResizeStart(e, direction)}
           />
         ))}
+      <SplitPane
+        leftLabel={<span className={PANEL_TITLE_CLASS}>Channel Selection</span>}
+        rightLabel={<span className={PANEL_TITLE_CLASS}>Montage Settings</span>}
+        onMaximizeChange={setMaximizedPanel}
+        left={channelSelectionPane}
+        right={montageSelectionPane}
+      />
     </div>
   );
 }
