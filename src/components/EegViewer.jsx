@@ -33,6 +33,7 @@ import { ELEC_POS_EXTENSIONS, INV_SOLUTIONS_EXTENSIONS } from '@/loaders/eegForm
 import { EegTopoViewer } from '@/components/EegTopoViewer';
 import { FileDropZone } from '@/components/FileDropZone';
 import { StatusLed } from '@/components/StatusLed';
+import { EegMontageEditor } from './EegMontageEditor';
 
 const EEG_LOADING_TOAST_ID = 'eeg-buffer-loading'; // fixed id so the loading/success toasts update in place rather than stacking
 const Y_AXIS_WIDTH = 60; // px for the y-axis area (channel name + tick space) — must match x-axis strip left padding
@@ -177,6 +178,9 @@ export const EegViewer = ({
   // Topograph window only opens when the toggle is on (topoEnabled) AND once a EEGplot
   // click has produced a timepoint to show (topoTimepoint)
   const topoVisible = topoEnabled && topoTimepoint !== null;
+
+  // EEG Montage window only opens when the button is pressed
+  const [montageVisible, setMontageVisible] = useState(false);
 
   // Px position (from the plot area's left edge) of the vertical marker for topoTimepoint — the
   // timestamp the electrode voltage snapshot was taken at, shared by the topography, ESI, and
@@ -534,9 +538,9 @@ export const EegViewer = ({
               className="flex flex-col items-center gap-1 pb-1"
               title="Apply EEG reference montage"
             >
-              <span className="text-xs text-foreground select-none pointer-events-none">
-                Montage:
-              </span>
+              <button type="button" className="button" onClick={() => setMontageVisible((v) => !v)}>
+                Montage
+              </button>
               <select
                 value={montage}
                 onChange={(e) => onMontageChange?.(e.target.value)}
@@ -967,6 +971,24 @@ export const EegViewer = ({
           customFileName={customElecPosFileName}
           montage={montage}
           isIntracranial={isIntracranial}
+        />
+      )}
+
+      {/* Floating EEG Montage Editor — position:fixed so it overlays the whole page */}
+      {montageVisible && (
+        <EegMontageEditor
+          electrodes={electrodes}
+          matched={matched}
+          voltages={topoVoltages}
+          channelNames={channelNames}
+          voltagesByChannel={topoVoltagesByChannel}
+          totalChannels={channelNames.length}
+          onClose={() => setMontageVisible(false)}
+          onTopoNvReady={onTopoNvReady}
+          isStandardElectrodes={isStandardElectrodes}
+          onElecPosFile={onElecPosFile}
+          customFileName={customElecPosFileName}
+          montage={montage}
         />
       )}
     </>
