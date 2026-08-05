@@ -187,9 +187,20 @@ export function EegMontageEditor({
     sw: 'bottom-0 left-0 w-2.5 h-2.5',
   };
 
-  // Names of channels that matched an electrode position — a Set so each row below is an
-  // O(1) lookup instead of re-scanning the whole matched array per channel.
-  const matchedChannelNames = useMemo(() => new Set(matched.map((m) => m.name)), [matched]);
+  // Channel name → matched electrode label, for the Pos checkbox's hover tooltip below.
+  // A Map (not a Set of names) so each row's tooltip can name which electrode it matched,
+  // not just whether it matched.
+  const matchedElectrodeByName = useMemo(
+    () => new Map(matched.map((m) => [m.name, m.pos.label])),
+    [matched]
+  );
+
+  // Human-readable name of the electrode position source, for the Pos tooltip text below.
+  const electrodePositionSourceLabel = isStandardElectrodes
+    ? 'the standard 10-05 template'
+    : customFileName
+      ? `"${customFileName}"`
+      : 'the loaded electrode position file';
 
   const channelSelectionPane = (
     <div className="h-full flex flex-col bg-surface">
@@ -214,6 +225,10 @@ export function EegMontageEditor({
           {channelNames.map((name) => {
             // take channel settings from draftChannelSetting (if exist) or default (type: 'eeg', bad: false)
             const settings = draftChannelSettings[name] ?? { type: 'eeg', bad: false };
+            const matchedElectrode = matchedElectrodeByName.get(name);
+            const posTooltip = matchedElectrode
+              ? `Matched to electrode "${matchedElectrode}" in ${electrodePositionSourceLabel}`
+              : `No match for "${name}" in ${electrodePositionSourceLabel}`;
             return (
               <div
                 key={name}
@@ -236,7 +251,8 @@ export function EegMontageEditor({
                     type="checkbox"
                     className="text-xs rounded accent-border opacity-60 cursor-help"
                     data-testid={`channel-pos-${name}`}
-                    checked={matchedChannelNames.has(name)}
+                    title={posTooltip}
+                    checked={Boolean(matchedElectrode)}
                     disabled={true}
                   ></input>
                 </div>

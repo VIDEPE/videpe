@@ -16,7 +16,7 @@ const CHANNEL_SETTINGS = {
 };
 
 // Only FP1 matched an electrode position — FP2/FP3 should show the Pos checkbox unchecked.
-const MATCHED = [{ channelIdx: 0, name: 'FP1', pos: { x: 0, y: 0, z: 0 } }];
+const MATCHED = [{ channelIdx: 0, name: 'FP1', pos: { label: 'FP1', x: 0, y: 0, z: 0 } }];
 
 const defaultProps = {
   channelNames: CHANNEL_NAMES,
@@ -73,6 +73,38 @@ describe('EegMontageEditor', () => {
     it('disables the Pos checkbox — it is a read-only indicator', () => {
       render(<EegMontageEditor {...defaultProps} />);
       expect(screen.getByTestId('channel-pos-FP1')).toBeDisabled();
+    });
+  });
+
+  describe('electrode position match tooltip', () => {
+    it('names the matched electrode and the standard template by default', () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      expect(screen.getByTestId('channel-pos-FP1')).toHaveAttribute(
+        'title',
+        'Matched to electrode "FP1" in the standard 10-05 template'
+      );
+    });
+
+    it('names the loaded file instead of the standard template when one is active', () => {
+      render(
+        <EegMontageEditor
+          {...defaultProps}
+          isStandardElectrodes={false}
+          customFileName="my_positions"
+        />
+      );
+      expect(screen.getByTestId('channel-pos-FP1')).toHaveAttribute(
+        'title',
+        'Matched to electrode "FP1" in "my_positions"'
+      );
+    });
+
+    it('explains there is no match for an unmatched channel', () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      expect(screen.getByTestId('channel-pos-FP2')).toHaveAttribute(
+        'title',
+        'No match for "FP2" in the standard 10-05 template'
+      );
     });
   });
 
