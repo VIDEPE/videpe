@@ -109,6 +109,18 @@ export function EegMontageEditor({
     ]);
   }, [channelNames, draftChannelSettings, addByType]);
 
+  const handleAddAll = useCallback(() => {
+    setDraftMontageChannels((prev) => [
+      ...prev,
+      ...channelNames.map((name) => ({
+        id: crypto.randomUUID(),
+        channel: name,
+        reference: null,
+        color: null,
+      })),
+    ]);
+  }, [channelNames]);
+
   // The live channelSettings/montageChannels props only ever change via a prior Apply/OK (or
   // the seeding effects in useChannelSettings/useMontageChannels) — never by draft edits — so
   // comparing against them directly doubles as "has either draft diverged from what was last
@@ -391,30 +403,52 @@ export function EegMontageEditor({
   const montageSelectionPane = (
     <div className="h-full flex bg-surface">
       {/* Add-row controls */}
-      <div className="w-25 h-full items-center flex flex-col gap-6 p-2 border-r border-border bg-surface">
+      <div className="w-25 h-full items-center justify-center flex flex-col gap-6 p-2 border-r border-border bg-surface">
+        {/* Add button */}
         <button
           type="button"
           className="button button-icon"
           data-testid="add-selected-button"
           disabled={selectedChannels.size === 0}
           onClick={handleAddSelectedChannels}
+          title={
+            selectedChannels.size === 0
+              ? 'Add selected channels to Montage (first select channel(s) on the left!)'
+              : 'Add selected channels to Montage'
+          }
         >
           <Plus size={40} />
         </button>
+        {/* Add ALL button */}
+        <div className="flex flex-col gap-2 pt-6 border-t border-border">
+          <button
+            type="button"
+            className="button"
+            data-testid="add-all-button"
+            onClick={handleAddAll}
+            title="Add all channels"
+          >
+            Add ALL
+          </button>
+        </div>
+        {/* Add bye type button + select */}
         <div className="flex flex-col gap-2 pt-6 border-t border-border">
           <button
             type="button"
             className="button"
             data-testid="add-by-type-button"
             onClick={handleAddByType}
+            title="Add all channels with the selected type below"
           >
-            Add by type
+            Add by Type
           </button>
+
           <select
             className="text-xs border border-border rounded bg-surface"
             data-testid="add-by-type-select"
             value={addByType}
             onChange={(e) => setAddByType(e.target.value)}
+            title="Channels with selected type can be added using the 'Add by type' button"
           >
             {Object.entries(TYPE_LIST).map(([typeValue, typeLabel]) => (
               <option key={typeValue} value={typeValue}>
@@ -426,20 +460,20 @@ export function EegMontageEditor({
       </div>
       {/* Header + scrollable row list — bg-background, so the padding leaves the
           surrounding bg-surface visible as a border around this section. */}
-      <div className="flex-1 min-w-0 min-h-0 flex flex-col pl-2 pt-2 bg-background">
+      <div className="flex-1 min-w-0 min-h-0 flex flex-col pt-2 bg-background">
         {/* Column headers — widths mirror each row's controls below so labels stay aligned */}
-        <div className="shrink-0 flex items-center gap-2 px-1 py-0.5 text-xs font-medium text-header border-b border-border">
+        <div className="shrink-0 flex items-center gap-2 pl-3 pr-1 py-0.5 text-xs font-medium text-header border-b border-border">
           <span className="flex-1">Channel</span>
-          <span className="w-20 text-center" title="Reference Channel">
+          <span className="w-23 text-center" title="Reference Channel">
             Ref
           </span>
-          <span className="w-16" title="Channel Type">
+          <span className="w-12" title="Channel Type">
             Color
           </span>
         </div>
         <div className="flex-1 min-h-0 pb-4 overflow-y-auto border-header">
           {draftMontageChannels.length === 0 && (
-            <p className="text-xs text-header px-1 py-2">
+            <p className="text-xs text-header pl-3 pr-1 py-2">
               No montage rows yet — select channel(s) in the Channel Selection pane and click "+ Add
               selected", or add every channel of a type at once on the left.
             </p>
@@ -451,7 +485,7 @@ export function EegMontageEditor({
                 overflow: 'visible',
                 borderBottom: `1px solid ${channelDividerColor}`,
               }}
-              className="relative flex items-center gap-2 px-1 py-0.5"
+              className="relative flex items-center gap-2 pl-3 pr-1 py-0.5"
             >
               {/* Channel name */}
               <span className="flex-1 truncate text-sm">{row.channel}</span>
@@ -487,6 +521,10 @@ export function EegMontageEditor({
               </select>
             </div>
           ))}
+        </div>
+        {/* Channel Selection Settings */}
+        <div className="h-36 shrink-0 flex flex-col items-start gap-2 p-2 border-t border-border bg-surface">
+          <span>PLACEHOLDER - MONTAGE SETTINGS</span>
         </div>
       </div>
     </div>

@@ -360,6 +360,52 @@ describe('EegMontageEditor', () => {
       expect(new Set(committed.map((row) => row.id)).size).toBe(committed.length);
     });
 
+    it('"Add all" adds a row for every channel, regardless of selection', async () => {
+      const onApplyMontageChannels = vi.fn();
+      render(
+        <EegMontageEditor
+          {...defaultProps}
+          montageChannels={[]}
+          onApplyMontageChannels={onApplyMontageChannels}
+        />
+      );
+      await userEvent.click(screen.getByTestId('add-all-button'));
+      await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+      const committed = onApplyMontageChannels.mock.calls[0][0];
+      expect(committed.map((row) => row.channel)).toEqual(CHANNEL_NAMES);
+      expect(committed.every((row) => row.reference === null && row.color === null)).toBe(true);
+    });
+
+    it('"Add all" adds a row for every channel even when some already have one', async () => {
+      const onApplyMontageChannels = vi.fn();
+      render(
+        // MONTAGE_CHANNELS already seeds one row per channel.
+        <EegMontageEditor {...defaultProps} onApplyMontageChannels={onApplyMontageChannels} />
+      );
+      await userEvent.click(screen.getByTestId('add-all-button'));
+      await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+      const committed = onApplyMontageChannels.mock.calls[0][0];
+      CHANNEL_NAMES.forEach((name) => {
+        expect(committed.filter((row) => row.channel === name)).toHaveLength(2);
+      });
+      expect(new Set(committed.map((row) => row.id)).size).toBe(committed.length);
+    });
+
+    it('"Add all" does not touch the current channel selection', async () => {
+      render(<EegMontageEditor {...defaultProps} montageChannels={[]} />);
+      await userEvent.click(screen.getByTestId('channel-select-FP1'));
+      await userEvent.click(screen.getByTestId('add-all-button'));
+      expect(screen.getByTestId('add-selected-button')).not.toBeDisabled();
+    });
+
+    it('adding all rows shows the unsaved-changes asterisk', async () => {
+      render(<EegMontageEditor {...defaultProps} montageChannels={[]} />);
+      await userEvent.click(screen.getByTestId('add-all-button'));
+      expect(screen.getByText('Montage Editor *')).toBeTruthy();
+    });
+
     it('"Add by type" adds a row for every channel currently of the picked type', async () => {
       const onApplyMontageChannels = vi.fn();
       render(
