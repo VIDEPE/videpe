@@ -66,6 +66,16 @@ export function EegMontageEditor({
     onClose();
   }, [handleApply, onClose]);
 
+  // isAlLBad tracks if all channels are set to bad and flips the 'Check all Bad/Good' settings button accordingly
+  const isAllBad = useMemo(
+    () => channelNames.every((name) => draftChannelSettings[name]?.bad),
+    [channelNames, draftChannelSettings]
+  );
+  // When 'Check all Good/Bad'button is flipped this function handles the draft settings changes
+  const handleFlipBadChannels = () => {
+    channelNames.forEach((name) => setDraftChannelBad(name, !isAllBad));
+  };
+
   // ─── Refs ───────────────────────────────────────────────────────────────────
   const fileInputRef = useRef(null);
   const dragOffset = useRef(null);
@@ -76,7 +86,9 @@ export function EegMontageEditor({
   const [position, setPosition] = useState({ x: 80, y: 80 });
   const [size, setSize] = useState(DEFAULT_WINDOW_SIZE);
 
-  // ─── Handlers: window drag/resize ──────────────────────────────────────────────
+  // ─── Handlers  ─────────────────────────────────────────────────────────────
+
+  //  window drag/resize
   // Drag the floating window by its title bar. Position is clamped to the viewport so the
   // window (and its title bar drag handle) can never be dragged out of view and get stranded.
   const handleDragStart = useCallback(
@@ -194,6 +206,7 @@ export function EegMontageEditor({
         </div>
         <div className="flex-1 min-h-0 pb-4 overflow-y-auto border-header">
           {channelNames.map((name) => {
+            // take channel settings from draftChannelSetting (if exist) or default (type: 'eeg', bad: false)
             const settings = draftChannelSettings[name] ?? { type: 'eeg', bad: false };
             return (
               <div
@@ -248,8 +261,10 @@ export function EegMontageEditor({
         </div>
       </div>
       {/* Channel Selection Settings */}
-      <div className="h-36 shrink-0 border-t border-border bg-surface">
-        <span>PLACEHOLDER SETTINGS</span>\
+      <div className="h-36 shrink-0 p-2 gap-2 border-t border-border bg-surface">
+        <button className="button" onClick={() => handleFlipBadChannels()}>
+          {isAllBad ? 'Check all Good' : 'Check all Bad'}
+        </button>
       </div>
     </div>
   );
@@ -319,12 +334,20 @@ export function EegMontageEditor({
         </button>
         <button
           type="button"
-          className="text-xs border border-border rounded-full px-3 py-1 bg-surface hover:bg-background"
+          className="text-xs border border-border rounded-full px-2 py-1 bg-surface hover:bg-background"
           onClick={onClose}
         >
           Cancel
         </button>
-        <button type="button" className="button" onClick={handleApply}>
+        <button
+          type="button"
+          className={
+            isModified
+              ? 'button'
+              : 'text-xs border border-border rounded-full px-2 py-1 bg-surface hover:bg-background'
+          }
+          onClick={handleApply}
+        >
           Apply
         </button>
       </div>

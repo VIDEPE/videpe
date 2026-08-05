@@ -154,4 +154,48 @@ describe('EegMontageEditor', () => {
       expect(onClose).toHaveBeenCalledOnce();
     });
   });
+
+  describe('Check all Bad / Check all Good', () => {
+    const ALL_BAD_SETTINGS = {
+      FP1: { type: 'eeg', bad: true },
+      FP2: { type: 'eeg', bad: true },
+      FP3: { type: 'seeg', bad: true },
+    };
+
+    it('shows "Check all Bad" when not every channel is already bad', () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      expect(screen.getByRole('button', { name: 'Check all Bad' })).toBeTruthy();
+    });
+
+    it('shows "Check all Good" when every channel is already bad', () => {
+      render(<EegMontageEditor {...defaultProps} channelSettings={ALL_BAD_SETTINGS} />);
+      expect(screen.getByRole('button', { name: 'Check all Good' })).toBeTruthy();
+    });
+
+    it('marks every channel bad when clicked while not all are bad', async () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      await userEvent.click(screen.getByRole('button', { name: 'Check all Bad' }));
+
+      CHANNEL_NAMES.forEach((name) =>
+        expect(screen.getByTestId(`channel-bad-${name}`)).toBeChecked()
+      );
+      expect(screen.getByRole('button', { name: 'Check all Good' })).toBeTruthy();
+    });
+
+    it('marks every channel good when clicked while all are bad', async () => {
+      render(<EegMontageEditor {...defaultProps} channelSettings={ALL_BAD_SETTINGS} />);
+      await userEvent.click(screen.getByRole('button', { name: 'Check all Good' }));
+
+      CHANNEL_NAMES.forEach((name) =>
+        expect(screen.getByTestId(`channel-bad-${name}`)).not.toBeChecked()
+      );
+      expect(screen.getByRole('button', { name: 'Check all Bad' })).toBeTruthy();
+    });
+
+    it('updates the label when a channel is unchecked by hand, not just via the button', async () => {
+      render(<EegMontageEditor {...defaultProps} channelSettings={ALL_BAD_SETTINGS} />);
+      await userEvent.click(screen.getByTestId('channel-bad-FP1'));
+      expect(screen.getByRole('button', { name: 'Check all Bad' })).toBeTruthy();
+    });
+  });
 });
