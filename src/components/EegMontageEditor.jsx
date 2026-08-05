@@ -521,55 +521,68 @@ export function EegMontageEditor({
               selected", or add every channel of a type at once on the left.
             </p>
           )}
-          {draftMontageChannels.map((row) => (
-            <div
-              key={row.id}
-              style={{
-                overflow: 'visible',
-                borderBottom: `1px solid ${channelDividerColor}`,
-              }}
-              className="relative flex items-center gap-2 pl-3 pr-1 py-0.5"
-            >
-              {/* Channel name */}
-              <span className="flex-1 truncate text-sm">{row.channel}</span>
-              {/* Reference Channel */}
-              <select
-                className="w-16 text-xs border border-border rounded bg-surface"
-                data-testid={`reference-${row.id}`}
-                value={row.reference ?? ''}
-                onChange={(e) => setDraftMontageRowReference(row.id, e.target.value)}
+          {draftMontageChannels.map((row) => {
+            // A row is "bad" if either its source channel or its reference channel (for
+            // bipolar rows) is marked bad — either one means the row can't be displayed.
+            const isRowBad =
+              draftChannelSettings[row.channel]?.bad ||
+              (row.reference && draftChannelSettings[row.reference]?.bad);
+            return (
+              <div
+                key={row.id}
+                style={{
+                  overflow: 'visible',
+                  borderBottom: `1px solid ${channelDividerColor}`,
+                }}
+                className={cn(
+                  'relative flex items-center gap-2 pl-3 pr-1 py-0.5',
+                  isRowBad ? (isDarkMode ? 'bg-alert/10' : 'bg-alert/20') : ''
+                )}
               >
-                {referenceOptions}
-              </select>
-              {/* Channel Color */}
-              <select
-                className="w-16 text-xs border border-border rounded bg-surface"
-                data-testid={`color-${row.id}`}
-                value={row.color ?? (isDarkMode ? 'white' : 'black')}
-                onChange={(e) => setDraftMontageRowColor(row.id, e.target.value)}
-              >
-                <option value={isDarkMode ? 'white' : 'black'}>
-                  {isDarkMode ? 'White' : 'Black'}
-                </option>
-                <option value="red">Red</option>
-                <option value="blue">Blue</option>
-                <option value="green">Green</option>
-                <option value="yellow">Yellow</option>
-                <option value="cyan">Cyan</option>
-                <option value="magenta">Magenta</option>
-              </select>
-              {/* Remove row */}
-              <button
-                type="button"
-                className="text-header hover:text-alert"
-                data-testid={`remove-row-${row.id}`}
-                title={`Remove ${row.channel} from the montage`}
-                onClick={() => handleRemoveMontageRow(row.id)}
-              >
-                <X size={14} />
-              </button>
-            </div>
-          ))}
+                {/* Channel name */}
+                <span className={cn('flex-1 truncate text-sm', isRowBad && 'text-alert')}>
+                  {row.channel}
+                </span>
+                {/* Reference Channel */}
+                <select
+                  className="w-16 text-xs border border-border rounded bg-surface"
+                  data-testid={`reference-${row.id}`}
+                  value={row.reference ?? ''}
+                  onChange={(e) => setDraftMontageRowReference(row.id, e.target.value)}
+                >
+                  <option value="">— n/a —</option>
+                  {referenceOptions}
+                </select>
+                {/* Channel Color */}
+                <select
+                  className="w-16 text-xs border border-border rounded bg-surface"
+                  data-testid={`color-${row.id}`}
+                  value={row.color ?? (isDarkMode ? 'white' : 'black')}
+                  onChange={(e) => setDraftMontageRowColor(row.id, e.target.value)}
+                >
+                  <option value={isDarkMode ? 'white' : 'black'}>
+                    {isDarkMode ? 'White' : 'Black'}
+                  </option>
+                  <option value="red">Red</option>
+                  <option value="blue">Blue</option>
+                  <option value="green">Green</option>
+                  <option value="yellow">Yellow</option>
+                  <option value="cyan">Cyan</option>
+                  <option value="magenta">Magenta</option>
+                </select>
+                {/* Remove row */}
+                <button
+                  type="button"
+                  className="text-header hover:text-alert"
+                  data-testid={`remove-row-${row.id}`}
+                  title={`Remove ${row.channel} from the montage`}
+                  onClick={() => handleRemoveMontageRow(row.id)}
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            );
+          })}
         </div>
         {/* Montage Settings */}
         <div className="h-36 shrink-0 flex flex-col items-start gap-2 p-2 border-t border-border bg-surface">

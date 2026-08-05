@@ -278,6 +278,12 @@ describe('EegMontageEditor', () => {
       });
     });
 
+    it('shows "— n/a —" for a row with no reference, instead of defaulting to the first channel', () => {
+      // MONTAGE_CHANNELS seeds every row with reference: null.
+      render(<EegMontageEditor {...defaultProps} />);
+      expect(screen.getByTestId('reference-FP1')).toHaveValue('');
+    });
+
     it('Apply commits an edited reference and color to onApplyMontageChannels', async () => {
       const onApplyMontageChannels = vi.fn();
       render(
@@ -298,6 +304,30 @@ describe('EegMontageEditor', () => {
       render(<EegMontageEditor {...defaultProps} />);
       await userEvent.selectOptions(screen.getByTestId('reference-FP1'), 'FP2');
       expect(screen.getByText('Montage Editor *')).toBeTruthy();
+    });
+
+    it('highlights a row in alert styling when its channel is marked bad', () => {
+      // CHANNEL_SETTINGS marks FP2 bad; FP1/FP3 are not.
+      render(<EegMontageEditor {...defaultProps} />);
+      expect(screen.getByTestId('reference-FP2').closest('div').className).toContain('bg-alert');
+      expect(screen.getByTestId('reference-FP1').closest('div').className).not.toContain(
+        'bg-alert'
+      );
+    });
+
+    it('un-marking a channel as bad removes the row highlight', async () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      await userEvent.click(screen.getByTestId('channel-bad-FP2'));
+      expect(screen.getByTestId('reference-FP2').closest('div').className).not.toContain(
+        'bg-alert'
+      );
+    });
+
+    it('highlights a row whose reference channel is marked bad, even if its own channel is fine', async () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      // FP1 isn't bad, but referencing bad FP2 should still flag FP1's row.
+      await userEvent.selectOptions(screen.getByTestId('reference-FP1'), 'FP2');
+      expect(screen.getByTestId('reference-FP1').closest('div').className).toContain('bg-alert');
     });
   });
 
