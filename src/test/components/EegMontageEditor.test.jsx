@@ -18,11 +18,19 @@ const CHANNEL_SETTINGS = {
 // Only FP1 matched an electrode position — FP2/FP3 should show the Pos checkbox unchecked.
 const MATCHED = [{ channelIdx: 0, name: 'FP1', pos: { label: 'FP1', x: 0, y: 0, z: 0 } }];
 
+const MONTAGE_SETTINGS = {
+  FP1: { reference: null, color: 'black' },
+  FP2: { reference: null, color: 'black' },
+  FP3: { reference: null, color: 'black' },
+};
+
 const defaultProps = {
   channelNames: CHANNEL_NAMES,
   matched: MATCHED,
   channelSettings: CHANNEL_SETTINGS,
   onApplyChannelSettings: vi.fn(),
+  montageSettings: MONTAGE_SETTINGS,
+  onApplyMontageSettings: vi.fn(),
   onClose: vi.fn(),
 };
 
@@ -33,13 +41,15 @@ describe('EegMontageEditor', () => {
   });
 
   it('renders a row for every channel name', () => {
+    // Each channel name now appears once per pane (channel selection + montage settings).
     render(<EegMontageEditor {...defaultProps} />);
-    CHANNEL_NAMES.forEach((name) => expect(screen.getByText(name)).toBeTruthy());
+    CHANNEL_NAMES.forEach((name) => expect(screen.getAllByText(name).length).toBeGreaterThan(0));
   });
 
   it('renders the column headers', () => {
+    // "Channel" is the first column header in both panes.
     render(<EegMontageEditor {...defaultProps} />);
-    expect(screen.getByText('Channel')).toBeTruthy();
+    expect(screen.getAllByText('Channel').length).toBeGreaterThan(0);
     expect(screen.getByText('Pos')).toBeTruthy();
     expect(screen.getByText('Type')).toBeTruthy();
     expect(screen.getByText('Bad')).toBeTruthy();
