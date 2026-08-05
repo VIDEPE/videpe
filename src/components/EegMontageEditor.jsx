@@ -215,7 +215,7 @@ export function EegMontageEditor({
                 <div className="w-4 flex justify-center">
                   <input
                     type="checkbox"
-                    className="text-xs rounded bg-surface"
+                    className="text-xs rounded accent-border opacity-60 cursor-help"
                     data-testid={`channel-pos-${name}`}
                     checked={matchedChannelNames.has(name)}
                     disabled={true}
@@ -249,7 +249,7 @@ export function EegMontageEditor({
       </div>
       {/* Channel Selection Settings */}
       <div className="h-36 shrink-0 border-t border-border bg-surface">
-        <span>PLACEHOLDER SETTINGS</span>
+        <span>PLACEHOLDER SETTINGS</span>\
       </div>
     </div>
   );
