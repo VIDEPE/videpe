@@ -97,6 +97,10 @@ export const SplitPane = ({
     };
 
     const stopDrag = () => {
+      // Guard: this listener is global (any mouseup in the window), not scoped to the divider,
+      // so without this check releasing an unrelated drag (e.g. a parent window's title bar)
+      // would force-sync splitPercent to the stale splitPercentRef default and clobber it.
+      if (!isDraggingRef.current) return;
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       isDraggingRef.current = false;
       setIsDragging(false);
