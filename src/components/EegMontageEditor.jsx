@@ -285,7 +285,6 @@ export function EegMontageEditor({
             <option value="seeg">SEEG</option>
             <option value="other">Other</option>
           </select>
-
         </div>
       </div>
     </div>

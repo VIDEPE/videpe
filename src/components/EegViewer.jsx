@@ -218,6 +218,17 @@ export const EegViewer = ({
     isIntracranial ? 'seeg' : 'eeg'
   );
 
+  // Bad channels are hidden from the waveform view entirely. Kept as {name, index} pairs
+  // (rather than filtering channelNames outright) so displayedData/montagedChannels — still
+  // indexed by the full channelNames — can be looked up by their original index below.
+  const visibleChannels = useMemo(
+    () =>
+      channelNames
+        .map((name, index) => ({ name, index }))
+        .filter(({ name }) => !channelSettings[name]?.bad),
+    [channelNames, channelSettings]
+  );
+
   // Montage application + the electrode/channel voltage snapshots at the clicked topography
   // timepoint, lifted up to PatientView for the intracranial connectome and ESI.
   const { montagedChannels, topoVoltages, topoVoltagesByChannel } = useTopographySnapshot({
@@ -599,7 +610,7 @@ export const EegViewer = ({
                         }}
                       />
                     )}
-                    {channelNames.map((name, i) => (
+                    {visibleChannels.map(({ name, index: i }) => (
                       // Channel divider below each channel
                       <div
                         key={name}

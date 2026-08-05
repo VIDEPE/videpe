@@ -2138,3 +2138,38 @@ describe('EegViewer — hovering a disabled toggle highlights the LED that expla
     expect(led).toHaveClass('bg-foreground/20');
   });
 });
+
+describe('EegViewer — bad channel filtering', () => {
+  it('hides a channel from the waveform view once marked bad and applied', async () => {
+    await renderViewer();
+    channelNames.forEach((name) => expect(screen.getByText(name)).toBeTruthy());
+
+    await userEvent.click(screen.getByRole('button', { name: 'Montage' }));
+    await userEvent.click(screen.getByTestId('channel-bad-EEG2'));
+    await userEvent.click(screen.getByRole('button', { name: 'OK' }));
+
+    expect(screen.getByText('EEG1')).toBeTruthy();
+    expect(screen.queryByText('EEG2')).toBeNull();
+    expect(screen.getByText('EEG3')).toBeTruthy();
+  });
+
+  it("still shows the remaining channels' own data after a bad channel is hidden", async () => {
+    // Within the default 20s window, EEG3's values are [7,8,9] — distinct from EEG1's
+    // [1,2,3] and EEG2's [4,5,6]. If hiding EEG2 shifted the remaining rows' indices
+    // instead of preserving each row's original index, EEG3 would render EEG2's data.
+    const { default: UplotReactMock } = await import('uplot-react');
+    await renderViewer();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Montage' }));
+    await userEvent.click(screen.getByTestId('channel-bad-EEG2'));
+    await userEvent.click(screen.getByRole('button', { name: 'OK' }));
+
+    // Search from the most recent render backward, so a stale call from before the
+    // commit can't hide a regression in the post-commit render.
+    const eeg3Call = [...UplotReactMock.mock.calls]
+      .reverse()
+      .find((call) => call[0].data?.[1]?.includes(7));
+    expect(eeg3Call).toBeTruthy();
+    expect(Array.from(eeg3Call[0].data[1])).toEqual([7, 8, 9]);
+  });
+});
