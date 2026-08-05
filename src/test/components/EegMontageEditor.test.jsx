@@ -198,4 +198,30 @@ describe('EegMontageEditor', () => {
       expect(screen.getByRole('button', { name: 'Check all Bad' })).toBeTruthy();
     });
   });
+
+  describe('Set all as [type]', () => {
+    it('defaults the bulk type select to "eeg"', () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      expect(screen.getByTestId('bulk-type-select')).toHaveValue('eeg');
+    });
+
+    it('sets every channel to the picked type when clicked', async () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      await userEvent.selectOptions(screen.getByTestId('bulk-type-select'), 'seeg');
+      await userEvent.click(screen.getByRole('button', { name: 'Set all as' }));
+
+      CHANNEL_NAMES.forEach((name) =>
+        expect(screen.getByTestId(`channel-type-${name}`)).toHaveValue('seeg')
+      );
+    });
+
+    it("leaves each channel's bad flag untouched", async () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      await userEvent.selectOptions(screen.getByTestId('bulk-type-select'), 'other');
+      await userEvent.click(screen.getByRole('button', { name: 'Set all as' }));
+
+      expect(screen.getByTestId('channel-bad-FP2')).toBeChecked();
+      expect(screen.getByTestId('channel-bad-FP1')).not.toBeChecked();
+    });
+  });
 });

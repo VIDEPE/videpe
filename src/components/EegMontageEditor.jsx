@@ -76,6 +76,12 @@ export function EegMontageEditor({
     channelNames.forEach((name) => setDraftChannelBad(name, !isAllBad));
   };
 
+  // Selected value for the "Set all as [type]" bulk control below
+  const [bulkType, setBulkType] = useState('eeg');
+  const handleSetAllType = () => {
+    channelNames.forEach((name) => setDraftChannelType(name, bulkType));
+  };
+
   // ─── Refs ───────────────────────────────────────────────────────────────────
   const fileInputRef = useRef(null);
   const dragOffset = useRef(null);
@@ -261,10 +267,26 @@ export function EegMontageEditor({
         </div>
       </div>
       {/* Channel Selection Settings */}
-      <div className="h-36 shrink-0 p-2 gap-2 border-t border-border bg-surface">
+      <div className="h-36 shrink-0 flex flex-col items-start gap-2 p-2 border-t border-border bg-surface">
         <button className="button" onClick={() => handleFlipBadChannels()}>
           {isAllBad ? 'Check all Good' : 'Check all Bad'}
         </button>
+        <div className="flex items-center gap-2">
+          <button className="button" onClick={handleSetAllType}>
+            Set all as
+          </button>
+          <select
+            className="text-xs border border-border rounded bg-surface"
+            data-testid="bulk-type-select"
+            value={bulkType}
+            onChange={(e) => setBulkType(e.target.value)}
+          >
+            <option value="eeg">EEG</option>
+            <option value="seeg">SEEG</option>
+            <option value="other">Other</option>
+          </select>
+
+        </div>
       </div>
     </div>
   );
