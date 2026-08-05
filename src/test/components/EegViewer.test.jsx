@@ -1412,9 +1412,9 @@ describe('EegViewer — loading toast', () => {
 // EEG1 = [1-4, 2-5, 3-6, 4-7] = [-3,-3,-3,-3].
 
 describe('EegViewer — montage controls', () => {
-  it('renders a Montage label with a dropdown defaulting to none', async () => {
+  it('renders a Montage button and a dropdown defaulting to none', async () => {
     await renderViewer();
-    expect(screen.getByText('Montage:')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Montage' })).toBeInTheDocument();
     const select = screen.getByLabelText(/montage/i);
     expect(select.value).toBe('none');
   });

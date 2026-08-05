@@ -216,6 +216,7 @@ export function EegMontageEditor({
                   <input
                     type="checkbox"
                     className="text-xs rounded bg-surface"
+                    data-testid={`channel-pos-${name}`}
                     checked={matchedChannelNames.has(name)}
                     disabled={true}
                   ></input>
@@ -223,6 +224,7 @@ export function EegMontageEditor({
                 {/* Channel Type */}
                 <select
                   className="w-16 text-xs border border-border rounded bg-surface"
+                  data-testid={`channel-type-${name}`}
                   value={settings.type}
                   onChange={(e) => setDraftChannelType(name, e.target.value)}
                 >
@@ -235,6 +237,7 @@ export function EegMontageEditor({
                   <input
                     type="checkbox"
                     className="accent-alert"
+                    data-testid={`channel-bad-${name}`}
                     checked={settings.bad}
                     onChange={(e) => setDraftChannelBad(name, e.target.checked)}
                   />
@@ -294,7 +297,7 @@ export function EegMontageEditor({
         RESIZE_DIRECTIONS.map((direction) => (
           <div
             key={direction}
-            data-testid={`topo-resize-${direction}`}
+            data-testid={`montage-resize-${direction}`}
             className={`absolute ${resizePosition[direction]} ${resizeCursor[direction]}`}
             onMouseDown={(e) => handleResizeStart(e, direction)}
           />
