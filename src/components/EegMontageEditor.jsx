@@ -5,10 +5,16 @@ import { TrafficLightButtons } from '@/components/TrafficLightButtons';
 import {} from '@/utils/eegViewerUtils';
 import { EyeDashed } from 'lucide-react';
 import { cn } from '@/utils/utils';
+import { Plus } from 'lucide-react';
 
 // ─── EEG Montage settings ────────────────────────────────────────
 // Shared title styling — keeps panes titles visually consistent, with the same height (TrafficLightButtons are 16px tall).
 const PANEL_TITLE_CLASS = 'h-5 flex items-center text-xs font-medium leading-none text-header';
+const TYPE_LIST = {
+  eeg: 'EEG',
+  seeg: 'SEEG',
+  other: 'Other',
+};
 
 // ─── Window sizing constants ────────────────────────────────────────────────
 // Default/minimum window size in px — default matches the previous fixed w-96 h-80 (24rem x 20rem)
@@ -53,17 +59,55 @@ export function EegMontageEditor({
     setDraftChannelSettings((prev) => ({ ...prev, [name]: { ...prev[name], bad } }));
   }, []);
 
-  const setDraftChannelReference = useCallback((name, reference) => {
+  // Keyed by row id, not channel name — a channel can now have several montage rows
+  // (duplicates are allowed, see handleAddSelectedChannels/handleAddByType below), so
+  // matching by channel name would edit every one of that channel's rows at once.
+  const setDraftMontageRowReference = useCallback((id, reference) => {
     setDraftMontageChannels((prev) =>
-      prev.map((row) => (row.channel === name ? { ...row, reference } : row))
+      prev.map((row) => (row.id === id ? { ...row, reference } : row))
     );
   }, []);
 
-  const setDraftChannelColor = useCallback((name, color) => {
-    setDraftMontageChannels((prev) =>
-      prev.map((row) => (row.channel === name ? { ...row, color } : row))
-    );
+  const setDraftMontageRowColor = useCallback((id, color) => {
+    setDraftMontageChannels((prev) => prev.map((row) => (row.id === id ? { ...row, color } : row)));
   }, []);
+
+  // Channels checked in the channel-selection pane, pending "+ Add selected" — purely
+  // ephemeral editor UI state, not part of either draft and never committed on Apply/OK.
+  const [selectedChannels, setSelectedChannels] = useState(() => new Set());
+  const toggleChannelSelected = useCallback((name) => {
+    setSelectedChannels((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  }, []);
+
+  // Adds one new montage row per currently-selected channel, then clears the selection so
+  // the next pick starts fresh. Rows aren't deduped against existing ones — a channel can
+  // end up with several rows (e.g. two different bipolar derivations).
+  const handleAddSelectedChannels = useCallback(() => {
+    setDraftMontageChannels((prev) => [
+      ...prev,
+      ...channelNames
+        .filter((name) => selectedChannels.has(name))
+        .map((name) => ({ id: crypto.randomUUID(), channel: name, reference: null, color: null })),
+    ]);
+    setSelectedChannels(new Set());
+  }, [channelNames, selectedChannels]);
+
+  // Selected value for the "Add by type" control below — adds a montage row for every
+  // channel currently set (in the draft) to the picked type, regardless of selection.
+  const [addByType, setAddByType] = useState('eeg');
+  const handleAddByType = useCallback(() => {
+    setDraftMontageChannels((prev) => [
+      ...prev,
+      ...channelNames
+        .filter((name) => (draftChannelSettings[name]?.type ?? 'eeg') === addByType)
+        .map((name) => ({ id: crypto.randomUUID(), channel: name, reference: null, color: null })),
+    ]);
+  }, [channelNames, draftChannelSettings, addByType]);
 
   // The live channelSettings/montageChannels props only ever change via a prior Apply/OK (or
   // the seeding effects in useChannelSettings/useMontageChannels) — never by draft edits — so
@@ -259,11 +303,21 @@ export function EegMontageEditor({
                 }}
                 className={cn(
                   'relative flex items-center gap-2 px-1 py-0.5',
-                  settings.bad ? (isDarkMode ? 'bg-alert/10' : 'bg-alert/20') : ''
+                  settings.bad ? (isDarkMode ? 'bg-alert/10' : 'bg-alert/20') : '',
+                  selectedChannels.has(name) && (isDarkMode ? 'bg-primary/15' : 'bg-primary/20')
                 )}
               >
-                {/* Channel name */}
-                <span className={cn('flex-1 truncate text-sm', settings.bad && 'text-alert')}>
+                {/* Channel name — click to select/deselect for "+ Add selected" in the
+                    montage settings pane. */}
+                <span
+                  className={cn(
+                    'flex-1 truncate text-sm cursor-pointer select-none',
+                    settings.bad && 'text-alert'
+                  )}
+                  data-testid={`channel-select-${name}`}
+                  title="Click to select for adding to the montage"
+                  onClick={() => toggleChannelSelected(name)}
+                >
                   {name}
                 </span>
                 {/* Electrode Position Match */}
@@ -284,9 +338,11 @@ export function EegMontageEditor({
                   value={settings.type}
                   onChange={(e) => setDraftChannelType(name, e.target.value)}
                 >
-                  <option value="eeg">EEG</option>
-                  <option value="seeg">SEEG</option>
-                  <option value="other">Other</option>
+                  {Object.entries(TYPE_LIST).map(([typeValue, typeLabel]) => (
+                    <option key={typeValue} value={typeValue}>
+                      {typeLabel}
+                    </option>
+                  ))}
                 </select>
                 {/* Bad Channel */}
                 <div className="w-4 flex justify-center">
@@ -318,32 +374,76 @@ export function EegMontageEditor({
             value={bulkType}
             onChange={(e) => setBulkType(e.target.value)}
           >
-            <option value="eeg">EEG</option>
-            <option value="seeg">SEEG</option>
-            <option value="other">Other</option>
+            {Object.entries(TYPE_LIST).map(([typeValue, typeLabel]) => (
+              <option key={typeValue} value={typeValue}>
+                {typeLabel}
+              </option>
+            ))}
           </select>
         </div>
       </div>
     </div>
   );
   // ─── Montage Selection Pane ──────────────────────────────────────────────────────
+  // Two sections: a narrow left column to build rows (from the channel-selection pane's
+  // selection, or by type), and the row list itself on the right. Montage rows are never
+  // auto-seeded (see useMontageChannels), so this is the only way rows get created.
   const montageSelectionPane = (
-    <div className="h-full flex flex-col bg-surface">
-      {/* Header + scrollable list — bg-background, so the padding leaves the
-          surrounding bg-surface visible as a border around this section. flex-1 min-h-0
-          claims all remaining height above the fixed-height settings section below. */}
-      <div className="flex-1 min-h-0 flex flex-col pl-2 pt-2 bg-background">
+    <div className="h-full flex bg-surface">
+      {/* Add-row controls */}
+      <div className="w-25 h-full items-center flex flex-col gap-6 p-2 border-r border-border bg-surface">
+        <button
+          type="button"
+          className="button button-icon"
+          data-testid="add-selected-button"
+          disabled={selectedChannels.size === 0}
+          onClick={handleAddSelectedChannels}
+        >
+          <Plus size={40} />
+        </button>
+        <div className="flex flex-col gap-2 pt-6 border-t border-border">
+          <button
+            type="button"
+            className="button"
+            data-testid="add-by-type-button"
+            onClick={handleAddByType}
+          >
+            Add by type
+          </button>
+          <select
+            className="text-xs border border-border rounded bg-surface"
+            data-testid="add-by-type-select"
+            value={addByType}
+            onChange={(e) => setAddByType(e.target.value)}
+          >
+            {Object.entries(TYPE_LIST).map(([typeValue, typeLabel]) => (
+              <option key={typeValue} value={typeValue}>
+                {typeLabel}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+      {/* Header + scrollable row list — bg-background, so the padding leaves the
+          surrounding bg-surface visible as a border around this section. */}
+      <div className="flex-1 min-w-0 min-h-0 flex flex-col pl-2 pt-2 bg-background">
         {/* Column headers — widths mirror each row's controls below so labels stay aligned */}
         <div className="shrink-0 flex items-center gap-2 px-1 py-0.5 text-xs font-medium text-header border-b border-border">
           <span className="flex-1">Channel</span>
-          <span className="w-13 text-center" title="Reference Channel">
+          <span className="w-20 text-center" title="Reference Channel">
             Ref
           </span>
-          <span className="w-8" title="Channel Type">
+          <span className="w-16" title="Channel Type">
             Color
           </span>
         </div>
         <div className="flex-1 min-h-0 pb-4 overflow-y-auto border-header">
+          {draftMontageChannels.length === 0 && (
+            <p className="text-xs text-header px-1 py-2">
+              No montage rows yet — select channel(s) in the Channel Selection pane and click "+ Add
+              selected", or add every channel of a type at once on the left.
+            </p>
+          )}
           {draftMontageChannels.map((row) => (
             <div
               key={row.id}
@@ -358,9 +458,9 @@ export function EegMontageEditor({
               {/* Reference Channel */}
               <select
                 className="w-16 text-xs border border-border rounded bg-surface"
-                data-testid={`reference-${row.channel}`}
+                data-testid={`reference-${row.id}`}
                 value={row.reference ?? ''}
-                onChange={(e) => setDraftChannelReference(row.channel, e.target.value)}
+                onChange={(e) => setDraftMontageRowReference(row.id, e.target.value)}
               >
                 {channelNames.map((refName) => (
                   <option key={refName} value={refName}>
@@ -371,12 +471,12 @@ export function EegMontageEditor({
               {/* Channel Color */}
               <select
                 className="w-16 text-xs border border-border rounded bg-surface"
-                data-testid={`color-${row.channel}`}
-                value={row.color ?? (isDarkMode ? 'black' : 'white')}
-                onChange={(e) => setDraftChannelColor(row.channel, e.target.value)}
+                data-testid={`color-${row.id}`}
+                value={row.color ?? (isDarkMode ? 'white' : 'black')}
+                onChange={(e) => setDraftMontageRowColor(row.id, e.target.value)}
               >
-                <option value={isDarkMode ? 'black' : 'white'}>
-                  {isDarkMode ? 'Black' : 'White'}
+                <option value={isDarkMode ? 'white' : 'black'}>
+                  {isDarkMode ? 'White' : 'Black'}
                 </option>
                 <option value="red">Red</option>
                 <option value="blue">Blue</option>
@@ -388,10 +488,6 @@ export function EegMontageEditor({
             </div>
           ))}
         </div>
-      </div>
-      {/* Channel Selection Settings */}
-      <div className="h-36 shrink-0 flex flex-col items-start gap-2 p-2 border-t border-border bg-surface">
-          <span>PLACEHOLDER - MONTAGE SETTINGS</span>
       </div>
     </div>
   );
@@ -449,7 +545,7 @@ export function EegMontageEditor({
         onMaximizeChange={setMaximizedPanel}
         left={channelSelectionPane}
         right={montageSelectionPane}
-        defaultSplitPercent={35}
+        defaultSplitPercent={25}
       />
 
       {/* Footer — Apply/OK commit the draft to EegViewer's live channelSettings; Cancel (and

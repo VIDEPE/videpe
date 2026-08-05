@@ -271,6 +271,7 @@ describe('EegMontageEditor', () => {
   describe('montage settings pane', () => {
     it('renders a reference/color row for every montageChannels entry', () => {
       render(<EegMontageEditor {...defaultProps} />);
+      // MONTAGE_CHANNELS seeds id === channel, so these testids double as an id check.
       CHANNEL_NAMES.forEach((name) => {
         expect(screen.getByTestId(`reference-${name}`)).toBeTruthy();
         expect(screen.getByTestId(`color-${name}`)).toBeTruthy();
@@ -296,6 +297,91 @@ describe('EegMontageEditor', () => {
     it('editing a reference/color shows the unsaved-changes asterisk', async () => {
       render(<EegMontageEditor {...defaultProps} />);
       await userEvent.selectOptions(screen.getByTestId('reference-FP1'), 'FP2');
+      expect(screen.getByText('Montage Editor *')).toBeTruthy();
+    });
+  });
+
+  describe('building montage rows from channel selection', () => {
+    it('shows a placeholder message when there are no montage rows yet', () => {
+      render(<EegMontageEditor {...defaultProps} montageChannels={[]} />);
+      expect(screen.getByText(/No montage rows yet/i)).toBeTruthy();
+    });
+
+    it('disables "+ Add selected" until a channel is selected', () => {
+      render(<EegMontageEditor {...defaultProps} montageChannels={[]} />);
+      expect(screen.getByTestId('add-selected-button')).toBeDisabled();
+    });
+
+    it('clicking a channel name toggles it selected, enabling "+ Add selected"', async () => {
+      render(<EegMontageEditor {...defaultProps} montageChannels={[]} />);
+      await userEvent.click(screen.getByTestId('channel-select-FP1'));
+      expect(screen.getByTestId('add-selected-button')).not.toBeDisabled();
+    });
+
+    it('clicking a selected channel name again deselects it', async () => {
+      render(<EegMontageEditor {...defaultProps} montageChannels={[]} />);
+      await userEvent.click(screen.getByTestId('channel-select-FP1'));
+      await userEvent.click(screen.getByTestId('channel-select-FP1'));
+      expect(screen.getByTestId('add-selected-button')).toBeDisabled();
+    });
+
+    it('"+ Add selected" adds one montage row per selected channel and clears the selection', async () => {
+      const onApplyMontageChannels = vi.fn();
+      render(
+        <EegMontageEditor
+          {...defaultProps}
+          montageChannels={[]}
+          onApplyMontageChannels={onApplyMontageChannels}
+        />
+      );
+      await userEvent.click(screen.getByTestId('channel-select-FP1'));
+      await userEvent.click(screen.getByTestId('channel-select-FP2'));
+      await userEvent.click(screen.getByTestId('add-selected-button'));
+
+      expect(screen.getByTestId('add-selected-button')).toBeDisabled(); // selection cleared
+
+      await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+      const committed = onApplyMontageChannels.mock.calls[0][0];
+      expect(committed.map((row) => row.channel).sort()).toEqual(['FP1', 'FP2']);
+      expect(committed.every((row) => row.reference === null && row.color === null)).toBe(true);
+    });
+
+    it('allows adding a second row for a channel that already has one, each with a unique id', async () => {
+      const onApplyMontageChannels = vi.fn();
+      render(
+        <EegMontageEditor {...defaultProps} onApplyMontageChannels={onApplyMontageChannels} />
+      );
+      await userEvent.click(screen.getByTestId('channel-select-FP1'));
+      await userEvent.click(screen.getByTestId('add-selected-button'));
+      await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+      const committed = onApplyMontageChannels.mock.calls[0][0];
+      expect(committed.filter((row) => row.channel === 'FP1')).toHaveLength(2);
+      expect(new Set(committed.map((row) => row.id)).size).toBe(committed.length);
+    });
+
+    it('"Add by type" adds a row for every channel currently of the picked type', async () => {
+      const onApplyMontageChannels = vi.fn();
+      render(
+        <EegMontageEditor
+          {...defaultProps}
+          montageChannels={[]}
+          onApplyMontageChannels={onApplyMontageChannels}
+        />
+      );
+      // CHANNEL_SETTINGS: FP1/FP2 are 'eeg', FP3 is 'seeg'.
+      await userEvent.selectOptions(screen.getByTestId('add-by-type-select'), 'seeg');
+      await userEvent.click(screen.getByTestId('add-by-type-button'));
+      await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+      const committed = onApplyMontageChannels.mock.calls[0][0];
+      expect(committed.map((row) => row.channel)).toEqual(['FP3']);
+    });
+
+    it('adding a row shows the unsaved-changes asterisk', async () => {
+      render(<EegMontageEditor {...defaultProps} montageChannels={[]} />);
+      await userEvent.click(screen.getByTestId('channel-select-FP1'));
+      await userEvent.click(screen.getByTestId('add-selected-button'));
       expect(screen.getByText('Montage Editor *')).toBeTruthy();
     });
   });

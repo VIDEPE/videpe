@@ -8,50 +8,44 @@ const setup = (channelNames) =>
   });
 
 describe('useMontageChannels — seeding', () => {
-  it('seeds one row per channel with reference:null and color:null', () => {
+  it('starts with no rows — rows are only created explicitly via EegMontageEditor', () => {
     const { result } = setup(['FP1', 'FP2']);
-    expect(result.current.montageChannels).toEqual([
-      { id: 'FP1', channel: 'FP1', reference: null, color: null },
-      { id: 'FP2', channel: 'FP2', reference: null, color: null },
-    ]);
-  });
-
-  it('preserves row order from channelNames', () => {
-    const { result } = setup(['FP2', 'FP1']);
-    expect(result.current.montageChannels.map((row) => row.channel)).toEqual(['FP2', 'FP1']);
+    expect(result.current.montageChannels).toEqual([]);
   });
 });
 
 describe('useMontageChannels — channelNames changes', () => {
-  it('adds a row for a newly-added channel', () => {
+  it('does not add a row for a newly-added channel', () => {
     const { result, rerender } = setup(['FP1']);
     act(() => rerender({ channelNames: ['FP1', 'FP2'] }));
-    expect(result.current.montageChannels).toContainEqual({
-      id: 'FP2',
-      channel: 'FP2',
-      reference: null,
-      color: null,
-    });
+    expect(result.current.montageChannels).toEqual([]);
   });
 
   it('drops the row for a channel no longer present', () => {
     const { result, rerender } = setup(['FP1', 'FP2']);
+    act(() =>
+      result.current.applyMontageChannels([
+        { id: 'row-1', channel: 'FP1', reference: null, color: null },
+        { id: 'row-2', channel: 'FP2', reference: null, color: null },
+      ])
+    );
     act(() => rerender({ channelNames: ['FP1'] }));
-    expect(result.current.montageChannels.map((row) => row.channel)).toEqual(['FP1']);
+    expect(result.current.montageChannels).toEqual([
+      { id: 'row-1', channel: 'FP1', reference: null, color: null },
+    ]);
   });
 
   it('preserves reference/color for a channel that persists across a channelNames change', () => {
     const { result, rerender } = setup(['FP1', 'FP2']);
     act(() =>
       result.current.applyMontageChannels([
-        { id: 'FP1', channel: 'FP1', reference: 'FP2', color: 'red' },
-        { id: 'FP2', channel: 'FP2', reference: null, color: null },
+        { id: 'row-1', channel: 'FP1', reference: 'FP2', color: 'red' },
+        { id: 'row-2', channel: 'FP2', reference: null, color: null },
       ])
     );
     act(() => rerender({ channelNames: ['FP1', 'FP3'] }));
     expect(result.current.montageChannels).toEqual([
-      { id: 'FP1', channel: 'FP1', reference: 'FP2', color: 'red' },
-      { id: 'FP3', channel: 'FP3', reference: null, color: null },
+      { id: 'row-1', channel: 'FP1', reference: 'FP2', color: 'red' },
     ]);
   });
 });

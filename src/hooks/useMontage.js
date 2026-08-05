@@ -31,25 +31,19 @@ export function useMontage() {
  * (theme default). This is an array, not a `Record<channelName, ...>` like
  * useChannelSettings, because a montage row list needs to support zero, one, or several
  * derived rows per source channel (custom bipolar builds, imported AnyWave/Cartool files)
- * — a per-channel record can't represent that. For now it's seeded 1:1 with channelNames
- * (one row per recording channel, the array's simplest case), so add/remove/reorder can be
- * layered on later without reshaping the state.
+ * — a per-channel record can't represent that. Rows are never auto-created: the list starts
+ * empty and only grows when EegMontageEditor's draft explicitly adds a row (via its
+ * "+ Add selected" / "Add by type" controls) and that draft is committed.
  *
  * @param {string[]} channelNames
  */
 export function useMontageChannels(channelNames) {
   const [montageChannels, setMontageChannels] = useState([]);
 
-  // Rebuilds montageChannels to match channelNames, preserving each surviving channel's
-  // row (reference/color) — mirrors useChannelSettings' re-seed-but-preserve pattern.
+  // Drops rows for channels no longer present (e.g. a new recording loaded) — never adds
+  // rows for new channels, since row creation is always an explicit user action.
   useEffect(() => {
-    setMontageChannels((prev) => {
-      const prevByChannel = new Map(prev.map((row) => [row.channel, row]));
-      return channelNames.map(
-        (name) =>
-          prevByChannel.get(name) ?? { id: name, channel: name, reference: null, color: null }
-      );
-    });
+    setMontageChannels((prev) => prev.filter((row) => channelNames.includes(row.channel)));
   }, [channelNames]);
 
   // Wholesale replace — commits a draft edited in EegMontageEditor (Apply/OK), same pattern
