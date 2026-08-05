@@ -89,7 +89,7 @@ export function EegMontageEditor({
   // ─── State ──────────────────────────────────────────────────────────────────
   const [isMaximized, setIsMaximized] = useState(false);
   const [maximizedPanel, setMaximizedPanel] = useState(null); // null | 'left' | 'right'
-  const [position, setPosition] = useState({ x: 80, y: 80 });
+  const [position, setPosition] = useState({ x: 100, y: 70 });
   const [size, setSize] = useState(DEFAULT_WINDOW_SIZE);
 
   // ─── Handlers  ─────────────────────────────────────────────────────────────
