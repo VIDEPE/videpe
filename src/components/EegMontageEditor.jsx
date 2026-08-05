@@ -281,6 +281,19 @@ export function EegMontageEditor({
     [matched]
   );
 
+  // Shared <option> list for every montage row's Reference select — every row offers the
+  // same full channel list, so this is built once per channelNames change instead of once
+  // per row per render (was O(rows × channels) <option> elements every render).
+  const referenceOptions = useMemo(
+    () =>
+      channelNames.map((refName) => (
+        <option key={refName} value={refName}>
+          {refName}
+        </option>
+      )),
+    [channelNames]
+  );
+
   // Human-readable name of the electrode position source, for the Pos tooltip text below.
   const electrodePositionSourceLabel = isStandardElectrodes
     ? 'the standard 10-05 template'
@@ -506,11 +519,7 @@ export function EegMontageEditor({
                 value={row.reference ?? ''}
                 onChange={(e) => setDraftMontageRowReference(row.id, e.target.value)}
               >
-                {channelNames.map((refName) => (
-                  <option key={refName} value={refName}>
-                    {refName}
-                  </option>
-                ))}
+                {referenceOptions}
               </select>
               {/* Channel Color */}
               <select
