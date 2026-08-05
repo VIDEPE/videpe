@@ -23,7 +23,7 @@ import {
 import { minMaxDownsample } from '@/utils/downsample';
 import { useEegBuffer } from '@/loaders/eegBuffer';
 import { useContainerResize } from '@/hooks/useContainerResize';
-import { useViewportControls } from '@/hooks/useViewportControls';
+import { useEegPlotControls } from '@/hooks/useEegPlotControls';
 import { useScrubberDrag } from '@/hooks/useScrubberDrag';
 import { useElectrodeMatching } from '@/hooks/useElectrodeMatching';
 import { useChannelSettings } from '@/hooks/useChannelSettings';
@@ -157,7 +157,7 @@ export const EegViewer = ({
     decreaseWindowSize,
     forwardshiftStartTime,
     backwardshiftStartTime,
-  } = useViewportControls({ tMax, channelCount: channelNames.length, channelAreaHeight });
+  } = useEegPlotControls({ tMax, channelCount: channelNames.length, channelAreaHeight });
 
   const X_AXIS_HEIGHT = 45; // px reserved for the fixed x-axis strip below the scroll area
   const plotHeight =

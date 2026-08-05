@@ -10,7 +10,7 @@ const Y_MAX = 10 ** Y_INPUT_MAX_LENGTH - 1; // 99999 — derived from Y_INPUT_MA
 const Y_MIN = 10 ** -(Y_INPUT_MAX_LENGTH - 2); // 0.001 minimum range (with Y_INPUT_MAX_LENGTH char length) to prevent uPlot from breaking with a zero or negative y-range
 
 /**
- * Owns the EEG viewer's viewport controls — visible channel count, x-range (window size +
+ * Owns the EEG plot's display controls — visible channel count, x-range (window size +
  * start time), time-step size, and y-range (voltage scale) — plus the input change/blur
  * handlers and increment helpers the controls row wires up to. Values are clamped against
  * each other (e.g. shift step can never exceed window size, channel count can never
@@ -25,7 +25,7 @@ const Y_MIN = 10 ** -(Y_INPUT_MAX_LENGTH - 2); // 0.001 minimum range (with Y_IN
  * @param {number} params.channelAreaHeight - measured pixel height of the scrollable
  *   channel-plot area; used with MIN_PLOT_HEIGHT to cap how many channel lanes can fit,
  *   and to re-clamp the visible count whenever the pane is resized.
- * @returns {Object} The current viewport state, plus the functions/handlers to drive it:
+ * @returns {Object} The current display state, plus the functions/handlers to drive it:
  *   - `visibleChannelCount`/`visibleChannelCountStr` (number/string) — how many channels
  *     are shown at once, and the input's editable string form.
  *   - `windowSize`/`windowSizeStr` (number/string) — seconds visible in the x-range.
@@ -50,7 +50,7 @@ const Y_MIN = 10 ** -(Y_INPUT_MAX_LENGTH - 2); // 0.001 minimum range (with Y_IN
  *   - `forwardshiftStartTime`/`backwardshiftStartTime` () => void — pan start time by
  *     `shiftTimeStepSize`.
  */
-export function useViewportControls({ tMax, channelCount, channelAreaHeight }) {
+export function useEegPlotControls({ tMax, channelCount, channelAreaHeight }) {
   // ── Visible channel count ────────────────────────────────────────────────
   const defaultVisibleChannelCount = 20;
   const [visibleChannelCount, setVisibleChannelCount] = useState(defaultVisibleChannelCount);
