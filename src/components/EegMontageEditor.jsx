@@ -5,7 +5,7 @@ import { TrafficLightButtons } from '@/components/TrafficLightButtons';
 import {} from '@/utils/eegViewerUtils';
 import { EyeDashed } from 'lucide-react';
 import { cn } from '@/utils/utils';
-import { Plus } from 'lucide-react';
+import { Plus, X } from 'lucide-react';
 
 // ─── EEG Montage settings ────────────────────────────────────────
 // Shared title styling — keeps panes titles visually consistent, with the same height (TrafficLightButtons are 16px tall).
@@ -120,6 +120,16 @@ export function EegMontageEditor({
       })),
     ]);
   }, [channelNames]);
+
+  // Removes every montage row — the reverse of Add all/Add selected/Add by type.
+  const handleClearAllMontageRows = useCallback(() => {
+    setDraftMontageChannels([]);
+  }, []);
+
+  // Removes a single row, keyed by id since channel names can repeat across rows.
+  const handleRemoveMontageRow = useCallback((id) => {
+    setDraftMontageChannels((prev) => prev.filter((row) => row.id !== id));
+  }, []);
 
   // The live channelSettings/montageChannels props only ever change via a prior Apply/OK (or
   // the seeding effects in useChannelSettings/useMontageChannels) — never by draft edits — so
@@ -467,7 +477,7 @@ export function EegMontageEditor({
           <span className="w-23 text-center" title="Reference Channel">
             Ref
           </span>
-          <span className="w-12" title="Channel Type">
+          <span className="w-20" title="Channel Type">
             Color
           </span>
         </div>
@@ -519,12 +529,31 @@ export function EegMontageEditor({
                 <option value="cyan">Cyan</option>
                 <option value="magenta">Magenta</option>
               </select>
+              {/* Remove row */}
+              <button
+                type="button"
+                className="text-header hover:text-alert"
+                data-testid={`remove-row-${row.id}`}
+                title={`Remove ${row.channel} from the montage`}
+                onClick={() => handleRemoveMontageRow(row.id)}
+              >
+                <X size={14} />
+              </button>
             </div>
           ))}
         </div>
-        {/* Channel Selection Settings */}
+        {/* Montage Settings */}
         <div className="h-36 shrink-0 flex flex-col items-start gap-2 p-2 border-t border-border bg-surface">
-          <span>PLACEHOLDER - MONTAGE SETTINGS</span>
+          <button
+            type="button"
+            className="button"
+            data-testid="clear-all-button"
+            disabled={draftMontageChannels.length === 0}
+            onClick={handleClearAllMontageRows}
+            title="Remove all montage rows"
+          >
+            Clear all
+          </button>
         </div>
       </div>
     </div>

@@ -431,4 +431,40 @@ describe('EegMontageEditor', () => {
       expect(screen.getByText('Montage Editor *')).toBeTruthy();
     });
   });
+
+  describe('removing montage rows', () => {
+    it('disables "Clear all" when there are no montage rows', () => {
+      render(<EegMontageEditor {...defaultProps} montageChannels={[]} />);
+      expect(screen.getByTestId('clear-all-button')).toBeDisabled();
+    });
+
+    it('"Clear all" removes every montage row', async () => {
+      const onApplyMontageChannels = vi.fn();
+      render(
+        <EegMontageEditor {...defaultProps} onApplyMontageChannels={onApplyMontageChannels} />
+      );
+      await userEvent.click(screen.getByTestId('clear-all-button'));
+      await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+      expect(onApplyMontageChannels).toHaveBeenCalledWith([]);
+    });
+
+    it("clicking a row's remove button removes only that row", async () => {
+      const onApplyMontageChannels = vi.fn();
+      render(
+        <EegMontageEditor {...defaultProps} onApplyMontageChannels={onApplyMontageChannels} />
+      );
+      await userEvent.click(screen.getByTestId('remove-row-FP1'));
+      await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+      const committed = onApplyMontageChannels.mock.calls[0][0];
+      expect(committed.map((row) => row.channel)).toEqual(['FP2', 'FP3']);
+    });
+
+    it('removing a row shows the unsaved-changes asterisk', async () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      await userEvent.click(screen.getByTestId('remove-row-FP1'));
+      expect(screen.getByText('Montage Editor *')).toBeTruthy();
+    });
+  });
 });
