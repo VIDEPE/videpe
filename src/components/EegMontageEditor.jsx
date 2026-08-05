@@ -177,6 +177,9 @@ export function EegMontageEditor({
   const [maximizedPanel, setMaximizedPanel] = useState(null); // null | 'left' | 'right'
   const [position, setPosition] = useState({ x: 100, y: 70 });
   const [size, setSize] = useState(DEFAULT_WINDOW_SIZE);
+  // Whether SplitPane's two panes are currently swapped — used to flip the montage pane's
+  // own internal add-row-controls/row-list layout so the controls stay on the outer edge.
+  const [isPanesSwapped, setIsPanesSwapped] = useState(false);
 
   // ─── Handlers  ─────────────────────────────────────────────────────────────
 
@@ -420,70 +423,87 @@ export function EegMontageEditor({
     </div>
   );
   // ─── Montage Selection Pane ──────────────────────────────────────────────────────
-  // Two sections: a narrow left column to build rows (from the channel-selection pane's
-  // selection, or by type), and the row list itself on the right. Montage rows are never
-  // auto-seeded (see useMontageChannels), so this is the only way rows get created.
-  const montageSelectionPane = (
-    <div className="h-full flex bg-surface">
-      {/* Add-row controls */}
-      <div className="w-25 h-full items-center justify-center flex flex-col gap-6 p-2 border-r border-border bg-surface">
-        {/* Add button */}
+  // Two sections: a narrow column to build rows (from the channel-selection pane's
+  // selection, or by type), and the row list itself. Montage rows are never auto-seeded
+  // (see useMontageChannels), so this is the only way rows get created.
+  //
+  // Kept as its own const (rather than inlined in montageSelectionPane below) so it can be
+  // positioned on either side via the order classes applied where it's rendered — when
+  // SplitPane's panes are swapped, this column flips to the opposite side so it stays on
+  // the window's outer edge instead of jumping next to the divider.
+  const addRowControls = (
+    <div
+      className={cn(
+        'w-25 h-full items-center justify-center flex flex-col gap-6 p-2 bg-surface',
+        isPanesSwapped ? 'order-2 border-l border-border' : 'order-1 border-r border-border'
+      )}
+    >
+      {/* Add button */}
+      <button
+        type="button"
+        className="button button-icon"
+        data-testid="add-selected-button"
+        disabled={selectedChannels.size === 0}
+        onClick={handleAddSelectedChannels}
+        title={
+          selectedChannels.size === 0
+            ? 'Add selected channels to Montage (first select channel(s) on the left!)'
+            : 'Add selected channels to Montage'
+        }
+      >
+        <Plus size={40} />
+      </button>
+      {/* Add ALL button */}
+      <div className="flex flex-col gap-2 pt-6 border-t border-border">
         <button
           type="button"
-          className="button button-icon"
-          data-testid="add-selected-button"
-          disabled={selectedChannels.size === 0}
-          onClick={handleAddSelectedChannels}
-          title={
-            selectedChannels.size === 0
-              ? 'Add selected channels to Montage (first select channel(s) on the left!)'
-              : 'Add selected channels to Montage'
-          }
+          className="button"
+          data-testid="add-all-button"
+          onClick={handleAddAll}
+          title="Add all channels"
         >
-          <Plus size={40} />
+          Add ALL
         </button>
-        {/* Add ALL button */}
-        <div className="flex flex-col gap-2 pt-6 border-t border-border">
-          <button
-            type="button"
-            className="button"
-            data-testid="add-all-button"
-            onClick={handleAddAll}
-            title="Add all channels"
-          >
-            Add ALL
-          </button>
-        </div>
-        {/* Add bye type button + select */}
-        <div className="flex flex-col gap-2 pt-6 border-t border-border">
-          <button
-            type="button"
-            className="button"
-            data-testid="add-by-type-button"
-            onClick={handleAddByType}
-            title="Add all channels with the selected type below"
-          >
-            Add by Type
-          </button>
-
-          <select
-            className="text-xs border border-border rounded bg-surface"
-            data-testid="add-by-type-select"
-            value={addByType}
-            onChange={(e) => setAddByType(e.target.value)}
-            title="Channels with selected type can be added using the 'Add by type' button"
-          >
-            {Object.entries(TYPE_LIST).map(([typeValue, typeLabel]) => (
-              <option key={typeValue} value={typeValue}>
-                {typeLabel}
-              </option>
-            ))}
-          </select>
-        </div>
       </div>
+      {/* Add bye type button + select */}
+      <div className="flex flex-col gap-2 pt-6 border-t border-border">
+        <button
+          type="button"
+          className="button"
+          data-testid="add-by-type-button"
+          onClick={handleAddByType}
+          title="Add all channels with the selected type below"
+        >
+          Add by Type
+        </button>
+
+        <select
+          className="text-xs border border-border rounded bg-surface"
+          data-testid="add-by-type-select"
+          value={addByType}
+          onChange={(e) => setAddByType(e.target.value)}
+          title="Channels with selected type can be added using the 'Add by type' button"
+        >
+          {Object.entries(TYPE_LIST).map(([typeValue, typeLabel]) => (
+            <option key={typeValue} value={typeValue}>
+              {typeLabel}
+            </option>
+          ))}
+        </select>
+      </div>
+    </div>
+  );
+  const montageSelectionPane = (
+    <div className="h-full flex bg-surface">
+      {addRowControls}
       {/* Header + scrollable row list — bg-background, so the padding leaves the
           surrounding bg-surface visible as a border around this section. */}
-      <div className="flex-1 min-w-0 min-h-0 flex flex-col pt-2 bg-background">
+      <div
+        className={cn(
+          'flex-1 min-w-0 min-h-0 flex flex-col pt-2 bg-background',
+          isPanesSwapped ? 'order-1' : 'order-2'
+        )}
+      >
         {/* Column headers — widths mirror each row's controls below so labels stay aligned */}
         <div className="shrink-0 flex items-center gap-2 pl-3 pr-1 py-0.5 text-xs font-medium text-header border-b border-border">
           <span className="flex-1">Channel</span>
@@ -619,9 +639,10 @@ export function EegMontageEditor({
         leftLabel={<span className={PANEL_TITLE_CLASS}>Channel Selection</span>}
         rightLabel={<span className={PANEL_TITLE_CLASS}>Montage Settings</span>}
         onMaximizeChange={setMaximizedPanel}
+        onSwapChange={setIsPanesSwapped}
         left={channelSelectionPane}
         right={montageSelectionPane}
-        defaultSplitPercent={25}
+        defaultSplitPercent={30}
       />
 
       {/* Footer — Apply/OK commit the draft to EegViewer's live channelSettings; Cancel (and

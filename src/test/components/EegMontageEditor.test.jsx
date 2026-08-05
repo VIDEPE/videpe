@@ -467,4 +467,21 @@ describe('EegMontageEditor', () => {
       expect(screen.getByText('Montage Editor *')).toBeTruthy();
     });
   });
+
+  describe('add-row controls flip when the panes are swapped', () => {
+    it('sit on the left (order-1) by default', () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      const controls = screen.getByTestId('add-selected-button').parentElement;
+      expect(controls.className).toContain('order-1');
+      expect(controls.className).not.toContain('order-2');
+    });
+
+    it('flip to the right (order-2) once the panes are swapped', async () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      await userEvent.click(screen.getAllByTitle('Swap panels')[0]);
+      const controls = screen.getByTestId('add-selected-button').parentElement;
+      expect(controls.className).toContain('order-2');
+      expect(controls.className).not.toContain('order-1');
+    });
+  });
 });
