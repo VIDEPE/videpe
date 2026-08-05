@@ -29,21 +29,21 @@ export function EegMontageEditor({
   voltagesByChannel,
   customFileName = null, // filename (no extension) of the loaded custom positions file — owned by PatientView, passed down
   montage,
-  channelSettings, // Recording<channelname, {type, bad}> — live state owned by EegViewer/useChannelSettings
+  channelSettings, // Record<channelname, {type, bad}> — live state owned by EegViewer/useChannelSettings
   onApplyChannelSettings, // (Record<name, {type, bad}>) => void — commits the draft on Apply/OK
-  montageSettings, // Recording<channelname, {reference, color}> — live state owned by EegViewer/useMontageSettings
-  onApplyMontageSettings,
+  montageChannels, // Array<{id, channel, reference, color}> — live state owned by EegViewer/useMontageChannels
+  onApplyMontageChannels, // (Array<{id, channel, reference, color}>) => void — commits the draft on Apply/OK
 }) {
   const { isDarkMode } = useTheme();
   const channelDividerColor = isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
 
-  // Draft channelSettings — this component remounts fresh every time it's opened (EegViewer
-  // conditionally renders it), so seeding draft state from the live prop here naturally
-  // re-snapshots on every open with no extra reset effect needed. Row edits (and later, bulk
-  // edits from the settings section below) only ever touch this draft; nothing reaches the
-  // live channelSettings in EegViewer until Apply/OK explicitly commits it.
+  // Draft channelSettings/montageChannels — this component remounts fresh every time it's
+  // opened (EegViewer conditionally renders it), so seeding draft state from the live props
+  // here naturally re-snapshots on every open with no extra reset effect needed. Row edits
+  // only ever touch these drafts; nothing reaches the live state in EegViewer until Apply/OK
+  // explicitly commits it.
   const [draftChannelSettings, setDraftChannelSettings] = useState(() => channelSettings);
-  const [draftMontageSettings, setDraftMontageSettings] = useState(() => montageSettings);
+  const [draftMontageChannels, setDraftMontageChannels] = useState(() => montageChannels);
 
   const setDraftChannelType = useCallback((name, type) => {
     setDraftChannelSettings((prev) => ({ ...prev, [name]: { ...prev[name], type } }));
@@ -53,28 +53,33 @@ export function EegMontageEditor({
     setDraftChannelSettings((prev) => ({ ...prev, [name]: { ...prev[name], bad } }));
   }, []);
 
-  const setDraftMontageReference = useCallback((name, reference) => {
-    setDraftMontageSettings((prev) => ({ ...prev, [name]: { ...prev[name], reference } }));
+  const setDraftChannelReference = useCallback((name, reference) => {
+    setDraftMontageChannels((prev) =>
+      prev.map((row) => (row.channel === name ? { ...row, reference } : row))
+    );
   }, []);
 
-  const setDraftMontageColor = useCallback((name, color) => {
-    setDraftMontageSettings((prev) => ({ ...prev, [name]: { ...prev[name], color } }));
+  const setDraftChannelColor = useCallback((name, color) => {
+    setDraftMontageChannels((prev) =>
+      prev.map((row) => (row.channel === name ? { ...row, color } : row))
+    );
   }, []);
 
-  // The live channelSettings prop only ever changes via a prior Apply/OK (or the seeding
-  // effect in useChannelSettings) — never by draft edits — so comparing against it directly
-  // doubles as "has the draft diverged from what was last applied", no separate snapshot needed.
+  // The live channelSettings/montageChannels props only ever change via a prior Apply/OK (or
+  // the seeding effects in useChannelSettings/useMontageChannels) — never by draft edits — so
+  // comparing against them directly doubles as "has either draft diverged from what was last
+  // applied", no separate snapshot needed.
   const isModified = useMemo(
     () =>
       JSON.stringify(draftChannelSettings) !== JSON.stringify(channelSettings) ||
-      JSON.stringify(draftMontageSettings) !== JSON.stringify(montageSettings),
-    [draftChannelSettings, channelSettings, draftMontageSettings, montageSettings]
+      JSON.stringify(draftMontageChannels) !== JSON.stringify(montageChannels),
+    [draftChannelSettings, channelSettings, draftMontageChannels, montageChannels]
   );
 
   const handleApply = useCallback(() => {
     onApplyChannelSettings(draftChannelSettings);
-    onApplyMontageSettings(draftMontageSettings);
-  }, [draftChannelSettings, onApplyChannelSettings, draftMontageSettings, onApplyMontageSettings]);
+    onApplyMontageChannels(draftMontageChannels);
+  }, [draftChannelSettings, onApplyChannelSettings, draftMontageChannels, onApplyMontageChannels]);
 
   const handleOk = useCallback(() => {
     handleApply();
@@ -339,58 +344,54 @@ export function EegMontageEditor({
           </span>
         </div>
         <div className="flex-1 min-h-0 pb-4 overflow-y-auto border-header">
-          {channelNames.map((name) => {
-            // take montage settings from draftMontageSettings (if exist) or default (reference: null, color: default)
-            const settings = draftMontageSettings[name] ?? {
-              reference: null,
-              color: isDarkMode ? 'black' : 'white',
-            };
-
-            return (
-              <div
-                key={name}
-                style={{
-                  overflow: 'visible',
-                  borderBottom: `1px solid ${channelDividerColor}`,
-                }}
-                className="relative flex items-center gap-2 px-1 py-0.5"
+          {draftMontageChannels.map((row) => (
+            <div
+              key={row.id}
+              style={{
+                overflow: 'visible',
+                borderBottom: `1px solid ${channelDividerColor}`,
+              }}
+              className="relative flex items-center gap-2 px-1 py-0.5"
+            >
+              {/* Channel name */}
+              <span className="flex-1 truncate text-sm">{row.channel}</span>
+              {/* Reference Channel */}
+              <select
+                className="w-16 text-xs border border-border rounded bg-surface"
+                data-testid={`reference-${row.channel}`}
+                value={row.reference ?? ''}
+                onChange={(e) => setDraftChannelReference(row.channel, e.target.value)}
               >
-                {/* Channel name */}
-                <span className="flex-1 truncate text-sm">{name}</span>
-                {/* Reference Channel */}
-                <select
-                  className="w-16 text-xs border border-border rounded bg-surface"
-                  data-testid={`reference-${name}`}
-                  value={settings.reference ?? ''}
-                  onChange={(e) => setDraftMontageReference(name, e.target.value)}
-                >
-                  {channelNames.map((refName) => (
-                    <option key={refName} value={refName}>
-                      {refName}
-                    </option>
-                  ))}
-                </select>
-                {/* Channel Color */}
-                <select
-                  className="w-16 text-xs border border-border rounded bg-surface"
-                  data-testid={`color-${name}`}
-                  value={settings.color}
-                  onChange={(e) => setDraftMontageColor(name, e.target.value)}
-                >
-                  <option value={isDarkMode ? 'black' : 'white'}>
-                    {isDarkMode ? 'Black' : 'White'}
+                {channelNames.map((refName) => (
+                  <option key={refName} value={refName}>
+                    {refName}
                   </option>
-                  <option value="red">Red</option>
-                  <option value="blue">Blue</option>
-                  <option value="green">Green</option>
-                  <option value="yellow">Yellow</option>
-                  <option value="cyan">Cyan</option>
-                  <option value="magenta">Magenta</option>
-                </select>
-              </div>
-            );
-          })}
+                ))}
+              </select>
+              {/* Channel Color */}
+              <select
+                className="w-16 text-xs border border-border rounded bg-surface"
+                data-testid={`color-${row.channel}`}
+                value={row.color ?? (isDarkMode ? 'black' : 'white')}
+                onChange={(e) => setDraftChannelColor(row.channel, e.target.value)}
+              >
+                <option value={isDarkMode ? 'black' : 'white'}>
+                  {isDarkMode ? 'Black' : 'White'}
+                </option>
+                <option value="red">Red</option>
+                <option value="blue">Blue</option>
+                <option value="green">Green</option>
+                <option value="yellow">Yellow</option>
+                <option value="cyan">Cyan</option>
+                <option value="magenta">Magenta</option>
+              </select>
+            </div>
+          ))}
         </div>
+      </div>
+      {/* Channel Selection Settings */}
+      <div className="h-36 shrink-0 flex flex-col items-start gap-2 p-2 border-t border-border bg-surface">
+          <span>PLACEHOLDER - MONTAGE SETTINGS</span>
       </div>
     </div>
   );

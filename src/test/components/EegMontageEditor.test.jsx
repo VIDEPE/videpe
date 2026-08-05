@@ -18,19 +18,20 @@ const CHANNEL_SETTINGS = {
 // Only FP1 matched an electrode position — FP2/FP3 should show the Pos checkbox unchecked.
 const MATCHED = [{ channelIdx: 0, name: 'FP1', pos: { label: 'FP1', x: 0, y: 0, z: 0 } }];
 
-const MONTAGE_SETTINGS = {
-  FP1: { reference: null, color: 'black' },
-  FP2: { reference: null, color: 'black' },
-  FP3: { reference: null, color: 'black' },
-};
+const MONTAGE_CHANNELS = CHANNEL_NAMES.map((name) => ({
+  id: name,
+  channel: name,
+  reference: null,
+  color: null,
+}));
 
 const defaultProps = {
   channelNames: CHANNEL_NAMES,
   matched: MATCHED,
   channelSettings: CHANNEL_SETTINGS,
   onApplyChannelSettings: vi.fn(),
-  montageSettings: MONTAGE_SETTINGS,
-  onApplyMontageSettings: vi.fn(),
+  montageChannels: MONTAGE_CHANNELS,
+  onApplyMontageChannels: vi.fn(),
   onClose: vi.fn(),
 };
 
@@ -264,6 +265,38 @@ describe('EegMontageEditor', () => {
 
       expect(screen.getByTestId('channel-bad-FP2')).toBeChecked();
       expect(screen.getByTestId('channel-bad-FP1')).not.toBeChecked();
+    });
+  });
+
+  describe('montage settings pane', () => {
+    it('renders a reference/color row for every montageChannels entry', () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      CHANNEL_NAMES.forEach((name) => {
+        expect(screen.getByTestId(`reference-${name}`)).toBeTruthy();
+        expect(screen.getByTestId(`color-${name}`)).toBeTruthy();
+      });
+    });
+
+    it('Apply commits an edited reference and color to onApplyMontageChannels', async () => {
+      const onApplyMontageChannels = vi.fn();
+      render(
+        <EegMontageEditor {...defaultProps} onApplyMontageChannels={onApplyMontageChannels} />
+      );
+      await userEvent.selectOptions(screen.getByTestId('reference-FP1'), 'FP2');
+      await userEvent.selectOptions(screen.getByTestId('color-FP1'), 'red');
+      await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+      expect(onApplyMontageChannels).toHaveBeenCalledWith([
+        { id: 'FP1', channel: 'FP1', reference: 'FP2', color: 'red' },
+        { id: 'FP2', channel: 'FP2', reference: null, color: null },
+        { id: 'FP3', channel: 'FP3', reference: null, color: null },
+      ]);
+    });
+
+    it('editing a reference/color shows the unsaved-changes asterisk', async () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      await userEvent.selectOptions(screen.getByTestId('reference-FP1'), 'FP2');
+      expect(screen.getByText('Montage Editor *')).toBeTruthy();
     });
   });
 });

@@ -27,6 +27,7 @@ import { useEegPlotControls } from '@/hooks/useEegPlotControls';
 import { useScrubberDrag } from '@/hooks/useScrubberDrag';
 import { useElectrodeMatching } from '@/hooks/useElectrodeMatching';
 import { useChannelSettings } from '@/hooks/useChannelSettings';
+import { useMontageChannels } from '@/hooks/useMontage';
 import { useTopographySnapshot } from '@/hooks/useTopographySnapshot';
 import { useRowResize } from '@/hooks/useRowResize';
 
@@ -217,6 +218,11 @@ export const EegViewer = ({
     channelNames,
     isIntracranial ? 'seeg' : 'eeg'
   );
+
+  // Montage row list (reference/color per displayed trace), edited via the same window's
+  // montage-settings pane — kept separate from channelSettings since it's an array (can
+  // later support arbitrary derived rows), not a per-channel record.
+  const { montageChannels, applyMontageChannels } = useMontageChannels(channelNames);
 
   // Bad channels are hidden from the waveform view entirely. Kept as {name, index} pairs
   // (rather than filtering channelNames outright) so displayedData/montagedChannels — still
@@ -1010,6 +1016,8 @@ export const EegViewer = ({
           montage={montage}
           channelSettings={channelSettings}
           onApplyChannelSettings={applyChannelSettings}
+          montageChannels={montageChannels}
+          onApplyMontageChannels={applyMontageChannels}
         />
       )}
     </>
