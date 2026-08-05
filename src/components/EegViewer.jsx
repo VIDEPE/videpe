@@ -23,9 +23,10 @@ import {
 import { minMaxDownsample } from '@/utils/downsample';
 import { useEegBuffer } from '@/loaders/eegBuffer';
 import { useContainerResize } from '@/hooks/useContainerResize';
-import { useViewportControls } from '@/hooks/useViewportControls';
+import { useEegPlotControls } from '@/hooks/useEegPlotControls';
 import { useScrubberDrag } from '@/hooks/useScrubberDrag';
 import { useElectrodeMatching } from '@/hooks/useElectrodeMatching';
+import { useChannelSettings } from '@/hooks/useChannelSettings';
 import { useTopographySnapshot } from '@/hooks/useTopographySnapshot';
 import { useRowResize } from '@/hooks/useRowResize';
 
@@ -33,6 +34,7 @@ import { ELEC_POS_EXTENSIONS, INV_SOLUTIONS_EXTENSIONS } from '@/loaders/eegForm
 import { EegTopoViewer } from '@/components/EegTopoViewer';
 import { FileDropZone } from '@/components/FileDropZone';
 import { StatusLed } from '@/components/StatusLed';
+import { EegMontageEditor } from './EegMontageEditor';
 
 const EEG_LOADING_TOAST_ID = 'eeg-buffer-loading'; // fixed id so the loading/success toasts update in place rather than stacking
 const Y_AXIS_WIDTH = 60; // px for the y-axis area (channel name + tick space) — must match x-axis strip left padding
@@ -155,7 +157,7 @@ export const EegViewer = ({
     decreaseWindowSize,
     forwardshiftStartTime,
     backwardshiftStartTime,
-  } = useViewportControls({ tMax, channelCount: channelNames.length, channelAreaHeight });
+  } = useEegPlotControls({ tMax, channelCount: channelNames.length, channelAreaHeight });
 
   const X_AXIS_HEIGHT = 45; // px reserved for the fixed x-axis strip below the scroll area
   const plotHeight =
@@ -177,6 +179,9 @@ export const EegViewer = ({
   // Topograph window only opens when the toggle is on (topoEnabled) AND once a EEGplot
   // click has produced a timepoint to show (topoTimepoint)
   const topoVisible = topoEnabled && topoTimepoint !== null;
+
+  // EEG Montage window only opens when the button is pressed
+  const [montageVisible, setMontageVisible] = useState(false);
 
   // Px position (from the plot area's left edge) of the vertical marker for topoTimepoint — the
   // timestamp the electrode voltage snapshot was taken at, shared by the topography, ESI, and
@@ -205,6 +210,24 @@ export const EegViewer = ({
     recordingType,
     onRecordingTypeChange,
   });
+
+  // Per-channel type/bad-channel state, edited via the EegMontageEditor window — new
+  // channels are seeded from the whole-recording isIntracranial detection above.
+  const { channelSettings, applyChannelSettings } = useChannelSettings(
+    channelNames,
+    isIntracranial ? 'seeg' : 'eeg'
+  );
+
+  // Bad channels are hidden from the waveform view entirely. Kept as {name, index} pairs
+  // (rather than filtering channelNames outright) so displayedData/montagedChannels — still
+  // indexed by the full channelNames — can be looked up by their original index below.
+  const visibleChannels = useMemo(
+    () =>
+      channelNames
+        .map((name, index) => ({ name, index }))
+        .filter(({ name }) => !channelSettings[name]?.bad),
+    [channelNames, channelSettings]
+  );
 
   // Montage application + the electrode/channel voltage snapshots at the clicked topography
   // timepoint, lifted up to PatientView for the intracranial connectome and ESI.
@@ -534,9 +557,9 @@ export const EegViewer = ({
               className="flex flex-col items-center gap-1 pb-1"
               title="Apply EEG reference montage"
             >
-              <span className="text-xs text-foreground select-none pointer-events-none">
-                Montage:
-              </span>
+              <button type="button" className="button" onClick={() => setMontageVisible((v) => !v)}>
+                Montage
+              </button>
               <select
                 value={montage}
                 onChange={(e) => onMontageChange?.(e.target.value)}
@@ -587,7 +610,7 @@ export const EegViewer = ({
                         }}
                       />
                     )}
-                    {channelNames.map((name, i) => (
+                    {visibleChannels.map(({ name, index: i }) => (
                       // Channel divider below each channel
                       <div
                         key={name}
@@ -967,6 +990,26 @@ export const EegViewer = ({
           customFileName={customElecPosFileName}
           montage={montage}
           isIntracranial={isIntracranial}
+        />
+      )}
+
+      {/* Floating EEG Montage Editor — position:fixed so it overlays the whole page */}
+      {montageVisible && (
+        <EegMontageEditor
+          electrodes={electrodes}
+          matched={matched}
+          voltages={topoVoltages}
+          channelNames={channelNames}
+          voltagesByChannel={topoVoltagesByChannel}
+          totalChannels={channelNames.length}
+          onClose={() => setMontageVisible(false)}
+          onTopoNvReady={onTopoNvReady}
+          isStandardElectrodes={isStandardElectrodes}
+          onElecPosFile={onElecPosFile}
+          customFileName={customElecPosFileName}
+          montage={montage}
+          channelSettings={channelSettings}
+          onApplyChannelSettings={applyChannelSettings}
         />
       )}
     </>

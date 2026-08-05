@@ -1,16 +1,16 @@
 import { describe, it, expect } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useViewportControls } from '@/hooks/useViewportControls';
+import { useEegPlotControls } from '@/hooks/useEegPlotControls';
 
 // tMax=30 (≥20) → default windowSize=20. channelCount=5, channelAreaHeight=0 (not yet
 // measured) → maxChannelsByHeight falls back to channelCount, so channel count is only
 // capped by channelCount until a real height is supplied.
 const setup = (overrides = {}) =>
-  renderHook((props) => useViewportControls(props), {
+  renderHook((props) => useEegPlotControls(props), {
     initialProps: { tMax: 30, channelCount: 5, channelAreaHeight: 0, ...overrides },
   });
 
-describe('useViewportControls — defaults', () => {
+describe('useEegPlotControls — defaults', () => {
   it('initialises windowSize to 20 for a recording ≥ 20s', () => {
     const { result } = setup();
     expect(result.current.windowSize).toBe(20);
@@ -37,7 +37,7 @@ describe('useViewportControls — defaults', () => {
   });
 });
 
-describe('useViewportControls — updateWindowSize', () => {
+describe('useEegPlotControls — updateWindowSize', () => {
   it('clamps to tMax and rounds to 1 decimal', () => {
     const { result } = setup({ tMax: 30.123456 });
     act(() => result.current.updateWindowSize(31));
@@ -67,7 +67,7 @@ describe('useViewportControls — updateWindowSize', () => {
   });
 });
 
-describe('useViewportControls — updateShiftTimeStepSize', () => {
+describe('useEegPlotControls — updateShiftTimeStepSize', () => {
   it('clamps to a minimum of 1', () => {
     const { result } = setup();
     act(() => result.current.updateShiftTimeStepSize(0));
@@ -81,7 +81,7 @@ describe('useViewportControls — updateShiftTimeStepSize', () => {
   });
 });
 
-describe('useViewportControls — updateYScale', () => {
+describe('useEegPlotControls — updateYScale', () => {
   it('clamps to Y_MIN (0.001) at the low end', () => {
     const { result } = setup();
     act(() => result.current.updateYScale(0));
@@ -101,7 +101,7 @@ describe('useViewportControls — updateYScale', () => {
   });
 });
 
-describe('useViewportControls — updateVisibleChannelCount', () => {
+describe('useEegPlotControls — updateVisibleChannelCount', () => {
   it('clamps to a minimum of 1', () => {
     const { result } = setup();
     act(() => result.current.updateVisibleChannelCount(0));
@@ -130,7 +130,7 @@ describe('useViewportControls — updateVisibleChannelCount', () => {
   });
 });
 
-describe('useViewportControls — input change/blur handlers', () => {
+describe('useEegPlotControls — input change/blur handlers', () => {
   it('onWindowSizeChange ignores input longer than the max length', () => {
     const { result } = setup({ tMax: 30 }); // WINDOW_INPUT_MAX_LENGTH = len("30")+2 = 4
     act(() => result.current.onWindowSizeChange({ target: { value: '123456' } }));
@@ -180,7 +180,7 @@ describe('useViewportControls — input change/blur handlers', () => {
   });
 });
 
-describe('useViewportControls — step helpers', () => {
+describe('useEegPlotControls — step helpers', () => {
   it('increaseWindowSize steps by 10, clamped to tMax', () => {
     const { result } = setup();
     act(() => result.current.increaseWindowSize()); // 20 → 30 (= tMax)

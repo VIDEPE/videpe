@@ -14,8 +14,9 @@ export const SplitPane = ({
   onLeftReset,
   onRightReset,
   onMaximizeChange,
+  defaultSplitPercent = 50,
 }) => {
-  const [splitPercent, setSplitPercent] = useState(50); // proportion of the first panel (0–100)
+  const [splitPercent, setSplitPercent] = useState(defaultSplitPercent); // proportion of the first panel (0–100)
   const [maximized, setMaximized] = useState(null); // null | 'left' | 'right'
   const [swapped, setSwapped] = useState(false); // whether the left/right (or top/bottom) content is swapped
   const [isDragging, setIsDragging] = useState(false); // true while the divider is being dragged — used to highlight it on touch where active: pseudo-class is unreliable
@@ -96,6 +97,10 @@ export const SplitPane = ({
     };
 
     const stopDrag = () => {
+      // Guard: this listener is global (any mouseup in the window), not scoped to the divider,
+      // so without this check releasing an unrelated drag (e.g. a parent window's title bar)
+      // would force-sync splitPercent to the stale splitPercentRef default and clobber it.
+      if (!isDraggingRef.current) return;
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       isDraggingRef.current = false;
       setIsDragging(false);
