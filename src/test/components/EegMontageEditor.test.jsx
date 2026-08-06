@@ -931,7 +931,7 @@ describe('EegMontageEditor', () => {
       render(<EegMontageEditor {...defaultProps} montageChannels={montageChannels} />);
 
       const name = screen.getByTestId('montage-channel-row-1');
-      expect(name.className).toContain('text-red-800');
+      expect(name.className).toContain('text-red-500');
       expect(name.title).toBe('Channel not found in this recording');
       expect(name.closest('div').className).toContain('opacity-50');
       expect(screen.getByTestId('reference-row-1')).toBeDisabled();
@@ -991,7 +991,7 @@ describe('EegMontageEditor', () => {
           montageChannels={montageChannels}
         />
       );
-      expect(screen.getByTestId('montage-channel-row-1').title).toBe('Channel marked bad');
+      expect(screen.getByTestId('montage-channel-row-1').title).toBe('Channel marked as bad');
       expect(screen.getByTestId('reference-row-1').title).toBe('Reference channel marked bad');
     });
   });
