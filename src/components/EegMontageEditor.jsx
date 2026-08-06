@@ -533,10 +533,18 @@ export function EegMontageEditor({
                 style={{
                   overflow: 'visible',
                   borderBottom: `1px solid ${channelDividerColor}`,
+                  // The row's selected color tints its background, but is overwrited by bg-alert when
+                  // the channel is bad (applied via className, not inline style, which always wins)
+                  // color-mix keeps this a subtle tint rather than the fully-saturated color used in uPlot
+                  ...(!isRowBad && row.color
+                    ? {
+                        backgroundColor: `color-mix(in srgb, ${row.color} ${isDarkMode ? 30 : 40}%, transparent)`,
+                      }
+                    : {}),
                 }}
                 className={cn(
                   'relative flex items-center gap-2 pl-3 pr-1 py-0.5',
-                  isRowBad ? (isDarkMode ? 'bg-alert/10' : 'bg-alert/20') : ''
+                  isRowBad ? (isDarkMode ? 'bg-alert/20' : 'bg-alert/30') : ''
                 )}
               >
                 {/* Channel name */}
@@ -553,16 +561,18 @@ export function EegMontageEditor({
                   <option value="">— n/a —</option>
                   {referenceOptions}
                 </select>
-                {/* Channel Color */}
+                {/* Channel Color — "Default" (color: null) follows the theme (white in
+                    dark mode, black in light mode) wherever it's actually plotted; this
+                    editor doesn't need to know which, so the option's value/label stay
+                    theme-independent unlike the old scheme where "Default" was literally
+                    stored as 'white' or 'black'. */}
                 <select
                   className="w-16 text-xs border border-border rounded bg-surface"
                   data-testid={`color-${row.id}`}
-                  value={row.color ?? (isDarkMode ? 'white' : 'black')}
-                  onChange={(e) => setDraftMontageRowColor(row.id, e.target.value)}
+                  value={row.color ?? ''}
+                  onChange={(e) => setDraftMontageRowColor(row.id, e.target.value || null)}
                 >
-                  <option value={isDarkMode ? 'white' : 'black'}>
-                    {isDarkMode ? 'White' : 'Black'}
-                  </option>
+                  <option value="">Default</option>
                   <option value="red">Red</option>
                   <option value="blue">Blue</option>
                   <option value="green">Green</option>

@@ -331,6 +331,56 @@ describe('EegMontageEditor', () => {
     });
   });
 
+  describe('montage row color', () => {
+    it("defaults the color select to 'Default' (not White/Black) regardless of theme", () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      const select = screen.getByTestId('color-FP1');
+      expect(select).toHaveValue('');
+      const defaultOption = Array.from(select.options).find((o) => o.value === '');
+      expect(defaultOption.textContent).toBe('Default');
+    });
+
+    it('selecting Default after picking a color commits color: null, not a literal white/black value', async () => {
+      const onApplyMontageChannels = vi.fn();
+      render(
+        <EegMontageEditor {...defaultProps} onApplyMontageChannels={onApplyMontageChannels} />
+      );
+      await userEvent.selectOptions(screen.getByTestId('color-FP1'), 'red');
+      await userEvent.selectOptions(screen.getByTestId('color-FP1'), '');
+      await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+      expect(onApplyMontageChannels).toHaveBeenCalledWith([
+        { id: 'FP1', channel: 'FP1', reference: null, color: null },
+        { id: 'FP2', channel: 'FP2', reference: null, color: null },
+        { id: 'FP3', channel: 'FP3', reference: null, color: null },
+      ]);
+    });
+
+    it("tints (not fully saturates) a montage row's background with its selected color", async () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      await userEvent.selectOptions(screen.getByTestId('color-FP1'), 'red');
+      const background = screen.getByTestId('reference-FP1').closest('div').style.backgroundColor;
+      // isDarkMode: false in this file's mock → the 20% (light-mode) tint strength
+      expect(background).toContain('color-mix');
+      expect(background).toContain('red');
+      expect(background).toContain('40%');
+    });
+
+    it('leaves a default-colored (unset) row background untouched', () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      expect(screen.getByTestId('reference-FP1').closest('div').style.backgroundColor).toBe('');
+    });
+
+    it('lets the bad-row bg-alert highlight override a selected color', async () => {
+      // FP2 is bad per CHANNEL_SETTINGS
+      render(<EegMontageEditor {...defaultProps} />);
+      await userEvent.selectOptions(screen.getByTestId('color-FP2'), 'red');
+      const row = screen.getByTestId('reference-FP2').closest('div');
+      expect(row.style.backgroundColor).toBe('');
+      expect(row.className).toContain('bg-alert');
+    });
+  });
+
   describe('building montage rows from channel selection', () => {
     it('shows a placeholder message when there are no montage rows yet', () => {
       render(<EegMontageEditor {...defaultProps} montageChannels={[]} />);

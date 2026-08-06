@@ -52,10 +52,12 @@ vi.mock('@/components/EegTopoViewer', () => ({
   }),
 }));
 
+// Mutable via vi.hoisted so individual tests can flip themeState.isDarkMode (see the
+// montage row color describe block below) — a plain top-level `let` wouldn't be
+// initialized yet when this factory runs, since vi.mock is hoisted above imports.
+const themeState = vi.hoisted(() => ({ isDarkMode: false }));
 vi.mock('@/components/ThemeContext', () => ({
-  useTheme: function () {
-    return { isDarkMode: false };
-  },
+  useTheme: () => ({ isDarkMode: themeState.isDarkMode }),
 }));
 
 // EegViewer shows its own loading/success toast while the initial buffer loads, and a
@@ -91,6 +93,7 @@ Cz
 // and fire the callback immediately so plotWidth/plotHeight become non-zero
 beforeEach(() => {
   capturedClickHandler = null;
+  themeState.isDarkMode = false;
   global.ResizeObserver = class {
     constructor(callback) {
       this._cb = callback;
@@ -2248,5 +2251,46 @@ describe('EegViewer — montage row wiring', () => {
 
     expect(screen.queryByText('EEG1 - EEG2')).toBeNull();
     expect(screen.queryByText('EEG1')).toBeNull();
+  });
+});
+
+// ── Montage row color wiring ────────────────────────────────────────────────
+
+describe('EegViewer — montage row color wiring', () => {
+  it('uses the light-mode default stroke color when a montage row has no color set', async () => {
+    const { default: UplotReactMock } = await import('uplot-react');
+    UplotReactMock.mockClear();
+    await renderViewer();
+
+    const call = UplotReactMock.mock.calls[0][0];
+    expect(call.options.series[1].stroke).toBe('rgba(0, 0, 0, 0.8)');
+  });
+
+  it('uses the dark-mode default stroke color when a montage row has no color set', async () => {
+    const { default: UplotReactMock } = await import('uplot-react');
+    themeState.isDarkMode = true;
+    UplotReactMock.mockClear();
+    await renderViewer();
+
+    const call = UplotReactMock.mock.calls[0][0];
+    expect(call.options.series[1].stroke).toBe('rgba(255, 255, 255, 0.8)');
+  });
+
+  it("uses a montage row's selected color as its plotted line color, overriding the theme default", async () => {
+    const { default: UplotReactMock } = await import('uplot-react');
+    const { container } = await renderViewer();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Montage' }));
+    await userEvent.click(screen.getByTestId('channel-select-EEG1'));
+    await userEvent.click(screen.getByTestId('add-selected-button'));
+
+    const colorSelect = container.querySelector('[data-testid^="color-"]');
+    await userEvent.selectOptions(colorSelect, 'red');
+    await userEvent.click(screen.getByRole('button', { name: 'OK' }));
+
+    const rowCall = [...UplotReactMock.mock.calls]
+      .reverse()
+      .find((call) => call[0].options?.series?.[1]?.stroke === 'red');
+    expect(rowCall).toBeTruthy();
   });
 });

@@ -64,8 +64,9 @@ const buildChannelOptions = ({
   windowSize,
   startTime,
   yScale,
+  color, // row's selected trace color ('red'|'blue'|...), or null/undefined for the theme default
 }) => {
-  const stroke = isDarkMode ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.8)';
+  const stroke = color ?? (isDarkMode ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.8)');
   const gridColor = isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)';
 
   return {
@@ -672,6 +673,7 @@ export const EegViewer = ({
                               windowSize,
                               startTime,
                               yScale,
+                              color: row.color,
                             })}
                             data={displayedData[rowIndex]}
                             onCreate={(u) => {
