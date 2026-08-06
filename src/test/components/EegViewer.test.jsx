@@ -2173,3 +2173,80 @@ describe('EegViewer — bad channel filtering', () => {
     expect(Array.from(eeg3Call[0].data[1])).toEqual([7, 8, 9]);
   });
 });
+
+// ── Montage row wiring ──────────────────────────────────────────────────────
+// CHANNEL_DATA per sample, within the default 20s window: EEG1=[1,2,3], EEG2=[4,5,6].
+
+describe('EegViewer — montage row wiring', () => {
+  it('falls back to the plain non-bad channel list when no montage rows are configured', async () => {
+    await renderViewer();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Montage' }));
+    await userEvent.click(screen.getByRole('button', { name: 'OK' }));
+
+    channelNames.forEach((name) => expect(screen.getByText(name)).toBeTruthy());
+  });
+
+  it('displays only the configured montage rows once any are added, instead of the full channel list', async () => {
+    await renderViewer();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Montage' }));
+    await userEvent.click(screen.getByTestId('channel-select-EEG1'));
+    await userEvent.click(screen.getByTestId('add-selected-button'));
+    await userEvent.click(screen.getByRole('button', { name: 'OK' }));
+
+    expect(screen.getByText('EEG1')).toBeTruthy();
+    expect(screen.queryByText('EEG2')).toBeNull();
+    expect(screen.queryByText('EEG3')).toBeNull();
+  });
+
+  it('names a bipolar montage row "channel - reference" and plots channel-minus-reference data', async () => {
+    const { default: UplotReactMock } = await import('uplot-react');
+    const { container } = await renderViewer();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Montage' }));
+    await userEvent.click(screen.getByTestId('channel-select-EEG1'));
+    await userEvent.click(screen.getByTestId('add-selected-button'));
+
+    const referenceSelect = container.querySelector('[data-testid^="reference-"]');
+    await userEvent.selectOptions(referenceSelect, 'EEG2');
+    await userEvent.click(screen.getByRole('button', { name: 'OK' }));
+
+    expect(screen.getByText('EEG1 - EEG2')).toBeTruthy();
+
+    // EEG1=[1,2,3], EEG2=[4,5,6] → EEG1 - EEG2 = [-3,-3,-3]
+    const rowCall = [...UplotReactMock.mock.calls]
+      .reverse()
+      .find((call) => call[0].data?.[1]?.length === 3);
+    expect(rowCall).toBeTruthy();
+    expect(Array.from(rowCall[0].data[1])).toEqual([-3, -3, -3]);
+  });
+
+  it('does not display a montage row whose source channel is bad', async () => {
+    await renderViewer();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Montage' }));
+    await userEvent.click(screen.getByTestId('channel-select-EEG1'));
+    await userEvent.click(screen.getByTestId('add-selected-button'));
+    await userEvent.click(screen.getByTestId('channel-bad-EEG1'));
+    await userEvent.click(screen.getByRole('button', { name: 'OK' }));
+
+    expect(screen.queryByText('EEG1')).toBeNull();
+  });
+
+  it('does not display a montage row whose reference channel is bad', async () => {
+    const { container } = await renderViewer();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Montage' }));
+    await userEvent.click(screen.getByTestId('channel-select-EEG1'));
+    await userEvent.click(screen.getByTestId('add-selected-button'));
+
+    const referenceSelect = container.querySelector('[data-testid^="reference-"]');
+    await userEvent.selectOptions(referenceSelect, 'EEG2');
+    await userEvent.click(screen.getByTestId('channel-bad-EEG2'));
+    await userEvent.click(screen.getByRole('button', { name: 'OK' }));
+
+    expect(screen.queryByText('EEG1 - EEG2')).toBeNull();
+    expect(screen.queryByText('EEG1')).toBeNull();
+  });
+});

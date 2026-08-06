@@ -21,6 +21,7 @@ import {
   LocateFixed,
 } from 'lucide-react';
 import { minMaxDownsample } from '@/utils/downsample';
+import { buildMontageDisplayRows, deriveMontageRowSamples } from '@/utils/eegViewerUtils';
 import { useEegBuffer } from '@/loaders/eegBuffer';
 import { useContainerResize } from '@/hooks/useContainerResize';
 import { useEegPlotControls } from '@/hooks/useEegPlotControls';
@@ -224,15 +225,13 @@ export const EegViewer = ({
   // later support arbitrary derived rows), not a per-channel record.
   const { montageChannels, applyMontageChannels } = useMontageChannels(channelNames);
 
-  // Bad channels are hidden from the waveform view entirely. Kept as {name, index} pairs
-  // (rather than filtering channelNames outright) so displayedData/montagedChannels — still
-  // indexed by the full channelNames — can be looked up by their original index below.
-  const visibleChannels = useMemo(
-    () =>
-      channelNames
-        .map((name, index) => ({ name, index }))
-        .filter(({ name }) => !channelSettings[name]?.bad),
-    [channelNames, channelSettings]
+  // Rows to render in the channel-plot area: one per non-bad channel (in channelNames
+  // order) when no montage rows are configured, or the configured montage rows once any
+  // exist — each named "channel - reference" (or just "channel" when unreferenced) and
+  // filtered to drop rows whose channel/reference is bad. See buildMontageDisplayRows.
+  const displayRows = useMemo(
+    () => buildMontageDisplayRows(channelNames, channelSettings, montageChannels),
+    [channelNames, channelSettings, montageChannels]
   );
 
   // Montage application + the electrode/channel voltage snapshots at the clicked topography
@@ -277,18 +276,25 @@ export const EegViewer = ({
     return () => toast.dismiss(EEG_LOADING_TOAST_ID);
   }, []);
 
-  // Downsample the montaged buffer for the visible window
+  // Downsample each display row's (possibly channel-minus-reference) series for the
+  // visible window
   const displayedData = useMemo(() => {
-    // If we don't have valid dimensions or data yet, return empty arrays for each channel to avoid rendering broken plots
-    const empty = channelNames.map(() => [[], []]);
+    // If we don't have valid dimensions or data yet, return empty arrays for each row to avoid rendering broken plots
+    const empty = displayRows.map(() => [[], []]);
     if (plotWidth === 0 || !timestamps || timestamps.length === 0 || !montagedChannels)
       return empty;
 
     const endTime = startTime + windowSize;
-    return channelNames.map((_, i) =>
-      minMaxDownsample(timestamps, montagedChannels[i], startTime, endTime, plotWidth)
+    return displayRows.map((row) =>
+      minMaxDownsample(
+        timestamps,
+        deriveMontageRowSamples(montagedChannels, row),
+        startTime,
+        endTime,
+        plotWidth
+      )
     );
-  }, [timestamps, montagedChannels, channelNames, startTime, windowSize, plotWidth]);
+  }, [timestamps, montagedChannels, displayRows, startTime, windowSize, plotWidth]);
 
   // Signal onViewReady once the first measurement lands and charts have rendered
   const onViewReadyCalledRef = useRef(false);
@@ -616,10 +622,10 @@ export const EegViewer = ({
                         }}
                       />
                     )}
-                    {visibleChannels.map(({ name, index: i }) => (
-                      // Channel divider below each channel
+                    {displayRows.map((row, rowIndex) => (
+                      // Channel divider below each row
                       <div
-                        key={name}
+                        key={row.id}
                         style={{
                           height: plotHeight,
                           overflow: 'visible',
@@ -627,12 +633,12 @@ export const EegViewer = ({
                         }}
                         className="relative"
                       >
-                        {/* Channel name label */}
+                        {/* Row name label */}
                         <span
                           className="absolute left-0 top-1/2 -translate-y-1/2 text-xs text-center pointer-events-none select-none z-10 px-0.5 truncate"
                           style={{ width: Y_AXIS_WIDTH }}
                         >
-                          {name}
+                          {row.name}
                         </span>
                         {/* Zero-line at y=0, aligned with the plot area (not drawn by uPlot to avoid grid issues) */}
                         <div
@@ -657,8 +663,8 @@ export const EegViewer = ({
                         >
                           <UplotReact
                             options={buildChannelOptions({
-                              channelIndex: i,
-                              totalChannels: channelNames.length,
+                              channelIndex: row.channelIndex,
+                              totalChannels: displayRows.length,
                               isDarkMode,
                               syncKey,
                               width: plotWidth,
@@ -667,7 +673,7 @@ export const EegViewer = ({
                               startTime,
                               yScale,
                             })}
-                            data={displayedData[i]}
+                            data={displayedData[rowIndex]}
                             onCreate={(u) => {
                               {
                                 /* click listener that converts the click's x-position into a timestamp => sets topoTimepoint */
