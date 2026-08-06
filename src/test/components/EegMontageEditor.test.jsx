@@ -970,7 +970,7 @@ describe('EegMontageEditor', () => {
       const referenceSelect = screen.getByTestId('reference-row-1');
       expect(referenceSelect).not.toBeDisabled();
       expect(referenceSelect).toHaveValue('GHOST');
-      expect(referenceSelect.className).toContain('text-red-800');
+      expect(referenceSelect.className).toContain('text-red-500');
       expect(referenceSelect.title).toBe('Reference channel not found in this recording');
       const injectedOption = Array.from(referenceSelect.options).find((o) => o.value === 'GHOST');
       expect(injectedOption.textContent).toBe('GHOST (missing)');

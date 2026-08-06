@@ -797,7 +797,7 @@ export function EegMontageEditor({
                   className={cn(
                     'w-16 text-xs border border-border rounded bg-surface cursor-default',
                     isReferenceBad && 'text-alert',
-                    isReferenceMissing && 'text-red-800'
+                    isReferenceMissing && 'text-red-500'
                   )}
                   title={
                     isReferenceMissing
