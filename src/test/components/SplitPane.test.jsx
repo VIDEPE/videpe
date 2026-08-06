@@ -123,6 +123,22 @@ describe('SplitPane — swap', () => {
     expect(getLeftPanel().style.order).toBe('1');
     expect(getRightPanel().style.order).toBe('3');
   });
+
+  it('calls onSwapChange with the new swapped state', () => {
+    const onSwapChange = vi.fn();
+    renderPane({ onSwapChange });
+    fireEvent.click(within(getLeftHeader()).getByTitle('Swap panels'));
+    expect(onSwapChange).toHaveBeenCalledWith(true);
+  });
+
+  it('calls onSwapChange(false) when swapping back', () => {
+    const onSwapChange = vi.fn();
+    renderPane({ onSwapChange });
+    const swapBtn = within(getLeftHeader()).getByTitle('Swap panels');
+    fireEvent.click(swapBtn);
+    fireEvent.click(swapBtn);
+    expect(onSwapChange).toHaveBeenLastCalledWith(false);
+  });
 });
 
 describe('SplitPane — reset buttons', () => {

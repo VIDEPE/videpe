@@ -14,6 +14,7 @@ export const SplitPane = ({
   onLeftReset,
   onRightReset,
   onMaximizeChange,
+  onSwapChange,
   defaultSplitPercent = 50,
 }) => {
   const [splitPercent, setSplitPercent] = useState(defaultSplitPercent); // proportion of the first panel (0–100)
@@ -52,6 +53,10 @@ export const SplitPane = ({
   useEffect(() => {
     onMaximizeChange?.(maximized);
   }, [maximized, onMaximizeChange]);
+
+  useEffect(() => {
+    onSwapChange?.(swapped);
+  }, [swapped, onSwapChange]);
 
   useEffect(() => {
     // Shared drag update logic — used by both mouse and touch handlers
