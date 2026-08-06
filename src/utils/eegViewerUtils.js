@@ -45,15 +45,10 @@ export function applyMontage(channels, montage) {
       : channels; // 'none' — use raw voltages without re-referencing
 }
 
-// Builds the list of rows to render in the EEG channel-plot area — either every non-bad
-// channel, in their natural order (when no montage rows have been configured in the
-// Montage Editor), or the configured montage rows, each carrying the channel/reference
-// indices into channelNames needed to derive its displayed sample series (see
-// deriveMontageRowSamples). A row is skipped when its source channel or (for bipolar
-// rows) its reference channel is marked bad, since neither can produce meaningful data.
-// `id` doubles as the React key: the channel name itself when falling back to the plain
-// channel list (unique by construction), or the montage row's own uuid — needed there
-// since two rows can derive from the same source channel.
+// Builds the rows to render in the EEG channel-plot area, resolving channel/reference
+// indices for deriveMontageRowSamples. Drops rows that are bad, or (only reachable via a
+// loaded montage file) name a channel not in channelNames — indexOf would return -1 there,
+// which deriveMontageRowSamples would crash on.
 export function buildMontageDisplayRows(channelNames, channelSettings, montageChannels) {
   if (montageChannels.length === 0) {
     return channelNames
@@ -72,6 +67,11 @@ export function buildMontageDisplayRows(channelNames, channelSettings, montageCh
   // separate "has a reference" guard.
   return montageChannels
     .filter((row) => !channelSettings[row.channel]?.bad && !channelSettings[row.reference]?.bad)
+    .filter(
+      (row) =>
+        channelNames.includes(row.channel) &&
+        (!row.reference || channelNames.includes(row.reference))
+    )
     .map((row) => ({
       id: row.id,
       name: row.reference ? `${row.channel} - ${row.reference}` : row.channel,

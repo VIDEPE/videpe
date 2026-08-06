@@ -213,6 +213,29 @@ describe('buildMontageDisplayRows', () => {
     const rows = buildMontageDisplayRows(channelNames, noneBad, montageChannels);
     expect(rows[0].color).toBe('red');
   });
+
+  it('drops a montage row whose channel is not present in this recording (e.g. an imported montage file naming an unknown channel) instead of producing a -1 index', () => {
+    const montageChannels = [
+      { id: 'row-1', channel: 'NOT_A_REAL_CHANNEL', reference: null, color: null },
+    ];
+    expect(buildMontageDisplayRows(channelNames, noneBad, montageChannels)).toEqual([]);
+  });
+
+  it('drops a montage row whose reference is not present in this recording', () => {
+    const montageChannels = [
+      { id: 'row-1', channel: 'EEG1', reference: 'NOT_A_REAL_CHANNEL', color: null },
+    ];
+    expect(buildMontageDisplayRows(channelNames, noneBad, montageChannels)).toEqual([]);
+  });
+
+  it('keeps other rows when only one row references an unknown channel', () => {
+    const montageChannels = [
+      { id: 'row-1', channel: 'NOT_A_REAL_CHANNEL', reference: null, color: null },
+      { id: 'row-2', channel: 'EEG3', reference: null, color: null },
+    ];
+    const rows = buildMontageDisplayRows(channelNames, noneBad, montageChannels);
+    expect(rows.map((r) => r.id)).toEqual(['row-2']);
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -1,8 +1,12 @@
 import { useRef, useEffect, useMemo, useState, useCallback } from 'react';
+import toast from 'react-hot-toast';
 import { SplitPane } from '@/components/SplitPane';
 import { useTheme } from '@/components/ThemeContext';
 import { TrafficLightButtons } from '@/components/TrafficLightButtons';
 import {} from '@/utils/eegViewerUtils';
+import { parseMontageFile } from '@/loaders/parseMontageFile';
+import { toAnyWaveMontage } from '@/loaders/toAnyWaveMontage';
+import { downloadTextFile } from '@/utils/fileDownload';
 import { EyeDashed } from 'lucide-react';
 import { cn } from '@/utils/utils';
 import {
@@ -27,6 +31,10 @@ const TYPE_LIST = {
 // Canonical grouping order for Sort by Type — clinical convention (eeg, then seeg, then
 // other), not alphabetical (which would separate seeg from eeg).
 const TYPE_ORDER = Object.keys(TYPE_LIST);
+// Preset options offered by each row's Color <select>. A loaded montage file (AnyWave) can
+// carry any CSS color keyword, not just these — see the color <select> below, which injects
+// an extra option for a row's current color when it isn't one of these presets.
+const PRESET_COLORS = ['red', 'blue', 'green', 'yellow', 'cyan', 'magenta'];
 
 // ─── Window sizing constants ────────────────────────────────────────────────
 // Default/minimum window size in px — default matches the previous fixed w-96 h-80 (24rem x 20rem)
@@ -102,13 +110,19 @@ export function EegMontageEditor({
     if (e.target === e.currentTarget) setSelectedChannels(new Set());
   }, []);
 
-  // Builds a fresh montage row for `name` — shared by all three "add row(s)" actions below.
-  // Deliberately doesn't carry a `type` field: a row's type is always looked up live from
-  // draftChannelSettings[row.channel] at render time (see the Channel Type span below), so
-  // it stays in sync if the channel's type is edited later in the channel-selection pane
-  // instead of freezing whatever it was when the row was added.
+  // Builds a fresh montage row for `name` — shared by the three "add row(s)" actions below
+  // plus Load. No `type` field: a row's type is always looked up live from
+  // draftChannelSettings[row.channel] at render time, so it stays in sync with later edits.
+  // `overrides` lets Load seed reference/color from a parsed file; every other caller omits
+  // it (or, via .map(makeMontageRow), passes the ignored numeric index), so the `??`
+  // fallbacks apply unchanged.
   const makeMontageRow = useCallback(
-    (name) => ({ id: crypto.randomUUID(), channel: name, reference: null, color: null }),
+    (name, overrides = {}) => ({
+      id: crypto.randomUUID(),
+      channel: name,
+      reference: overrides.reference ?? null,
+      color: overrides.color ?? null,
+    }),
     []
   );
 
@@ -243,6 +257,48 @@ export function EegMontageEditor({
     );
     setTypeSortDescending((prev) => !prev);
   }, [typeSortDescending, draftChannelSettings]);
+
+  // Loads a montage file (AnyWave XML or Cartool text) and replaces the draft montage rows
+  // wholesale, same as Add ALL/Clear all.
+  const handleLoadMontageFile = useCallback(
+    async (e) => {
+      const file = e.target.files?.[0];
+      e.target.value = ''; // reset so the same file can be re-selected
+      if (!file) return;
+
+      try {
+        const { rows, channelTypes } = await parseMontageFile(file);
+        setDraftMontageChannels(
+          rows.map((row) =>
+            makeMontageRow(row.channel, { reference: row.reference, color: row.color })
+          )
+        );
+        // AnyWave files carry a per-channel type alongside each row; patch those into the
+        // channel-selection draft too. Cartool files have no type info, so channelTypes is
+        // {} for them and this loop is a no-op, leaving existing types untouched.
+        setDraftChannelSettings((prev) => {
+          const next = { ...prev };
+          for (const [name, type] of Object.entries(channelTypes)) {
+            next[name] = { ...next[name], type };
+          }
+          return next;
+        });
+      } catch (err) {
+        // Parse failure (unrecognized/invalid content): surface it and leave the draft as
+        // it was — returning here means neither setDraft* call above ever runs, so there's
+        // nothing to roll back.
+        toast.error(`Error loading montage file:\n${err.message}`);
+      }
+    },
+    [makeMontageRow]
+  );
+
+  // Exports the current draft as AnyWave XML, regardless of whether it was built by hand
+  // or loaded from either supported file format — Save always emits this one format.
+  const handleSaveMontage = useCallback(() => {
+    const xml = toAnyWaveMontage(draftMontageChannels, draftChannelSettings);
+    downloadTextFile(xml, 'montage.mtg', 'text/xml');
+  }, [draftMontageChannels, draftChannelSettings]);
 
   // The live channelSettings/montageChannels props only ever change via a prior Apply/OK (or
   // the seeding effects in useChannelSettings/useMontageChannels) — never by draft edits — so
@@ -665,7 +721,15 @@ export function EegMontageEditor({
             const isChannelBad = draftChannelSettings[row.channel]?.bad;
             const isReferenceBad = row.reference && draftChannelSettings[row.reference]?.bad;
             const isRowBad = isChannelBad || isReferenceBad;
-            const channelType = draftChannelSettings[row.channel]?.type ?? 'eeg';
+            // "Missing" (channel/reference not in this recording, only possible via a
+            // loaded file) is styled distinctly from "bad" — secondary, not alert.
+            const isChannelMissing = !channelNames.includes(row.channel);
+            const isReferenceMissing =
+              Boolean(row.reference) && !channelNames.includes(row.reference);
+            const isRowMissing = isChannelMissing || isReferenceMissing;
+            const channelType = isChannelMissing
+              ? null
+              : (draftChannelSettings[row.channel]?.type ?? 'eeg');
             return (
               <div
                 key={row.id}
@@ -675,7 +739,7 @@ export function EegMontageEditor({
                   // The row's selected color tints its background, but is overwrited by bg-alert when
                   // the channel is bad (applied via className, not inline style, which always wins)
                   // color-mix keeps this a subtle tint rather than the fully-saturated color used in uPlot
-                  ...(!isRowBad && row.color
+                  ...(!isRowBad && !isRowMissing && row.color
                     ? {
                         backgroundColor: `color-mix(in srgb, ${row.color} ${isDarkMode ? 30 : 40}%, transparent)`,
                       }
@@ -683,10 +747,11 @@ export function EegMontageEditor({
                 }}
                 className={cn(
                   'relative flex items-center gap-2 pl-3 pr-1 py-0.5 cursor-pointer select-none',
-                  isRowBad ? (isDarkMode ? 'bg-alert/20' : 'bg-alert/30') : '',
+                  isRowBad && (isDarkMode ? 'bg-alert/20' : 'bg-alert/30'),
+                  !isRowBad && isRowMissing && (isDarkMode ? 'bg-secondary/20' : 'bg-secondary/20'),
                   // A ring (not a background) marks the row selected for Move Up/Down —
-                  // background is already spoken for by the bad/color tints above, and an
-                  // inline style (row.color) would win over a background className anyway.
+                  // background is already spoken for by the bad/missing/color tints above,
+                  // and an inline style (row.color) would win over a background className anyway.
                   selectedMontageRows.has(row.id) && 'ring-2 ring-inset ring-primary'
                 )}
                 title="Click to select for Move Up/Down"
@@ -694,31 +759,46 @@ export function EegMontageEditor({
               >
                 {/* Channel name */}
                 <span
-                  className={cn('flex-1 truncate text-sm', isChannelBad && 'text-alert')}
+                  className={cn(
+                    'flex-1 truncate text-sm',
+                    isChannelBad && 'text-alert',
+                    isChannelMissing && 'text-secondary'
+                  )}
+                  title={isChannelMissing ? 'Channel not found in this recording' : undefined}
                   data-testid={`montage-channel-${row.id}`}
                 >
                   {row.channel}
                 </span>
                 {/* Channel Type — looked up live from draftChannelSettings (see channelType
                     above), so it tracks edits made afterward in the channel-selection pane
-                    rather than freezing whatever the type was when the row was added. */}
+                    rather than freezing whatever the type was when the row was added. A
+                    missing channel has no draftChannelSettings entry to read a type from. */}
                 <span
                   className="w-23 text-center truncate text-sm"
                   data-testid={`montage-type-${row.id}`}
                 >
-                  {TYPE_LIST[channelType]}
+                  {channelType ? TYPE_LIST[channelType] : '—'}
                 </span>
-                {/* Reference Channel */}
+                {/* Reference Channel — a reference naming a channel not in this recording
+                    (only reachable via a loaded file) gets its own injected option so it
+                    displays as selected instead of falling back to blank "— n/a —". */}
                 <select
                   className={cn(
                     'w-16 text-xs border border-border rounded bg-surface cursor-default',
-                    isReferenceBad && 'text-alert'
+                    isReferenceBad && 'text-alert',
+                    isReferenceMissing && 'text-secondary'
                   )}
+                  title={
+                    isReferenceMissing ? 'Reference channel not found in this recording' : undefined
+                  }
                   data-testid={`reference-${row.id}`}
                   value={row.reference ?? ''}
                   onChange={(e) => setDraftMontageRowReference(row.id, e.target.value)}
                 >
                   <option value="">— n/a —</option>
+                  {isReferenceMissing && (
+                    <option value={row.reference}>{row.reference} (missing)</option>
+                  )}
                   {referenceOptions}
                 </select>
                 {/* Channel Color — "Default" (color: null) follows the theme (white in
@@ -733,6 +813,14 @@ export function EegMontageEditor({
                   onChange={(e) => setDraftMontageRowColor(row.id, e.target.value || null)}
                 >
                   <option value="">Default</option>
+                  {/* A loaded file (AnyWave) can carry any CSS color keyword, not just the
+                      presets below — inject it as an extra option so the select shows the
+                      row's actual color instead of falling back to blank/unselected. */}
+                  {row.color && !PRESET_COLORS.includes(row.color) && (
+                    <option value={row.color}>
+                      {row.color[0].toUpperCase() + row.color.slice(1)}
+                    </option>
+                  )}
                   <option value="red">Red</option>
                   <option value="blue">Blue</option>
                   <option value="green">Green</option>
@@ -754,78 +842,116 @@ export function EegMontageEditor({
             );
           })}
         </div>
-        {/* Montage Settings — three groups side by side, each stacking its own buttons in a
-            column; the Move group is pushed to the right edge (ml-auto) since it acts on
-            row selection rather than the list as a whole, like Clear/Sort do. */}
+        {/* Montage Settings — a row of three column groups (Clear/Sort/Move), each stacking
+            its own buttons; the Move group is pushed to the right edge (ml-auto) since it
+            acts on row selection rather than the list as a whole, like Clear/Sort do. A
+            second row below holds Load/Save side by side. */}
         <div
-          className="h-36 shrink-0 flex items-start gap-4 p-2 border-t border-border bg-surface"
+          className="h-36 shrink-0 flex flex-col gap-2 p-2 border-t border-border bg-surface"
           onClick={handleMontagePaneBackgroundClick}
         >
-          {/* Clear group */}
-          <div className="flex flex-col gap-2">
+          <div className="flex items-start gap-4">
+            {/* Clear group */}
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                className="button"
+                data-testid="clear-all-button"
+                disabled={draftMontageChannels.length === 0}
+                onClick={handleClearAllMontageRows}
+                title="Remove all montage rows"
+              >
+                Clear all
+              </button>
+            </div>
+            {/* Sort group — the arrow shows the direction the next click will sort in. */}
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                className="button flex items-center gap-1"
+                data-testid="sort-by-name-button"
+                disabled={draftMontageChannels.length === 0}
+                onClick={handleSortByName}
+                title={`Sort rows by channel name (${nameSortDescending ? 'descending' : 'ascending'})`}
+              >
+                Sort by Name
+                {nameSortDescending ? <ArrowDownAZ size={14} /> : <ArrowUpAZ size={14} />}
+              </button>
+              <button
+                type="button"
+                className="button flex items-center gap-1"
+                data-testid="sort-by-type-button"
+                disabled={draftMontageChannels.length === 0}
+                onClick={handleSortByType}
+                title={`Sort rows by channel type (${typeSortDescending ? 'descending' : 'ascending'})`}
+              >
+                Sort by Type
+                {typeSortDescending ? (
+                  <ArrowDownWideNarrow size={14} />
+                ) : (
+                  <ArrowUpWideNarrow size={14} />
+                )}
+              </button>
+            </div>
+            {/* Move group — acts on whichever row(s) are selected (click a row's channel
+                name above to select it); disabled with none selected since there's nothing
+                to move. */}
+            <div className="flex flex-col gap-2 ml-auto">
+              <button
+                type="button"
+                className="button button-icon"
+                data-testid="move-up-button"
+                disabled={selectedMontageRows.size === 0}
+                onClick={handleMoveSelectedUp}
+                title="Move selected row(s) up"
+              >
+                <MoveUp size={16} />
+              </button>
+              <button
+                type="button"
+                className="button button-icon"
+                data-testid="move-down-button"
+                disabled={selectedMontageRows.size === 0}
+                onClick={handleMoveSelectedDown}
+                title="Move selected row(s) down"
+              >
+                <MoveDown size={16} />
+              </button>
+            </div>
+          </div>
+          {/* File row — Load replaces all draft rows wholesale (grouped conceptually with
+              Clear, both whole-list-replacing); Save always exports AnyWave format
+              regardless of the montage's origin. Both .mtg formats share the same file
+              extension, so format detection happens by content-sniffing in
+              parseMontageFile, not via the file input's accept filter. */}
+          <div className="flex items-center gap-2">
             <button
               type="button"
               className="button"
-              data-testid="clear-all-button"
+              data-testid="load-montage-button"
+              onClick={() => fileInputRef.current?.click()}
+              title="Load a montage from an AnyWave or Cartool .mtg file (replaces all current rows)"
+            >
+              Load
+            </button>
+            <button
+              type="button"
+              className="button"
+              data-testid="save-montage-button"
               disabled={draftMontageChannels.length === 0}
-              onClick={handleClearAllMontageRows}
-              title="Remove all montage rows"
+              onClick={handleSaveMontage}
+              title="Save the current montage as an AnyWave .mtg file"
             >
-              Clear all
+              Save
             </button>
-          </div>
-          {/* Sort group — the arrow shows the direction the next click will sort in. */}
-          <div className="flex flex-col gap-2">
-            <button
-              type="button"
-              className="button flex items-center gap-1"
-              data-testid="sort-by-name-button"
-              disabled={draftMontageChannels.length === 0}
-              onClick={handleSortByName}
-              title={`Sort rows by channel name (${nameSortDescending ? 'descending' : 'ascending'})`}
-            >
-              Sort by Name
-              {nameSortDescending ? <ArrowDownAZ size={14} /> : <ArrowUpAZ size={14} />}
-            </button>
-            <button
-              type="button"
-              className="button flex items-center gap-1"
-              data-testid="sort-by-type-button"
-              disabled={draftMontageChannels.length === 0}
-              onClick={handleSortByType}
-              title={`Sort rows by channel type (${typeSortDescending ? 'descending' : 'ascending'})`}
-            >
-              Sort by Type
-              {typeSortDescending ? (
-                <ArrowDownWideNarrow size={14} />
-              ) : (
-                <ArrowUpWideNarrow size={14} />
-              )}
-            </button>
-          </div>
-          {/* Move group — acts on whichever row(s) are selected (click a row's channel name
-              above to select it); disabled with none selected since there's nothing to move. */}
-          <div className="flex flex-col gap-2 ml-auto">
-            <button
-              type="button"
-              className="button button-icon"
-              data-testid="move-up-button"
-              disabled={selectedMontageRows.size === 0}
-              onClick={handleMoveSelectedUp}
-              title="Move selected row(s) up"
-            >
-              <MoveUp size={16} />
-            </button>
-            <button
-              type="button"
-              className="button button-icon"
-              data-testid="move-down-button"
-              disabled={selectedMontageRows.size === 0}
-              onClick={handleMoveSelectedDown}
-              title="Move selected row(s) down"
-            >
-              <MoveDown size={16} />
-            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".mtg"
+              hidden
+              data-testid="montage-file-input"
+              onChange={handleLoadMontageFile}
+            />
           </div>
         </div>
       </div>

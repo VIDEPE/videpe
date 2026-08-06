@@ -1,10 +1,22 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import toast from 'react-hot-toast';
+import { downloadTextFile } from '@/utils/fileDownload';
 import { EegMontageEditor } from '@/components/EegMontageEditor';
 
 vi.mock('@/components/ThemeContext', () => ({
   useTheme: () => ({ isDarkMode: false }),
+}));
+
+vi.mock('react-hot-toast', () => {
+  const toastFn = vi.fn();
+  toastFn.error = vi.fn();
+  return { default: toastFn };
+});
+
+vi.mock('@/utils/fileDownload', () => ({
+  downloadTextFile: vi.fn(),
 }));
 
 const CHANNEL_NAMES = ['FP1', 'FP2', 'FP3'];
@@ -925,6 +937,113 @@ describe('EegMontageEditor', () => {
       const controls = screen.getByTestId('add-selected-button').parentElement;
       expect(controls.className).toContain('order-2');
       expect(controls.className).not.toContain('order-1');
+    });
+  });
+
+  describe('Load / Save montage', () => {
+    const ANYWAVE_FILE_TEXT = `<!DOCTYPE AnyWaveMontage>
+<Montage>
+	<Channel name="FP1">
+		<type>SEEG</type>
+		<reference></reference>
+		<color>darkblue</color>
+	</Channel>
+	<Channel name="FP2">
+		<type>EEG</type>
+		<reference>FP1</reference>
+		<color></color>
+	</Channel>
+</Montage>`;
+
+    const CARTOOL_FILE_TEXT = 'MT01\nFP1\tFP2\nFP2\tFP3\n';
+
+    beforeEach(() => {
+      toast.error.mockClear();
+      downloadTextFile.mockClear();
+    });
+
+    it('renders Load and Save buttons', () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      expect(screen.getByRole('button', { name: 'Load' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Save' })).toBeTruthy();
+    });
+
+    it('disables Save when there are no montage rows', () => {
+      render(<EegMontageEditor {...defaultProps} montageChannels={[]} />);
+      expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+    });
+
+    it('enables Save when there are montage rows', () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      expect(screen.getByRole('button', { name: 'Save' })).not.toBeDisabled();
+    });
+
+    it('loading a valid AnyWave file replaces the montage rows and updates channel types', async () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      const file = new File([ANYWAVE_FILE_TEXT], 'custom.mtg');
+      await userEvent.upload(screen.getByTestId('montage-file-input'), file);
+
+      // Row list is now exactly the 2 rows from the file, replacing the original 3.
+      expect(screen.queryByTestId('montage-channel-FP3')).toBeNull();
+      const rows = screen.getAllByTestId(/^montage-channel-/);
+      expect(rows.map((r) => r.textContent)).toEqual(['FP1', 'FP2']);
+
+      // FP1's type was updated to SEEG in the channel-selection pane.
+      expect(screen.getByTestId('channel-type-FP1')).toHaveValue('seeg');
+      // Loaded rows get freshly-generated ids (not the channel name), so reference selects
+      // are matched by list order (FP1, then FP2) rather than a `reference-FP2` testid.
+      // FP1 is referential (no reference); FP2's row is now bipolar against FP1.
+      const referenceSelects = screen.getAllByTestId(/^reference-/);
+      expect(referenceSelects.map((s) => s.value)).toEqual(['', 'FP1']);
+      expect(toast.error).not.toHaveBeenCalled();
+    });
+
+    it('loading a valid Cartool file replaces the montage rows and leaves channel types untouched', async () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      const file = new File([CARTOOL_FILE_TEXT], 'custom.mtg');
+      await userEvent.upload(screen.getByTestId('montage-file-input'), file);
+
+      const rows = screen.getAllByTestId(/^montage-channel-/);
+      expect(rows.map((r) => r.textContent)).toEqual(['FP1', 'FP2']);
+      // Both rows are bipolar per the Cartool file's channel/reference pairs.
+      const referenceSelects = screen.getAllByTestId(/^reference-/);
+      expect(referenceSelects.map((s) => s.value)).toEqual(['FP2', 'FP3']);
+      // Channel types are exactly as seeded from CHANNEL_SETTINGS — untouched.
+      expect(screen.getByTestId('channel-type-FP1')).toHaveValue('eeg');
+      expect(toast.error).not.toHaveBeenCalled();
+    });
+
+    it('loading invalid content shows a toast error and leaves the draft unchanged', async () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      const file = new File(['this is not a montage file'], 'bad.mtg');
+      await userEvent.upload(screen.getByTestId('montage-file-input'), file);
+
+      expect(toast.error).toHaveBeenCalledTimes(1);
+      // Original 3 rows and channel types are untouched.
+      const rows = screen.getAllByTestId(/^montage-channel-/);
+      expect(rows.map((r) => r.textContent)).toEqual(['FP1', 'FP2', 'FP3']);
+      expect(screen.getByTestId('channel-type-FP1')).toHaveValue('eeg');
+    });
+
+    it('clicking Save downloads the current draft as AnyWave XML named montage.mtg', async () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+      expect(downloadTextFile).toHaveBeenCalledTimes(1);
+      const [xml, filename] = downloadTextFile.mock.calls[0];
+      expect(filename).toBe('montage.mtg');
+      expect(xml).toContain('<Channel name="FP1">');
+      expect(xml).toContain('<Channel name="FP2">');
+      expect(xml).toContain('<Channel name="FP3">');
+    });
+
+    it("a row with a non-preset color (e.g. an AnyWave import's 'darkblue') renders as the select's actual selected value", async () => {
+      const montageChannels = [{ id: 'FP1', channel: 'FP1', reference: null, color: 'darkblue' }];
+      render(<EegMontageEditor {...defaultProps} montageChannels={montageChannels} />);
+      const select = screen.getByTestId('color-FP1');
+      expect(select).toHaveValue('darkblue');
+      const injectedOption = Array.from(select.options).find((o) => o.value === 'darkblue');
+      expect(injectedOption).toBeTruthy();
     });
   });
 });
