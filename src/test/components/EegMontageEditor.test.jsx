@@ -964,7 +964,7 @@ describe('EegMontageEditor', () => {
       render(<EegMontageEditor {...defaultProps} montageChannels={montageChannels} />);
 
       const name = screen.getByTestId('montage-channel-row-1');
-      expect(name.className).not.toContain('text-red-800');
+      expect(name.className).not.toContain('text-red-500');
       expect(name.closest('div').className).not.toContain('opacity-50');
 
       const referenceSelect = screen.getByTestId('reference-row-1');

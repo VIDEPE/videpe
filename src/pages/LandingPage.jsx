@@ -24,6 +24,7 @@ import {
   FlaskConical,
   TabletSmartphone,
   CodeXml,
+  MonitorCog,
 } from 'lucide-react';
 const GithubIcon = ({ size = 24, ...props }) => (
   <svg
@@ -79,6 +80,13 @@ const FEATURES = [
     description:
       'Load an inverse solution to visualise per-source power as a 3D connectome or a volumetric heatmap.',
     anchor: '#feature-esi',
+  },
+  {
+    icon: MonitorCog,
+    label: 'Montage Editor',
+    description:
+      'Build custom referenced or bipolar montages, colour and reorder rows, and import/export AnyWave or Cartool montage files.',
+    anchor: '#feature-montage-editor',
   },
   {
     icon: ChartNetwork,
