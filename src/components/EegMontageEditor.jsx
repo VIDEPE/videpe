@@ -5,7 +5,16 @@ import { TrafficLightButtons } from '@/components/TrafficLightButtons';
 import {} from '@/utils/eegViewerUtils';
 import { EyeDashed } from 'lucide-react';
 import { cn } from '@/utils/utils';
-import { Plus, X } from 'lucide-react';
+import {
+  Plus,
+  X,
+  MoveUp,
+  MoveDown,
+  ArrowUpAZ,
+  ArrowDownAZ,
+  ArrowUpWideNarrow,
+  ArrowDownWideNarrow,
+} from 'lucide-react';
 
 // ─── EEG Montage settings ────────────────────────────────────────
 // Shared title styling — keeps panes titles visually consistent, with the same height (TrafficLightButtons are 16px tall).
@@ -15,6 +24,9 @@ const TYPE_LIST = {
   seeg: 'SEEG',
   other: 'Other',
 };
+// Canonical grouping order for Sort by Type — clinical convention (eeg, then seeg, then
+// other), not alphabetical (which would separate seeg from eeg).
+const TYPE_ORDER = Object.keys(TYPE_LIST);
 
 // ─── Window sizing constants ────────────────────────────────────────────────
 // Default/minimum window size in px — default matches the previous fixed w-96 h-80 (24rem x 20rem)
@@ -83,6 +95,12 @@ export function EegMontageEditor({
       return next;
     });
   }, []);
+  // Clears the channel selection when empty space in the channel-selection pane is clicked
+  // (the list background, its header, or the settings card below). The target check means a
+  // click that started on a channel row/control and bubbled up doesn't undo its own handler.
+  const handleChannelPaneBackgroundClick = useCallback((e) => {
+    if (e.target === e.currentTarget) setSelectedChannels(new Set());
+  }, []);
 
   // Builds a fresh montage row for `name` — shared by all three "add row(s)" actions below.
   // Deliberately doesn't carry a `type` field: a row's type is always looked up live from
@@ -121,15 +139,110 @@ export function EegMontageEditor({
     setDraftMontageChannels((prev) => [...prev, ...channelNames.map(makeMontageRow)]);
   }, [channelNames, makeMontageRow]);
 
+  // Rows checked for Move Up/Down below, keyed by row id (not channel name, so two rows
+  // sharing a channel select independently). Declared before handleClearAllMontageRows/
+  // handleRemoveMontageRow below since they reference its setter — React Compiler couldn't
+  // preserve those handlers' memoization with a forward reference.
+  const [selectedMontageRows, setSelectedMontageRows] = useState(() => new Set());
+  const toggleMontageRowSelected = useCallback((id) => {
+    setSelectedMontageRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+  // Anywhere on a row toggles its selection, so the whole row is one big target rather
+  // than just the channel name. Clicks landing on the row's own controls are ignored —
+  // those have their own jobs (edit the reference/color, remove the row) and shouldn't
+  // also flip selection as a side effect.
+  const handleMontageRowClick = useCallback(
+    (e, id) => {
+      if (e.target.closest('button, input, select, textarea')) return;
+      toggleMontageRowSelected(id);
+    },
+    [toggleMontageRowSelected]
+  );
+  // Clears the montage row selection when empty space in the montage pane is clicked (the
+  // row list background, its header, the settings row below, or the add-row controls
+  // column). The target check means a click that started on a row/control and bubbled up
+  // doesn't undo that row's own click-to-select handler.
+  const handleMontagePaneBackgroundClick = useCallback((e) => {
+    if (e.target === e.currentTarget) setSelectedMontageRows(new Set());
+  }, []);
+
   // Removes every montage row — the reverse of Add all/Add selected/Add by type.
   const handleClearAllMontageRows = useCallback(() => {
     setDraftMontageChannels([]);
+    setSelectedMontageRows(new Set());
   }, []);
 
   // Removes a single row, keyed by id since channel names can repeat across rows.
   const handleRemoveMontageRow = useCallback((id) => {
     setDraftMontageChannels((prev) => prev.filter((row) => row.id !== id));
+    setSelectedMontageRows((prev) => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
   }, []);
+
+  // Moves every selected row up one slot. Scanning left-to-right and swapping a selected
+  // row with its predecessor only when that predecessor isn't also selected handles several
+  // separately-selected rows in one pass without them fighting each other.
+  const handleMoveSelectedUp = useCallback(() => {
+    setDraftMontageChannels((prev) => {
+      const next = [...prev];
+      for (let i = 1; i < next.length; i++) {
+        if (selectedMontageRows.has(next[i].id) && !selectedMontageRows.has(next[i - 1].id)) {
+          [next[i - 1], next[i]] = [next[i], next[i - 1]];
+        }
+      }
+      return next;
+    });
+  }, [selectedMontageRows]);
+
+  // Mirror of handleMoveSelectedUp, scanning right-to-left.
+  const handleMoveSelectedDown = useCallback(() => {
+    setDraftMontageChannels((prev) => {
+      const next = [...prev];
+      for (let i = next.length - 2; i >= 0; i--) {
+        if (selectedMontageRows.has(next[i].id) && !selectedMontageRows.has(next[i + 1].id)) {
+          [next[i], next[i + 1]] = [next[i + 1], next[i]];
+        }
+      }
+      return next;
+    });
+  }, [selectedMontageRows]);
+
+  // Sorts by channel name, flipping ascending/descending on each click.
+  const [nameSortDescending, setNameSortDescending] = useState(false);
+  const handleSortByName = useCallback(() => {
+    setDraftMontageChannels((prev) =>
+      [...prev].sort((a, b) =>
+        nameSortDescending ? b.channel.localeCompare(a.channel) : a.channel.localeCompare(b.channel)
+      )
+    );
+    setNameSortDescending((prev) => !prev);
+  }, [nameSortDescending]);
+
+  // Sorts by type (TYPE_ORDER: eeg, seeg, other), then name within each group, also
+  // flipping direction on each click. Reads type live from draftChannelSettings, same as
+  // the Channel Type column (see channelType below) — a row has no type field of its own.
+  const [typeSortDescending, setTypeSortDescending] = useState(false);
+  const handleSortByType = useCallback(() => {
+    setDraftMontageChannels((prev) =>
+      [...prev].sort((a, b) => {
+        const typeA = draftChannelSettings[a.channel]?.type ?? 'eeg';
+        const typeB = draftChannelSettings[b.channel]?.type ?? 'eeg';
+        const typeOrderDiff = TYPE_ORDER.indexOf(typeA) - TYPE_ORDER.indexOf(typeB);
+        const diff = typeOrderDiff !== 0 ? typeOrderDiff : a.channel.localeCompare(b.channel);
+        return typeSortDescending ? -diff : diff;
+      })
+    );
+    setTypeSortDescending((prev) => !prev);
+  }, [typeSortDescending, draftChannelSettings]);
 
   // The live channelSettings/montageChannels props only ever change via a prior Apply/OK (or
   // the seeding effects in useChannelSettings/useMontageChannels) — never by draft edits — so
@@ -312,7 +425,10 @@ export function EegMontageEditor({
           claims all remaining height above the fixed-height settings section below. */}
       <div className="flex-1 min-h-0 flex flex-col pl-2 pt-2 bg-background">
         {/* Column headers — widths mirror each row's controls below so labels stay aligned */}
-        <div className="shrink-0 flex items-center gap-2 px-1 py-0.5 text-xs font-medium text-header border-b border-border">
+        <div
+          className="shrink-0 flex items-center gap-2 px-1 py-0.5 text-xs font-medium text-header border-b border-border"
+          onClick={handleChannelPaneBackgroundClick}
+        >
           <span className="flex-1">Channel</span>
           <span className="w-13 text-center" title="Electrode Position Match">
             Pos
@@ -324,7 +440,11 @@ export function EegMontageEditor({
             Bad
           </span>
         </div>
-        <div className="flex-1 min-h-0 pb-4 overflow-y-auto border-header">
+        <div
+          className="flex-1 min-h-0 pb-4 overflow-y-auto border-header"
+          data-testid="channel-list"
+          onClick={handleChannelPaneBackgroundClick}
+        >
           {channelNames.map((name) => {
             // take channel settings from draftChannelSetting (if exist) or default (type: 'eeg', bad: false)
             const settings = draftChannelSettings[name] ?? { type: 'eeg', bad: false };
@@ -398,9 +518,12 @@ export function EegMontageEditor({
         </div>
       </div>
       {/* Channel Selection Settings */}
-      <div className="h-36 shrink-0 flex flex-col items-start gap-2 p-2 border-t border-border bg-surface">
+      <div
+        className="h-36 shrink-0 flex flex-col items-start gap-2 p-2 border-t border-border bg-surface"
+        onClick={handleChannelPaneBackgroundClick}
+      >
         <button className="button" onClick={() => handleFlipBadChannels()}>
-          {isAllBad ? 'Check all Good' : 'Check all Bad'}
+          {isAllBad ? 'Set all Good' : 'Set all Bad'}
         </button>
         <div className="flex items-center gap-2">
           <button className="button" onClick={handleSetAllType}>
@@ -437,6 +560,7 @@ export function EegMontageEditor({
         'w-25 h-full items-center justify-center flex flex-col gap-6 p-2 bg-surface',
         isPanesSwapped ? 'order-2 border-l border-border' : 'order-1 border-r border-border'
       )}
+      onClick={handleMontagePaneBackgroundClick}
     >
       {/* Add button */}
       <button
@@ -505,7 +629,10 @@ export function EegMontageEditor({
         )}
       >
         {/* Column headers — widths mirror each row's controls below so labels stay aligned */}
-        <div className="shrink-0 flex items-center gap-2 pl-3 pr-1 py-0.5 text-xs font-medium text-header border-b border-border">
+        <div
+          className="shrink-0 flex items-center gap-2 pl-3 pr-1 py-0.5 text-xs font-medium text-header border-b border-border"
+          onClick={handleMontagePaneBackgroundClick}
+        >
           <span className="flex-1" title="Montage Channel">
             Channel
           </span>
@@ -519,11 +646,14 @@ export function EegMontageEditor({
             Color
           </span>
         </div>
-        <div className="flex-1 min-h-0 pb-4 overflow-y-auto border-header">
+        <div
+          className="flex-1 min-h-0 pb-4 overflow-y-auto border-header"
+          data-testid="montage-row-list"
+          onClick={handleMontagePaneBackgroundClick}
+        >
           {draftMontageChannels.length === 0 && (
             <p className="text-xs text-header pl-3 pr-1 py-2">
-              No montage rows yet — select channel(s) in the Channel Selection pane and click "+ Add
-              selected", or add every channel of a type at once on the left.
+              {`No montage rows yet — select channel(s) in the Channel Selection pane on the ${isPanesSwapped ? 'right' : 'left'} and use the + / Add buttons to add them to the row list on the ${isPanesSwapped ? 'left' : 'right'}.`}
             </p>
           )}
           {draftMontageChannels.map((row) => {
@@ -551,9 +681,15 @@ export function EegMontageEditor({
                     : {}),
                 }}
                 className={cn(
-                  'relative flex items-center gap-2 pl-3 pr-1 py-0.5',
-                  isRowBad ? (isDarkMode ? 'bg-alert/20' : 'bg-alert/30') : ''
+                  'relative flex items-center gap-2 pl-3 pr-1 py-0.5 cursor-pointer select-none',
+                  isRowBad ? (isDarkMode ? 'bg-alert/20' : 'bg-alert/30') : '',
+                  // A ring (not a background) marks the row selected for Move Up/Down —
+                  // background is already spoken for by the bad/color tints above, and an
+                  // inline style (row.color) would win over a background className anyway.
+                  selectedMontageRows.has(row.id) && 'ring-2 ring-inset ring-primary'
                 )}
+                title="Click to select for Move Up/Down"
+                onClick={(e) => handleMontageRowClick(e, row.id)}
               >
                 {/* Channel name */}
                 <span
@@ -574,7 +710,7 @@ export function EegMontageEditor({
                 {/* Reference Channel */}
                 <select
                   className={cn(
-                    'w-16 text-xs border border-border rounded bg-surface',
+                    'w-16 text-xs border border-border rounded bg-surface cursor-default',
                     isReferenceBad && 'text-alert'
                   )}
                   data-testid={`reference-${row.id}`}
@@ -590,7 +726,7 @@ export function EegMontageEditor({
                     theme-independent unlike the old scheme where "Default" was literally
                     stored as 'white' or 'black'. */}
                 <select
-                  className="w-16 text-xs border border-border rounded bg-surface"
+                  className="w-16 text-xs border border-border rounded bg-surface cursor-default"
                   data-testid={`color-${row.id}`}
                   value={row.color ?? ''}
                   onChange={(e) => setDraftMontageRowColor(row.id, e.target.value || null)}
@@ -606,7 +742,7 @@ export function EegMontageEditor({
                 {/* Remove row */}
                 <button
                   type="button"
-                  className="text-header hover:text-alert"
+                  className="text-header hover:text-alert cursor-pointer"
                   data-testid={`remove-row-${row.id}`}
                   title={`Remove ${row.channel} from the montage`}
                   onClick={() => handleRemoveMontageRow(row.id)}
@@ -617,18 +753,79 @@ export function EegMontageEditor({
             );
           })}
         </div>
-        {/* Montage Settings */}
-        <div className="h-36 shrink-0 flex flex-col items-start gap-2 p-2 border-t border-border bg-surface">
-          <button
-            type="button"
-            className="button"
-            data-testid="clear-all-button"
-            disabled={draftMontageChannels.length === 0}
-            onClick={handleClearAllMontageRows}
-            title="Remove all montage rows"
-          >
-            Clear all
-          </button>
+        {/* Montage Settings — three groups side by side, each stacking its own buttons in a
+            column; the Move group is pushed to the right edge (ml-auto) since it acts on
+            row selection rather than the list as a whole, like Clear/Sort do. */}
+        <div
+          className="h-36 shrink-0 flex items-start gap-4 p-2 border-t border-border bg-surface"
+          onClick={handleMontagePaneBackgroundClick}
+        >
+          {/* Clear group */}
+          <div className="flex flex-col gap-2">
+            <button
+              type="button"
+              className="button"
+              data-testid="clear-all-button"
+              disabled={draftMontageChannels.length === 0}
+              onClick={handleClearAllMontageRows}
+              title="Remove all montage rows"
+            >
+              Clear all
+            </button>
+          </div>
+          {/* Sort group — the arrow shows the direction the next click will sort in. */}
+          <div className="flex flex-col gap-2">
+            <button
+              type="button"
+              className="button flex items-center gap-1"
+              data-testid="sort-by-name-button"
+              disabled={draftMontageChannels.length === 0}
+              onClick={handleSortByName}
+              title={`Sort rows by channel name (${nameSortDescending ? 'descending' : 'ascending'})`}
+            >
+              Sort by Name
+              {nameSortDescending ? <ArrowDownAZ size={14} /> : <ArrowUpAZ size={14} />}
+            </button>
+            <button
+              type="button"
+              className="button flex items-center gap-1"
+              data-testid="sort-by-type-button"
+              disabled={draftMontageChannels.length === 0}
+              onClick={handleSortByType}
+              title={`Sort rows by channel type (${typeSortDescending ? 'descending' : 'ascending'})`}
+            >
+              Sort by Type
+              {typeSortDescending ? (
+                <ArrowDownWideNarrow size={14} />
+              ) : (
+                <ArrowUpWideNarrow size={14} />
+              )}
+            </button>
+          </div>
+          {/* Move group — acts on whichever row(s) are selected (click a row's channel name
+              above to select it); disabled with none selected since there's nothing to move. */}
+          <div className="flex flex-col gap-2 ml-auto">
+            <button
+              type="button"
+              className="button button-icon"
+              data-testid="move-up-button"
+              disabled={selectedMontageRows.size === 0}
+              onClick={handleMoveSelectedUp}
+              title="Move selected row(s) up"
+            >
+              <MoveUp size={16} />
+            </button>
+            <button
+              type="button"
+              className="button button-icon"
+              data-testid="move-down-button"
+              disabled={selectedMontageRows.size === 0}
+              onClick={handleMoveSelectedDown}
+              title="Move selected row(s) down"
+            >
+              <MoveDown size={16} />
+            </button>
+          </div>
         </div>
       </div>
     </div>

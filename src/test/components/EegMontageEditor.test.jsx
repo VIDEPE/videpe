@@ -198,47 +198,47 @@ describe('EegMontageEditor', () => {
     });
   });
 
-  describe('Check all Bad / Check all Good', () => {
+  describe('Set all Bad / Set all Good', () => {
     const ALL_BAD_SETTINGS = {
       FP1: { type: 'eeg', bad: true },
       FP2: { type: 'eeg', bad: true },
       FP3: { type: 'seeg', bad: true },
     };
 
-    it('shows "Check all Bad" when not every channel is already bad', () => {
+    it('shows "Set all Bad" when not every channel is already bad', () => {
       render(<EegMontageEditor {...defaultProps} />);
-      expect(screen.getByRole('button', { name: 'Check all Bad' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Set all Bad' })).toBeTruthy();
     });
 
-    it('shows "Check all Good" when every channel is already bad', () => {
+    it('shows "Set all Good" when every channel is already bad', () => {
       render(<EegMontageEditor {...defaultProps} channelSettings={ALL_BAD_SETTINGS} />);
-      expect(screen.getByRole('button', { name: 'Check all Good' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Set all Good' })).toBeTruthy();
     });
 
     it('marks every channel bad when clicked while not all are bad', async () => {
       render(<EegMontageEditor {...defaultProps} />);
-      await userEvent.click(screen.getByRole('button', { name: 'Check all Bad' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Set all Bad' }));
 
       CHANNEL_NAMES.forEach((name) =>
         expect(screen.getByTestId(`channel-bad-${name}`)).toBeChecked()
       );
-      expect(screen.getByRole('button', { name: 'Check all Good' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Set all Good' })).toBeTruthy();
     });
 
     it('marks every channel good when clicked while all are bad', async () => {
       render(<EegMontageEditor {...defaultProps} channelSettings={ALL_BAD_SETTINGS} />);
-      await userEvent.click(screen.getByRole('button', { name: 'Check all Good' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Set all Good' }));
 
       CHANNEL_NAMES.forEach((name) =>
         expect(screen.getByTestId(`channel-bad-${name}`)).not.toBeChecked()
       );
-      expect(screen.getByRole('button', { name: 'Check all Bad' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Set all Bad' })).toBeTruthy();
     });
 
     it('updates the label when a channel is unchecked by hand, not just via the button', async () => {
       render(<EegMontageEditor {...defaultProps} channelSettings={ALL_BAD_SETTINGS} />);
       await userEvent.click(screen.getByTestId('channel-bad-FP1'));
-      expect(screen.getByRole('button', { name: 'Check all Bad' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Set all Bad' })).toBeTruthy();
     });
   });
 
@@ -446,6 +446,301 @@ describe('EegMontageEditor', () => {
 
       const committed = onApplyMontageChannels.mock.calls[0][0];
       expect(committed.every((row) => !('type' in row))).toBe(true);
+    });
+  });
+
+  describe('reordering montage rows', () => {
+    it('renders Move Up, Move Down, Sort by Name, and Sort by Type controls', () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      expect(screen.getByTestId('move-up-button')).toBeTruthy();
+      expect(screen.getByTestId('move-down-button')).toBeTruthy();
+      expect(screen.getByTestId('sort-by-name-button')).toBeTruthy();
+      expect(screen.getByTestId('sort-by-type-button')).toBeTruthy();
+    });
+
+    it('disables Move Up/Down until a row is selected', () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      expect(screen.getByTestId('move-up-button')).toBeDisabled();
+      expect(screen.getByTestId('move-down-button')).toBeDisabled();
+    });
+
+    it('clicking a row’s channel name selects it, enabling Move Up/Down', async () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      await userEvent.click(screen.getByTestId('montage-channel-FP2'));
+      expect(screen.getByTestId('move-up-button')).not.toBeDisabled();
+      expect(screen.getByTestId('move-down-button')).not.toBeDisabled();
+    });
+
+    it('clicking a selected row’s channel name again deselects it', async () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      await userEvent.click(screen.getByTestId('montage-channel-FP2'));
+      await userEvent.click(screen.getByTestId('montage-channel-FP2'));
+      expect(screen.getByTestId('move-up-button')).toBeDisabled();
+    });
+
+    it('Move Up swaps the selected row with its predecessor', async () => {
+      const onApplyMontageChannels = vi.fn();
+      render(
+        <EegMontageEditor {...defaultProps} onApplyMontageChannels={onApplyMontageChannels} />
+      );
+      await userEvent.click(screen.getByTestId('montage-channel-FP2'));
+      await userEvent.click(screen.getByTestId('move-up-button'));
+      await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+      const committed = onApplyMontageChannels.mock.calls[0][0];
+      expect(committed.map((row) => row.channel)).toEqual(['FP2', 'FP1', 'FP3']);
+    });
+
+    it('Move Up is a no-op when the selected row is already first', async () => {
+      const onApplyMontageChannels = vi.fn();
+      render(
+        <EegMontageEditor {...defaultProps} onApplyMontageChannels={onApplyMontageChannels} />
+      );
+      await userEvent.click(screen.getByTestId('montage-channel-FP1'));
+      await userEvent.click(screen.getByTestId('move-up-button'));
+      await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+      const committed = onApplyMontageChannels.mock.calls[0][0];
+      expect(committed.map((row) => row.channel)).toEqual(['FP1', 'FP2', 'FP3']);
+    });
+
+    it('Move Down swaps the selected row with its successor', async () => {
+      const onApplyMontageChannels = vi.fn();
+      render(
+        <EegMontageEditor {...defaultProps} onApplyMontageChannels={onApplyMontageChannels} />
+      );
+      await userEvent.click(screen.getByTestId('montage-channel-FP2'));
+      await userEvent.click(screen.getByTestId('move-down-button'));
+      await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+      const committed = onApplyMontageChannels.mock.calls[0][0];
+      expect(committed.map((row) => row.channel)).toEqual(['FP1', 'FP3', 'FP2']);
+    });
+
+    it('Move Down is a no-op when the selected row is already last', async () => {
+      const onApplyMontageChannels = vi.fn();
+      render(
+        <EegMontageEditor {...defaultProps} onApplyMontageChannels={onApplyMontageChannels} />
+      );
+      await userEvent.click(screen.getByTestId('montage-channel-FP3'));
+      await userEvent.click(screen.getByTestId('move-down-button'));
+      await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+      const committed = onApplyMontageChannels.mock.calls[0][0];
+      expect(committed.map((row) => row.channel)).toEqual(['FP1', 'FP2', 'FP3']);
+    });
+
+    it('moving several selected rows up preserves their relative order to each other', async () => {
+      // Two rows share channel FP1 — distinguished by id, not channel name, since a
+      // channel can have several montage rows.
+      const FOUR_ROWS = [
+        { id: 'r1', channel: 'FP1', reference: null, color: null },
+        { id: 'r2', channel: 'FP2', reference: null, color: null },
+        { id: 'r3', channel: 'FP3', reference: null, color: null },
+        { id: 'r4', channel: 'FP1', reference: null, color: null },
+      ];
+      const onApplyMontageChannels = vi.fn();
+      render(
+        <EegMontageEditor
+          {...defaultProps}
+          montageChannels={FOUR_ROWS}
+          onApplyMontageChannels={onApplyMontageChannels}
+        />
+      );
+      await userEvent.click(screen.getByTestId('montage-channel-r2'));
+      await userEvent.click(screen.getByTestId('montage-channel-r4'));
+      await userEvent.click(screen.getByTestId('move-up-button'));
+      await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+      const committed = onApplyMontageChannels.mock.calls[0][0];
+      expect(committed.map((row) => row.id)).toEqual(['r2', 'r1', 'r4', 'r3']);
+    });
+
+    it('removing a selected row also drops it from the selection', async () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      await userEvent.click(screen.getByTestId('montage-channel-FP2'));
+      expect(screen.getByTestId('move-up-button')).not.toBeDisabled();
+
+      await userEvent.click(screen.getByTestId('remove-row-FP2'));
+      expect(screen.getByTestId('move-up-button')).toBeDisabled();
+    });
+
+    it('Sort by Name reorders rows alphabetically by channel name', async () => {
+      const SCRAMBLED = [
+        { id: 'a', channel: 'FP3', reference: null, color: null },
+        { id: 'b', channel: 'FP1', reference: null, color: null },
+        { id: 'c', channel: 'FP2', reference: null, color: null },
+      ];
+      const onApplyMontageChannels = vi.fn();
+      render(
+        <EegMontageEditor
+          {...defaultProps}
+          montageChannels={SCRAMBLED}
+          onApplyMontageChannels={onApplyMontageChannels}
+        />
+      );
+      await userEvent.click(screen.getByTestId('sort-by-name-button'));
+      await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+      const committed = onApplyMontageChannels.mock.calls[0][0];
+      expect(committed.map((row) => row.channel)).toEqual(['FP1', 'FP2', 'FP3']);
+    });
+
+    it('Sort by Type groups rows by channel type (eeg, seeg, other), then alphabetically within each group', async () => {
+      // FP1 is 'seeg' here (unlike the shared CHANNEL_SETTINGS fixture) so type-order and
+      // name-order genuinely diverge, proving this isn't just an alphabetical sort in disguise.
+      const CUSTOM_SETTINGS = {
+        FP1: { type: 'seeg', bad: false },
+        FP2: { type: 'eeg', bad: false },
+        FP3: { type: 'eeg', bad: false },
+      };
+      const onApplyMontageChannels = vi.fn();
+      render(
+        <EegMontageEditor
+          {...defaultProps}
+          channelSettings={CUSTOM_SETTINGS}
+          onApplyMontageChannels={onApplyMontageChannels}
+        />
+      );
+      await userEvent.click(screen.getByTestId('sort-by-type-button'));
+      await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+      const committed = onApplyMontageChannels.mock.calls[0][0];
+      expect(committed.map((row) => row.channel)).toEqual(['FP2', 'FP3', 'FP1']);
+    });
+
+    it('reordering rows shows the unsaved-changes asterisk', async () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      await userEvent.click(screen.getByTestId('montage-channel-FP2'));
+      await userEvent.click(screen.getByTestId('move-up-button'));
+      expect(screen.getByText('Montage Editor *')).toBeTruthy();
+    });
+
+    it('clicking Sort by Name a second time reverses to descending order', async () => {
+      const onApplyMontageChannels = vi.fn();
+      render(
+        <EegMontageEditor {...defaultProps} onApplyMontageChannels={onApplyMontageChannels} />
+      );
+      await userEvent.click(screen.getByTestId('sort-by-name-button')); // ascending
+      await userEvent.click(screen.getByTestId('sort-by-name-button')); // descending
+      await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+      const committed = onApplyMontageChannels.mock.calls[0][0];
+      expect(committed.map((row) => row.channel)).toEqual(['FP3', 'FP2', 'FP1']);
+    });
+
+    it('clicking Sort by Type a second time reverses the group order (and the alphabetical tiebreaker)', async () => {
+      const CUSTOM_SETTINGS = {
+        FP1: { type: 'seeg', bad: false },
+        FP2: { type: 'eeg', bad: false },
+        FP3: { type: 'eeg', bad: false },
+      };
+      const onApplyMontageChannels = vi.fn();
+      render(
+        <EegMontageEditor
+          {...defaultProps}
+          channelSettings={CUSTOM_SETTINGS}
+          onApplyMontageChannels={onApplyMontageChannels}
+        />
+      );
+      await userEvent.click(screen.getByTestId('sort-by-type-button')); // ascending: FP2,FP3,FP1
+      await userEvent.click(screen.getByTestId('sort-by-type-button')); // descending
+      await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+      const committed = onApplyMontageChannels.mock.calls[0][0];
+      expect(committed.map((row) => row.channel)).toEqual(['FP1', 'FP3', 'FP2']);
+    });
+
+    it('clicking empty space in the montage row list clears the row selection', async () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      await userEvent.click(screen.getByTestId('montage-channel-FP2'));
+      expect(screen.getByTestId('move-up-button')).not.toBeDisabled();
+
+      await userEvent.click(screen.getByTestId('montage-row-list'));
+      expect(screen.getByTestId('move-up-button')).toBeDisabled();
+    });
+
+    it('clicking a row does not bubble up and immediately clear its own selection', async () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      await userEvent.click(screen.getByTestId('montage-channel-FP2'));
+      expect(screen.getByTestId('move-up-button')).not.toBeDisabled();
+    });
+
+    it("clicking a row's type cell selects the row, same as its channel name", async () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      await userEvent.click(screen.getByTestId('montage-type-FP2'));
+      expect(screen.getByTestId('move-up-button')).not.toBeDisabled();
+
+      await userEvent.click(screen.getByTestId('montage-type-FP2'));
+      expect(screen.getByTestId('move-up-button')).toBeDisabled();
+    });
+
+    it("clicking a row's Reference select does not change the row selection", async () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      await userEvent.click(screen.getByTestId('reference-FP2'));
+      expect(screen.getByTestId('move-up-button')).toBeDisabled();
+    });
+
+    it("clicking a row's Color select does not change the row selection", async () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      await userEvent.click(screen.getByTestId('color-FP2'));
+      expect(screen.getByTestId('move-up-button')).toBeDisabled();
+    });
+
+    it("clicking a selected row's remove button removes it without re-toggling the selection", async () => {
+      const onApplyMontageChannels = vi.fn();
+      render(
+        <EegMontageEditor {...defaultProps} onApplyMontageChannels={onApplyMontageChannels} />
+      );
+      await userEvent.click(screen.getByTestId('montage-channel-FP1'));
+      await userEvent.click(screen.getByTestId('remove-row-FP2'));
+      await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+      // FP2 is gone, and FP1 stays selected (so Move Up/Down remain enabled).
+      const committed = onApplyMontageChannels.mock.calls[0][0];
+      expect(committed.map((row) => row.channel)).toEqual(['FP1', 'FP3']);
+      expect(screen.getByTestId('move-up-button')).not.toBeDisabled();
+    });
+  });
+
+  describe('clicking empty space clears selections', () => {
+    it('clicking empty space in the channel list clears the channel selection', async () => {
+      render(<EegMontageEditor {...defaultProps} montageChannels={[]} />);
+      await userEvent.click(screen.getByTestId('channel-select-FP1'));
+      expect(screen.getByTestId('add-selected-button')).not.toBeDisabled();
+
+      await userEvent.click(screen.getByTestId('channel-list'));
+      expect(screen.getByTestId('add-selected-button')).toBeDisabled();
+    });
+
+    it('clicking a channel row itself does not also clear the selection it just set', async () => {
+      render(<EegMontageEditor {...defaultProps} montageChannels={[]} />);
+      await userEvent.click(screen.getByTestId('channel-select-FP1'));
+      expect(screen.getByTestId('add-selected-button')).not.toBeDisabled();
+    });
+
+    it('clicking empty space in the montage add-row controls column clears the montage row selection', async () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      await userEvent.click(screen.getByTestId('montage-channel-FP2'));
+      expect(screen.getByTestId('move-up-button')).not.toBeDisabled();
+
+      await userEvent.click(screen.getByTestId('add-all-button').parentElement.parentElement);
+      expect(screen.getByTestId('move-up-button')).toBeDisabled();
+    });
+
+    it('clicking a Move Up/Down button does not clear the montage row selection it needs to act on', async () => {
+      const onApplyMontageChannels = vi.fn();
+      render(
+        <EegMontageEditor {...defaultProps} onApplyMontageChannels={onApplyMontageChannels} />
+      );
+      await userEvent.click(screen.getByTestId('montage-channel-FP2'));
+      await userEvent.click(screen.getByTestId('move-up-button'));
+      // A second Move Up on the still-selected row proves the selection survived the first click.
+      await userEvent.click(screen.getByTestId('move-up-button'));
+      await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+      const committed = onApplyMontageChannels.mock.calls[0][0];
+      expect(committed.map((row) => row.channel)).toEqual(['FP2', 'FP1', 'FP3']);
     });
   });
 
