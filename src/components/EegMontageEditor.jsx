@@ -524,9 +524,11 @@ export function EegMontageEditor({
           {draftMontageChannels.map((row) => {
             // A row is "bad" if either its source channel or its reference channel (for
             // bipolar rows) is marked bad — either one means the row can't be displayed.
-            const isRowBad =
-              draftChannelSettings[row.channel]?.bad ||
-              (row.reference && draftChannelSettings[row.reference]?.bad);
+            // Tracked separately so the channel name and reference select can each be
+            // flagged individually, instead of both turning text-alert whenever either is bad.
+            const isChannelBad = draftChannelSettings[row.channel]?.bad;
+            const isReferenceBad = row.reference && draftChannelSettings[row.reference]?.bad;
+            const isRowBad = isChannelBad || isReferenceBad;
             return (
               <div
                 key={row.id}
@@ -548,12 +550,18 @@ export function EegMontageEditor({
                 )}
               >
                 {/* Channel name */}
-                <span className={cn('flex-1 truncate text-sm', isRowBad && 'text-alert')}>
+                <span
+                  className={cn('flex-1 truncate text-sm', isChannelBad && 'text-alert')}
+                  data-testid={`montage-channel-${row.id}`}
+                >
                   {row.channel}
                 </span>
                 {/* Reference Channel */}
                 <select
-                  className="w-16 text-xs border border-border rounded bg-surface"
+                  className={cn(
+                    'w-16 text-xs border border-border rounded bg-surface',
+                    isReferenceBad && 'text-alert'
+                  )}
                   data-testid={`reference-${row.id}`}
                   value={row.reference ?? ''}
                   onChange={(e) => setDraftMontageRowReference(row.id, e.target.value)}

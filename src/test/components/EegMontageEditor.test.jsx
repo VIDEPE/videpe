@@ -329,6 +329,29 @@ describe('EegMontageEditor', () => {
       await userEvent.selectOptions(screen.getByTestId('reference-FP1'), 'FP2');
       expect(screen.getByTestId('reference-FP1').closest('div').className).toContain('bg-alert');
     });
+
+    it('colors only the channel name text-alert when the channel itself is bad, not the reference select', () => {
+      // CHANNEL_SETTINGS marks FP2 bad; its reference is unset (not bad).
+      render(<EegMontageEditor {...defaultProps} />);
+      expect(screen.getByTestId('montage-channel-FP2').className).toContain('text-alert');
+      expect(screen.getByTestId('reference-FP2').className).not.toContain('text-alert');
+    });
+
+    it('colors only the reference select text-alert when the reference channel is bad, not the channel name', async () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      // FP1 isn't bad, but referencing bad FP2 should flag only the reference select.
+      await userEvent.selectOptions(screen.getByTestId('reference-FP1'), 'FP2');
+      expect(screen.getByTestId('reference-FP1').className).toContain('text-alert');
+      expect(screen.getByTestId('montage-channel-FP1').className).not.toContain('text-alert');
+    });
+
+    it('colors both the channel name and reference select text-alert when both are bad', async () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      await userEvent.click(screen.getByTestId('channel-bad-FP1'));
+      await userEvent.selectOptions(screen.getByTestId('reference-FP1'), 'FP2');
+      expect(screen.getByTestId('montage-channel-FP1').className).toContain('text-alert');
+      expect(screen.getByTestId('reference-FP1').className).toContain('text-alert');
+    });
   });
 
   describe('montage row color', () => {
