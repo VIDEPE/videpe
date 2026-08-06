@@ -11,6 +11,7 @@
   ShieldCheck,
   ArrowLeft,
   CodeXml,
+  MonitorCog,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useScrollToHash } from '@/utils/useScrollToHash';
@@ -325,6 +326,42 @@ export const AboutPage = () => {
                     reappears when you switch back
                   </li>
                   <li>Volume rendering defaults to the Inferno colormap</li>
+                </ul>
+              </div>
+            </div>
+
+            <div id="feature-montage-editor" className="flex gap-3">
+              <MonitorCog
+                size={22}
+                className="shrink-0 mt-0.5"
+                style={{ color: 'var(--c-primary)' }}
+              />
+              <div>
+                <p className="font-semibold text-heading">Montage Editor</p>
+                <p className="text-sm mt-1" style={{ color: 'var(--c-foreground)' }}>
+                  A dedicated window for building custom EEG montages, opened from the{' '}
+                  <strong>Montage</strong> button in the EEG viewer.
+                </p>
+                <ul
+                  className="text-sm mt-2 flex flex-col gap-1 list-disc list-inside"
+                  style={{ color: 'var(--c-foreground)' }}
+                >
+                  <li>
+                    Channel-selection pane for setting each channel's type and flagging bad
+                    channels, with electrode-position match shown per row
+                  </li>
+                  <li>
+                    Montage pane for building referenced or bipolar rows from selected channels,
+                    with per-row colour, reordering, and sort-by-name/type
+                  </li>
+                  <li>
+                    Once rows are built, the EEG waveform view shows exactly those rows instead of
+                    the raw channel list
+                  </li>
+                  <li>
+                    Import montage files in AnyWave (XML) or Cartool (plain-text) format —
+                    auto-detected from file content — and export back out as AnyWave XML
+                  </li>
                 </ul>
               </div>
             </div>
