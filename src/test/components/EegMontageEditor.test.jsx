@@ -923,6 +923,79 @@ describe('EegMontageEditor', () => {
     });
   });
 
+  describe('rows referencing a channel not present in this recording', () => {
+    // Only reachable via a loaded montage file naming a channel this recording doesn't
+    // have — the editor's own row-building controls can never produce this.
+    it("greys out the row and disables Reference/Color when the row's own channel is missing", () => {
+      const montageChannels = [{ id: 'row-1', channel: 'GHOST', reference: null, color: null }];
+      render(<EegMontageEditor {...defaultProps} montageChannels={montageChannels} />);
+
+      const name = screen.getByTestId('montage-channel-row-1');
+      expect(name.className).toContain('text-red-800');
+      expect(name.title).toBe('Channel not found in this recording');
+      expect(name.closest('div').className).toContain('opacity-50');
+      expect(screen.getByTestId('reference-row-1')).toBeDisabled();
+      expect(screen.getByTestId('color-row-1')).toBeDisabled();
+    });
+
+    it('shows "—" for a missing channel\'s type instead of a misleading default', () => {
+      const montageChannels = [{ id: 'row-1', channel: 'GHOST', reference: null, color: null }];
+      render(<EegMontageEditor {...defaultProps} montageChannels={montageChannels} />);
+      expect(screen.getByTestId('montage-type-row-1').textContent).toBe('—');
+    });
+
+    it('still lets Remove work on a row with a missing channel', async () => {
+      const onApplyMontageChannels = vi.fn();
+      const montageChannels = [{ id: 'row-1', channel: 'GHOST', reference: null, color: null }];
+      render(
+        <EegMontageEditor
+          {...defaultProps}
+          montageChannels={montageChannels}
+          onApplyMontageChannels={onApplyMontageChannels}
+        />
+      );
+      await userEvent.click(screen.getByTestId('remove-row-row-1'));
+      await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+      expect(onApplyMontageChannels).toHaveBeenCalledWith([]);
+    });
+
+    it('keeps a row interactive (not greyed/disabled) when only its reference is missing, injecting a labeled option instead of falling back to blank', () => {
+      const montageChannels = [{ id: 'row-1', channel: 'FP1', reference: 'GHOST', color: null }];
+      render(<EegMontageEditor {...defaultProps} montageChannels={montageChannels} />);
+
+      const name = screen.getByTestId('montage-channel-row-1');
+      expect(name.className).not.toContain('text-red-800');
+      expect(name.closest('div').className).not.toContain('opacity-50');
+
+      const referenceSelect = screen.getByTestId('reference-row-1');
+      expect(referenceSelect).not.toBeDisabled();
+      expect(referenceSelect).toHaveValue('GHOST');
+      expect(referenceSelect.className).toContain('text-red-800');
+      expect(referenceSelect.title).toBe('Reference channel not found in this recording');
+      const injectedOption = Array.from(referenceSelect.options).find((o) => o.value === 'GHOST');
+      expect(injectedOption.textContent).toBe('GHOST (missing)');
+      expect(screen.getByTestId('color-row-1')).not.toBeDisabled();
+    });
+
+    it('shows a tooltip on a bad (not missing) channel name and reference too', () => {
+      // FP2 is bad per CHANNEL_SETTINGS; FP1 is a valid reference so only badness applies.
+      const montageChannels = [{ id: 'row-1', channel: 'FP2', reference: 'FP1', color: null }];
+      const channelSettings = {
+        ...CHANNEL_SETTINGS,
+        FP1: { type: 'eeg', bad: true },
+      };
+      render(
+        <EegMontageEditor
+          {...defaultProps}
+          channelSettings={channelSettings}
+          montageChannels={montageChannels}
+        />
+      );
+      expect(screen.getByTestId('montage-channel-row-1').title).toBe('Channel marked bad');
+      expect(screen.getByTestId('reference-row-1').title).toBe('Reference channel marked bad');
+    });
+  });
+
   describe('add-row controls flip when the panes are swapped', () => {
     it('sit on the left (order-1) by default', () => {
       render(<EegMontageEditor {...defaultProps} />);

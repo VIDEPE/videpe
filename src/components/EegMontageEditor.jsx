@@ -722,11 +722,14 @@ export function EegMontageEditor({
             const isReferenceBad = row.reference && draftChannelSettings[row.reference]?.bad;
             const isRowBad = isChannelBad || isReferenceBad;
             // "Missing" (channel/reference not in this recording, only possible via a
-            // loaded file) is styled distinctly from "bad" — secondary, not alert.
+            // loaded file) is unfixable when it's the row's own channel — nothing about
+            // the row can be edited to recover it, so it's greyed out and its Reference/
+            // Color controls disabled (Remove still works). A missing reference alone
+            // (channel is fine) stays interactive, since picking a different reference from
+            // the select is literally the fix.
             const isChannelMissing = !channelNames.includes(row.channel);
             const isReferenceMissing =
               Boolean(row.reference) && !channelNames.includes(row.reference);
-            const isRowMissing = isChannelMissing || isReferenceMissing;
             const channelType = isChannelMissing
               ? null
               : (draftChannelSettings[row.channel]?.type ?? 'eeg');
@@ -739,7 +742,7 @@ export function EegMontageEditor({
                   // The row's selected color tints its background, but is overwrited by bg-alert when
                   // the channel is bad (applied via className, not inline style, which always wins)
                   // color-mix keeps this a subtle tint rather than the fully-saturated color used in uPlot
-                  ...(!isRowBad && !isRowMissing && row.color
+                  ...(!isRowBad && !isChannelMissing && row.color
                     ? {
                         backgroundColor: `color-mix(in srgb, ${row.color} ${isDarkMode ? 30 : 40}%, transparent)`,
                       }
@@ -748,13 +751,13 @@ export function EegMontageEditor({
                 className={cn(
                   'relative flex items-center gap-2 pl-3 pr-1 py-0.5 cursor-pointer select-none',
                   isRowBad && (isDarkMode ? 'bg-alert/20' : 'bg-alert/30'),
-                  !isRowBad && isRowMissing && (isDarkMode ? 'bg-secondary/20' : 'bg-secondary/20'),
+                  isChannelMissing && 'opacity-50',
                   // A ring (not a background) marks the row selected for Move Up/Down —
-                  // background is already spoken for by the bad/missing/color tints above,
-                  // and an inline style (row.color) would win over a background className anyway.
+                  // background is already spoken for by the bad/color tints above, and an
+                  // inline style (row.color) would win over a background className anyway.
                   selectedMontageRows.has(row.id) && 'ring-2 ring-inset ring-primary'
                 )}
-                title="Click to select for Move Up/Down"
+                title="Click row to select for Move Up/Down"
                 onClick={(e) => handleMontageRowClick(e, row.id)}
               >
                 {/* Channel name */}
@@ -762,9 +765,15 @@ export function EegMontageEditor({
                   className={cn(
                     'flex-1 truncate text-sm',
                     isChannelBad && 'text-alert',
-                    isChannelMissing && 'text-secondary'
+                    isChannelMissing && 'text-red-500'
                   )}
-                  title={isChannelMissing ? 'Channel not found in this recording' : undefined}
+                  title={
+                    isChannelMissing
+                      ? 'Channel not found in this recording'
+                      : isChannelBad
+                        ? 'Channel marked as bad'
+                        : undefined
+                  }
                   data-testid={`montage-channel-${row.id}`}
                 >
                   {row.channel}
@@ -781,18 +790,25 @@ export function EegMontageEditor({
                 </span>
                 {/* Reference Channel — a reference naming a channel not in this recording
                     (only reachable via a loaded file) gets its own injected option so it
-                    displays as selected instead of falling back to blank "— n/a —". */}
+                    displays as selected instead of falling back to blank "— n/a —". Only
+                    disabled when the row's own channel is missing (see isChannelMissing
+                    above) — a missing reference alone is fixable by picking another one. */}
                 <select
                   className={cn(
                     'w-16 text-xs border border-border rounded bg-surface cursor-default',
                     isReferenceBad && 'text-alert',
-                    isReferenceMissing && 'text-secondary'
+                    isReferenceMissing && 'text-red-800'
                   )}
                   title={
-                    isReferenceMissing ? 'Reference channel not found in this recording' : undefined
+                    isReferenceMissing
+                      ? 'Reference channel not found in this recording'
+                      : isReferenceBad
+                        ? 'Reference channel marked bad'
+                        : undefined
                   }
                   data-testid={`reference-${row.id}`}
                   value={row.reference ?? ''}
+                  disabled={isChannelMissing}
                   onChange={(e) => setDraftMontageRowReference(row.id, e.target.value)}
                 >
                   <option value="">— n/a —</option>
@@ -810,6 +826,7 @@ export function EegMontageEditor({
                   className="w-16 text-xs border border-border rounded bg-surface cursor-default"
                   data-testid={`color-${row.id}`}
                   value={row.color ?? ''}
+                  disabled={isChannelMissing}
                   onChange={(e) => setDraftMontageRowColor(row.id, e.target.value || null)}
                 >
                   <option value="">Default</option>
