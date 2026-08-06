@@ -653,7 +653,8 @@ export function EegMontageEditor({
         >
           {draftMontageChannels.length === 0 && (
             <p className="text-xs text-header pl-3 pr-1 py-2">
-              {`No montage rows yet — select channel(s) in the Channel Selection pane on the ${isPanesSwapped ? 'right' : 'left'} and use the + / Add buttons to add them to the row list on the ${isPanesSwapped ? 'left' : 'right'}.`}
+              {`No montage rows yet — select channel(s) in the Channel Selection pane (${isPanesSwapped ? 'right' : 'left'}) 
+              and use the + / Add buttons to add them to the montage row list (${isPanesSwapped ? 'left' : 'right'}).`}
             </p>
           )}
           {draftMontageChannels.map((row) => {
