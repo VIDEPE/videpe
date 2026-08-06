@@ -18,7 +18,7 @@ const TYPE_LIST = {
 
 // ─── Window sizing constants ────────────────────────────────────────────────
 // Default/minimum window size in px — default matches the previous fixed w-96 h-80 (24rem x 20rem)
-const DEFAULT_WINDOW_SIZE = { width: 1000, height: 800 };
+const DEFAULT_WINDOW_SIZE = { width: 800, height: 700 };
 const MIN_WINDOW_WIDTH = 600;
 const MIN_WINDOW_HEIGHT = 450;
 const RESIZE_DIRECTIONS = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
@@ -84,18 +84,26 @@ export function EegMontageEditor({
     });
   }, []);
 
+  // Builds a fresh montage row for `name` — shared by all three "add row(s)" actions below.
+  // Deliberately doesn't carry a `type` field: a row's type is always looked up live from
+  // draftChannelSettings[row.channel] at render time (see the Channel Type span below), so
+  // it stays in sync if the channel's type is edited later in the channel-selection pane
+  // instead of freezing whatever it was when the row was added.
+  const makeMontageRow = useCallback(
+    (name) => ({ id: crypto.randomUUID(), channel: name, reference: null, color: null }),
+    []
+  );
+
   // Adds one new montage row per currently-selected channel, then clears the selection so
   // the next pick starts fresh. Rows aren't deduped against existing ones — a channel can
   // end up with several rows (e.g. two different bipolar derivations).
   const handleAddSelectedChannels = useCallback(() => {
     setDraftMontageChannels((prev) => [
       ...prev,
-      ...channelNames
-        .filter((name) => selectedChannels.has(name))
-        .map((name) => ({ id: crypto.randomUUID(), channel: name, reference: null, color: null })),
+      ...channelNames.filter((name) => selectedChannels.has(name)).map(makeMontageRow),
     ]);
     setSelectedChannels(new Set());
-  }, [channelNames, selectedChannels]);
+  }, [channelNames, selectedChannels, makeMontageRow]);
 
   // Selected value for the "Add by type" control below — adds a montage row for every
   // channel currently set (in the draft) to the picked type, regardless of selection.
@@ -105,21 +113,13 @@ export function EegMontageEditor({
       ...prev,
       ...channelNames
         .filter((name) => (draftChannelSettings[name]?.type ?? 'eeg') === addByType)
-        .map((name) => ({ id: crypto.randomUUID(), channel: name, reference: null, color: null })),
+        .map(makeMontageRow),
     ]);
-  }, [channelNames, draftChannelSettings, addByType]);
+  }, [channelNames, draftChannelSettings, addByType, makeMontageRow]);
 
   const handleAddAll = useCallback(() => {
-    setDraftMontageChannels((prev) => [
-      ...prev,
-      ...channelNames.map((name) => ({
-        id: crypto.randomUUID(),
-        channel: name,
-        reference: null,
-        color: null,
-      })),
-    ]);
-  }, [channelNames]);
+    setDraftMontageChannels((prev) => [...prev, ...channelNames.map(makeMontageRow)]);
+  }, [channelNames, makeMontageRow]);
 
   // Removes every montage row — the reverse of Add all/Add selected/Add by type.
   const handleClearAllMontageRows = useCallback(() => {
@@ -506,11 +506,16 @@ export function EegMontageEditor({
       >
         {/* Column headers — widths mirror each row's controls below so labels stay aligned */}
         <div className="shrink-0 flex items-center gap-2 pl-3 pr-1 py-0.5 text-xs font-medium text-header border-b border-border">
-          <span className="flex-1">Channel</span>
-          <span className="w-23 text-center" title="Reference Channel">
+          <span className="flex-1" title="Montage Channel">
+            Channel
+          </span>
+          <span className="w-17 text-center" title="Channel Type">
+            Type
+          </span>
+          <span className="w-22 text-center" title="Reference Channel">
             Ref
           </span>
-          <span className="w-20" title="Channel Type">
+          <span className="w-18" title="Montage Channel Color">
             Color
           </span>
         </div>
@@ -529,6 +534,7 @@ export function EegMontageEditor({
             const isChannelBad = draftChannelSettings[row.channel]?.bad;
             const isReferenceBad = row.reference && draftChannelSettings[row.reference]?.bad;
             const isRowBad = isChannelBad || isReferenceBad;
+            const channelType = draftChannelSettings[row.channel]?.type ?? 'eeg';
             return (
               <div
                 key={row.id}
@@ -555,6 +561,15 @@ export function EegMontageEditor({
                   data-testid={`montage-channel-${row.id}`}
                 >
                   {row.channel}
+                </span>
+                {/* Channel Type — looked up live from draftChannelSettings (see channelType
+                    above), so it tracks edits made afterward in the channel-selection pane
+                    rather than freezing whatever the type was when the row was added. */}
+                <span
+                  className="w-23 text-center truncate text-sm"
+                  data-testid={`montage-type-${row.id}`}
+                >
+                  {TYPE_LIST[channelType]}
                 </span>
                 {/* Reference Channel */}
                 <select

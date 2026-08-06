@@ -48,11 +48,11 @@ describe('EegMontageEditor', () => {
   });
 
   it('renders the column headers', () => {
-    // "Channel" is the first column header in both panes.
+    // "Channel" and "Type" each label a column in both panes.
     render(<EegMontageEditor {...defaultProps} />);
     expect(screen.getAllByText('Channel').length).toBeGreaterThan(0);
     expect(screen.getByText('Pos')).toBeTruthy();
-    expect(screen.getByText('Type')).toBeTruthy();
+    expect(screen.getAllByText('Type').length).toBeGreaterThan(0);
     expect(screen.getByText('Bad')).toBeTruthy();
   });
 
@@ -401,6 +401,51 @@ describe('EegMontageEditor', () => {
       const row = screen.getByTestId('reference-FP2').closest('div');
       expect(row.style.backgroundColor).toBe('');
       expect(row.className).toContain('bg-alert');
+    });
+  });
+
+  describe('montage row type', () => {
+    it('renders a Type column header in the montage settings pane', () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      // "Type" already labels the channel-selection pane's column; the montage pane now
+      // has its own, so the text appears twice.
+      expect(screen.getAllByText('Type').length).toBeGreaterThan(1);
+    });
+
+    it("displays a newly added row's type (as its friendly label), read from live channelSettings", async () => {
+      const { container } = render(<EegMontageEditor {...defaultProps} montageChannels={[]} />);
+      await userEvent.click(screen.getByTestId('channel-select-FP3'));
+      await userEvent.click(screen.getByTestId('add-selected-button'));
+
+      // FP3 is 'seeg' per CHANNEL_SETTINGS — displayed via TYPE_LIST as 'SEEG'.
+      const typeSpan = container.querySelector('[data-testid^="montage-type-"]');
+      expect(typeSpan.textContent).toBe('SEEG');
+    });
+
+    it("updates a row's displayed type when the channel's type is changed afterward, instead of freezing it", async () => {
+      // MONTAGE_CHANNELS seeds id === channel; FP1 starts 'eeg' per CHANNEL_SETTINGS.
+      render(<EegMontageEditor {...defaultProps} />);
+      expect(screen.getByTestId('montage-type-FP1').textContent).toBe('EEG');
+
+      await userEvent.selectOptions(screen.getByTestId('channel-type-FP1'), 'seeg');
+
+      expect(screen.getByTestId('montage-type-FP1').textContent).toBe('SEEG');
+    });
+
+    it('does not add a type field to the committed montage row — type is derived, not stored', async () => {
+      const onApplyMontageChannels = vi.fn();
+      render(
+        <EegMontageEditor
+          {...defaultProps}
+          montageChannels={[]}
+          onApplyMontageChannels={onApplyMontageChannels}
+        />
+      );
+      await userEvent.click(screen.getByTestId('add-all-button'));
+      await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+      const committed = onApplyMontageChannels.mock.calls[0][0];
+      expect(committed.every((row) => !('type' in row))).toBe(true);
     });
   });
 
