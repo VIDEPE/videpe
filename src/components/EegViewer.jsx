@@ -21,11 +21,14 @@ import {
   LocateFixed,
 } from 'lucide-react';
 import { minMaxDownsample } from '@/utils/downsample';
+import { buildMontageDisplayRows, deriveMontageRowSamples } from '@/utils/eegViewerUtils';
 import { useEegBuffer } from '@/loaders/eegBuffer';
 import { useContainerResize } from '@/hooks/useContainerResize';
-import { useViewportControls } from '@/hooks/useViewportControls';
+import { useEegPlotControls } from '@/hooks/useEegPlotControls';
 import { useScrubberDrag } from '@/hooks/useScrubberDrag';
 import { useElectrodeMatching } from '@/hooks/useElectrodeMatching';
+import { useChannelSettings } from '@/hooks/useChannelSettings';
+import { useMontageChannels } from '@/hooks/useMontage';
 import { useTopographySnapshot } from '@/hooks/useTopographySnapshot';
 import { useRowResize } from '@/hooks/useRowResize';
 
@@ -33,6 +36,7 @@ import { ELEC_POS_EXTENSIONS, INV_SOLUTIONS_EXTENSIONS } from '@/loaders/eegForm
 import { EegTopoViewer } from '@/components/EegTopoViewer';
 import { FileDropZone } from '@/components/FileDropZone';
 import { StatusLed } from '@/components/StatusLed';
+import { EegMontageEditor } from './EegMontageEditor';
 
 const EEG_LOADING_TOAST_ID = 'eeg-buffer-loading'; // fixed id so the loading/success toasts update in place rather than stacking
 const Y_AXIS_WIDTH = 60; // px for the y-axis area (channel name + tick space) — must match x-axis strip left padding
@@ -60,8 +64,9 @@ const buildChannelOptions = ({
   windowSize,
   startTime,
   yScale,
+  color, // row's selected trace color ('red'|'blue'|...), or null/undefined for the theme default
 }) => {
-  const stroke = isDarkMode ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.8)';
+  const stroke = color ?? (isDarkMode ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.8)');
   const gridColor = isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)';
 
   return {
@@ -155,7 +160,7 @@ export const EegViewer = ({
     decreaseWindowSize,
     forwardshiftStartTime,
     backwardshiftStartTime,
-  } = useViewportControls({ tMax, channelCount: channelNames.length, channelAreaHeight });
+  } = useEegPlotControls({ tMax, channelCount: channelNames.length, channelAreaHeight });
 
   const X_AXIS_HEIGHT = 45; // px reserved for the fixed x-axis strip below the scroll area
   const plotHeight =
@@ -177,6 +182,9 @@ export const EegViewer = ({
   // Topograph window only opens when the toggle is on (topoEnabled) AND once a EEGplot
   // click has produced a timepoint to show (topoTimepoint)
   const topoVisible = topoEnabled && topoTimepoint !== null;
+
+  // EEG Montage window only opens when the button is pressed
+  const [montageVisible, setMontageVisible] = useState(false);
 
   // Px position (from the plot area's left edge) of the vertical marker for topoTimepoint — the
   // timestamp the electrode voltage snapshot was taken at, shared by the topography, ESI, and
@@ -205,6 +213,27 @@ export const EegViewer = ({
     recordingType,
     onRecordingTypeChange,
   });
+
+  // Per-channel type/bad-channel state, edited via the EegMontageEditor window — new
+  // channels are seeded from the whole-recording isIntracranial detection above.
+  const { channelSettings, applyChannelSettings } = useChannelSettings(
+    channelNames,
+    isIntracranial ? 'seeg' : 'eeg'
+  );
+
+  // Montage row list (reference/color per displayed trace), edited via the same window's
+  // montage-settings pane — kept separate from channelSettings since it's an array (can
+  // later support arbitrary derived rows), not a per-channel record.
+  const { montageChannels, applyMontageChannels } = useMontageChannels(channelNames);
+
+  // Rows to render in the channel-plot area: one per non-bad channel (in channelNames
+  // order) when no montage rows are configured, or the configured montage rows once any
+  // exist — each named "channel - reference" (or just "channel" when unreferenced) and
+  // filtered to drop rows whose channel/reference is bad. See buildMontageDisplayRows.
+  const displayRows = useMemo(
+    () => buildMontageDisplayRows(channelNames, channelSettings, montageChannels),
+    [channelNames, channelSettings, montageChannels]
+  );
 
   // Montage application + the electrode/channel voltage snapshots at the clicked topography
   // timepoint, lifted up to PatientView for the intracranial connectome and ESI.
@@ -248,18 +277,25 @@ export const EegViewer = ({
     return () => toast.dismiss(EEG_LOADING_TOAST_ID);
   }, []);
 
-  // Downsample the montaged buffer for the visible window
+  // Downsample each display row's (possibly channel-minus-reference) series for the
+  // visible window
   const displayedData = useMemo(() => {
-    // If we don't have valid dimensions or data yet, return empty arrays for each channel to avoid rendering broken plots
-    const empty = channelNames.map(() => [[], []]);
+    // If we don't have valid dimensions or data yet, return empty arrays for each row to avoid rendering broken plots
+    const empty = displayRows.map(() => [[], []]);
     if (plotWidth === 0 || !timestamps || timestamps.length === 0 || !montagedChannels)
       return empty;
 
     const endTime = startTime + windowSize;
-    return channelNames.map((_, i) =>
-      minMaxDownsample(timestamps, montagedChannels[i], startTime, endTime, plotWidth)
+    return displayRows.map((row) =>
+      minMaxDownsample(
+        timestamps,
+        deriveMontageRowSamples(montagedChannels, row),
+        startTime,
+        endTime,
+        plotWidth
+      )
     );
-  }, [timestamps, montagedChannels, channelNames, startTime, windowSize, plotWidth]);
+  }, [timestamps, montagedChannels, displayRows, startTime, windowSize, plotWidth]);
 
   // Signal onViewReady once the first measurement lands and charts have rendered
   const onViewReadyCalledRef = useRef(false);
@@ -534,9 +570,9 @@ export const EegViewer = ({
               className="flex flex-col items-center gap-1 pb-1"
               title="Apply EEG reference montage"
             >
-              <span className="text-xs text-foreground select-none pointer-events-none">
-                Montage:
-              </span>
+              <button type="button" className="button" onClick={() => setMontageVisible((v) => !v)}>
+                Montage
+              </button>
               <select
                 value={montage}
                 onChange={(e) => onMontageChange?.(e.target.value)}
@@ -587,10 +623,10 @@ export const EegViewer = ({
                         }}
                       />
                     )}
-                    {channelNames.map((name, i) => (
-                      // Channel divider below each channel
+                    {displayRows.map((row, rowIndex) => (
+                      // Channel divider below each row
                       <div
-                        key={name}
+                        key={row.id}
                         style={{
                           height: plotHeight,
                           overflow: 'visible',
@@ -598,12 +634,12 @@ export const EegViewer = ({
                         }}
                         className="relative"
                       >
-                        {/* Channel name label */}
+                        {/* Row name label */}
                         <span
                           className="absolute left-0 top-1/2 -translate-y-1/2 text-xs text-center pointer-events-none select-none z-10 px-0.5 truncate"
                           style={{ width: Y_AXIS_WIDTH }}
                         >
-                          {name}
+                          {row.name}
                         </span>
                         {/* Zero-line at y=0, aligned with the plot area (not drawn by uPlot to avoid grid issues) */}
                         <div
@@ -628,8 +664,8 @@ export const EegViewer = ({
                         >
                           <UplotReact
                             options={buildChannelOptions({
-                              channelIndex: i,
-                              totalChannels: channelNames.length,
+                              channelIndex: row.channelIndex,
+                              totalChannels: displayRows.length,
                               isDarkMode,
                               syncKey,
                               width: plotWidth,
@@ -637,8 +673,9 @@ export const EegViewer = ({
                               windowSize,
                               startTime,
                               yScale,
+                              color: row.color,
                             })}
-                            data={displayedData[i]}
+                            data={displayedData[rowIndex]}
                             onCreate={(u) => {
                               {
                                 /* click listener that converts the click's x-position into a timestamp => sets topoTimepoint */
@@ -967,6 +1004,28 @@ export const EegViewer = ({
           customFileName={customElecPosFileName}
           montage={montage}
           isIntracranial={isIntracranial}
+        />
+      )}
+
+      {/* Floating EEG Montage Editor — position:fixed so it overlays the whole page */}
+      {montageVisible && (
+        <EegMontageEditor
+          electrodes={electrodes}
+          matched={matched}
+          voltages={topoVoltages}
+          channelNames={channelNames}
+          voltagesByChannel={topoVoltagesByChannel}
+          totalChannels={channelNames.length}
+          onClose={() => setMontageVisible(false)}
+          onTopoNvReady={onTopoNvReady}
+          isStandardElectrodes={isStandardElectrodes}
+          onElecPosFile={onElecPosFile}
+          customFileName={customElecPosFileName}
+          montage={montage}
+          channelSettings={channelSettings}
+          onApplyChannelSettings={applyChannelSettings}
+          montageChannels={montageChannels}
+          onApplyMontageChannels={applyMontageChannels}
         />
       )}
     </>

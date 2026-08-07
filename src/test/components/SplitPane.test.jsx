@@ -49,6 +49,25 @@ describe('SplitPane — initial render', () => {
     expect(getLeftPanel().style.order).toBe('1');
     expect(getRightPanel().style.order).toBe('3');
   });
+
+  it('honours a custom defaultSplitPercent', () => {
+    renderPane({ defaultSplitPercent: 35 });
+    expect(getLeftPanel().style.width).toBe('35%');
+    expect(getRightPanel().style.width).toBe('65%');
+  });
+});
+
+describe('SplitPane — unrelated mouseup', () => {
+  // Regression test: the divider-drag-end handler is registered on window (so it can catch
+  // a mouseup anywhere), not scoped to the divider itself. It must ignore a mouseup that
+  // wasn't preceded by a mousedown on the divider — e.g. releasing a drag on some unrelated
+  // element elsewhere on the page — instead of resetting the split to a stale default.
+  it('does not change the split when a mouseup fires without a prior divider drag', () => {
+    renderPane({ defaultSplitPercent: 35 });
+    fireEvent.mouseUp(window);
+    expect(getLeftPanel().style.width).toBe('35%');
+    expect(getRightPanel().style.width).toBe('65%');
+  });
 });
 
 describe('SplitPane — maximize', () => {
@@ -103,6 +122,22 @@ describe('SplitPane — swap', () => {
     fireEvent.click(swapBtn);
     expect(getLeftPanel().style.order).toBe('1');
     expect(getRightPanel().style.order).toBe('3');
+  });
+
+  it('calls onSwapChange with the new swapped state', () => {
+    const onSwapChange = vi.fn();
+    renderPane({ onSwapChange });
+    fireEvent.click(within(getLeftHeader()).getByTitle('Swap panels'));
+    expect(onSwapChange).toHaveBeenCalledWith(true);
+  });
+
+  it('calls onSwapChange(false) when swapping back', () => {
+    const onSwapChange = vi.fn();
+    renderPane({ onSwapChange });
+    const swapBtn = within(getLeftHeader()).getByTitle('Swap panels');
+    fireEvent.click(swapBtn);
+    fireEvent.click(swapBtn);
+    expect(onSwapChange).toHaveBeenLastCalledWith(false);
   });
 });
 

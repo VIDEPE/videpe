@@ -52,10 +52,12 @@ vi.mock('@/components/EegTopoViewer', () => ({
   }),
 }));
 
+// Mutable via vi.hoisted so individual tests can flip themeState.isDarkMode (see the
+// montage row color describe block below) — a plain top-level `let` wouldn't be
+// initialized yet when this factory runs, since vi.mock is hoisted above imports.
+const themeState = vi.hoisted(() => ({ isDarkMode: false }));
 vi.mock('@/components/ThemeContext', () => ({
-  useTheme: function () {
-    return { isDarkMode: false };
-  },
+  useTheme: () => ({ isDarkMode: themeState.isDarkMode }),
 }));
 
 // EegViewer shows its own loading/success toast while the initial buffer loads, and a
@@ -91,6 +93,7 @@ Cz
 // and fire the callback immediately so plotWidth/plotHeight become non-zero
 beforeEach(() => {
   capturedClickHandler = null;
+  themeState.isDarkMode = false;
   global.ResizeObserver = class {
     constructor(callback) {
       this._cb = callback;
@@ -1412,9 +1415,9 @@ describe('EegViewer — loading toast', () => {
 // EEG1 = [1-4, 2-5, 3-6, 4-7] = [-3,-3,-3,-3].
 
 describe('EegViewer — montage controls', () => {
-  it('renders a Montage label with a dropdown defaulting to none', async () => {
+  it('renders a Montage button and a dropdown defaulting to none', async () => {
     await renderViewer();
-    expect(screen.getByText('Montage:')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Montage' })).toBeInTheDocument();
     const select = screen.getByLabelText(/montage/i);
     expect(select.value).toBe('none');
   });
@@ -2136,5 +2139,158 @@ describe('EegViewer — hovering a disabled toggle highlights the LED that expla
 
     await userEvent.hover(esiButton.parentElement);
     expect(led).toHaveClass('bg-foreground/20');
+  });
+});
+
+describe('EegViewer — bad channel filtering', () => {
+  it('hides a channel from the waveform view once marked bad and applied', async () => {
+    await renderViewer();
+    channelNames.forEach((name) => expect(screen.getByText(name)).toBeTruthy());
+
+    await userEvent.click(screen.getByRole('button', { name: 'Montage' }));
+    await userEvent.click(screen.getByTestId('channel-bad-EEG2'));
+    await userEvent.click(screen.getByRole('button', { name: 'OK' }));
+
+    expect(screen.getByText('EEG1')).toBeTruthy();
+    expect(screen.queryByText('EEG2')).toBeNull();
+    expect(screen.getByText('EEG3')).toBeTruthy();
+  });
+
+  it("still shows the remaining channels' own data after a bad channel is hidden", async () => {
+    // Within the default 20s window, EEG3's values are [7,8,9] — distinct from EEG1's
+    // [1,2,3] and EEG2's [4,5,6]. If hiding EEG2 shifted the remaining rows' indices
+    // instead of preserving each row's original index, EEG3 would render EEG2's data.
+    const { default: UplotReactMock } = await import('uplot-react');
+    await renderViewer();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Montage' }));
+    await userEvent.click(screen.getByTestId('channel-bad-EEG2'));
+    await userEvent.click(screen.getByRole('button', { name: 'OK' }));
+
+    // Search from the most recent render backward, so a stale call from before the
+    // commit can't hide a regression in the post-commit render.
+    const eeg3Call = [...UplotReactMock.mock.calls]
+      .reverse()
+      .find((call) => call[0].data?.[1]?.includes(7));
+    expect(eeg3Call).toBeTruthy();
+    expect(Array.from(eeg3Call[0].data[1])).toEqual([7, 8, 9]);
+  });
+});
+
+// ── Montage row wiring ──────────────────────────────────────────────────────
+// CHANNEL_DATA per sample, within the default 20s window: EEG1=[1,2,3], EEG2=[4,5,6].
+
+describe('EegViewer — montage row wiring', () => {
+  it('falls back to the plain non-bad channel list when no montage rows are configured', async () => {
+    await renderViewer();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Montage' }));
+    await userEvent.click(screen.getByRole('button', { name: 'OK' }));
+
+    channelNames.forEach((name) => expect(screen.getByText(name)).toBeTruthy());
+  });
+
+  it('displays only the configured montage rows once any are added, instead of the full channel list', async () => {
+    await renderViewer();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Montage' }));
+    await userEvent.click(screen.getByTestId('channel-select-EEG1'));
+    await userEvent.click(screen.getByTestId('add-selected-button'));
+    await userEvent.click(screen.getByRole('button', { name: 'OK' }));
+
+    expect(screen.getByText('EEG1')).toBeTruthy();
+    expect(screen.queryByText('EEG2')).toBeNull();
+    expect(screen.queryByText('EEG3')).toBeNull();
+  });
+
+  it('names a bipolar montage row "channel - reference" and plots channel-minus-reference data', async () => {
+    const { default: UplotReactMock } = await import('uplot-react');
+    const { container } = await renderViewer();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Montage' }));
+    await userEvent.click(screen.getByTestId('channel-select-EEG1'));
+    await userEvent.click(screen.getByTestId('add-selected-button'));
+
+    const referenceSelect = container.querySelector('[data-testid^="reference-"]');
+    await userEvent.selectOptions(referenceSelect, 'EEG2');
+    await userEvent.click(screen.getByRole('button', { name: 'OK' }));
+
+    expect(screen.getByText('EEG1 - EEG2')).toBeTruthy();
+
+    // EEG1=[1,2,3], EEG2=[4,5,6] → EEG1 - EEG2 = [-3,-3,-3]
+    const rowCall = [...UplotReactMock.mock.calls]
+      .reverse()
+      .find((call) => call[0].data?.[1]?.length === 3);
+    expect(rowCall).toBeTruthy();
+    expect(Array.from(rowCall[0].data[1])).toEqual([-3, -3, -3]);
+  });
+
+  it('does not display a montage row whose source channel is bad', async () => {
+    await renderViewer();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Montage' }));
+    await userEvent.click(screen.getByTestId('channel-select-EEG1'));
+    await userEvent.click(screen.getByTestId('add-selected-button'));
+    await userEvent.click(screen.getByTestId('channel-bad-EEG1'));
+    await userEvent.click(screen.getByRole('button', { name: 'OK' }));
+
+    expect(screen.queryByText('EEG1')).toBeNull();
+  });
+
+  it('does not display a montage row whose reference channel is bad', async () => {
+    const { container } = await renderViewer();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Montage' }));
+    await userEvent.click(screen.getByTestId('channel-select-EEG1'));
+    await userEvent.click(screen.getByTestId('add-selected-button'));
+
+    const referenceSelect = container.querySelector('[data-testid^="reference-"]');
+    await userEvent.selectOptions(referenceSelect, 'EEG2');
+    await userEvent.click(screen.getByTestId('channel-bad-EEG2'));
+    await userEvent.click(screen.getByRole('button', { name: 'OK' }));
+
+    expect(screen.queryByText('EEG1 - EEG2')).toBeNull();
+    expect(screen.queryByText('EEG1')).toBeNull();
+  });
+});
+
+// ── Montage row color wiring ────────────────────────────────────────────────
+
+describe('EegViewer — montage row color wiring', () => {
+  it('uses the light-mode default stroke color when a montage row has no color set', async () => {
+    const { default: UplotReactMock } = await import('uplot-react');
+    UplotReactMock.mockClear();
+    await renderViewer();
+
+    const call = UplotReactMock.mock.calls[0][0];
+    expect(call.options.series[1].stroke).toBe('rgba(0, 0, 0, 0.8)');
+  });
+
+  it('uses the dark-mode default stroke color when a montage row has no color set', async () => {
+    const { default: UplotReactMock } = await import('uplot-react');
+    themeState.isDarkMode = true;
+    UplotReactMock.mockClear();
+    await renderViewer();
+
+    const call = UplotReactMock.mock.calls[0][0];
+    expect(call.options.series[1].stroke).toBe('rgba(255, 255, 255, 0.8)');
+  });
+
+  it("uses a montage row's selected color as its plotted line color, overriding the theme default", async () => {
+    const { default: UplotReactMock } = await import('uplot-react');
+    const { container } = await renderViewer();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Montage' }));
+    await userEvent.click(screen.getByTestId('channel-select-EEG1'));
+    await userEvent.click(screen.getByTestId('add-selected-button'));
+
+    const colorSelect = container.querySelector('[data-testid^="color-"]');
+    await userEvent.selectOptions(colorSelect, 'red');
+    await userEvent.click(screen.getByRole('button', { name: 'OK' }));
+
+    const rowCall = [...UplotReactMock.mock.calls]
+      .reverse()
+      .find((call) => call[0].options?.series?.[1]?.stroke === 'red');
+    expect(rowCall).toBeTruthy();
   });
 });
