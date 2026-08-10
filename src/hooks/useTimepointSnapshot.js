@@ -43,7 +43,7 @@ import { applyMontage } from '@/utils/eegViewerUtils';
  *   - `topoVoltagesByChannel` (number[]) — one voltage per channel (not position-gated)
  *     at `topoTimepoint`, `[]` when there's nothing to show yet.
  */
-export function useTopographySnapshot({
+export function useTimepointSnapshot({
   channels,
   montage,
   referenceSeries,

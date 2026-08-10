@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { renderHook } from '@testing-library/react';
-import { useTopographySnapshot } from '@/hooks/useTopographySnapshot';
+import { useTimepointSnapshot } from '@/hooks/useTimepointSnapshot';
 import { computeReferenceSeries } from '@/utils/eegViewerUtils';
 
 // Two channels, 4 samples each, fs=1 so timestamps double as sample indices.
@@ -17,7 +17,7 @@ const matched = [{ channelIdx: 0 }, { channelIdx: 1 }];
 const channelNames = ['CH1', 'CH2'];
 
 const setup = (overrides = {}) =>
-  renderHook((props) => useTopographySnapshot(props), {
+  renderHook((props) => useTimepointSnapshot(props), {
     initialProps: {
       channels,
       montage: 'none',
@@ -34,7 +34,7 @@ const setup = (overrides = {}) =>
     },
   });
 
-describe('useTopographySnapshot — montagedChannels', () => {
+describe('useTimepointSnapshot — montagedChannels', () => {
   it('is null before channels load', () => {
     const { result } = setup({ channels: null });
     expect(result.current.montagedChannels).toBeNull();
@@ -52,7 +52,7 @@ describe('useTopographySnapshot — montagedChannels', () => {
   });
 });
 
-describe('useTopographySnapshot — voltage snapshots', () => {
+describe('useTimepointSnapshot — voltage snapshots', () => {
   it('topoVoltages/topoVoltagesByChannel are empty before any timepoint is clicked', () => {
     const { result } = setup({ topoTimepoint: null });
     expect(result.current.topoVoltages).toEqual([]);
@@ -76,7 +76,7 @@ describe('useTopographySnapshot — voltage snapshots', () => {
   });
 });
 
-describe('useTopographySnapshot — lifted snapshots', () => {
+describe('useTimepointSnapshot — lifted snapshots', () => {
   it('calls onElectrodeSnapshotChange on mount, regardless of topoTimepoint', () => {
     const onElectrodeSnapshotChange = vi.fn();
     setup({ onElectrodeSnapshotChange, topoTimepoint: null });

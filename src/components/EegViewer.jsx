@@ -33,7 +33,7 @@ import { useScrubberDrag } from '@/hooks/useScrubberDrag';
 import { useElectrodeMatching } from '@/hooks/useElectrodeMatching';
 import { useChannelSettings } from '@/hooks/useChannelSettings';
 import { useMontageChannels } from '@/hooks/useMontage';
-import { useTopographySnapshot } from '@/hooks/useTopographySnapshot';
+import { useTimepointSnapshot } from '@/hooks/useTimepointSnapshot';
 import { useRowResize } from '@/hooks/useRowResize';
 
 import { ELEC_POS_EXTENSIONS, INV_SOLUTIONS_EXTENSIONS } from '@/loaders/eegFormats';
@@ -242,7 +242,7 @@ export const EegViewer = ({
   // Shared average/median reference series (see the diagram atop eegViewerUtils.js) —
   // computed once from the raw buffer's non-bad channels, then handed to both the montage
   // row waveform below (deriveMontageRowSamples) and the topography/connectome/ESI
-  // snapshot (useTopographySnapshot's applyMontage call) rather than each recomputing it.
+  // snapshot (useTimepointSnapshot's applyMontage call) rather than each recomputing it.
   // The filtered non-bad array itself is only a transient local — nothing but the small
   // { average, median } result needs to survive between renders.
   const referenceSeries = useMemo(() => {
@@ -254,8 +254,10 @@ export const EegViewer = ({
   }, [channels, channelSettings, channelNames]);
 
   // Montage application + the electrode/channel voltage snapshots at the clicked topography
-  // timepoint, lifted up to PatientView for the intracranial connectome and ESI.
-  const { montagedChannels, topoVoltages, topoVoltagesByChannel } = useTopographySnapshot({
+  // timepoint, lifted up to PatientView for the intracranial connectome and ESI. The hook's
+  // own montagedChannels isn't consumed here — the waveform re-references independently now
+  // (see referenceSeries/deriveMontageRowSamples above).
+  const { topoVoltages, topoVoltagesByChannel } = useTimepointSnapshot({
     channels,
     montage,
     referenceSeries,
