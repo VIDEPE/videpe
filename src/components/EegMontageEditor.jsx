@@ -337,6 +337,11 @@ export function EegMontageEditor({
     channelNames.forEach((name) => setDraftChannelType(name, bulkType));
   };
 
+  const [bulkReference, setBulkReference] = useState('');
+  const handleSetAllReference = () => {
+    draftMontageChannels.forEach((row) => setDraftMontageRowReference(row.id, bulkReference));
+  };
+
   // ─── Refs ───────────────────────────────────────────────────────────────────
   const fileInputRef = useRef(null);
   const dragOffset = useRef(null);
@@ -454,15 +459,25 @@ export function EegMontageEditor({
   );
 
   // Shared <option> list for every montage row's Reference select — every row offers the
-  // same full channel list, so this is built once per channelNames change instead of once
+  // same full n/a, average, med channel list, so this is built once per channelNames change instead of once
   // per row per render (was O(rows × channels) <option> elements every render).
   const referenceOptions = useMemo(
-    () =>
-      channelNames.map((refName) => (
+    () => [
+      <option key="none" value="">
+        — n/a —
+      </option>,
+      <option key="average" value="average">
+        Average
+      </option>,
+      <option key="median" value="median">
+        Median
+      </option>,
+      ...channelNames.map((refName) => (
         <option key={refName} value={refName}>
           {refName}
         </option>
       )),
+    ],
     [channelNames]
   );
 
@@ -582,7 +597,11 @@ export function EegMontageEditor({
           {isAllBad ? 'Set all Good' : 'Set all Bad'}
         </button>
         <div className="flex items-center gap-2">
-          <button className="button" onClick={handleSetAllType}>
+          <button
+            className="button"
+            data-testid="bulk-type-apply-button"
+            onClick={handleSetAllType}
+          >
             Set all as
           </button>
           <select
@@ -729,7 +748,10 @@ export function EegMontageEditor({
             // the select is literally the fix.
             const isChannelMissing = !channelNames.includes(row.channel);
             const isReferenceMissing =
-              Boolean(row.reference) && !channelNames.includes(row.reference);
+              Boolean(row.reference) &&
+              row.reference !== 'average' &&
+              row.reference !== 'median' &&
+              !channelNames.includes(row.reference);
             const channelType = isChannelMissing
               ? null
               : (draftChannelSettings[row.channel]?.type ?? 'eeg');
@@ -811,7 +833,6 @@ export function EegMontageEditor({
                   disabled={isChannelMissing}
                   onChange={(e) => setDraftMontageRowReference(row.id, e.target.value)}
                 >
-                  <option value="">— n/a —</option>
                   {isReferenceMissing && (
                     <option value={row.reference}>{row.reference} (missing)</option>
                   )}
@@ -910,6 +931,25 @@ export function EegMontageEditor({
                 )}
               </button>
             </div>
+            {/* Set all Ref group */}
+            <div className="flex flex-col gap-2">
+              <button
+                className="button"
+                data-testid="bulk-reference-apply-button"
+                onClick={handleSetAllReference}
+              >
+                Set all as
+              </button>
+              <select
+                className="text-xs border border-border rounded bg-surface"
+                data-testid="bulk-reference-select"
+                value={bulkReference}
+                onChange={(e) => setBulkReference(e.target.value)}
+              >
+                {referenceOptions}
+              </select>
+            </div>
+
             {/* Move group — acts on whichever row(s) are selected (click a row's channel
                 name above to select it); disabled with none selected since there's nothing
                 to move. */}

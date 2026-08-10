@@ -263,7 +263,7 @@ describe('EegMontageEditor', () => {
     it('sets every channel to the picked type when clicked', async () => {
       render(<EegMontageEditor {...defaultProps} />);
       await userEvent.selectOptions(screen.getByTestId('bulk-type-select'), 'seeg');
-      await userEvent.click(screen.getByRole('button', { name: 'Set all as' }));
+      await userEvent.click(screen.getByTestId('bulk-type-apply-button'));
 
       CHANNEL_NAMES.forEach((name) =>
         expect(screen.getByTestId(`channel-type-${name}`)).toHaveValue('seeg')
@@ -273,10 +273,76 @@ describe('EegMontageEditor', () => {
     it("leaves each channel's bad flag untouched", async () => {
       render(<EegMontageEditor {...defaultProps} />);
       await userEvent.selectOptions(screen.getByTestId('bulk-type-select'), 'other');
-      await userEvent.click(screen.getByRole('button', { name: 'Set all as' }));
+      await userEvent.click(screen.getByTestId('bulk-type-apply-button'));
 
       expect(screen.getByTestId('channel-bad-FP2')).toBeChecked();
       expect(screen.getByTestId('channel-bad-FP1')).not.toBeChecked();
+    });
+  });
+
+  describe('Set all as [reference]', () => {
+    it('defaults the bulk reference select to n/a', () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      expect(screen.getByTestId('bulk-reference-select')).toHaveValue('');
+    });
+
+    it('offers n/a, average and median above the channel names, in that order', () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      const options = Array.from(screen.getByTestId('bulk-reference-select').options).map(
+        (option) => option.value
+      );
+      expect(options.slice(0, 3)).toEqual(['', 'average', 'median']);
+      CHANNEL_NAMES.forEach((name) => expect(options).toContain(name));
+    });
+
+    it('sets every montage row to "average" when picked', async () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      await userEvent.selectOptions(screen.getByTestId('bulk-reference-select'), 'average');
+      await userEvent.click(screen.getByTestId('bulk-reference-apply-button'));
+
+      // MONTAGE_CHANNELS seeds id === channel, so these testids double as an id check.
+      CHANNEL_NAMES.forEach((name) =>
+        expect(screen.getByTestId(`reference-${name}`)).toHaveValue('average')
+      );
+    });
+
+    it('sets every montage row to "median" when picked', async () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      await userEvent.selectOptions(screen.getByTestId('bulk-reference-select'), 'median');
+      await userEvent.click(screen.getByTestId('bulk-reference-apply-button'));
+
+      CHANNEL_NAMES.forEach((name) =>
+        expect(screen.getByTestId(`reference-${name}`)).toHaveValue('median')
+      );
+    });
+
+    it('clears every row back to n/a when picked after a prior bulk set', async () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      await userEvent.selectOptions(screen.getByTestId('bulk-reference-select'), 'average');
+      await userEvent.click(screen.getByTestId('bulk-reference-apply-button'));
+
+      await userEvent.selectOptions(screen.getByTestId('bulk-reference-select'), '');
+      await userEvent.click(screen.getByTestId('bulk-reference-apply-button'));
+
+      CHANNEL_NAMES.forEach((name) =>
+        expect(screen.getByTestId(`reference-${name}`)).toHaveValue('')
+      );
+    });
+
+    it("leaves each row's color untouched", async () => {
+      const montageChannels = CHANNEL_NAMES.map((name) => ({
+        id: name,
+        channel: name,
+        reference: null,
+        color: 'red',
+      }));
+      render(<EegMontageEditor {...defaultProps} montageChannels={montageChannels} />);
+      await userEvent.selectOptions(screen.getByTestId('bulk-reference-select'), 'median');
+      await userEvent.click(screen.getByTestId('bulk-reference-apply-button'));
+
+      CHANNEL_NAMES.forEach((name) =>
+        expect(screen.getByTestId(`color-${name}`)).toHaveValue('red')
+      );
     });
   });
 
