@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import {
   computeReferenceSeries,
   applyReferenceSeries,
-  applyMontage,
   buildMontageDisplayRows,
   deriveMontageRowSamples,
 } from '@/utils/eegViewerUtils';
@@ -121,41 +120,6 @@ describe('applyReferenceSeries', () => {
       [1, 2],
       [3, 4],
     ]);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// applyMontage
-// ---------------------------------------------------------------------------
-
-describe('applyMontage', () => {
-  const channels = [
-    [1, 2],
-    [3, 4],
-    [5, 6],
-  ];
-  const referenceSeries = computeReferenceSeries(channels);
-
-  it('returns the raw channels unchanged for "none"', () => {
-    expect(applyMontage(channels, 'none', referenceSeries)).toBe(channels);
-  });
-
-  it('applies the average series for "average"', () => {
-    expect(applyMontage(channels, 'average', referenceSeries)).toEqual(
-      applyReferenceSeries(channels, referenceSeries.average)
-    );
-  });
-
-  it('applies the median series for "median"', () => {
-    expect(applyMontage(channels, 'median', referenceSeries)).toEqual(
-      applyReferenceSeries(channels, referenceSeries.median)
-    );
-  });
-
-  it('returns the raw channels unchanged when no referenceSeries is given', () => {
-    // A caller that forgets to pass referenceSeries should get raw data back, not a crash
-    // or a silently-wrong result.
-    expect(applyMontage(channels, 'average')).toBe(channels);
   });
 });
 

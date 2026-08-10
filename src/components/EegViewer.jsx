@@ -118,8 +118,6 @@ export const EegViewer = ({
   onChannelSnapshotChange,
   recordingType = 'eeg', // 'eeg' | 'ieeg' — controlled by PatientView, which shows/drives the toggle in the panel title
   onRecordingTypeChange,
-  montage = 'none', // 'none' | 'average' | 'median' — controlled by PatientView, which forces 'average' when ESI needs it
-  onMontageChange,
   onTopoHasContentChange, // whether the topography NiiVue canvas currently has a mesh, so PatientView can enable/disable the cross-panel rotation link accordingly
   electrodeRenderEnabled, // boolean — owned by PatientView => whether electrode 3D render is enabled
   onElectrodeRenderChange, // handle for electrodeRender changes
@@ -242,9 +240,9 @@ export const EegViewer = ({
   // Shared average/median reference series (see the diagram atop eegViewerUtils.js) —
   // computed once from the raw buffer's non-bad channels, then handed to both the montage
   // row waveform below (deriveMontageRowSamples) and the topography/connectome/ESI
-  // snapshot (useTimepointSnapshot's applyMontage call) rather than each recomputing it.
-  // The filtered non-bad array itself is only a transient local — nothing but the small
-  // { average, median } result needs to survive between renders.
+  // snapshot (useTimepointSnapshot's always-average referencing) rather than each
+  // recomputing it. The filtered non-bad array itself is only a transient local — nothing
+  // but the small { average, median } result needs to survive between renders.
   const referenceSeries = useMemo(() => {
     if (!channels) return null;
     const nonBadChannels = channels.filter(
@@ -253,13 +251,11 @@ export const EegViewer = ({
     return computeReferenceSeries(nonBadChannels);
   }, [channels, channelSettings, channelNames]);
 
-  // Montage application + the electrode/channel voltage snapshots at the clicked topography
-  // timepoint, lifted up to PatientView for the intracranial connectome and ESI. The hook's
-  // own montagedChannels isn't consumed here — the waveform re-references independently now
-  // (see referenceSeries/deriveMontageRowSamples above).
+  // Electrode/channel voltage snapshots at the clicked topography timepoint, lifted up to
+  // PatientView for the intracranial connectome and ESI — always common-average-referenced
+  // (see useTimepointSnapshot), independent of the montage row waveform above.
   const { topoVoltages, topoVoltagesByChannel } = useTimepointSnapshot({
     channels,
-    montage,
     referenceSeries,
     topoTimepoint,
     timestamps,
@@ -585,24 +581,11 @@ export const EegViewer = ({
                 </div>
               </div>
             </div>
-            {/* EEG Montage: Settings for chaning the EEG referencing */}
-            <div
-              className="flex flex-col items-center gap-1 pb-1"
-              title="Apply EEG reference montage"
-            >
+            {/* EEG Montage: opens the montage editor window for per-channel/row referencing */}
+            <div className="flex flex-col items-center gap-1 pb-1">
               <button type="button" className="button" onClick={() => setMontageVisible((v) => !v)}>
                 Montage
               </button>
-              <select
-                value={montage}
-                onChange={(e) => onMontageChange?.(e.target.value)}
-                aria-label="Apply EEG reference montage"
-                className="bg-background border border-border rounded px-1 py-0.5 text-xs text-heading cursor-pointer"
-              >
-                <option value="none">None</option>
-                <option value="average">Average</option>
-                <option value="median">Median</option>
-              </select>
             </div>
           </div>
 
@@ -1022,7 +1005,6 @@ export const EegViewer = ({
           isStandardElectrodes={isStandardElectrodes}
           onElecPosFile={onElecPosFile}
           customFileName={customElecPosFileName}
-          montage={montage}
           isIntracranial={isIntracranial}
         />
       )}
@@ -1041,7 +1023,6 @@ export const EegViewer = ({
           isStandardElectrodes={isStandardElectrodes}
           onElecPosFile={onElecPosFile}
           customFileName={customElecPosFileName}
-          montage={montage}
           channelSettings={channelSettings}
           onApplyChannelSettings={applyChannelSettings}
           montageChannels={montageChannels}

@@ -1,22 +1,21 @@
 import { useMemo, useEffect } from 'react';
-import { applyMontage } from '@/utils/eegViewerUtils';
+import { applyReferenceSeries } from '@/utils/eegViewerUtils';
 
 /**
- * Applies the selected montage to the raw channel buffer, then derives the per-electrode
- * and per-channel voltage snapshots at the clicked topography timepoint — and lifts both
- * upward so PatientView can build the intracranial connectome layer (fires regardless of
- * whether the topography window is open) and drive Electrical Source Imaging (fires only
- * on user clicks, not on every buffer refresh).
+ * Always re-references the raw channel buffer to the common average of the good (non-bad)
+ * channels, then derives the per-electrode and per-channel voltage snapshots at the clicked
+ * topography timepoint — and lifts both upward so PatientView can build the intracranial
+ * connectome layer (fires regardless of whether the topography window is open) and drive
+ * Electrical Source Imaging (fires only on user clicks, not on every buffer refresh).
+ * Unlike the montage editor's per-row references, this referencing isn't user-selectable —
+ * topography/connectome/ESI always need the common-average reference, so it's unconditional.
  *
  * @param {Object} params
- * @param {Array<Float32Array|number[]>|null} params.channels - the raw (un-montaged)
+ * @param {Array<Float32Array|number[]>|null} params.channels - the raw (un-referenced)
  *   channel buffer for the currently visible window, or `null` before it's loaded.
- * @param {'none'|'average'|'median'} params.montage - the currently selected EEG
- *   reference montage, applied to `channels` before any voltages are extracted.
  * @param {{average: number[]|null, median: number[]|null}|null} params.referenceSeries -
  *   the shared average/median series (see computeReferenceSeries in eegViewerUtils.js),
- *   computed once by the caller from non-bad channels and reused here rather than
- *   recomputed — passed straight through to applyMontage.
+ *   computed once by the caller from non-bad channels — only `.average` is used here.
  * @param {number|null} params.topoTimepoint - the timestamp (seconds) the user last
  *   clicked in the channel plots, or `null` before any click.
  * @param {number[]|null} params.timestamps - sample timestamps for the current buffer,
@@ -35,9 +34,9 @@ import { applyMontage } from '@/utils/eegViewerUtils';
  * @param {(snapshot: {isIntracranial: boolean, channelNames: string[], voltages: number[]}) => void} params.onChannelSnapshotChange
  *   Called only when the user clicks a new topography timepoint, so PatientView/ESI can
  *   recompute source power from the full per-channel snapshot.
- * @returns {Object} The montaged buffer and derived voltage snapshots:
- *   - `montagedChannels` (Array|null) — `channels` with the selected montage applied, or
- *     `null` before `channels` is loaded.
+ * @returns {Object} The re-referenced buffer and derived voltage snapshots:
+ *   - `montagedChannels` (Array|null) — `channels` re-referenced to the common average of
+ *     the good channels, or `null` before `channels` is loaded.
  *   - `topoVoltages` (number[]) — one voltage per position-matched electrode at
  *     `topoTimepoint`, `[]` when there's nothing to show yet.
  *   - `topoVoltagesByChannel` (number[]) — one voltage per channel (not position-gated)
@@ -45,7 +44,6 @@ import { applyMontage } from '@/utils/eegViewerUtils';
  */
 export function useTimepointSnapshot({
   channels,
-  montage,
   referenceSeries,
   topoTimepoint,
   timestamps,
@@ -56,11 +54,12 @@ export function useTimepointSnapshot({
   onElectrodeSnapshotChange,
   onChannelSnapshotChange,
 }) {
-  // Apply the selected montage once, shared by the topography/connectome/ESI snapshot below
+  // Re-reference to the common average of the good channels once, shared by the
+  // topography/connectome/ESI snapshot below — always applied, not user-selectable.
   const montagedChannels = useMemo(() => {
     if (!channels) return null;
-    return applyMontage(channels, montage, referenceSeries);
-  }, [channels, montage, referenceSeries]);
+    return applyReferenceSeries(channels, referenceSeries?.average);
+  }, [channels, referenceSeries]);
 
   // Sample index shared by both voltage snapshots below.
   const topoSampleIndex = useMemo(() => {

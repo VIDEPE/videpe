@@ -14,14 +14,15 @@ import { mean, median } from './arrayAndMatrixMathUtils';
 //   computeReferenceSeries(nonBad) → { average, median }   ← computed ONCE
 //           │                              │
 //           ▼                              ▼
-//   deriveMontageRowSamples          applyReferenceSeries(channels, series[montage])
-//   (subtract from ONE row's channel)   (subtract from ALL channels, via applyMontage)
+//   deriveMontageRowSamples          applyReferenceSeries(channels, series.average)
+//   (subtract from ONE row's channel,   (subtract from ALL channels — always the average,
+//    per-row reference/mode)             unconditionally, via useTimepointSnapshot)
 //           │                              │
 //           ▼                              ▼
 //      waveform plot                topoVoltages / connectome / ESI
 //
 // Neither side knows about the other's output — montage rows never feed topography/
-// connectome/ESI, and the global montage select never touches the waveform display.
+// connectome/ESI, which always uses the common-average reference (never user-selectable).
 
 // The shared reference series everything below subtracts from channels set to
 // 'average'/'median' — one series per mode, computed once from `nonBadChannels` (the
@@ -52,14 +53,6 @@ export function computeReferenceSeries(nonBadChannels) {
 export function applyReferenceSeries(channels, series) {
   if (!series) return channels;
   return channels.map((chan) => chan.map((value, iSamp) => value - series[iSamp]));
-}
-
-// Re-references the whole channel buffer for topography/connectome/ESI. `referenceSeries`
-// is the { average, median } object from computeReferenceSeries — computed once by the
-// caller from non-bad channels and shared with the waveform pipeline (see diagram above).
-export function applyMontage(channels, montage, referenceSeries) {
-  if (montage !== 'average' && montage !== 'median') return channels; // 'none' — raw voltages
-  return applyReferenceSeries(channels, referenceSeries?.[montage]);
 }
 
 // Reference values a montage row can carry besides a real channel name — resolved against

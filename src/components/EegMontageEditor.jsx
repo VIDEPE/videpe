@@ -54,7 +54,6 @@ export function EegMontageEditor({
   channelNames,
   voltagesByChannel,
   customFileName = null, // filename (no extension) of the loaded custom positions file — owned by PatientView, passed down
-  montage,
   channelSettings, // Record<channelname, {type, bad}> — live state owned by EegViewer/useChannelSettings
   onApplyChannelSettings, // (Record<name, {type, bad}>) => void — commits the draft on Apply/OK
   montageChannels, // Array<{id, channel, reference, color}> — live state owned by EegViewer/useMontageChannels
