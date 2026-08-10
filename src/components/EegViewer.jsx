@@ -21,7 +21,11 @@ import {
   LocateFixed,
 } from 'lucide-react';
 import { minMaxDownsample } from '@/utils/downsample';
-import { buildMontageDisplayRows, deriveMontageRowSamples } from '@/utils/eegViewerUtils';
+import {
+  buildMontageDisplayRows,
+  deriveMontageRowSamples,
+  computeReferenceSeries,
+} from '@/utils/eegViewerUtils';
 import { useEegBuffer } from '@/loaders/eegBuffer';
 import { useContainerResize } from '@/hooks/useContainerResize';
 import { useEegPlotControls } from '@/hooks/useEegPlotControls';
@@ -235,11 +239,26 @@ export const EegViewer = ({
     [channelNames, channelSettings, montageChannels]
   );
 
+  // Shared average/median reference series (see the diagram atop eegViewerUtils.js) —
+  // computed once from the raw buffer's non-bad channels, then handed to both the montage
+  // row waveform below (deriveMontageRowSamples) and the topography/connectome/ESI
+  // snapshot (useTopographySnapshot's applyMontage call) rather than each recomputing it.
+  // The filtered non-bad array itself is only a transient local — nothing but the small
+  // { average, median } result needs to survive between renders.
+  const referenceSeries = useMemo(() => {
+    if (!channels) return null;
+    const nonBadChannels = channels.filter(
+      (_, index) => !channelSettings[channelNames[index]]?.bad
+    );
+    return computeReferenceSeries(nonBadChannels);
+  }, [channels, channelSettings, channelNames]);
+
   // Montage application + the electrode/channel voltage snapshots at the clicked topography
   // timepoint, lifted up to PatientView for the intracranial connectome and ESI.
   const { montagedChannels, topoVoltages, topoVoltagesByChannel } = useTopographySnapshot({
     channels,
     montage,
+    referenceSeries,
     topoTimepoint,
     timestamps,
     fs: provider.fs,
@@ -282,20 +301,19 @@ export const EegViewer = ({
   const displayedData = useMemo(() => {
     // If we don't have valid dimensions or data yet, return empty arrays for each row to avoid rendering broken plots
     const empty = displayRows.map(() => [[], []]);
-    if (plotWidth === 0 || !timestamps || timestamps.length === 0 || !montagedChannels)
-      return empty;
+    if (plotWidth === 0 || !timestamps || timestamps.length === 0 || !channels) return empty;
 
     const endTime = startTime + windowSize;
     return displayRows.map((row) =>
       minMaxDownsample(
         timestamps,
-        deriveMontageRowSamples(montagedChannels, row),
+        deriveMontageRowSamples(channels, row, referenceSeries),
         startTime,
         endTime,
         plotWidth
       )
     );
-  }, [timestamps, montagedChannels, displayRows, startTime, windowSize, plotWidth]);
+  }, [timestamps, channels, referenceSeries, displayRows, startTime, windowSize, plotWidth]);
 
   // Signal onViewReady once the first measurement lands and charts have rendered
   const onViewReadyCalledRef = useRef(false);
