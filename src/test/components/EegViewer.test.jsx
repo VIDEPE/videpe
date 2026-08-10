@@ -2121,6 +2121,61 @@ describe('EegViewer — bad channel filtering', () => {
   });
 });
 
+describe('EegViewer — bad channels excluded from topography/connectome/ESI', () => {
+  it("excludes a bad channel's electrode from the topography match count and voltages", async () => {
+    const provider = makeProvider();
+    render(<EegViewer provider={provider} channelNames={provider.channelNames} />);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Montage' }));
+    await userEvent.click(screen.getByTestId('channel-bad-EEG1'));
+    await userEvent.click(screen.getByRole('button', { name: 'OK' }));
+
+    await enableTopoAndClick();
+
+    // MOCK_ELC matches EEG1 and EEG2 (Cz has no corresponding channel) — with EEG1 bad,
+    // only EEG2's electrode remains, and the average reference now excludes EEG1 too:
+    // (7+10)/2 = 8.5 → EEG2: 7-8.5 = -1.5.
+    expect(screen.getByText('1 / 3 channels mapped')).toBeTruthy();
+    expect(screen.getByTestId('topo-voltages').textContent).toBe('-1.5');
+  });
+
+  it("zeroes a bad channel's voltage in the all-channel snapshot fed to ESI, without dropping it from the array", async () => {
+    const onChannelSnapshotChange = vi.fn();
+    const provider = makeProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        onChannelSnapshotChange={onChannelSnapshotChange}
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Montage' }));
+    await userEvent.click(screen.getByTestId('channel-bad-EEG1'));
+    await userEvent.click(screen.getByRole('button', { name: 'OK' }));
+
+    onChannelSnapshotChange.mockClear();
+    await act(async () => {
+      capturedClickHandler?.();
+    });
+
+    // EEG1 is bad → zeroed, not dropped (the array stays channelNames-aligned for ESI's
+    // inverse-solution model). Average reference excludes EEG1: (7+10)/2 = 8.5 →
+    // EEG2: 7-8.5=-1.5, EEG3: 10-8.5=1.5.
+    expect(onChannelSnapshotChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ voltages: [0, -1.5, 1.5] })
+    );
+  });
+});
+
 // ── Montage row wiring ──────────────────────────────────────────────────────
 // CHANNEL_DATA per sample, within the default 20s window: EEG1=[1,2,3], EEG2=[4,5,6].
 

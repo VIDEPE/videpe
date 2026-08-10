@@ -1,4 +1,4 @@
-﻿import { useRef, useState, useEffect, useMemo } from 'react';
+﻿import { useRef, useState, useEffect, useMemo, useCallback } from 'react';
 import UplotReact from 'uplot-react';
 import { cn } from '../utils/utils';
 import toast from 'react-hot-toast';
@@ -251,21 +251,54 @@ export const EegViewer = ({
     return computeReferenceSeries(nonBadChannels);
   }, [channels, channelSettings, channelNames]);
 
+  // Bad channels are hidden from topography/connectome/ESI entirely, not just excluded from
+  // the reference calc — a bad electrode's position never appears as a node to plot, and
+  // its own voltage never contributes to ESI's source-power computation. `matched` (from
+  // useElectrodeMatching) is kept raw for EegMontageEditor's Pos-match indicator below,
+  // which cares about position-file coverage independent of the current bad-channel flags.
+  const visibleMatched = useMemo(
+    () => matched.filter((m) => !channelSettings[m.name]?.bad),
+    [matched, channelSettings]
+  );
+
+  // Zeroes a bad channel's entry in an all-channel voltage array (channelNames-aligned) —
+  // used for the ESI/matrix snapshot below, where entries can't simply be dropped (their
+  // positions must stay aligned with channelNames/the inverse-solution model), only zeroed
+  // out so they stop contributing real-looking data. Memoized so the onChannelSnapshotChange
+  // wrapper below keeps a stable identity across renders — useTimepointSnapshot's effect
+  // deliberately fires only on topoTimepoint changes, not on every re-render.
+  const zeroBadChannelVoltages = useCallback(
+    (voltages) => voltages.map((v, index) => (channelSettings[channelNames[index]]?.bad ? 0 : v)),
+    [channelSettings, channelNames]
+  );
+
   // Electrode/channel voltage snapshots at the clicked topography timepoint, lifted up to
   // PatientView for the intracranial connectome and ESI — always common-average-referenced
   // (see useTimepointSnapshot), independent of the montage row waveform above.
-  const { topoVoltages, topoVoltagesByChannel } = useTimepointSnapshot({
+  const handleChannelSnapshotChange = useCallback(
+    (snapshot) =>
+      onChannelSnapshotChange?.({
+        ...snapshot,
+        voltages: zeroBadChannelVoltages(snapshot.voltages),
+      }),
+    [onChannelSnapshotChange, zeroBadChannelVoltages]
+  );
+  const { topoVoltages, topoVoltagesByChannel: rawTopoVoltagesByChannel } = useTimepointSnapshot({
     channels,
     referenceSeries,
     topoTimepoint,
     timestamps,
     fs: provider.fs,
-    matched,
+    matched: visibleMatched,
     channelNames,
     isIntracranial,
     onElectrodeSnapshotChange,
-    onChannelSnapshotChange,
+    onChannelSnapshotChange: handleChannelSnapshotChange,
   });
+  const topoVoltagesByChannel = useMemo(
+    () => zeroBadChannelVoltages(rawTopoVoltagesByChannel),
+    [rawTopoVoltagesByChannel, zeroBadChannelVoltages]
+  );
 
   // Reports whether EegTopoViewer's NiiVue canvas currently has a mesh loaded — mirrors
   // the guard in EegTopoViewer's mesh-loading effect (isIntracranial || !electrodes?.length
@@ -603,7 +636,7 @@ export const EegViewer = ({
                 ref={containerRef}
                 className="absolute top-2 left-0 bottom-0 right-0 overflow-y-auto themed-scrollbar"
                 title={
-                  matched.length > 0 && topoEnabled && !topoVisible
+                  visibleMatched.length > 0 && topoEnabled && !topoVisible
                     ? 'Click any channel to view the EEG topography for that time point'
                     : undefined
                 }
@@ -995,7 +1028,7 @@ export const EegViewer = ({
         <EegTopoViewer
           nvRef={nvRef_eegtopo}
           electrodes={electrodes}
-          matched={matched}
+          matched={visibleMatched}
           voltages={topoVoltages}
           channelNames={channelNames}
           voltagesByChannel={topoVoltagesByChannel}
