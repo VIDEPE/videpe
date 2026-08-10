@@ -13,6 +13,10 @@ import { applyMontage } from '@/utils/eegViewerUtils';
  *   channel buffer for the currently visible window, or `null` before it's loaded.
  * @param {'none'|'average'|'median'} params.montage - the currently selected EEG
  *   reference montage, applied to `channels` before any voltages are extracted.
+ * @param {{average: number[]|null, median: number[]|null}|null} params.referenceSeries -
+ *   the shared average/median series (see computeReferenceSeries in eegViewerUtils.js),
+ *   computed once by the caller from non-bad channels and reused here rather than
+ *   recomputed — passed straight through to applyMontage.
  * @param {number|null} params.topoTimepoint - the timestamp (seconds) the user last
  *   clicked in the channel plots, or `null` before any click.
  * @param {number[]|null} params.timestamps - sample timestamps for the current buffer,
@@ -42,6 +46,7 @@ import { applyMontage } from '@/utils/eegViewerUtils';
 export function useTopographySnapshot({
   channels,
   montage,
+  referenceSeries,
   topoTimepoint,
   timestamps,
   fs,
@@ -51,11 +56,11 @@ export function useTopographySnapshot({
   onElectrodeSnapshotChange,
   onChannelSnapshotChange,
 }) {
-  // Apply the selected montage once, shared by the channel plots and the topography snapshot
+  // Apply the selected montage once, shared by the topography/connectome/ESI snapshot below
   const montagedChannels = useMemo(() => {
     if (!channels) return null;
-    return applyMontage(channels, montage);
-  }, [channels, montage]);
+    return applyMontage(channels, montage, referenceSeries);
+  }, [channels, montage, referenceSeries]);
 
   // Sample index shared by both voltage snapshots below.
   const topoSampleIndex = useMemo(() => {

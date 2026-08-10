@@ -1455,7 +1455,7 @@ describe('EegViewer — montage controls', () => {
   // montage is a controlled prop (PatientView owns the state so it can force 'average'
   // when ESI needs it and react when the user switches away) — tests simulate the parent
   // feeding the updated value back down via rerender, same pattern as recordingType below.
-  it('re-references the channel plot data when the montage prop changes to average', async () => {
+  it('does not re-reference the channel plot data when the montage prop changes (the global montage select now only drives topography/connectome/ESI — the waveform re-references per row via the montage editor instead)', async () => {
     const { default: UplotReactMock } = await import('uplot-react');
     const provider = makeProvider();
     const { rerender } = render(
@@ -1471,9 +1471,10 @@ describe('EegViewer — montage controls', () => {
       <EegViewer provider={provider} channelNames={provider.channelNames} montage="average" />
     );
 
-    // EEG1 raw values for the visible window are [1,2,3]; averaged → [-3,-3,-3]
+    // EEG1 raw values for the visible window are [1,2,3] — unchanged, since with no montage
+    // rows configured every row falls back to its raw channel (referenceMode: null).
     const eeg1Data = Array.from(UplotReactMock.mock.calls[0][0].data[1]);
-    expect(eeg1Data).toEqual([-3, -3, -3]);
+    expect(eeg1Data).toEqual([1, 2, 3]);
   });
 });
 

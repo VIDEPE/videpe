@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import { useTopographySnapshot } from '@/hooks/useTopographySnapshot';
+import { computeReferenceSeries } from '@/utils/eegViewerUtils';
 
 // Two channels, 4 samples each, fs=1 so timestamps double as sample indices.
 const timestamps = [0, 1, 2, 3];
@@ -8,6 +9,10 @@ const channels = [
   [1, 2, 3, 4], // channel 0
   [5, 6, 7, 8], // channel 1
 ];
+// The caller (EegViewer.jsx) computes this once from non-bad channels and passes it in —
+// this hook no longer computes its own average/median, so tests need a real series to
+// exercise the 'average'/'median' montage cases.
+const referenceSeries = computeReferenceSeries(channels);
 const matched = [{ channelIdx: 0 }, { channelIdx: 1 }];
 const channelNames = ['CH1', 'CH2'];
 
@@ -16,6 +21,7 @@ const setup = (overrides = {}) =>
     initialProps: {
       channels,
       montage: 'none',
+      referenceSeries,
       topoTimepoint: null,
       timestamps,
       fs: 1,
@@ -89,6 +95,7 @@ describe('useTopographySnapshot — lifted snapshots', () => {
     rerender({
       channels,
       montage: 'none',
+      referenceSeries,
       topoTimepoint: 2,
       timestamps,
       fs: 1,
@@ -132,6 +139,7 @@ describe('useTopographySnapshot — lifted snapshots', () => {
     rerender({
       channels,
       montage: 'average', // changed
+      referenceSeries,
       topoTimepoint: 2, // unchanged
       timestamps,
       fs: 1,
