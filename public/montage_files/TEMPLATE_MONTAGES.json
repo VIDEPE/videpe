@@ -1,0 +1,50 @@
+[
+  {
+    "name": "GSN-HydroCel-257",
+    "path": "montage_files/GSN-HydroCel-257.mtg"
+  },
+  {
+    "name": "GSN-HydroCel-257_10-20",
+    "path": "montage_files/GSN-HydroCel-257_10-20.mtg"
+  },
+  {
+    "name": "GSN-HydroCel-257_10-20_downsampled",
+    "path": "montage_files/GSN-HydroCel-257_10-20_downsampled.mtg"
+  },
+  {
+    "name": "GSN-HydroCel-257_downsampled",
+    "path": "montage_files/GSN-HydroCel-257_downsampled.mtg"
+  },
+  {
+    "name": "GSN-HydroCel-257_withoutE",
+    "path": "montage_files/GSN-HydroCel-257_withoutE.mtg"
+  },
+  {
+    "name": "GSN-HydroCel-257_withoutE_downsampled",
+    "path": "montage_files/GSN-HydroCel-257_withoutE_downsampled.mtg"
+  },
+  {
+    "name": "longbip_GSN-HydroCel-257_10-20_downsampled",
+    "path": "montage_files/longbip_GSN-HydroCel-257_10-20_downsampled.mtg"
+  },
+  {
+    "name": "longbip_GSN-HydroCel-257_downsampled",
+    "path": "montage_files/longbip_GSN-HydroCel-257_downsampled.mtg"
+  },
+  {
+    "name": "longbip_GSN-HydroCel-257_withoutE_downsampled",
+    "path": "montage_files/longbip_GSN-HydroCel-257_withoutE_downsampled.mtg"
+  },
+  {
+    "name": "transbip_GSN-HydroCel-257_10-20_downsampled",
+    "path": "montage_files/transbip_GSN-HydroCel-257_10-20_downsampled.mtg"
+  },
+  {
+    "name": "transbip_GSN-HydroCel-257_downsampled",
+    "path": "montage_files/transbip_GSN-HydroCel-257_downsampled.mtg"
+  },
+  {
+    "name": "transbip_GSN-HydroCel-257_withoutE_downsampled",
+    "path": "montage_files/transbip_GSN-HydroCel-257_withoutE_downsampled.mtg"
+  }
+]

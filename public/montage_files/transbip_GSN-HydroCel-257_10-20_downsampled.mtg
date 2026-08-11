@@ -1,0 +1,123 @@
+<!DOCTYPE AnyWaveMontage>
+<Montage>
+	<Channel name="F7">
+		<type>EEG</type>
+		<reference>FP1</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="FP1">
+		<type>EEG</type>
+		<reference>FP2</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="FP2">
+		<type>EEG</type>
+		<reference>F8</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="F9">
+		<type>EEG</type>
+		<reference>F7</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="F7">
+		<type>EEG</type>
+		<reference>F3</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="F3">
+		<type>EEG</type>
+		<reference>Fz</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="Fz">
+		<type>EEG</type>
+		<reference>F4</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="F4">
+		<type>EEG</type>
+		<reference>F8</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="F8">
+		<type>EEG</type>
+		<reference>F10</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="T9">
+		<type>EEG</type>
+		<reference>T7</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="T7">
+		<type>EEG</type>
+		<reference>C3</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="C3">
+		<type>EEG</type>
+		<reference>Cz</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="Cz">
+		<type>EEG</type>
+		<reference>C4</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="C4">
+		<type>EEG</type>
+		<reference>T8</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="T8">
+		<type>EEG</type>
+		<reference>T10</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="P9">
+		<type>EEG</type>
+		<reference>P7</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="P7">
+		<type>EEG</type>
+		<reference>P3</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="P3">
+		<type>EEG</type>
+		<reference>Pz</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="Pz">
+		<type>EEG</type>
+		<reference>P4</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="P4">
+		<type>EEG</type>
+		<reference>P8</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="P8">
+		<type>EEG</type>
+		<reference>P10</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="P7">
+		<type>EEG</type>
+		<reference>O1</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="O1">
+		<type>EEG</type>
+		<reference>O2</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="O2">
+		<type>EEG</type>
+		<reference>P8</reference>
+		<color>black</color>
+	</Channel>
+</Montage>
