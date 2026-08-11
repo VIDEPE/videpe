@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, within, fireEvent, act } from '@testing-library/react';
+import { render, screen, within, fireEvent, act, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { EegViewer } from '@/components/EegViewer';
 
@@ -2299,6 +2299,65 @@ describe('EegViewer — montage template dropdown', () => {
     await userEvent.selectOptions(screen.getByTestId('montage-template-select'), 'custom');
     expect(screen.getByText('EEG1')).toBeTruthy();
     expect(screen.queryByText('EEG2')).toBeNull();
+  });
+});
+
+describe('EegViewer — file-backed montage templates', () => {
+  // EEG1 referential (no reference), EEG2 bipolar against EEG1 — exercises both the
+  // "just the channel name" and "channel - reference" display-row naming paths.
+  const TEMPLATE_MTG_TEXT = `<!DOCTYPE AnyWaveMontage>
+<Montage>
+	<Channel name="EEG1">
+		<type>SEEG</type>
+		<reference></reference>
+		<color>red</color>
+	</Channel>
+	<Channel name="EEG2">
+		<type>EEG</type>
+		<reference>EEG1</reference>
+		<color></color>
+	</Channel>
+</Montage>`;
+
+  const TEMPLATE_LIST = [{ name: 'Test Template', path: 'montage_files/test.mtg' }];
+
+  beforeEach(() => {
+    global.fetch = vi.fn((url) => {
+      if (url === 'montage_files/TEMPLATE_MONTAGES.json')
+        return Promise.resolve({ text: () => Promise.resolve(JSON.stringify(TEMPLATE_LIST)) });
+      if (url === 'montage_files/test.mtg')
+        return Promise.resolve({ text: () => Promise.resolve(TEMPLATE_MTG_TEXT) });
+      return Promise.resolve({ text: () => Promise.resolve(MOCK_ELC) }); // standard_1005.elc
+    });
+  });
+
+  const optionValues = () =>
+    Array.from(screen.getByTestId('montage-template-select').options).map((o) => o.value);
+
+  it('lists file-backed templates from TEMPLATE_MONTAGES.json in the dropdown', async () => {
+    await renderViewer();
+
+    await waitFor(() => expect(optionValues()).toContain('montage_files/test.mtg'));
+    expect(screen.getByText('Test Template')).toBeTruthy();
+  });
+
+  it("applies a file-backed template's rows to the live waveform and patches channel types", async () => {
+    await renderViewer();
+    await waitFor(() => expect(optionValues()).toContain('montage_files/test.mtg'));
+
+    await userEvent.selectOptions(
+      screen.getByTestId('montage-template-select'),
+      'montage_files/test.mtg'
+    );
+
+    expect(screen.getByText('EEG1')).toBeTruthy();
+    expect(screen.getByText('EEG2 - EEG1')).toBeTruthy();
+    expect(screen.queryByText('EEG3')).toBeNull();
+
+    // channel types (SEEG/EEG) patched — verify via the editor's channel-selection pane
+    await userEvent.click(screen.getByRole('button', { name: 'Montage' }));
+    expect(screen.getByTestId('channel-type-EEG1')).toHaveValue('seeg');
+    expect(screen.getByTestId('channel-type-EEG2')).toHaveValue('eeg');
   });
 });
 

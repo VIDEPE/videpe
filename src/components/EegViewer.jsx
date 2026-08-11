@@ -33,6 +33,7 @@ import { useScrubberDrag } from '@/hooks/useScrubberDrag';
 import { useElectrodeMatching } from '@/hooks/useElectrodeMatching';
 import { useChannelSettings } from '@/hooks/useChannelSettings';
 import { useMontageChannels } from '@/hooks/useMontage';
+import { useMontageTemplates } from '@/hooks/useMontageTemplates';
 import { useTimepointSnapshot } from '@/hooks/useTimepointSnapshot';
 import { useRowResize } from '@/hooks/useRowResize';
 
@@ -277,6 +278,35 @@ export const EegViewer = ({
     (voltages) => voltages.map((v, index) => (channelSettings[channelNames[index]]?.bad ? 0 : v)),
     [channelSettings, channelNames]
   );
+
+  // File-backed montage templates (public/montage_files/TEMPLATE_MONTAGES.json), listed
+  // in the same sidebar quick-select alongside the None/CAR/Custom presets above.
+  const montageTemplates = useMontageTemplates();
+
+  const applyMontageFileTemplate = (template) => {
+    // Overwrite the current montage rows with the one from the template
+    applyMontageChannels(
+      template.rows.map((row) => ({
+        id: crypto.randomUUID(),
+        ...row, // this preserves whatever channel, reference and color the fil has per row
+      }))
+    );
+    // Patch the type of every channel the template names. A name not in this recording
+    // still gets added (harmless — nothing reads channelSettings by iterating its keys).
+    const nextChannelSettings = { ...channelSettings };
+    for (const [name, type] of Object.entries(template.channelTypes)) {
+      nextChannelSettings[name] = { ...nextChannelSettings[name], type };
+    }
+    applyChannelSettings(nextChannelSettings);
+  };
+
+  // Routes the sidebar template <select>'s value to the right apply function — a file path
+  // (looked up in montageTemplates) or one of the built-in preset strings.
+  const applyTemplateSelection = (value) => {
+    const template = montageTemplates.find((t) => t.path === value);
+    if (template) applyMontageFileTemplate(template);
+    else applyMontageTemplate(value);
+  };
 
   // Electrode/channel voltage snapshots at the clicked topography timepoint, lifted up to
   // PatientView for the intracranial connectome and ESI — always common-average-referenced
@@ -633,11 +663,16 @@ export const EegViewer = ({
                 data-testid="montage-template-select"
                 title="Montage template"
                 value={montageTemplate}
-                onChange={(e) => applyMontageTemplate(e.target.value)}
+                onChange={(e) => applyTemplateSelection(e.target.value)}
               >
                 <option value="none">None</option>
                 <option value="average">CAR (Common Average Reference)</option>
                 {customMontageChannels && <option value="custom">Custom</option>}
+                {montageTemplates.map((template) => (
+                  <option key={template.path} value={template.path}>
+                    {template.name}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
