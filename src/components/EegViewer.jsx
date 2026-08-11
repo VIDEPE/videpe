@@ -43,7 +43,7 @@ import { StatusLed } from '@/components/StatusLed';
 import { EegMontageEditor } from './EegMontageEditor';
 
 const EEG_LOADING_TOAST_ID = 'eeg-buffer-loading'; // fixed id so the loading/success toasts update in place rather than stacking
-const Y_AXIS_WIDTH = 60; // px for the y-axis area (channel name + tick space) — must match x-axis strip left padding
+const Y_AXIS_WIDTH = 80; // px for the y-axis area (channel name + tick space) — must match x-axis strip left padding
 const PLOT_RIGHT_PAD = 20; // px right padding — must match in both channel plots and x-axis strip so ticks align
 const OVERDRAW = 2; // canvas height multiplier — peaks bleed ±50% into adjacent lanes instead of clipping
 const X_AXIS_GRID_SPACE = 60; // Min px between vertical gridlines — shared by the channel plots and the x-axis =>uPlot uses it to pick an increment (1,2,5,10,etc)

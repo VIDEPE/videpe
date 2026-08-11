@@ -35,19 +35,18 @@ function getMontageTemplateMatch(rows, channelNames) {
 export function useMontageChannels(channelNames) {
   const [montageChannels, setMontageChannels] = useState([]);
 
-  // ApplyMontageChannels = complete replace — commits a draft edited in EegMontageEditor (Apply/OK), 
-  // same pattern as useChannelSettings.applyChannelSettings. 
+  // ApplyMontageChannels = complete replace — commits a draft edited in EegMontageEditor (Apply/OK),
+  // same pattern as useChannelSettings.applyChannelSettings.
   // Wrapped instead of exposing setMontageChannels directly, so logic can be added here later without changing EegMontageEditor's Apply/OK.
   const applyMontageChannels = useCallback((next) => {
     setMontageChannels(next);
   }, []);
-  // (automatic housekeeping) When channelNames change (e.g. a new recording) it drops any montage rows 
+  // (automatic housekeeping) When channelNames change (e.g. a new recording) it drops any montage rows
   // which no longer exists in channelNames (i.e. in the recording)
   // Note: it never adds rows for new channels, since row creation is always an explicit user action.
   useEffect(() => {
     setMontageChannels((prev) => prev.filter((row) => channelNames.includes(row.channel)));
   }, [channelNames]);
-
 
   // ─── Template dropdown (None / Common Average Reference / Custom) ─────────────
   const montageTemplate = useMemo(
@@ -55,7 +54,7 @@ export function useMontageChannels(channelNames) {
     [montageChannels, channelNames]
   );
 
-  // State stores the last hand-built (non-preset) montage, 
+  // State stores the last hand-built (non-preset) montage,
   // so it can be restored by selecting 'Custom' in the template dropdown in EegViewer.jsx.
   // Starts null (no custom montage set yet)
   const [customMontageChannels, setCustomMontageChannels] = useState(null);
@@ -63,7 +62,8 @@ export function useMontageChannels(channelNames) {
     setCustomMontageChannels(montageChannels);
   }
 
-  const applyMontageTemplate = useCallback((value) => {
+  const applyMontageTemplate = useCallback(
+    (value) => {
       if (value === 'none') setMontageChannels([]);
       else if (value === 'average')
         setMontageChannels(
