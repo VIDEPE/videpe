@@ -226,7 +226,13 @@ export const EegViewer = ({
   // Montage row list (reference/color per displayed trace), edited via the same window's
   // montage-settings pane — kept separate from channelSettings since it's an array (can
   // later support arbitrary derived rows), not a per-channel record.
-  const { montageChannels, applyMontageChannels } = useMontageChannels(channelNames);
+  const {
+    montageChannels,
+    applyMontageChannels,
+    montageTemplate,
+    customMontageChannels,
+    applyMontageTemplate,
+  } = useMontageChannels(channelNames);
 
   // Rows to render in the channel-plot area: one per non-bad channel (in channelNames
   // order) when no montage rows are configured, or the configured montage rows once any
@@ -614,11 +620,25 @@ export const EegViewer = ({
                 </div>
               </div>
             </div>
-            {/* EEG Montage: opens the montage editor window for per-channel/row referencing */}
+            {/* EEG Montage: opens the montage editor window for per-channel/row referencing,
+                plus a quick template <select> below it that applies a preset straight to
+                the live montage (no Apply/OK gate) — None/Common Average Reference always
+                offered, "Custom" only once a hand-built montage exists to switch back to. */}
             <div className="flex flex-col items-center gap-1 pb-1">
               <button type="button" className="button" onClick={() => setMontageVisible((v) => !v)}>
                 Montage
               </button>
+              <select
+                className="text-xs w-20 border border-border rounded bg-surface"
+                data-testid="montage-template-select"
+                title="Montage template"
+                value={montageTemplate}
+                onChange={(e) => applyMontageTemplate(e.target.value)}
+              >
+                <option value="none">None</option>
+                <option value="average">CAR (Common Average Reference)</option>
+                {customMontageChannels && <option value="custom">Custom</option>}
+              </select>
             </div>
           </div>
 
