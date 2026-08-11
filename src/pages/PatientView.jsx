@@ -14,7 +14,6 @@ import { FileDropZone } from '../components/FileDropZone';
 import { filesToLayers } from '../utils/NiiViewer.utils';
 import { buildElectrodeLayer } from '../utils/eegTopographyUtils';
 import { useEegFileIntake } from '../hooks/useEegFileIntake';
-import { useMontage } from '../hooks/useMontage';
 import { useElectricalSourceImaging } from '../hooks/useElectricalSourceImaging';
 import { useDemoData } from '../hooks/useDemoData';
 
@@ -56,22 +55,12 @@ export const PatientView = () => {
   const [electrodeRenderEnabled, setElectrodeRenderEnabled] = useState(false); // boolean to enable/disable the 3D rendering of the electrodes
   const [esiEnabled, setEsiEnabled] = useState(false); // boolean to enable/disable showing the Electrical Source Imaging layer — same gating pattern as electrodeRenderEnabled
 
-  const { montage, setMontage, resetMontage } = useMontage();
-
-  const {
-    inverseSolutionFileName,
-    esiLayer,
-    handleInverseSolutionFile,
-    handleMontageChange,
-    resetInverseSolution,
-  } = useElectricalSourceImaging({
-    eeg,
-    recordingType,
-    channelSnapshot,
-    montage,
-    setMontage,
-    esiEnabled,
-  });
+  const { inverseSolutionFileName, esiLayer, handleInverseSolutionFile, resetInverseSolution } =
+    useElectricalSourceImaging({
+      recordingType,
+      channelSnapshot,
+      esiEnabled,
+    });
 
   const {
     pendingEegFiles,
@@ -188,7 +177,6 @@ export const PatientView = () => {
     resetIntake();
     setElectrodeSnapshot(null);
     resetInverseSolution();
-    resetMontage();
     setChannelSnapshot(null);
     setRecordingType('eeg');
     setElectrodeRenderEnabled(false);
@@ -196,7 +184,7 @@ export const PatientView = () => {
   };
 
   // SplitPane's left (EEG) panel reset button — clears only the EEG side (recording,
-  // pending files, electrode positions, inverse solution/montage/ESI, recording type).
+  // pending files, electrode positions, inverse solution/ESI, recording type).
   // Leaves `layers`/`niiHasOwnContent` untouched, so any imaging data already loaded in
   // the Neuroimaging panel survives; the electrode connectome layer built from EEG
   // state does get cleared, via setElectrodeSnapshot(null) below.
@@ -206,7 +194,6 @@ export const PatientView = () => {
     setRecordingType('eeg');
     setElectrodeSnapshot(null);
     resetInverseSolution();
-    resetMontage();
     setChannelSnapshot(null);
     setElectrodeRenderEnabled(false);
     setEsiEnabled(false);
@@ -309,8 +296,6 @@ export const PatientView = () => {
               inverseSolutionFileName={inverseSolutionFileName}
               recordingType={recordingType}
               onRecordingTypeChange={setRecordingType}
-              montage={montage}
-              onMontageChange={handleMontageChange}
               onElecPosFile={handleElecPosFile}
               onInverseSolutionFile={handleInverseSolutionFile}
               onElectrodeSnapshotChange={setElectrodeSnapshot}

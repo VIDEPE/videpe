@@ -1,92 +1,135 @@
 import { mean, median } from './arrayAndMatrixMathUtils';
 
-// Re-reference by subtracting the channel mean. Standard default in EEG analysis.
-export function averageReference(channels) {
-  const nChannels = channels.length;
-  const nSamples = channels[0].length;
+// ─── EEG channel referencing ──────────────────────────────────────────────────────────
+//
+// Two independent pipelines re-reference EEG channels against the same shared
+// average/median series (computed once from non-bad channels), but apply it differently:
+//
+//   raw channels + channelSettings (bad flags)
+//           │
+//           ▼
+//      filter non-bad
+//           │
+//           ▼
+//   computeReferenceSeries(nonBad) → { average, median }   ← computed ONCE
+//           │                              │
+//           ▼                              ▼
+//   deriveMontageRowSamples          applyReferenceSeries(channels, series.average)
+//   (subtract from ONE row's channel,   (subtract from ALL channels — always the average,
+//    per-row reference/mode)             unconditionally, via useTimepointSnapshot)
+//           │                              │
+//           ▼                              ▼
+//      waveform plot                topoVoltages / connectome / ESI
+//
+// Neither side knows about the other's output — montage rows never feed topography/
+// connectome/ESI, which always uses the common-average reference (never user-selectable).
 
-  const sampleMeans = Array(nSamples);
+// The shared reference series everything below subtracts from channels set to
+// 'average'/'median' — one series per mode, computed once from `nonBadChannels` (the
+// caller has already excluded bad channels, since a bad channel's own noise/artifacts
+// shouldn't skew what everything else is referenced against). Both are null when there
+// are no channels to reference against (e.g. every channel is currently marked bad).
+export function computeReferenceSeries(nonBadChannels) {
+  if (nonBadChannels.length === 0) return { average: null, median: null };
+
+  const nSamples = nonBadChannels[0].length;
+  const averageSeries = Array(nSamples);
+  const medianSeries = Array(nSamples);
 
   for (let iSample = 0; iSample < nSamples; iSample++) {
-    const valuesAtSample = Array(nChannels);
-    for (let iChan = 0; iChan < nChannels; iChan++) {
-      valuesAtSample[iChan] = channels[iChan][iSample];
-    }
-    sampleMeans[iSample] = mean(valuesAtSample);
+    const valuesAtSample = nonBadChannels.map((chan) => chan[iSample]);
+    averageSeries[iSample] = mean(valuesAtSample);
+    medianSeries[iSample] = median(valuesAtSample);
   }
 
-  return channels.map((chan) => chan.map((value, iSamp) => value - sampleMeans[iSamp]));
+  return { average: averageSeries, median: medianSeries };
 }
 
-// Re-reference by subtracting the channel median. More robust when one or more
-// channels carry artifacts, since outliers don't shift the median.
-export function medianReference(channels) {
-  const nChannels = channels.length;
-  const nSamples = channels[0].length;
-
-  const sampleMedians = Array(nSamples);
-
-  for (let iSample = 0; iSample < nSamples; iSample++) {
-    const valuesAtSample = Array(nChannels);
-    for (let iChan = 0; iChan < nChannels; iChan++) {
-      valuesAtSample[iChan] = channels[iChan][iSample];
-    }
-    sampleMedians[iSample] = median(valuesAtSample);
-  }
-
-  return channels.map((chan) => chan.map((v, iSamp) => v - sampleMedians[iSamp]));
+// Subtracts an already-computed reference series (see computeReferenceSeries above)
+// from every channel — the "apply to ALL channels" half of the diagram above, used by
+// applyMontage to re-reference the whole buffer for topography/connectome/ESI. `series`
+// is null when there was nothing to reference against (see computeReferenceSeries),
+// in which case channels are returned unchanged rather than subtracting nothing meaningful.
+export function applyReferenceSeries(channels, series) {
+  if (!series) return channels;
+  return channels.map((chan) => chan.map((value, iSamp) => value - series[iSamp]));
 }
 
-export function applyMontage(channels, montage) {
-  return montage === 'median'
-    ? medianReference(channels)
-    : montage === 'average'
-      ? averageReference(channels)
-      : channels; // 'none' — use raw voltages without re-referencing
-}
+// Reference values a montage row can carry besides a real channel name — resolved against
+// computeReferenceSeries's shared series, not a channel index (see deriveMontageRowSamples).
+const REFERENCE_LABELS = { average: 'Avg', median: 'Med' };
+const SPECIAL_REFERENCES = Object.keys(REFERENCE_LABELS);
 
 // Builds the rows to render in the EEG channel-plot area, resolving channel/reference
 // indices for deriveMontageRowSamples. Drops rows that are bad, or (only reachable via a
 // loaded montage file) name a channel not in channelNames — indexOf would return -1 there,
 // which deriveMontageRowSamples would crash on.
 export function buildMontageDisplayRows(channelNames, channelSettings, montageChannels) {
+  // No montage set => return all non-bad channel names
   if (montageChannels.length === 0) {
     return channelNames
       .map((name, index) => ({
         id: name,
         name: name,
         channelIndex: index,
-        referenceIndex: null,
+        referenceIndex: null, // channel index of the reference (if reference not n/a, average or median)
+        referenceMode: null, // if reference is average / median, this field will indicate so
         color: null,
       }))
       .filter(({ name }) => !channelSettings[name]?.bad);
   }
 
-  // channelSettings[row.reference] is simply undefined when reference is null/'' (no
-  // such key), so this reads correctly for both referential and bipolar rows without a
-  // separate "has a reference" guard.
-  return montageChannels
-    .filter((row) => !channelSettings[row.channel]?.bad && !channelSettings[row.reference]?.bad)
-    .filter(
-      (row) =>
-        channelNames.includes(row.channel) &&
-        (!row.reference || channelNames.includes(row.reference))
-    )
-    .map((row) => ({
-      id: row.id,
-      name: row.reference ? `${row.channel} - ${row.reference}` : row.channel,
-      channelIndex: channelNames.indexOf(row.channel),
-      referenceIndex: row.reference ? channelNames.indexOf(row.reference) : null,
-      color: row.color,
-    }));
+  // Montage is set:
+  return (
+    montageChannels
+      // - filter out bad channels and bad references
+      // note: channelSettings[row.reference] is simply undefined when reference is null/''
+      .filter((row) => !channelSettings[row.channel]?.bad && !channelSettings[row.reference]?.bad)
+      // filter out rows with channel/reference not present in the current recording
+      .filter(
+        (row) =>
+          channelNames.includes(row.channel) &&
+          (!row.reference ||
+            SPECIAL_REFERENCES.includes(row.reference) ||
+            channelNames.includes(row.reference))
+      )
+      // - create new names: [channel] - [ref] if there is a reference, else: row.channel
+      //   if row.reference === 'average'/'median': [channel] - Avg / Med
+      .map((row) => {
+        const isSpecialReference = SPECIAL_REFERENCES.includes(row.reference);
+        return {
+          id: row.id,
+          name: row.reference
+            ? `${row.channel} - ${REFERENCE_LABELS[row.reference] ?? row.reference}`
+            : row.channel,
+          channelIndex: channelNames.indexOf(row.channel),
+          referenceIndex:
+            row.reference && !isSpecialReference ? channelNames.indexOf(row.reference) : null,
+          referenceMode: isSpecialReference ? row.reference : null,
+          color: row.color,
+        };
+      })
+  );
 }
 
-// Derives one display row's raw sample series from the (already whole-buffer-montaged)
-// channel data — the channel's own samples minus its reference's, or the channel as-is
-// when the row has no reference.
-export function deriveMontageRowSamples(montagedChannels, row) {
-  const channelSamples = montagedChannels[row.channelIndex];
-  if (row.referenceIndex === null) return channelSamples;
-  const referenceSamples = montagedChannels[row.referenceIndex];
+// Derives one display row's raw sample series from the raw (un-montaged) channel buffer —
+// the channel's own samples minus its reference's, or the channel as-is when the row has no
+// reference. `referenceSeries` ({ average, median } from computeReferenceSeries) resolves
+// rows whose reference is 'average'/'median'; a channel-name reference instead looks the
+// other channel up directly via `referenceIndex`.
+export function deriveMontageRowSamples(channels, row, referenceSeries) {
+  const channelSamples = channels[row.channelIndex];
+  // if no reference channel and no reference mode is selected: return the channelSamples as they are
+  if (row.referenceIndex === null && row.referenceMode === null) return channelSamples;
+
+  // if reference mode is set (average / median), substract the corresponding referenceSeries from the channel
+  if (row.referenceMode) {
+    const series = referenceSeries?.[row.referenceMode];
+    if (!series) return channelSamples; // no non-bad channels to reference against — fall back to raw
+    return channelSamples.map((v, i) => v - series[i]);
+  }
+
+  // else: substract the reference channel from the channel
+  const referenceSamples = channels[row.referenceIndex];
   return channelSamples.map((v, i) => v - referenceSamples[i]);
 }

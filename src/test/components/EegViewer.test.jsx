@@ -1414,66 +1414,21 @@ describe('EegViewer — loading toast', () => {
 // Cross-channel mean per sample is [4,5,6,7], so e.g. average-referenced
 // EEG1 = [1-4, 2-5, 3-6, 4-7] = [-3,-3,-3,-3].
 
-describe('EegViewer — montage controls', () => {
-  it('renders a Montage button and a dropdown defaulting to none', async () => {
+describe('EegViewer — montage', () => {
+  it('renders a Montage button, with no global reference dropdown (referencing now lives in the montage editor / is unconditional for topography)', async () => {
     await renderViewer();
     expect(screen.getByRole('button', { name: 'Montage' })).toBeInTheDocument();
-    const select = screen.getByLabelText(/montage/i);
-    expect(select.value).toBe('none');
+    expect(screen.queryByLabelText(/montage/i)).not.toBeInTheDocument();
   });
 
-  it('montage dropdown has None, Average, and Median options', async () => {
-    await renderViewer();
-    const select = screen.getByLabelText(/montage/i);
-    const values = Array.from(select.options).map((o) => o.value);
-    expect(values).toContain('none');
-    expect(values).toContain('average');
-    expect(values).toContain('median');
-  });
-
-  it('reports the selected montage via onMontageChange instead of applying it itself', async () => {
-    const onMontageChange = vi.fn();
-    const user = userEvent.setup();
-    const provider = makeProvider();
-    render(
-      <EegViewer
-        provider={provider}
-        channelNames={provider.channelNames}
-        montage="none"
-        onMontageChange={onMontageChange}
-      />
-    );
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    await user.selectOptions(screen.getByLabelText(/montage/i), 'average');
-    expect(onMontageChange).toHaveBeenCalledWith('average');
-  });
-
-  // montage is a controlled prop (PatientView owns the state so it can force 'average'
-  // when ESI needs it and react when the user switches away) — tests simulate the parent
-  // feeding the updated value back down via rerender, same pattern as recordingType below.
-  it('re-references the channel plot data when the montage prop changes to average', async () => {
+  it('does not re-reference the channel plot data (the waveform re-references per row via the montage editor; topography/connectome/ESI always use the common-average reference instead)', async () => {
     const { default: UplotReactMock } = await import('uplot-react');
-    const provider = makeProvider();
-    const { rerender } = render(
-      <EegViewer provider={provider} channelNames={provider.channelNames} montage="none" />
-    );
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await renderViewer();
 
-    UplotReactMock.mockClear();
-    rerender(
-      <EegViewer provider={provider} channelNames={provider.channelNames} montage="average" />
-    );
-
-    // EEG1 raw values for the visible window are [1,2,3]; averaged → [-3,-3,-3]
+    // EEG1 raw values for the visible window are [1,2,3] — unchanged, since with no montage
+    // rows configured every row falls back to its raw channel (referenceMode: null).
     const eeg1Data = Array.from(UplotReactMock.mock.calls[0][0].data[1]);
-    expect(eeg1Data).toEqual([-3, -3, -3]);
+    expect(eeg1Data).toEqual([1, 2, 3]);
   });
 });
 
@@ -1504,28 +1459,15 @@ describe('eeg plot resize handle', () => {
   });
 });
 
-describe('EegViewer — topography uses the montaged buffer', () => {
-  it('topography voltages reflect the montage prop', async () => {
-    const provider = makeProvider();
-    const { rerender } = render(
-      <EegViewer provider={provider} channelNames={provider.channelNames} montage="none" />
-    );
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+describe('EegViewer — topography always uses the common-average reference', () => {
+  it('topography voltages are average-referenced, unconditionally (no montage prop to toggle)', async () => {
+    await renderViewer();
 
     // Open the topography viewer at the mocked click timepoint
     await enableTopoAndClick();
-    // matched channels are EEG1 (idx0) and EEG2 (idx1); raw values at the clicked
-    // sample are EEG1=4, EEG2=7
-    expect(screen.getByTestId('topo-voltages').textContent).toBe('4,7');
-
-    rerender(
-      <EegViewer provider={provider} channelNames={provider.channelNames} montage="average" />
-    );
-
-    // cross-channel mean at that sample = (4+7+10)/3 = 7 → EEG1: 4-7=-3, EEG2: 7-7=0
+    // matched channels are EEG1 (idx0) and EEG2 (idx1); raw values at the clicked sample
+    // are EEG1=4, EEG2=7. Cross-channel mean at that sample = (4+7+10)/3 = 7 (all three
+    // channels are non-bad by default) → EEG1: 4-7=-3, EEG2: 7-7=0.
     expect(screen.getByTestId('topo-voltages').textContent).toBe('-3,0');
   });
 });
@@ -1656,8 +1598,10 @@ describe('EegViewer — lifted electrode state callback', () => {
       capturedClickHandler?.();
     });
 
+    // Always common-average-referenced now (see the topography describe block above):
+    // cross-channel mean at this sample = (4+7+10)/3 = 7 → EEG1: 4-7=-3, EEG2: 7-7=0.
     expect(onElectrodeSnapshotChange).toHaveBeenLastCalledWith(
-      expect.objectContaining({ isIntracranial: false, voltages: [4, 7] })
+      expect.objectContaining({ isIntracranial: false, voltages: [-3, 0] })
     );
   });
 });
@@ -2174,6 +2118,61 @@ describe('EegViewer — bad channel filtering', () => {
       .find((call) => call[0].data?.[1]?.includes(7));
     expect(eeg3Call).toBeTruthy();
     expect(Array.from(eeg3Call[0].data[1])).toEqual([7, 8, 9]);
+  });
+});
+
+describe('EegViewer — bad channels excluded from topography/connectome/ESI', () => {
+  it("excludes a bad channel's electrode from the topography match count and voltages", async () => {
+    const provider = makeProvider();
+    render(<EegViewer provider={provider} channelNames={provider.channelNames} />);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Montage' }));
+    await userEvent.click(screen.getByTestId('channel-bad-EEG1'));
+    await userEvent.click(screen.getByRole('button', { name: 'OK' }));
+
+    await enableTopoAndClick();
+
+    // MOCK_ELC matches EEG1 and EEG2 (Cz has no corresponding channel) — with EEG1 bad,
+    // only EEG2's electrode remains, and the average reference now excludes EEG1 too:
+    // (7+10)/2 = 8.5 → EEG2: 7-8.5 = -1.5.
+    expect(screen.getByText('1 / 3 channels mapped')).toBeTruthy();
+    expect(screen.getByTestId('topo-voltages').textContent).toBe('-1.5');
+  });
+
+  it("zeroes a bad channel's voltage in the all-channel snapshot fed to ESI, without dropping it from the array", async () => {
+    const onChannelSnapshotChange = vi.fn();
+    const provider = makeProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        onChannelSnapshotChange={onChannelSnapshotChange}
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Montage' }));
+    await userEvent.click(screen.getByTestId('channel-bad-EEG1'));
+    await userEvent.click(screen.getByRole('button', { name: 'OK' }));
+
+    onChannelSnapshotChange.mockClear();
+    await act(async () => {
+      capturedClickHandler?.();
+    });
+
+    // EEG1 is bad → zeroed, not dropped (the array stays channelNames-aligned for ESI's
+    // inverse-solution model). Average reference excludes EEG1: (7+10)/2 = 8.5 →
+    // EEG2: 7-8.5=-1.5, EEG3: 10-8.5=1.5.
+    expect(onChannelSnapshotChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ voltages: [0, -1.5, 1.5] })
+    );
   });
 });
 

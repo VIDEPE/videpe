@@ -1,4 +1,4 @@
-﻿import { useRef, useState, useEffect, useMemo } from 'react';
+﻿import { useRef, useState, useEffect, useMemo, useCallback } from 'react';
 import UplotReact from 'uplot-react';
 import { cn } from '../utils/utils';
 import toast from 'react-hot-toast';
@@ -21,7 +21,11 @@ import {
   LocateFixed,
 } from 'lucide-react';
 import { minMaxDownsample } from '@/utils/downsample';
-import { buildMontageDisplayRows, deriveMontageRowSamples } from '@/utils/eegViewerUtils';
+import {
+  buildMontageDisplayRows,
+  deriveMontageRowSamples,
+  computeReferenceSeries,
+} from '@/utils/eegViewerUtils';
 import { useEegBuffer } from '@/loaders/eegBuffer';
 import { useContainerResize } from '@/hooks/useContainerResize';
 import { useEegPlotControls } from '@/hooks/useEegPlotControls';
@@ -29,7 +33,7 @@ import { useScrubberDrag } from '@/hooks/useScrubberDrag';
 import { useElectrodeMatching } from '@/hooks/useElectrodeMatching';
 import { useChannelSettings } from '@/hooks/useChannelSettings';
 import { useMontageChannels } from '@/hooks/useMontage';
-import { useTopographySnapshot } from '@/hooks/useTopographySnapshot';
+import { useTimepointSnapshot } from '@/hooks/useTimepointSnapshot';
 import { useRowResize } from '@/hooks/useRowResize';
 
 import { ELEC_POS_EXTENSIONS, INV_SOLUTIONS_EXTENSIONS } from '@/loaders/eegFormats';
@@ -114,8 +118,6 @@ export const EegViewer = ({
   onChannelSnapshotChange,
   recordingType = 'eeg', // 'eeg' | 'ieeg' — controlled by PatientView, which shows/drives the toggle in the panel title
   onRecordingTypeChange,
-  montage = 'none', // 'none' | 'average' | 'median' — controlled by PatientView, which forces 'average' when ESI needs it
-  onMontageChange,
   onTopoHasContentChange, // whether the topography NiiVue canvas currently has a mesh, so PatientView can enable/disable the cross-panel rotation link accordingly
   electrodeRenderEnabled, // boolean — owned by PatientView => whether electrode 3D render is enabled
   onElectrodeRenderChange, // handle for electrodeRender changes
@@ -235,20 +237,68 @@ export const EegViewer = ({
     [channelNames, channelSettings, montageChannels]
   );
 
-  // Montage application + the electrode/channel voltage snapshots at the clicked topography
-  // timepoint, lifted up to PatientView for the intracranial connectome and ESI.
-  const { montagedChannels, topoVoltages, topoVoltagesByChannel } = useTopographySnapshot({
+  // Shared average/median reference series (see the diagram atop eegViewerUtils.js) —
+  // computed once from the raw buffer's non-bad channels, then handed to both the montage
+  // row waveform below (deriveMontageRowSamples) and the topography/connectome/ESI
+  // snapshot (useTimepointSnapshot's always-average referencing) rather than each
+  // recomputing it. The filtered non-bad array itself is only a transient local — nothing
+  // but the small { average, median } result needs to survive between renders.
+  const referenceSeries = useMemo(() => {
+    if (!channels) return null;
+    const nonBadChannels = channels.filter(
+      (_, index) => !channelSettings[channelNames[index]]?.bad
+    );
+    return computeReferenceSeries(nonBadChannels);
+  }, [channels, channelSettings, channelNames]);
+
+  // Bad channels are hidden from topography/connectome/ESI entirely, not just excluded from
+  // the reference calc — a bad electrode's position never appears as a node to plot, and
+  // its own voltage never contributes to ESI's source-power computation. `matched` (from
+  // useElectrodeMatching) is kept raw for EegMontageEditor's Pos-match indicator below,
+  // which cares about position-file coverage independent of the current bad-channel flags.
+  const visibleMatched = useMemo(
+    () => matched.filter((m) => !channelSettings[m.name]?.bad),
+    [matched, channelSettings]
+  );
+
+  // Zeroes a bad channel's entry in an all-channel voltage array (channelNames-aligned) —
+  // used for the ESI/matrix snapshot below, where entries can't simply be dropped (their
+  // positions must stay aligned with channelNames/the inverse-solution model), only zeroed
+  // out so they stop contributing real-looking data. Memoized so the onChannelSnapshotChange
+  // wrapper below keeps a stable identity across renders — useTimepointSnapshot's effect
+  // deliberately fires only on topoTimepoint changes, not on every re-render.
+  const zeroBadChannelVoltages = useCallback(
+    (voltages) => voltages.map((v, index) => (channelSettings[channelNames[index]]?.bad ? 0 : v)),
+    [channelSettings, channelNames]
+  );
+
+  // Electrode/channel voltage snapshots at the clicked topography timepoint, lifted up to
+  // PatientView for the intracranial connectome and ESI — always common-average-referenced
+  // (see useTimepointSnapshot), independent of the montage row waveform above.
+  const handleChannelSnapshotChange = useCallback(
+    (snapshot) =>
+      onChannelSnapshotChange?.({
+        ...snapshot,
+        voltages: zeroBadChannelVoltages(snapshot.voltages),
+      }),
+    [onChannelSnapshotChange, zeroBadChannelVoltages]
+  );
+  const { topoVoltages, topoVoltagesByChannel: rawTopoVoltagesByChannel } = useTimepointSnapshot({
     channels,
-    montage,
+    referenceSeries,
     topoTimepoint,
     timestamps,
     fs: provider.fs,
-    matched,
+    matched: visibleMatched,
     channelNames,
     isIntracranial,
     onElectrodeSnapshotChange,
-    onChannelSnapshotChange,
+    onChannelSnapshotChange: handleChannelSnapshotChange,
   });
+  const topoVoltagesByChannel = useMemo(
+    () => zeroBadChannelVoltages(rawTopoVoltagesByChannel),
+    [rawTopoVoltagesByChannel, zeroBadChannelVoltages]
+  );
 
   // Reports whether EegTopoViewer's NiiVue canvas currently has a mesh loaded — mirrors
   // the guard in EegTopoViewer's mesh-loading effect (isIntracranial || !electrodes?.length
@@ -282,20 +332,19 @@ export const EegViewer = ({
   const displayedData = useMemo(() => {
     // If we don't have valid dimensions or data yet, return empty arrays for each row to avoid rendering broken plots
     const empty = displayRows.map(() => [[], []]);
-    if (plotWidth === 0 || !timestamps || timestamps.length === 0 || !montagedChannels)
-      return empty;
+    if (plotWidth === 0 || !timestamps || timestamps.length === 0 || !channels) return empty;
 
     const endTime = startTime + windowSize;
     return displayRows.map((row) =>
       minMaxDownsample(
         timestamps,
-        deriveMontageRowSamples(montagedChannels, row),
+        deriveMontageRowSamples(channels, row, referenceSeries),
         startTime,
         endTime,
         plotWidth
       )
     );
-  }, [timestamps, montagedChannels, displayRows, startTime, windowSize, plotWidth]);
+  }, [timestamps, channels, referenceSeries, displayRows, startTime, windowSize, plotWidth]);
 
   // Signal onViewReady once the first measurement lands and charts have rendered
   const onViewReadyCalledRef = useRef(false);
@@ -565,24 +614,11 @@ export const EegViewer = ({
                 </div>
               </div>
             </div>
-            {/* EEG Montage: Settings for chaning the EEG referencing */}
-            <div
-              className="flex flex-col items-center gap-1 pb-1"
-              title="Apply EEG reference montage"
-            >
+            {/* EEG Montage: opens the montage editor window for per-channel/row referencing */}
+            <div className="flex flex-col items-center gap-1 pb-1">
               <button type="button" className="button" onClick={() => setMontageVisible((v) => !v)}>
                 Montage
               </button>
-              <select
-                value={montage}
-                onChange={(e) => onMontageChange?.(e.target.value)}
-                aria-label="Apply EEG reference montage"
-                className="bg-background border border-border rounded px-1 py-0.5 text-xs text-heading cursor-pointer"
-              >
-                <option value="none">None</option>
-                <option value="average">Average</option>
-                <option value="median">Median</option>
-              </select>
             </div>
           </div>
 
@@ -600,7 +636,7 @@ export const EegViewer = ({
                 ref={containerRef}
                 className="absolute top-2 left-0 bottom-0 right-0 overflow-y-auto themed-scrollbar"
                 title={
-                  matched.length > 0 && topoEnabled && !topoVisible
+                  visibleMatched.length > 0 && topoEnabled && !topoVisible
                     ? 'Click any channel to view the EEG topography for that time point'
                     : undefined
                 }
@@ -992,7 +1028,7 @@ export const EegViewer = ({
         <EegTopoViewer
           nvRef={nvRef_eegtopo}
           electrodes={electrodes}
-          matched={matched}
+          matched={visibleMatched}
           voltages={topoVoltages}
           channelNames={channelNames}
           voltagesByChannel={topoVoltagesByChannel}
@@ -1002,7 +1038,6 @@ export const EegViewer = ({
           isStandardElectrodes={isStandardElectrodes}
           onElecPosFile={onElecPosFile}
           customFileName={customElecPosFileName}
-          montage={montage}
           isIntracranial={isIntracranial}
         />
       )}
@@ -1021,7 +1056,6 @@ export const EegViewer = ({
           isStandardElectrodes={isStandardElectrodes}
           onElecPosFile={onElecPosFile}
           customFileName={customElecPosFileName}
-          montage={montage}
           channelSettings={channelSettings}
           onApplyChannelSettings={applyChannelSettings}
           montageChannels={montageChannels}
