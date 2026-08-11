@@ -43,7 +43,7 @@ import { StatusLed } from '@/components/StatusLed';
 import { EegMontageEditor } from './EegMontageEditor';
 
 const EEG_LOADING_TOAST_ID = 'eeg-buffer-loading'; // fixed id so the loading/success toasts update in place rather than stacking
-const Y_AXIS_WIDTH = 60; // px for the y-axis area (channel name + tick space) — must match x-axis strip left padding
+const Y_AXIS_WIDTH = 80; // px for the y-axis area (channel name + tick space) — must match x-axis strip left padding
 const PLOT_RIGHT_PAD = 20; // px right padding — must match in both channel plots and x-axis strip so ticks align
 const OVERDRAW = 2; // canvas height multiplier — peaks bleed ±50% into adjacent lanes instead of clipping
 const X_AXIS_GRID_SPACE = 60; // Min px between vertical gridlines — shared by the channel plots and the x-axis =>uPlot uses it to pick an increment (1,2,5,10,etc)
@@ -226,7 +226,13 @@ export const EegViewer = ({
   // Montage row list (reference/color per displayed trace), edited via the same window's
   // montage-settings pane — kept separate from channelSettings since it's an array (can
   // later support arbitrary derived rows), not a per-channel record.
-  const { montageChannels, applyMontageChannels } = useMontageChannels(channelNames);
+  const {
+    montageChannels,
+    applyMontageChannels,
+    montageTemplate,
+    customMontageChannels,
+    applyMontageTemplate,
+  } = useMontageChannels(channelNames);
 
   // Rows to render in the channel-plot area: one per non-bad channel (in channelNames
   // order) when no montage rows are configured, or the configured montage rows once any
@@ -614,11 +620,25 @@ export const EegViewer = ({
                 </div>
               </div>
             </div>
-            {/* EEG Montage: opens the montage editor window for per-channel/row referencing */}
+            {/* EEG Montage: opens the montage editor window for per-channel/row referencing,
+                plus a quick template <select> below it that applies a preset straight to
+                the live montage (no Apply/OK gate) — None/Common Average Reference always
+                offered, "Custom" only once a hand-built montage exists to switch back to. */}
             <div className="flex flex-col items-center gap-1 pb-1">
               <button type="button" className="button" onClick={() => setMontageVisible((v) => !v)}>
                 Montage
               </button>
+              <select
+                className="text-xs w-20 border border-border rounded bg-surface"
+                data-testid="montage-template-select"
+                title="Montage template"
+                value={montageTemplate}
+                onChange={(e) => applyMontageTemplate(e.target.value)}
+              >
+                <option value="none">None</option>
+                <option value="average">CAR (Common Average Reference)</option>
+                {customMontageChannels && <option value="custom">Custom</option>}
+              </select>
             </div>
           </div>
 

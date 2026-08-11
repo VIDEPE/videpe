@@ -2253,6 +2253,55 @@ describe('EegViewer — montage row wiring', () => {
   });
 });
 
+describe('EegViewer — montage template dropdown', () => {
+  it('defaults to "None" with no "Custom" option, before any montage has been built', async () => {
+    await renderViewer();
+
+    expect(screen.getByTestId('montage-template-select')).toHaveValue('none');
+    const options = Array.from(screen.getByTestId('montage-template-select').options).map(
+      (option) => option.value
+    );
+    expect(options).toEqual(['none', 'average']);
+  });
+
+  it('replaces the waveform rows with one average-referenced row per channel when "Common Average Reference" is picked', async () => {
+    await renderViewer();
+
+    await userEvent.selectOptions(screen.getByTestId('montage-template-select'), 'average');
+
+    channelNames.forEach((name) => expect(screen.getByText(`${name} - Avg`)).toBeTruthy());
+  });
+
+  it('falls back to the plain channel list when "None" is picked after "Common Average Reference"', async () => {
+    await renderViewer();
+
+    await userEvent.selectOptions(screen.getByTestId('montage-template-select'), 'average');
+    await userEvent.selectOptions(screen.getByTestId('montage-template-select'), 'none');
+
+    channelNames.forEach((name) => expect(screen.getByText(name)).toBeTruthy());
+  });
+
+  it('adds a "Custom" option once a hand-built montage is applied via the editor, and restores it after switching to a template', async () => {
+    await renderViewer();
+    // change montage
+    await userEvent.click(screen.getByRole('button', { name: 'Montage' }));
+    await userEvent.click(screen.getByTestId('channel-select-EEG1'));
+    await userEvent.click(screen.getByTestId('add-selected-button'));
+    await userEvent.click(screen.getByRole('button', { name: 'OK' }));
+    // confirm change by reading channel names
+    expect(screen.getByText('EEG1')).toBeTruthy();
+    expect(screen.queryByText('EEG2')).toBeNull();
+    expect(screen.getByTestId('montage-template-select')).toHaveValue('custom');
+    // set to average and confirm channel names
+    await userEvent.selectOptions(screen.getByTestId('montage-template-select'), 'average');
+    channelNames.forEach((name) => expect(screen.getByText(`${name} - Avg`)).toBeTruthy());
+    // change back to previously set montage and confirm again it is restored
+    await userEvent.selectOptions(screen.getByTestId('montage-template-select'), 'custom');
+    expect(screen.getByText('EEG1')).toBeTruthy();
+    expect(screen.queryByText('EEG2')).toBeNull();
+  });
+});
+
 // ── Montage row color wiring ────────────────────────────────────────────────
 
 describe('EegViewer — montage row color wiring', () => {
