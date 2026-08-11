@@ -1,0 +1,133 @@
+<!DOCTYPE AnyWaveMontage>
+<Montage>
+	<Channel name="18">
+		<type>EEG</type>
+		<reference>226</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="226">
+		<type>EEG</type>
+		<reference>210</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="210">
+		<type>EEG</type>
+		<reference>169</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="169">
+		<type>EEG</type>
+		<reference>150</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="18">
+		<type>EEG</type>
+		<reference>2</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="2">
+		<type>EEG</type>
+		<reference>202</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="202">
+		<type>EEG</type>
+		<reference>170</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="170">
+		<type>EEG</type>
+		<reference>150</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="18">
+		<type>EEG</type>
+		<reference>224</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="224">
+		<type>EEG</type>
+		<reference>183</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="183">
+		<type>EEG</type>
+		<reference>153</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="153">
+		<type>EEG</type>
+		<reference>150</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="37">
+		<type>EEG</type>
+		<reference>36</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="36">
+		<type>EEG</type>
+		<reference>59</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="59">
+		<type>EEG</type>
+		<reference>87</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="87">
+		<type>EEG</type>
+		<reference>116</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="37">
+		<type>EEG</type>
+		<reference>47</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="47">
+		<type>EEG</type>
+		<reference>69</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="69">
+		<type>EEG</type>
+		<reference>96</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="96">
+		<type>EEG</type>
+		<reference>116</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="37">
+		<type>EEG</type>
+		<reference>252</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="252">
+		<type>EEG</type>
+		<reference>68</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="68">
+		<type>EEG</type>
+		<reference>106</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="106">
+		<type>EEG</type>
+		<reference>116</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="21">
+		<type>EEG</type>
+		<reference>VREF</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="VREF">
+		<type>EEG</type>
+		<reference>101</reference>
+		<color>black</color>
+	</Channel>
+</Montage>
