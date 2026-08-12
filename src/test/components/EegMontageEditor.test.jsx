@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import toast from 'react-hot-toast';
@@ -48,6 +48,17 @@ const defaultProps = {
 };
 
 describe('EegMontageEditor', () => {
+  // Apply/OK confirm the commit via window.confirm when the draft has bad/missing rows (see
+  // the "Apply/OK warns about bad or missing montage rows" describe block below) — default to
+  // confirming so every other test's Apply/OK clicks behave as before that warning existed.
+  beforeEach(() => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+  });
+
+  afterEach(() => {
+    window.confirm.mockRestore();
+  });
+
   it('renders without crashing', () => {
     const { container } = render(<EegMontageEditor {...defaultProps} />);
     expect(container.firstChild).toBeTruthy();
@@ -206,6 +217,106 @@ describe('EegMontageEditor', () => {
         ...CHANNEL_SETTINGS,
         FP1: { type: 'eeg', bad: true },
       });
+      expect(onClose).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe('Apply/OK warns about bad or missing montage rows', () => {
+    it('does not prompt when no montage row is bad or missing', async () => {
+      const onApplyMontageChannels = vi.fn();
+      const montageChannels = [{ id: 'row-1', channel: 'FP1', reference: null, color: null }];
+      const channelSettings = { FP1: { type: 'eeg', bad: false } };
+      render(
+        <EegMontageEditor
+          {...defaultProps}
+          channelSettings={channelSettings}
+          montageChannels={montageChannels}
+          onApplyMontageChannels={onApplyMontageChannels}
+        />
+      );
+      await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+      expect(window.confirm).not.toHaveBeenCalled();
+      expect(onApplyMontageChannels).toHaveBeenCalled();
+    });
+
+    it('prompts for confirmation when a montage row uses a bad channel', async () => {
+      // Default montageChannels includes a row for FP2, which CHANNEL_SETTINGS marks bad.
+      const onApplyMontageChannels = vi.fn();
+      render(
+        <EegMontageEditor {...defaultProps} onApplyMontageChannels={onApplyMontageChannels} />
+      );
+      await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+      expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('FP2'));
+      expect(onApplyMontageChannels).toHaveBeenCalled();
+    });
+
+    it('prompts for confirmation when a montage row references a missing channel', async () => {
+      const onApplyMontageChannels = vi.fn();
+      const montageChannels = [{ id: 'row-1', channel: 'FP1', reference: 'GHOST', color: null }];
+      render(
+        <EegMontageEditor
+          {...defaultProps}
+          montageChannels={montageChannels}
+          onApplyMontageChannels={onApplyMontageChannels}
+        />
+      );
+      await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+      expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('GHOST'));
+      expect(onApplyMontageChannels).toHaveBeenCalled();
+    });
+
+    it('prompts for confirmation when a montage row is itself a missing channel', async () => {
+      const onApplyMontageChannels = vi.fn();
+      const montageChannels = [{ id: 'row-1', channel: 'GHOST', reference: null, color: null }];
+      render(
+        <EegMontageEditor
+          {...defaultProps}
+          montageChannels={montageChannels}
+          onApplyMontageChannels={onApplyMontageChannels}
+        />
+      );
+      await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+      expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('GHOST'));
+      expect(onApplyMontageChannels).toHaveBeenCalled();
+    });
+
+    it('does not commit when the confirmation is cancelled', async () => {
+      window.confirm.mockReturnValue(false);
+      const onApplyMontageChannels = vi.fn();
+      const onApplyChannelSettings = vi.fn();
+      render(
+        <EegMontageEditor
+          {...defaultProps}
+          onApplyMontageChannels={onApplyMontageChannels}
+          onApplyChannelSettings={onApplyChannelSettings}
+        />
+      );
+      await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+      expect(onApplyMontageChannels).not.toHaveBeenCalled();
+      expect(onApplyChannelSettings).not.toHaveBeenCalled();
+    });
+
+    it('does not close the window when OK is cancelled at the confirmation', async () => {
+      window.confirm.mockReturnValue(false);
+      const onClose = vi.fn();
+      const onApplyMontageChannels = vi.fn();
+      render(
+        <EegMontageEditor
+          {...defaultProps}
+          onClose={onClose}
+          onApplyMontageChannels={onApplyMontageChannels}
+        />
+      );
+      await userEvent.click(screen.getByRole('button', { name: 'OK' }));
+      expect(onClose).not.toHaveBeenCalled();
+      expect(onApplyMontageChannels).not.toHaveBeenCalled();
+    });
+
+    it('closes the window when OK is confirmed', async () => {
+      const onClose = vi.fn();
+      render(<EegMontageEditor {...defaultProps} onClose={onClose} />);
+      await userEvent.click(screen.getByRole('button', { name: 'OK' }));
+      expect(window.confirm).toHaveBeenCalled();
       expect(onClose).toHaveBeenCalledOnce();
     });
   });

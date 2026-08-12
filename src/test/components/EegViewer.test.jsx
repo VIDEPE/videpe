@@ -104,6 +104,13 @@ beforeEach(() => {
     disconnect() {}
   };
   global.fetch = vi.fn().mockResolvedValue({ text: () => Promise.resolve(MOCK_ELC) });
+  // EegMontageEditor's Apply/OK confirm via window.confirm when the draft has bad/missing
+  // rows — default to confirming so montage tests that mark a channel bad still commit.
+  vi.spyOn(window, 'confirm').mockReturnValue(true);
+});
+
+afterEach(() => {
+  window.confirm.mockRestore();
 });
 
 const INITIAL_Y_SCALE = 0.15; // must match the yScale useState default in EegViewer
