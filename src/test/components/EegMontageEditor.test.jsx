@@ -457,6 +457,79 @@ describe('EegMontageEditor', () => {
     });
   });
 
+  describe('Set all as [color]', () => {
+    it('defaults the bulk color select to Default', () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      expect(screen.getByTestId('bulk-color-select')).toHaveValue('');
+    });
+
+    it('offers Default followed by the preset colors, in that order', () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      const options = Array.from(screen.getByTestId('bulk-color-select').options).map(
+        (option) => option.value
+      );
+      expect(options).toEqual(['', 'red', 'blue', 'green', 'yellow', 'cyan', 'magenta']);
+    });
+
+    it("tints each preset option's text to match the color it applies", () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      const options = Array.from(screen.getByTestId('bulk-color-select').options);
+      const byValue = Object.fromEntries(options.map((option) => [option.value, option]));
+
+      ['red', 'blue', 'green', 'yellow', 'cyan', 'magenta'].forEach((color) =>
+        expect(byValue[color].style.color).toBe(color)
+      );
+    });
+
+    it('sets every montage row to "red" when picked', async () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      await userEvent.selectOptions(screen.getByTestId('bulk-color-select'), 'red');
+      await userEvent.click(screen.getByTestId('bulk-color-apply-button'));
+
+      // MONTAGE_CHANNELS seeds id === channel, so these testids double as an id check.
+      CHANNEL_NAMES.forEach((name) =>
+        expect(screen.getByTestId(`color-${name}`)).toHaveValue('red')
+      );
+    });
+
+    it('sets every montage row to "cyan" when picked', async () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      await userEvent.selectOptions(screen.getByTestId('bulk-color-select'), 'cyan');
+      await userEvent.click(screen.getByTestId('bulk-color-apply-button'));
+
+      CHANNEL_NAMES.forEach((name) =>
+        expect(screen.getByTestId(`color-${name}`)).toHaveValue('cyan')
+      );
+    });
+
+    it('clears every row back to Default when picked after a prior bulk set', async () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      await userEvent.selectOptions(screen.getByTestId('bulk-color-select'), 'red');
+      await userEvent.click(screen.getByTestId('bulk-color-apply-button'));
+
+      await userEvent.selectOptions(screen.getByTestId('bulk-color-select'), '');
+      await userEvent.click(screen.getByTestId('bulk-color-apply-button'));
+
+      CHANNEL_NAMES.forEach((name) => expect(screen.getByTestId(`color-${name}`)).toHaveValue(''));
+    });
+
+    it("leaves each row's reference untouched", async () => {
+      const montageChannels = CHANNEL_NAMES.map((name) => ({
+        id: name,
+        channel: name,
+        reference: 'average',
+        color: null,
+      }));
+      render(<EegMontageEditor {...defaultProps} montageChannels={montageChannels} />);
+      await userEvent.selectOptions(screen.getByTestId('bulk-color-select'), 'blue');
+      await userEvent.click(screen.getByTestId('bulk-color-apply-button'));
+
+      CHANNEL_NAMES.forEach((name) =>
+        expect(screen.getByTestId(`reference-${name}`)).toHaveValue('average')
+      );
+    });
+  });
+
   describe('montage settings pane', () => {
     it('renders a reference/color row for every montageChannels entry', () => {
       render(<EegMontageEditor {...defaultProps} />);
@@ -1294,6 +1367,18 @@ describe('EegMontageEditor', () => {
       expect(select).toHaveValue('darkblue');
       const injectedOption = Array.from(select.options).find((o) => o.value === 'darkblue');
       expect(injectedOption).toBeTruthy();
+      expect(injectedOption.style.color).toBe('darkblue');
+    });
+
+    it("tints each preset option's text to match the color it applies, in a row's Color select", () => {
+      const montageChannels = [{ id: 'FP1', channel: 'FP1', reference: null, color: null }];
+      render(<EegMontageEditor {...defaultProps} montageChannels={montageChannels} />);
+      const options = Array.from(screen.getByTestId('color-FP1').options);
+      const byValue = Object.fromEntries(options.map((option) => [option.value, option]));
+
+      ['red', 'blue', 'green', 'yellow', 'cyan', 'magenta'].forEach((color) =>
+        expect(byValue[color].style.color).toBe(color)
+      );
     });
   });
 });

@@ -388,6 +388,11 @@ export function EegMontageEditor({
     draftMontageChannels.forEach((row) => setDraftMontageRowReference(row.id, bulkReference));
   };
 
+  const [bulkColor, setBulkColor] = useState('');
+  const handleSetAllColor = () => {
+    draftMontageChannels.forEach((row) => setDraftMontageRowColor(row.id, bulkColor || null));
+  };
+
   // ─── Refs ───────────────────────────────────────────────────────────────────
   const fileInputRef = useRef(null);
   const dragOffset = useRef(null);
@@ -526,6 +531,16 @@ export function EegMontageEditor({
     ],
     [channelNames]
   );
+
+  // Shared <option> list for the bulk "Set all Colors" select — the per-row Color select
+  // below builds its own list so it can also inject the row's current non-preset color.
+  // Each option's text is tinted to match the color it applies, so the picked shade is
+  // visible before the row is committed.
+  const colorOptions = PRESET_COLORS.map((color) => (
+    <option key={color} value={color} style={{ color }}>
+      {color[0].toUpperCase() + color.slice(1)}
+    </option>
+  ));
 
   // Human-readable name of the electrode position source, for the Pos tooltip text below.
   const electrodePositionSourceLabel = isStandardElectrodes
@@ -901,16 +916,11 @@ export function EegMontageEditor({
                       presets below — inject it as an extra option so the select shows the
                       row's actual color instead of falling back to blank/unselected. */}
                   {row.color && !PRESET_COLORS.includes(row.color) && (
-                    <option value={row.color}>
+                    <option value={row.color} style={{ color: row.color }}>
                       {row.color[0].toUpperCase() + row.color.slice(1)}
                     </option>
                   )}
-                  <option value="red">Red</option>
-                  <option value="blue">Blue</option>
-                  <option value="green">Green</option>
-                  <option value="yellow">Yellow</option>
-                  <option value="cyan">Cyan</option>
-                  <option value="magenta">Magenta</option>
+                  {colorOptions}
                 </select>
                 {/* Remove row */}
                 <button
@@ -993,6 +1003,26 @@ export function EegMontageEditor({
                 onChange={(e) => setBulkReference(e.target.value)}
               >
                 {referenceOptions}
+              </select>
+            </div>
+
+            {/* Set all Color group */}
+            <div className="flex flex-col gap-2">
+              <button
+                className="button"
+                data-testid="bulk-color-apply-button"
+                onClick={handleSetAllColor}
+              >
+                Set all as
+              </button>
+              <select
+                className="text-xs border border-border rounded bg-surface"
+                data-testid="bulk-color-select"
+                value={bulkColor}
+                onChange={(e) => setBulkColor(e.target.value)}
+              >
+                <option value="">Default</option>
+                {colorOptions}
               </select>
             </div>
 
