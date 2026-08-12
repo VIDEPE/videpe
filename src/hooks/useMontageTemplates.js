@@ -15,7 +15,8 @@ export function useMontageTemplates() {
       try {
         const listText = await fetch(TEMPLATE_MONTAGES_PATH).then((response) => response.text());
         sources = JSON.parse(listText);
-      } catch {
+      } catch (err) { 
+        console.error('Failed to load montage template list', err);
         return; // TEMPLATE_MONTAGE_PATH could not be read, montageTemplate stays at initial []
       }
 
