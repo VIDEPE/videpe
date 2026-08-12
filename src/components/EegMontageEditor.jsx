@@ -310,14 +310,61 @@ export function EegMontageEditor({
     [draftChannelSettings, channelSettings, draftMontageChannels, montageChannels]
   );
 
+  // Same bad/missing checks the row list uses for its own styling (see isChannelBad etc. in
+  // montageSelectionPane below) — reused here to warn before committing a montage that can't
+  // actually be displayed correctly.
+  const getRowIssues = useCallback(
+    (row) => {
+      const issues = [];
+      const isChannelMissing = !channelNames.includes(row.channel);
+      if (isChannelMissing) issues.push(`'${row.channel}' is not a channel in this recording`);
+      else if (draftChannelSettings[row.channel]?.bad)
+        issues.push(`'${row.channel}' is marked as a bad channel`);
+      const isReferenceMissing =
+        Boolean(row.reference) &&
+        row.reference !== 'average' &&
+        row.reference !== 'median' &&
+        !channelNames.includes(row.reference);
+      if (isReferenceMissing)
+        issues.push(`its reference '${row.reference}' is not a channel in this recording`);
+      else if (row.reference && draftChannelSettings[row.reference]?.bad)
+        issues.push(`its reference '${row.reference}' is marked as a bad channel`);
+      return issues;
+    },
+    [channelNames, draftChannelSettings]
+  );
+
+  // Apply/OK confirms with the user before committing a draft where a row's channel or
+  // reference is bad or missing — those rows can't be displayed correctly, but the user may
+  // still want to proceed (e.g. a known-noisy channel they'll exclude from display later).
+  const okToApply = useCallback(() => {
+    const problems = draftMontageChannels
+      .map((row) => ({ row, issues: getRowIssues(row) }))
+      .filter(({ issues }) => issues.length > 0);
+    if (problems.length === 0) return true;
+    const summary = problems
+      .map(({ row, issues }) => `- ${row.channel}: ${issues.join(', ')}`)
+      .join('\n');
+    return window.confirm(
+      `${problems.length} montage ${problems.length > 1 ? 'rows have' : 'row has'} a bad or missing channel/reference:\n\n${summary}\n\nApply anyway?`
+    );
+  }, [draftMontageChannels, getRowIssues]);
+
   const handleApply = useCallback(() => {
+    if (!okToApply()) return false;
     onApplyChannelSettings(draftChannelSettings);
     onApplyMontageChannels(draftMontageChannels);
-  }, [draftChannelSettings, onApplyChannelSettings, draftMontageChannels, onApplyMontageChannels]);
+    return true;
+  }, [
+    okToApply,
+    draftChannelSettings,
+    onApplyChannelSettings,
+    draftMontageChannels,
+    onApplyMontageChannels,
+  ]);
 
   const handleOk = useCallback(() => {
-    handleApply();
-    onClose();
+    if (handleApply()) onClose();
   }, [handleApply, onClose]);
 
   // isAlLBad tracks if all channels are set to bad and flips the 'Check all Bad/Good' settings button accordingly
