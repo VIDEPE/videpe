@@ -666,8 +666,8 @@ export const EegViewer = ({
                 onChange={(e) => applyTemplateSelection(e.target.value)}
               >
                 <option value="none">None</option>
-                <option value="average">CAR (Common Average Reference)</option>
                 {customMontageChannels && <option value="custom">Custom</option>}
+                <option value="average">CAR (Common Average Reference)</option>
                 {montageTemplates.map((template) => (
                   <option key={template.path} value={template.path}>
                     {template.name}
