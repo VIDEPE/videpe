@@ -22,6 +22,22 @@ describe('parseAnyWaveMontage', () => {
     expect(rows.every((r) => channelTypes[r.channel] === 'eeg')).toBe(true);
   });
 
+  it.each(['black', 'white', 'Black', 'WHITE'])(
+    'treats <color>%s</color> as the theme default (null), not a literal color',
+    (colorText) => {
+      const xml = `<!DOCTYPE AnyWaveMontage>
+<Montage>
+	<Channel name="F3">
+		<type>EEG</type>
+		<reference></reference>
+		<color>${colorText}</color>
+	</Channel>
+</Montage>`;
+      const { rows } = parseAnyWaveMontage(xml);
+      expect(rows[0].color).toBeNull();
+    }
+  );
+
   it('reads a non-empty <reference> as a bipolar reference', () => {
     const xml = `<!DOCTYPE AnyWaveMontage>
 <Montage>
