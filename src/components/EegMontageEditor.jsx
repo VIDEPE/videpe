@@ -510,8 +510,11 @@ export function EegMontageEditor({
   );
 
   // Shared <option> list for every montage row's Reference select — every row offers the
-  // same full n/a, average, med channel list, so this is built once per channelNames change instead of once
-  // per row per render (was O(rows × channels) <option> elements every render).
+  // same full n/a, average, med channel list, so this is built once per channelNames/bad-status
+  // change instead of once per row per render (was O(rows × channels) <option> elements every
+  // render). Each bad channel's own <option> is tinted text-alert directly — coloring lived on
+  // the <select> itself, which cascaded that color onto every option in the dropdown, not just
+  // the bad one.
   const referenceOptions = useMemo(
     () => [
       <option key="none" value="">
@@ -524,12 +527,16 @@ export function EegMontageEditor({
         Median
       </option>,
       ...channelNames.map((refName) => (
-        <option key={refName} value={refName}>
+        <option
+          key={refName}
+          value={refName}
+          className={draftChannelSettings[refName]?.bad ? 'text-alert' : undefined}
+        >
           {refName}
         </option>
       )),
     ],
-    [channelNames]
+    [channelNames, draftChannelSettings]
   );
 
   // Shared <option> list for the bulk "Set all Colors" select — the per-row Color select
@@ -875,13 +882,13 @@ export function EegMontageEditor({
                     (only reachable via a loaded file) gets its own injected option so it
                     displays as selected instead of falling back to blank "— n/a —". Only
                     disabled when the row's own channel is missing (see isChannelMissing
-                    above) — a missing reference alone is fixable by picking another one. */}
+                    above) — a missing reference alone is fixable by picking another one.
+                    Bad/missing coloring lives on the individual <option> elements below (not
+                    this <select>'s own className) — a color class here would cascade onto
+                    every option in the dropdown instead of just the one that's actually bad
+                    or missing. */}
                 <select
-                  className={cn(
-                    'w-16 text-xs border border-border rounded bg-surface cursor-default',
-                    isReferenceBad && 'text-alert',
-                    isReferenceMissing && 'text-red-500'
-                  )}
+                  className="w-16 text-xs border border-border rounded bg-surface cursor-default"
                   title={
                     isReferenceMissing
                       ? 'Reference channel not found in this recording'
@@ -895,7 +902,9 @@ export function EegMontageEditor({
                   onChange={(e) => setDraftMontageRowReference(row.id, e.target.value)}
                 >
                   {isReferenceMissing && (
-                    <option value={row.reference}>{row.reference} (missing)</option>
+                    <option value={row.reference} className="text-red-500">
+                      {row.reference} (missing)
+                    </option>
                   )}
                   {referenceOptions}
                 </select>
