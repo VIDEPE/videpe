@@ -599,20 +599,30 @@ describe('EegMontageEditor', () => {
       expect(screen.getByTestId('reference-FP2').className).not.toContain('text-alert');
     });
 
-    it('colors only the reference select text-alert when the reference channel is bad, not the channel name', async () => {
+    it("colors only the bad channel's own <option> text-alert in the reference dropdown, not the select or the other options", async () => {
       render(<EegMontageEditor {...defaultProps} />);
-      // FP1 isn't bad, but referencing bad FP2 should flag only the reference select.
+      // FP1 isn't bad, but referencing bad FP2 should flag only FP2's own <option>.
       await userEvent.selectOptions(screen.getByTestId('reference-FP1'), 'FP2');
-      expect(screen.getByTestId('reference-FP1').className).toContain('text-alert');
       expect(screen.getByTestId('montage-channel-FP1').className).not.toContain('text-alert');
+      // The <select> itself must stay uncolored — a class here would cascade onto every
+      // <option> in the dropdown, not just the bad one (the bug this test guards against).
+      expect(screen.getByTestId('reference-FP1').className).not.toContain('text-alert');
+      const options = Array.from(screen.getByTestId('reference-FP1').options);
+      const fp2Option = options.find((o) => o.value === 'FP2');
+      const fp3Option = options.find((o) => o.value === 'FP3');
+      expect(fp2Option.className).toContain('text-alert');
+      expect(fp3Option.className).not.toContain('text-alert');
     });
 
-    it('colors both the channel name and reference select text-alert when both are bad', async () => {
+    it('colors both the channel name and its bad reference option text-alert when both are bad', async () => {
       render(<EegMontageEditor {...defaultProps} />);
       await userEvent.click(screen.getByTestId('channel-bad-FP1'));
       await userEvent.selectOptions(screen.getByTestId('reference-FP1'), 'FP2');
       expect(screen.getByTestId('montage-channel-FP1').className).toContain('text-alert');
-      expect(screen.getByTestId('reference-FP1').className).toContain('text-alert');
+      const fp2Option = Array.from(screen.getByTestId('reference-FP1').options).find(
+        (o) => o.value === 'FP2'
+      );
+      expect(fp2Option.className).toContain('text-alert');
     });
   });
 
@@ -1220,10 +1230,15 @@ describe('EegMontageEditor', () => {
       const referenceSelect = screen.getByTestId('reference-row-1');
       expect(referenceSelect).not.toBeDisabled();
       expect(referenceSelect).toHaveValue('GHOST');
-      expect(referenceSelect.className).toContain('text-red-500');
+      // The <select> itself stays uncolored — only the injected "missing" <option> turns
+      // red, so the rest of the dropdown's channel names aren't tinted along with it.
+      expect(referenceSelect.className).not.toContain('text-red-500');
       expect(referenceSelect.title).toBe('Reference channel not found in this recording');
       const injectedOption = Array.from(referenceSelect.options).find((o) => o.value === 'GHOST');
       expect(injectedOption.textContent).toBe('GHOST (missing)');
+      expect(injectedOption.className).toContain('text-red-500');
+      const normalOption = Array.from(referenceSelect.options).find((o) => o.value === 'FP2');
+      expect(normalOption.className).not.toContain('text-red-500');
       expect(screen.getByTestId('color-row-1')).not.toBeDisabled();
     });
 
