@@ -992,6 +992,7 @@ export function EegMontageEditor({
               <button
                 className="button"
                 data-testid="bulk-reference-apply-button"
+                disabled={draftMontageChannels.length === 0}
                 onClick={handleSetAllReference}
               >
                 Set all as
@@ -999,6 +1000,7 @@ export function EegMontageEditor({
               <select
                 className="text-xs border border-border rounded bg-surface"
                 data-testid="bulk-reference-select"
+                disabled={draftMontageChannels.length === 0}
                 value={bulkReference}
                 onChange={(e) => setBulkReference(e.target.value)}
               >
@@ -1011,6 +1013,7 @@ export function EegMontageEditor({
               <button
                 className="button"
                 data-testid="bulk-color-apply-button"
+                disabled={draftMontageChannels.length === 0}
                 onClick={handleSetAllColor}
               >
                 Set all as
@@ -1018,6 +1021,7 @@ export function EegMontageEditor({
               <select
                 className="text-xs border border-border rounded bg-surface"
                 data-testid="bulk-color-select"
+                disabled={draftMontageChannels.length === 0}
                 value={bulkColor}
                 onChange={(e) => setBulkColor(e.target.value)}
               >
