@@ -224,6 +224,12 @@ export const EegViewer = ({
     isIntracranial ? 'seeg' : 'eeg'
   );
 
+  // File-backed montage templates (public/montage_files/TEMPLATE_MONTAGES.json), listed
+  // in the sidebar quick-select alongside the None/CAR/Custom presets below — fetched here
+  // (rather than where it's applied, further down) so useMontageChannels can recognize a
+  // live montage that exactly matches one of them.
+  const montageTemplates = useMontageTemplates();
+
   // Montage row list (reference/color per displayed trace), edited via the same window's
   // montage-settings pane — kept separate from channelSettings since it's an array (can
   // later support arbitrary derived rows), not a per-channel record.
@@ -233,7 +239,7 @@ export const EegViewer = ({
     montageTemplate,
     customMontageChannels,
     applyMontageTemplate,
-  } = useMontageChannels(channelNames);
+  } = useMontageChannels(channelNames, montageTemplates);
 
   // Rows to render in the channel-plot area: one per non-bad channel (in channelNames
   // order) when no montage rows are configured, or the configured montage rows once any
@@ -279,11 +285,23 @@ export const EegViewer = ({
     [channelSettings, channelNames]
   );
 
-  // File-backed montage templates (public/montage_files/TEMPLATE_MONTAGES.json), listed
-  // in the same sidebar quick-select alongside the None/CAR/Custom presets above.
-  const montageTemplates = useMontageTemplates();
-
   const applyMontageFileTemplate = (template) => {
+    // Warn about any channel/reference the template names that this recording doesn't
+    // have — those rows still get applied to montageChannels state below (so the dropdown
+    // keeps reflecting "this is the template, as loaded"), but buildMontageDisplayRows
+    // silently drops them from the waveform, which otherwise looks like a mystery
+    // empty/partial montage.
+    const missingNames = new Set();
+    for (const row of template.rows) {
+      if (!channelNames.includes(row.channel)) missingNames.add(row.channel);
+      if (row.reference && !channelNames.includes(row.reference)) missingNames.add(row.reference);
+    }
+    if (missingNames.size > 0) {
+      toast.error(
+        `"${template.name}" applied, but this recording is missing ${missingNames.size} channel(s) it references (${[...missingNames].join(', ')}) — those rows won't be shown.`
+      );
+    }
+
     // Overwrite the current montage rows with the one from the template
     applyMontageChannels(
       template.rows.map((row) => ({
