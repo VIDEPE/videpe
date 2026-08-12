@@ -392,6 +392,12 @@ describe('EegMontageEditor', () => {
   });
 
   describe('Set all as [reference]', () => {
+    it('disables the bulk reference button and select when there are no montage rows', () => {
+      render(<EegMontageEditor {...defaultProps} montageChannels={[]} />);
+      expect(screen.getByTestId('bulk-reference-apply-button')).toBeDisabled();
+      expect(screen.getByTestId('bulk-reference-select')).toBeDisabled();
+    });
+
     it('defaults the bulk reference select to n/a', () => {
       render(<EegMontageEditor {...defaultProps} />);
       expect(screen.getByTestId('bulk-reference-select')).toHaveValue('');
@@ -458,6 +464,12 @@ describe('EegMontageEditor', () => {
   });
 
   describe('Set all as [color]', () => {
+    it('disables the bulk color button and select when there are no montage rows', () => {
+      render(<EegMontageEditor {...defaultProps} montageChannels={[]} />);
+      expect(screen.getByTestId('bulk-color-apply-button')).toBeDisabled();
+      expect(screen.getByTestId('bulk-color-select')).toBeDisabled();
+    });
+
     it('defaults the bulk color select to Default', () => {
       render(<EegMontageEditor {...defaultProps} />);
       expect(screen.getByTestId('bulk-color-select')).toHaveValue('');
