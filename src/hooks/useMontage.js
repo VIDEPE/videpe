@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 
-// Helper function to create order-independent identity keys comparing montage rows to montage template rows. 
+// Helper function to create order-independent identity keys comparing montage rows to montage template rows.
 function rowKey(row) {
   return `${row.channel} ${row.reference ?? ''} ${row.color ?? ''}`;
 }
 
-// True when `rows` is exactly the same multiset (allows duplicates) of 
+// True when `rows` is exactly the same multiset (allows duplicates) of
 // {channel, reference, color} as `templateRows`
 function rowsMatchTemplate(rows, templateRows) {
   if (rows.length !== templateRows.length) return false;
@@ -16,13 +16,13 @@ function rowsMatchTemplate(rows, templateRows) {
 
 // Identifies which built-in or file-backed montage template (if any) `rows` currently
 // matches, so the sidebar's template <select> (see EegViewer.jsx) can reflect the live
-// montage's actual state instead of drifting out of sync with it. 
+// montage's actual state instead of drifting out of sync with it.
 // - 'none' = no rows (plot one row per non-bad channel with no reference, see buildMontageDisplayRows);
-// - 'average' = every channel has exactly one row referenced to 'average' 
+// - 'average' = every channel has exactly one row referenced to 'average'
 //    (color is ignored — recoloring a CAR montage shouldn't demote it to Custom);
 // - template file `path` = means `rows` matches template's rows (see rowsMatchTemplate —
 // this holds even when some of those rows name channels absent from the current recording,
-// since that's still "the template, as loaded", not a hand edit); 
+// since that's still "the template, as loaded", not a hand edit);
 // - anything else = null, i.e. a hand-built montage that doesn't match any known preset.
 function getMontageTemplateMatch(rows, channelNames, fileTemplates) {
   if (rows.length === 0) return 'none';

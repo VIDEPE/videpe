@@ -297,9 +297,21 @@ export const EegViewer = ({
       if (row.reference && !channelNames.includes(row.reference)) missingNames.add(row.reference);
     }
     if (missingNames.size > 0) {
-      toast.error(
-        `"${template.name}" applied, but this recording is missing ${missingNames.size} channel(s) it references (${[...missingNames].join(', ')}) — those rows won't be shown.`
-      );
+      if (missingNames.size < 20) {
+        toast(
+          `"${template.name}" applied.\nRecording is missing ${missingNames.size} ${missingNames.size > 1 ? 'channels' : 'channel'}.\nIt references: (${[...missingNames].join(', ')}) — these rows won't be shown.`,
+          {
+            icon: '⚠️',
+          }
+        );
+      } else {
+        toast(
+          `"${template.name}" applied.\nRecording is missing ${missingNames.size} channels.\nThese rows won't be shown.`,
+          {
+            icon: '⚠️',
+          }
+        );
+      }
     }
 
     // Overwrite the current montage rows with the one from the template

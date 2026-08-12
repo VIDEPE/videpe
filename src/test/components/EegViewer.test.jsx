@@ -2374,7 +2374,7 @@ describe('EegViewer — file-backed montage templates', () => {
 
   it('warns via toast when a template names a channel not present in this recording, and still applies the rows that do match', async () => {
     const { default: toast } = await import('react-hot-toast');
-    toast.error.mockClear();
+    toast.mockClear();
     global.fetch = vi.fn((url) => {
       if (url === 'montage_files/TEMPLATE_MONTAGES.json')
         return Promise.resolve({ text: () => Promise.resolve(JSON.stringify(TEMPLATE_LIST)) });
@@ -2401,7 +2401,10 @@ describe('EegViewer — file-backed montage templates', () => {
       'montage_files/test.mtg'
     );
 
-    expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('EEG9'));
+    expect(toast).toHaveBeenCalledWith(
+      expect.stringContaining('EEG9'),
+      expect.objectContaining({ icon: '⚠️' })
+    );
     // the row itself is dropped from the display since its reference channel doesn't exist
     expect(screen.queryByText('EEG1 - EEG9')).toBeNull();
   });
