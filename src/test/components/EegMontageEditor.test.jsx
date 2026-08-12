@@ -471,6 +471,16 @@ describe('EegMontageEditor', () => {
       expect(options).toEqual(['', 'red', 'blue', 'green', 'yellow', 'cyan', 'magenta']);
     });
 
+    it("tints each preset option's text to match the color it applies", () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      const options = Array.from(screen.getByTestId('bulk-color-select').options);
+      const byValue = Object.fromEntries(options.map((option) => [option.value, option]));
+
+      ['red', 'blue', 'green', 'yellow', 'cyan', 'magenta'].forEach((color) =>
+        expect(byValue[color].style.color).toBe(color)
+      );
+    });
+
     it('sets every montage row to "red" when picked', async () => {
       render(<EegMontageEditor {...defaultProps} />);
       await userEvent.selectOptions(screen.getByTestId('bulk-color-select'), 'red');
@@ -1357,6 +1367,18 @@ describe('EegMontageEditor', () => {
       expect(select).toHaveValue('darkblue');
       const injectedOption = Array.from(select.options).find((o) => o.value === 'darkblue');
       expect(injectedOption).toBeTruthy();
+      expect(injectedOption.style.color).toBe('darkblue');
+    });
+
+    it("tints each preset option's text to match the color it applies, in a row's Color select", () => {
+      const montageChannels = [{ id: 'FP1', channel: 'FP1', reference: null, color: null }];
+      render(<EegMontageEditor {...defaultProps} montageChannels={montageChannels} />);
+      const options = Array.from(screen.getByTestId('color-FP1').options);
+      const byValue = Object.fromEntries(options.map((option) => [option.value, option]));
+
+      ['red', 'blue', 'green', 'yellow', 'cyan', 'magenta'].forEach((color) =>
+        expect(byValue[color].style.color).toBe(color)
+      );
     });
   });
 });

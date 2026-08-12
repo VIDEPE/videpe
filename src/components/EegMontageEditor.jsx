@@ -534,8 +534,10 @@ export function EegMontageEditor({
 
   // Shared <option> list for the bulk "Set all Colors" select — the per-row Color select
   // below builds its own list so it can also inject the row's current non-preset color.
+  // Each option's text is tinted to match the color it applies, so the picked shade is
+  // visible before the row is committed.
   const colorOptions = PRESET_COLORS.map((color) => (
-    <option key={color} value={color}>
+    <option key={color} value={color} style={{ color }}>
       {color[0].toUpperCase() + color.slice(1)}
     </option>
   ));
@@ -914,7 +916,7 @@ export function EegMontageEditor({
                       presets below — inject it as an extra option so the select shows the
                       row's actual color instead of falling back to blank/unselected. */}
                   {row.color && !PRESET_COLORS.includes(row.color) && (
-                    <option value={row.color}>
+                    <option value={row.color} style={{ color: row.color }}>
                       {row.color[0].toUpperCase() + row.color.slice(1)}
                     </option>
                   )}
