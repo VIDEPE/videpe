@@ -2359,6 +2359,55 @@ describe('EegViewer — file-backed montage templates', () => {
     expect(screen.getByTestId('channel-type-EEG1')).toHaveValue('seeg');
     expect(screen.getByTestId('channel-type-EEG2')).toHaveValue('eeg');
   });
+
+  it('keeps showing the template selected once applied, since the loaded rows do exactly match it', async () => {
+    await renderViewer();
+    await waitFor(() => expect(optionValues()).toContain('montage_files/test.mtg'));
+
+    await userEvent.selectOptions(
+      screen.getByTestId('montage-template-select'),
+      'montage_files/test.mtg'
+    );
+
+    expect(screen.getByTestId('montage-template-select')).toHaveValue('montage_files/test.mtg');
+  });
+
+  it('warns via toast when a template names a channel not present in this recording, and still applies the rows that do match', async () => {
+    const { default: toast } = await import('react-hot-toast');
+    toast.mockClear();
+    global.fetch = vi.fn((url) => {
+      if (url === 'montage_files/TEMPLATE_MONTAGES.json')
+        return Promise.resolve({ text: () => Promise.resolve(JSON.stringify(TEMPLATE_LIST)) });
+      if (url === 'montage_files/test.mtg')
+        return Promise.resolve({
+          text: () =>
+            Promise.resolve(`<!DOCTYPE AnyWaveMontage>
+<Montage>
+	<Channel name="EEG1">
+		<type>EEG</type>
+		<reference>EEG9</reference>
+		<color></color>
+	</Channel>
+</Montage>`),
+        });
+      return Promise.resolve({ text: () => Promise.resolve(MOCK_ELC) });
+    });
+
+    await renderViewer();
+    await waitFor(() => expect(optionValues()).toContain('montage_files/test.mtg'));
+
+    await userEvent.selectOptions(
+      screen.getByTestId('montage-template-select'),
+      'montage_files/test.mtg'
+    );
+
+    expect(toast).toHaveBeenCalledWith(
+      expect.stringContaining('EEG9'),
+      expect.objectContaining({ icon: '⚠️' })
+    );
+    // the row itself is dropped from the display since its reference channel doesn't exist
+    expect(screen.queryByText('EEG1 - EEG9')).toBeNull();
+  });
 });
 
 // ── Montage row color wiring ────────────────────────────────────────────────

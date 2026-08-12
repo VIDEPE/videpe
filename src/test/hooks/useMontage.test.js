@@ -2,9 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useMontageChannels } from '@/hooks/useMontage';
 
-const setup = (channelNames) =>
-  renderHook(({ channelNames }) => useMontageChannels(channelNames), {
-    initialProps: { channelNames },
+const setup = (channelNames, fileTemplates) =>
+  renderHook(({ channelNames, fileTemplates }) => useMontageChannels(channelNames, fileTemplates), {
+    initialProps: { channelNames, fileTemplates },
   });
 
 describe('useMontageChannels — seeding', () => {
@@ -105,6 +105,49 @@ describe('useMontageChannels — montageTemplate', () => {
     act(() =>
       result.current.applyMontageChannels([
         { id: 'row-1', channel: 'FP1', reference: 'average', color: null },
+      ])
+    );
+    expect(result.current.montageTemplate).toBe('custom');
+  });
+});
+
+describe('useMontageChannels — montageTemplate (file-backed templates)', () => {
+  const doubleBanana = {
+    path: 'montage_files/double-banana_10-20.mtg',
+    rows: [
+      { channel: 'FP1', reference: 'F7', color: 'yellow' },
+      { channel: 'F7', reference: 'FP2', color: 'yellow' },
+    ],
+  };
+
+  it("reflects the template's path when the applied rows exactly match a file-backed template", () => {
+    const { result } = setup(['FP1', 'F7', 'FP2'], [doubleBanana]);
+    act(() =>
+      result.current.applyMontageChannels([
+        { id: 'row-1', channel: 'FP1', reference: 'F7', color: 'yellow' },
+        { id: 'row-2', channel: 'F7', reference: 'FP2', color: 'yellow' },
+      ])
+    );
+    expect(result.current.montageTemplate).toBe(doubleBanana.path);
+  });
+
+  it('matches regardless of row order', () => {
+    const { result } = setup(['FP1', 'F7', 'FP2'], [doubleBanana]);
+    act(() =>
+      result.current.applyMontageChannels([
+        { id: 'row-2', channel: 'F7', reference: 'FP2', color: 'yellow' },
+        { id: 'row-1', channel: 'FP1', reference: 'F7', color: 'yellow' },
+      ])
+    );
+    expect(result.current.montageTemplate).toBe(doubleBanana.path);
+  });
+
+  it('is "custom" once a row is edited away from the matching template', () => {
+    const { result } = setup(['FP1', 'F7', 'FP2'], [doubleBanana]);
+    act(() =>
+      result.current.applyMontageChannels([
+        { id: 'row-1', channel: 'FP1', reference: 'F7', color: 'red' },
+        { id: 'row-2', channel: 'F7', reference: 'FP2', color: 'yellow' },
       ])
     );
     expect(result.current.montageTemplate).toBe('custom');
