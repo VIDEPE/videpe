@@ -22,7 +22,7 @@ import { useTheme } from '@/components/ThemeContext';
  * @param {string|null} [fileName] - name of the loaded file, if any. Presence alone
  *   (regardless of match quality) decides the green/amber branch vs. the blue/red branch
  * @param {boolean} [disabled=false] - greys the LED out for a file type that doesn't apply
- *   to the current recording mode (e.g. inverse solution in iEEG) — greyed rather than
+ *   to the current recording mode (e.g. inverse solution in SEEG) — greyed rather than
  *   removed so the layout doesn't jump and a loaded-but-unused file doesn't disappear
  * @param {number} [matchCount] - channels matched against this file/template. Provide
  *   together with totalCount to opt this LED into the "channels matched" concept — the
@@ -98,7 +98,7 @@ export const StatusLed = ({
           : 'none';
   const matchSuffix = hasMatchInfo ? ` (${matchCount}/${totalCount} channels matched)` : '';
   const title = disabled
-    ? `${label} is not applicable for iEEG recordings`
+    ? `${label} is not applicable for SEEG recordings`
     : isActive
       ? hasMatchInfo
         ? `Custom: ${fileName}${matchSuffix}`
