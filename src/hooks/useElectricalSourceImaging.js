@@ -66,9 +66,10 @@ export function useElectricalSourceImaging({ channelSnapshot, channelNames, esiE
   /**
    * Parses one inverse-solution file and, if parsing succeeds, makes it the active
    * inverse solution (replacing whatever was active before, if anything). Shows a toast
-   * confirming success or reporting a parse error, and — if the recording is currently
-   * iEEG — an extra toast noting that ESI has no effect until the user switches to EEG
-   * mode.
+   * confirming success or reporting a parse error, plus two conditional warnings: one if
+   * the recording is currently SEEG-majority (ESI has no effect until channel types read
+   * as EEG), and one if the recording has a duplicate channel name the model needs (ESI
+   * can never compute for that case — see matchChannelsToInverseSolution).
    *
    * @param {File} file - the dropped/selected inverse-solution (.mat, FieldTrip) file.
    * @returns {Promise<void>} Resolves once parsing finishes and state/toasts have been
@@ -99,11 +100,28 @@ export function useElectricalSourceImaging({ channelSnapshot, channelNames, esiE
             }
           );
         }
+
+        // A duplicate channel name (e.g. a SEEG and an EEG channel sharing a name) makes
+        // ESI unable to compute at all for that channel, silently — surface it explicitly
+        // rather than let the toggle just sit disabled with no explanation. Computed fresh
+        // from the just-parsed file rather than the memoized esiChannelMatch below, which
+        // still reflects the *previous* inverseSolution state at this point in the callback.
+        if (channelNames?.length) {
+          const { duplicateChannelNames } = matchChannelsToInverseSolution(
+            channelNames,
+            parsedInverseSolution.channelLabels
+          );
+          if (duplicateChannelNames.length > 0) {
+            toast.error(
+              `Electrical Source Imaging can't compute — this recording has more than one channel named ${duplicateChannelNames.join(', ')}`
+            );
+          }
+        }
       } catch (err) {
         toast.error(err.message);
       }
     },
-    [channelSnapshot]
+    [channelSnapshot, channelNames]
   );
 
   const esiLayer = useMemo(

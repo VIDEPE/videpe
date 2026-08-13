@@ -707,12 +707,22 @@ const IEEG_SNAPSHOT = { isIntracranial: true, channelNames: ['B1', 'B2'], voltag
 describe('matchChannelsToInverseSolution', () => {
   it('reports a full match when every channelLabel has a same-named recording channel', () => {
     const result = matchChannelsToInverseSolution(['1', '2', 'ECG'], ['1', '2']);
-    expect(result).toEqual({ matchCount: 2, totalCount: 2, isGoodMatch: true });
+    expect(result).toEqual({
+      matchCount: 2,
+      totalCount: 2,
+      isGoodMatch: true,
+      duplicateChannelNames: [],
+    });
   });
 
   it('reports a partial match and isGoodMatch: false when a channelLabel has no match', () => {
     const result = matchChannelsToInverseSolution(['1'], ['1', '2']);
-    expect(result).toEqual({ matchCount: 1, totalCount: 2, isGoodMatch: false });
+    expect(result).toEqual({
+      matchCount: 1,
+      totalCount: 2,
+      isGoodMatch: false,
+      duplicateChannelNames: [],
+    });
   });
 
   it('matches names using the same normalization as electrode-position matching', () => {
@@ -720,7 +730,24 @@ describe('matchChannelsToInverseSolution', () => {
     // normalizeChannelName already strips for electrode-position matching, not a montage-editor
     // artifact (montage row labels never reach channelSnapshot.channelNames — see PatientView.jsx).
     const result = matchChannelsToInverseSolution(['1-Ref', '2-Ref'], ['1', '2']);
-    expect(result).toEqual({ matchCount: 2, totalCount: 2, isGoodMatch: true });
+    expect(result).toEqual({
+      matchCount: 2,
+      totalCount: 2,
+      isGoodMatch: true,
+      duplicateChannelNames: [],
+    });
+  });
+
+  it('treats a duplicated recording channel name as unmatchable (fail closed, not last-wins), and reports it in duplicateChannelNames', () => {
+    // Two recording channels both named "1" (e.g. a SEEG and an EEG channel sharing a
+    // name) — can't tell which one the model's "1" refers to, so it must not match either.
+    const result = matchChannelsToInverseSolution(['1', '1', '2'], ['1', '2']);
+    expect(result).toEqual({
+      matchCount: 1,
+      totalCount: 2,
+      isGoodMatch: false,
+      duplicateChannelNames: ['1'],
+    });
   });
 });
 
@@ -738,6 +765,11 @@ describe('matchVoltagesToInverseSolution', () => {
 
   it('returns null when a channelLabel has no matching recording channel', () => {
     const result = matchVoltagesToInverseSolution(['1'], [2], ['1', '2']);
+    expect(result).toBeNull();
+  });
+
+  it('returns null rather than picking either voltage when a recording channel name is duplicated', () => {
+    const result = matchVoltagesToInverseSolution(['1', '1', '2'], [2, 999, 3], ['1', '2']);
     expect(result).toBeNull();
   });
 });

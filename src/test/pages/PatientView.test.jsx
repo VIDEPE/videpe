@@ -291,9 +291,16 @@ vi.mock('@/components/ThemeToggle', () => ({ ThemeToggle: () => null }));
 // electricalSourceImaging's own computation is covered by its dedicated unit tests
 // (electricalSourceImagingUtils.test.js) — stub it here so PatientView's montage-gating
 // logic can be tested in isolation from the fixture's grid/affine data.
-vi.mock('@/utils/electricalSourceImagingUtils', () => ({
-  electricalSourceImaging: vi.fn(),
-}));
+// matchChannelsToInverseSolution/matchVoltagesToInverseSolution stay real (pure string
+// matching, no heavy fixture needed) — only the fixture-heavy electricalSourceImaging is
+// mocked.
+vi.mock('@/utils/electricalSourceImagingUtils', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    electricalSourceImaging: vi.fn(),
+  };
+});
 
 const makeFile = (name) => new File([''], name);
 
@@ -1119,6 +1126,36 @@ describe('PatientView — ESI iEEG warning', () => {
     expect(toast).toHaveBeenCalledWith(
       expect.stringMatching(/SEEG/i),
       expect.objectContaining({ icon: '⚠️' })
+    );
+  });
+
+  it("warns that ESI can't compute when the recording has a duplicate channel name the inverse solution needs", async () => {
+    checkEegFiles.mockReturnValue({
+      formatName: 'BrainVision',
+      complete: true,
+      missing: [],
+      warning: null,
+    });
+    // Channel "1" duplicated — the default parseInverseSolutionFieldtrip mock's
+    // channelLabels is ['1', '2'], so this collides with a channel the model needs.
+    detectAndLoadEEG.mockResolvedValue({
+      channelNames: ['1', '1', '2'],
+      fs: 256,
+      tMax: 10,
+      getChunk: vi.fn(),
+    });
+    renderPatientView();
+    await act(async () => {
+      await getEegOnFiles()([makeFile('sub01.vhdr'), makeFile('sub01.eeg')]);
+    });
+    toast.mockClear();
+
+    await act(async () => {
+      await userEvent.click(screen.getByTestId('trigger-inverse-solution-file'));
+    });
+
+    expect(toast.error).toHaveBeenCalledWith(
+      expect.stringMatching(/duplicate|more than one channel/i)
     );
   });
 });

@@ -366,11 +366,25 @@ export function convertSourcePowersToVolume(
 
 // Builds a normalized-name → recording-channel-index lookup, reusing the same
 // normalization electrode-position matching uses (so e.g. "EEG 1-Ref" matches a model's
-// bare "1" label) — shared by both channel-matching functions below.
+// bare "1" label) — shared by both channel-matching functions below. A name that appears
+// more than once in channelNames (e.g. a SEEG and an EEG channel that happen to share a
+// name) is treated as unmatchable rather than silently resolving to whichever occurrence
+// was seen last — feeding the wrong channel's voltage into the matrix multiply is worse
+// than reporting no match at all. duplicateNames tracks which normalized names hit this
+// case, so callers can tell "genuinely missing" apart from "ambiguous" for error reporting.
 function buildChannelNameIndex(channelNames) {
   const index = new Map();
-  channelNames.forEach((name, i) => index.set(normalizeChannelName(name), i));
-  return index;
+  const duplicateNames = new Set();
+  channelNames.forEach((name, i) => {
+    const normalized = normalizeChannelName(name);
+    if (index.has(normalized) || duplicateNames.has(normalized)) {
+      index.delete(normalized); // ambiguous — undo its earlier mapping, never re-add below
+      duplicateNames.add(normalized);
+      return;
+    }
+    index.set(normalized, i);
+  });
+  return { index, duplicateNames };
 }
 
 // Matches a recording's channel names against an inverse-solution model's own channel
@@ -381,17 +395,23 @@ function buildChannelNameIndex(channelNames) {
 // @param {string[]} channelNames - the recording's own channel names
 // @param {string[]} inverseSolutionChannelNames - inverseSolution.channelLabels, the
 //   model's own channel names, in the model's own order
-// @returns {{ matchCount: number, totalCount: number, isGoodMatch: boolean }} isGoodMatch is
-//   true only for a *full* match — unlike electrode-position matching, a partial match here
-//   isn't just a lower-quality result, it means ESI can't compute at all (see
-//   matchVoltagesToInverseSolution below).
+// @returns {{ matchCount: number, totalCount: number, isGoodMatch: boolean, duplicateChannelNames: string[] }}
+//   isGoodMatch is true only for a *full* match — unlike electrode-position matching, a
+//   partial match here isn't just a lower-quality result, it means ESI can't compute at all
+//   (see matchVoltagesToInverseSolution below). duplicateChannelNames lists which of the
+//   model's own channel names (its own spelling, not the recording's) are unmatched
+//   specifically because the recording has more than one channel with that name — worth
+//   surfacing distinctly from a channel that's simply absent.
 export function matchChannelsToInverseSolution(channelNames, inverseSolutionChannelNames) {
-  const index = buildChannelNameIndex(channelNames);
+  const { index, duplicateNames } = buildChannelNameIndex(channelNames);
   const matchCount = inverseSolutionChannelNames.filter((name) =>
     index.has(normalizeChannelName(name))
   ).length;
   const totalCount = inverseSolutionChannelNames.length;
-  return { matchCount, totalCount, isGoodMatch: matchCount === totalCount };
+  const duplicateChannelNames = inverseSolutionChannelNames.filter((name) =>
+    duplicateNames.has(normalizeChannelName(name))
+  );
+  return { matchCount, totalCount, isGoodMatch: matchCount === totalCount, duplicateChannelNames };
 }
 
 // Reorders/selects a per-click voltage snapshot into the inverse-solution model's own
@@ -413,7 +433,7 @@ export function matchVoltagesToInverseSolution(
   voltages,
   inverseSolutionChannelNames
 ) {
-  const index = buildChannelNameIndex(channelNames); // recording name -> recording index
+  const { index } = buildChannelNameIndex(channelNames); // recording name -> recording index
   const matchedVoltages = [];
   // walk the MODEL's own channel order, looking each one up in the recording's index
   for (const modelChannelName of inverseSolutionChannelNames) {

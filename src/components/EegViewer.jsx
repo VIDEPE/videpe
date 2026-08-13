@@ -113,6 +113,9 @@ export const EegViewer = ({
   customElectrodes = [], // [{label,x,y,z}] — owned by PatientView, loaded from a user-supplied .elc/.tsv file
   customElecPosFileName = null,
   inverseSolutionFileName = null, // filename (no extension) of the loaded inverse-solution file — owned by PatientView, passed down
+  esiChannelMatchCount, // how many of the inverse solution's own channels have a same-named match in this recording — owned by PatientView, passed down
+  esiChannelTotalCount, // paired with esiChannelMatchCount for the Inverse Solution status LED
+  isEsiChannelMatchGoodForLed = false, // true only for a *full* match — a partial match means ESI can't compute at all
   onElecPosFile,
   onInverseSolutionFile,
   onElectrodeSnapshotChange,
@@ -624,7 +627,7 @@ export const EegViewer = ({
               <div
                 className=""
                 onMouseEnter={() =>
-                  (!inverseSolutionFileName || majorityIsSeeg) &&
+                  (!inverseSolutionFileName || !isEsiChannelMatchGoodForLed) &&
                   setHoveredLedHighlight('inverseSolution')
                 }
                 onMouseLeave={() => setHoveredLedHighlight(null)}
@@ -633,15 +636,15 @@ export const EegViewer = ({
                   type="button"
                   className="button button-icon"
                   title={
-                    inverseSolutionFileName && !majorityIsSeeg
+                    inverseSolutionFileName && isEsiChannelMatchGoodForLed
                       ? `${esiEnabled ? 'Disable Electrical Source Imaging' : 'Electrical Source Imaging. If enabled: click EEG plot to compute source power at selected timestamp'}`
-                      : majorityIsSeeg
-                        ? 'Electrical Source Imaging. Not available for SEEG'
+                      : inverseSolutionFileName
+                        ? 'Electrical Source Imaging. Inverse solution channels do not fully match this recording'
                         : 'Electrical Source Imaging. Requires a loaded inverse solution'
                   }
                   aria-label={`${esiEnabled ? 'Disable' : 'Enable'} Electrical Source Imaging`}
                   aria-pressed={esiEnabled}
-                  disabled={!inverseSolutionFileName || majorityIsSeeg}
+                  disabled={!inverseSolutionFileName || !isEsiChannelMatchGoodForLed}
                   onClick={() => onEsiEnabledChange(!esiEnabled)}
                 >
                   <LocateFixed size={ICON_SIZE} />
@@ -1098,6 +1101,9 @@ export const EegViewer = ({
             <StatusLed
               label="Inverse Solution"
               fileName={inverseSolutionFileName}
+              matchCount={esiChannelMatchCount}
+              totalCount={esiChannelTotalCount}
+              isGoodMatch={isEsiChannelMatchGoodForLed}
               disabled={majorityIsSeeg}
               highlighted={hoveredLedHighlight === 'inverseSolution'}
             />

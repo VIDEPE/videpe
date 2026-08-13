@@ -693,7 +693,31 @@ describe('EegViewer — ESI toggle wiring', () => {
     expect(button).toBeDisabled();
   });
 
-  it('is enabled once an inverse solution is loaded, and toggles aria-pressed/label when clicked', async () => {
+  it('is disabled with an inverse solution loaded but a partial channel match', async () => {
+    const provider = makeProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        inverseSolutionFileName="my_inverse_solution"
+        isEsiChannelMatchGoodForLed={false}
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const button = screen.getByRole('button', { name: /enable electrical source imaging/i });
+    expect(button).toBeDisabled();
+    expect(
+      screen.getByTitle(
+        'Electrical Source Imaging. Inverse solution channels do not fully match this recording'
+      )
+    ).toBeInTheDocument();
+  });
+
+  it('is enabled once an inverse solution is loaded with a full channel match, and toggles aria-pressed/label when clicked', async () => {
     const provider = makeProvider();
     const onEsiEnabledChange = vi.fn();
     render(
@@ -701,6 +725,7 @@ describe('EegViewer — ESI toggle wiring', () => {
         provider={provider}
         channelNames={provider.channelNames}
         inverseSolutionFileName="my_inverse_solution"
+        isEsiChannelMatchGoodForLed={true}
         esiEnabled={false}
         onEsiEnabledChange={onEsiEnabledChange}
       />
@@ -725,6 +750,7 @@ describe('EegViewer — ESI toggle wiring', () => {
         provider={provider}
         channelNames={provider.channelNames}
         inverseSolutionFileName="my_inverse_solution"
+        isEsiChannelMatchGoodForLed={true}
         esiEnabled={true}
         onEsiEnabledChange={() => {}}
       />
@@ -738,13 +764,14 @@ describe('EegViewer — ESI toggle wiring', () => {
     expect(button).toHaveAttribute('aria-pressed', 'true');
   });
 
-  it('stays disabled for an intracranial-shaped recording even with an inverse solution loaded', async () => {
+  it('is enabled for an intracranial-shaped recording too, as long as the channel match is full — majorityIsSeeg no longer gates this button', async () => {
     const provider = makeIntracranialProvider();
     render(
       <EegViewer
         provider={provider}
         channelNames={provider.channelNames}
         inverseSolutionFileName="my_inverse_solution"
+        isEsiChannelMatchGoodForLed={true}
       />
     );
     await act(async () => {
@@ -753,7 +780,7 @@ describe('EegViewer — ESI toggle wiring', () => {
     });
 
     const button = screen.getByRole('button', { name: /enable electrical source imaging/i });
-    expect(button).toBeDisabled();
+    expect(button).toBeEnabled();
   });
 });
 
@@ -1898,13 +1925,59 @@ describe('EegViewer — persistent electrode position dropzone', () => {
       await Promise.resolve();
     });
 
-    // Inverse Solution has no match-count concept — loaded must mean green, not amber.
+    // Without esiChannelMatchCount/TotalCount passed, no match info — green, no count suffix.
     const led = screen.getByTitle('my_inverse_solution');
     expect(led).toBeInTheDocument();
     expect(led.querySelector('span')).toHaveClass('bg-green-500');
     expect(
       screen.getByTitle('Using standard_1005 template (2/3 channels matched)')
     ).toBeInTheDocument();
+  });
+
+  it('shows the inverse solution LED green with a match count when every model channel matches', async () => {
+    const provider = makeProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        inverseSolutionFileName="my_inverse_solution"
+        esiChannelMatchCount={3}
+        esiChannelTotalCount={3}
+        isEsiChannelMatchGoodForLed={true}
+      />
+    );
+    // Two ticks flush useElectrodeMatching's fetch().then(r => r.text()).then(setState) chain — one tick per .then().
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const led = screen.getByTitle('Custom: my_inverse_solution (3/3 channels matched)');
+    expect(led).toBeInTheDocument();
+    expect(led.querySelector('span')).toHaveClass('bg-green-500');
+  });
+
+  it('shows the inverse solution LED amber when only some of the model channels match', async () => {
+    const provider = makeProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        inverseSolutionFileName="my_inverse_solution"
+        esiChannelMatchCount={2}
+        esiChannelTotalCount={3}
+        isEsiChannelMatchGoodForLed={false}
+      />
+    );
+    // Two ticks flush useElectrodeMatching's fetch().then(r => r.text()).then(setState) chain — one tick per .then().
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const led = screen.getByTitle('Custom: my_inverse_solution (2/3 channels matched)');
+    expect(led).toBeInTheDocument();
+    expect(led.querySelector('span')).toHaveClass('bg-amber-500');
   });
 
   it('greys out the inverse solution LED in iEEG mode, even with a file loaded', async () => {

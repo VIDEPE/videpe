@@ -53,11 +53,19 @@ export const PatientView = () => {
   const [electrodeRenderEnabled, setElectrodeRenderEnabled] = useState(false); // boolean to enable/disable the 3D rendering of the electrodes
   const [esiEnabled, setEsiEnabled] = useState(false); // boolean to enable/disable showing the Electrical Source Imaging layer — same gating pattern as electrodeRenderEnabled
 
-  const { inverseSolutionFileName, esiLayer, handleInverseSolutionFile, resetInverseSolution } =
-    useElectricalSourceImaging({
-      channelSnapshot,
-      esiEnabled,
-    });
+  const {
+    inverseSolutionFileName,
+    esiChannelMatchCount,
+    esiChannelTotalCount,
+    isEsiChannelMatchGoodForLed,
+    esiLayer,
+    handleInverseSolutionFile,
+    resetInverseSolution,
+  } = useElectricalSourceImaging({
+    channelSnapshot,
+    channelNames: eeg?.channelNames,
+    esiEnabled,
+  });
 
   const {
     pendingEegFiles,
@@ -283,6 +291,9 @@ export const PatientView = () => {
               customElectrodes={customElectrodes}
               customElecPosFileName={customElecPosFileName}
               inverseSolutionFileName={inverseSolutionFileName}
+              esiChannelMatchCount={esiChannelMatchCount}
+              esiChannelTotalCount={esiChannelTotalCount}
+              isEsiChannelMatchGoodForLed={isEsiChannelMatchGoodForLed}
               onElecPosFile={handleElecPosFile}
               onInverseSolutionFile={handleInverseSolutionFile}
               onElectrodeSnapshotChange={setElectrodeSnapshot}
