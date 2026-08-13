@@ -9,7 +9,6 @@ import { ThemeToggle } from '../components/ThemeToggle';
 import { EegViewer } from '../components/EegViewer';
 import { NiiViewer } from '../components/NiiViewer';
 import { SplitPane } from '../components/SplitPane';
-import { EEGTypeToggle } from '../components/EEGTypeToggle';
 import { FileDropZone } from '../components/FileDropZone';
 import { filesToLayers } from '../utils/NiiViewer.utils';
 import { buildElectrodeLayer } from '../utils/eegTopographyUtils';
@@ -47,17 +46,15 @@ export const PatientView = () => {
   // Live EEG/electrode state lifted out of EegViewer — drives the intracranial connectome
   // layer in the Neuroimaging pane. { isIntracranial, matched, voltages } | null.
   const [electrodeSnapshot, setElectrodeSnapshot] = useState(null);
-  // 'eeg' | 'ieeg' — owned here (not EegViewer) so the SplitPane title can show/drive the
-  // toggle. EegViewer reports its auto-detection result up via the same setter that the
-  // title's click handler uses, then reads the resulting value back down as a prop.
-  const [recordingType, setRecordingType] = useState('eeg');
-  const [channelSnapshot, setChannelSnapshot] = useState(null); // { isIntracranial, channelNames, voltages } lifted from EegViewer on each click
+  // Per-click voltage snapshot lifted out of EegViewer — { isIntracranial, channelNames,
+  // voltages } | null. isIntracranial here is EegViewer's live channelSettings-derived
+  // majority, not a manually-set recording type (there's no toggle anymore).
+  const [channelSnapshot, setChannelSnapshot] = useState(null);
   const [electrodeRenderEnabled, setElectrodeRenderEnabled] = useState(false); // boolean to enable/disable the 3D rendering of the electrodes
   const [esiEnabled, setEsiEnabled] = useState(false); // boolean to enable/disable showing the Electrical Source Imaging layer — same gating pattern as electrodeRenderEnabled
 
   const { inverseSolutionFileName, esiLayer, handleInverseSolutionFile, resetInverseSolution } =
     useElectricalSourceImaging({
-      recordingType,
       channelSnapshot,
       esiEnabled,
     });
@@ -178,20 +175,18 @@ export const PatientView = () => {
     setElectrodeSnapshot(null);
     resetInverseSolution();
     setChannelSnapshot(null);
-    setRecordingType('eeg');
     setElectrodeRenderEnabled(false);
     setEsiEnabled(false);
   };
 
   // SplitPane's left (EEG) panel reset button — clears only the EEG side (recording,
-  // pending files, electrode positions, inverse solution/ESI, recording type).
+  // pending files, electrode positions, inverse solution/ESI).
   // Leaves `layers`/`niiHasOwnContent` untouched, so any imaging data already loaded in
   // the Neuroimaging panel survives; the electrode connectome layer built from EEG
   // state does get cleared, via setElectrodeSnapshot(null) below.
   const handleEegReset = () => {
     setEeg(null);
     resetIntake();
-    setRecordingType('eeg');
     setElectrodeSnapshot(null);
     resetInverseSolution();
     setChannelSnapshot(null);
@@ -272,13 +267,7 @@ export const PatientView = () => {
       </div>
 
       <SplitPane
-        leftLabel={
-          eeg ? (
-            <EEGTypeToggle recordingType={recordingType} onChange={setRecordingType} />
-          ) : (
-            <span className={PANEL_TITLE_CLASS}>EEG</span>
-          )
-        }
+        leftLabel={<span className={PANEL_TITLE_CLASS}>EEG</span>}
         rightLabel={<span className={PANEL_TITLE_CLASS}>Neuroimaging</span>}
         onLeftReset={eeg || pendingEegFiles.length > 0 ? handleEegReset : undefined}
         onRightReset={niiViewerHasContent ? handleNiiReset : undefined}
@@ -294,8 +283,6 @@ export const PatientView = () => {
               customElectrodes={customElectrodes}
               customElecPosFileName={customElecPosFileName}
               inverseSolutionFileName={inverseSolutionFileName}
-              recordingType={recordingType}
-              onRecordingTypeChange={setRecordingType}
               onElecPosFile={handleElecPosFile}
               onInverseSolutionFile={handleInverseSolutionFile}
               onElectrodeSnapshotChange={setElectrodeSnapshot}

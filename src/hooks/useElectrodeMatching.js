@@ -10,11 +10,13 @@ const RECORDING_TYPE_TOAST_ID = 'eeg-recording-type-detected'; // fixed id so re
 
 /**
  * Fetches the built-in standard_1005 electrode-position template, matches it against the
- * recording's channel names, and (re-)detects the recording type (EEG vs iEEG) from that
- * match — reporting it upward via onRecordingTypeChange. Also derives the render-facing
- * electrode/match set: a user-supplied file (customElectrodes) always wins when present,
- * intracranial recordings never fall back to the scalp template, and otherwise the
- * standard_1005 template is used.
+ * recording's channel names, and (re-)detects whether the recording is scalp EEG or SEEG
+ * from that match — purely local detection state, used only to seed new channels' type in
+ * useChannelSettings (see EegViewer.jsx); nothing else should read it as a live "current
+ * recording type", since a user can hand-edit individual channels' types afterward. Also
+ * derives the render-facing electrode/match set: a user-supplied file (customElectrodes)
+ * always wins when present, SEEG recordings never fall back to the scalp template, and
+ * otherwise the standard_1005 template is used.
  *
  * @param {Object} params
  * @param {string[]} params.channelNames - the loaded recording's channel names; the
@@ -24,41 +26,33 @@ const RECORDING_TYPE_TOAST_ID = 'eeg-recording-type-detected'; // fixed id so re
  * @param {string|null} params.customElecPosFileName - filename of the loaded custom
  *   electrode-position file, or `null` if none — used only to decide which match count
  *   drives the status LED.
- * @param {'eeg'|'ieeg'} params.recordingType - the currently active recording type.
- * @param {(detected: 'eeg'|'ieeg') => void} params.onRecordingTypeChange - called with
- *   the auto-detected recording type whenever the standard_1005 template match completes.
  * @returns {Object} The electrode/recording-type detection state:
- *   - `isIntracranial` (boolean) — true when `recordingType` is 'ieeg'.
+ *   - `detectedIsSeeg` (boolean) — true when the standard_1005 match looks like SEEG.
  *   - `electrodes` (Array) — the render-facing electrode positions (custom file if
- *     present or intracranial, otherwise the standard_1005 template).
+ *     present or SEEG, otherwise the standard_1005 template).
  *   - `matched` (Array) — the subset of `electrodes` matched to `channelNames`, each with
  *     a `channelIdx` back-reference.
  *   - `isStandardElectrodes` (boolean) — true when no custom file is active and the
- *     recording isn't intracranial, i.e. `electrodes` is the standard_1005 template.
+ *     recording isn't SEEG, i.e. `electrodes` is the standard_1005 template.
  *   - `electrodePositionMatchCount` (number|undefined) — match count to show on the
  *     Electrode Position status LED, or `undefined` when there's nothing meaningful to
- *     show (intracranial with no custom file).
+ *     show (SEEG with no custom file).
  *   - `electrodePositionTotalCount` (number|undefined) — channel count to pair with
  *     `electrodePositionMatchCount` on the LED, same `undefined` case.
  *   - `isElectrodePositionMatchGoodForLed` (boolean) — whether the LED should render as a
  *     good match (green/blue) rather than a weak one (amber/red).
  */
-export function useElectrodeMatching({
-  channelNames,
-  customElectrodes,
-  customElecPosFileName,
-  recordingType,
-  onRecordingTypeChange,
-}) {
+export function useElectrodeMatching({ channelNames, customElectrodes, customElecPosFileName }) {
   // Detection-only — always holds the standard_1005 template + its match against
   // channelNames, used purely as input to detectIsIntracranial. Never used to
   // render the topography itself (that's customElectrodes' job — see below).
   const [standard1005Electrodes, setStandard1005Electrodes] = useState([]);
   const [standard1005Matched, setStandard1005Matched] = useState([]);
+  const [detectedIsSeeg, setDetectedIsSeeg] = useState(false);
 
   // Fetch the built-in electrode position template, match it against the recording's
-  // channel names (for detection purposes only), then (re-)detect the recording type
-  // and report it upward. Re-runs whenever channelNames changes (new recording loaded).
+  // channel names (for detection purposes only), then (re-)detect the recording type.
+  // Re-runs whenever channelNames changes (new recording loaded).
   useEffect(() => {
     fetch('electrode_positions/standard_1005.elc')
       .then((r) => r.text())
@@ -66,17 +60,15 @@ export function useElectrodeMatching({
         const { electrodes: parsedElectrodes } = parseElcElectrodePositions(text);
         setStandard1005Electrodes(parsedElectrodes);
         setStandard1005Matched(matchChannelsToPositions(channelNames, parsedElectrodes).matched);
-        const detected = detectIsIntracranial(channelNames, parsedElectrodes) ? 'ieeg' : 'eeg';
-        onRecordingTypeChange?.(detected);
-        toast(detected === 'ieeg' ? 'iEEG recording detected' : 'EEG recording detected', {
+        const isSeeg = detectIsIntracranial(channelNames, parsedElectrodes);
+        setDetectedIsSeeg(isSeeg);
+        toast(isSeeg ? 'SEEG recording detected' : 'EEG recording detected', {
           id: RECORDING_TYPE_TOAST_ID,
           icon: '🔍',
         });
       })
       .catch(() => {}); // silently ignore if file unavailable (e.g. in tests without the asset)
-  }, [channelNames, onRecordingTypeChange]);
-
-  const isIntracranial = recordingType === 'ieeg';
+  }, [channelNames]);
 
   // Channels matched against the custom electrode positions (if any) — independent
   // of mode, since intracranial recordings need this for the 3D connectome too.
@@ -88,10 +80,10 @@ export function useElectrodeMatching({
   // Render-facing electrodes/matched. Scalp mode falls back to the standard_1005
   // template when no custom file is loaded (today's behavior); intracranial mode
   // never falls back to it — standard_1005 simply doesn't apply to depth probes.
-  const usingCustom = isIntracranial || customElectrodes.length > 0;
+  const usingCustom = detectedIsSeeg || customElectrodes.length > 0;
   const electrodes = usingCustom ? customElectrodes : standard1005Electrodes;
   const matched = usingCustom ? customMatched : standard1005Matched;
-  const isStandardElectrodes = !isIntracranial && customElectrodes.length === 0;
+  const isStandardElectrodes = !detectedIsSeeg && customElectrodes.length === 0;
   // Gates the status LED's auto-matched (blue) state — a technically non-empty match can
   // still be too sparse (e.g. one shared label like "Cz" out of 200+ channels) to call
   // positions "known".
@@ -106,18 +98,18 @@ export function useElectrodeMatching({
   const hasCustomElecPos = Boolean(customElecPosFileName);
   const electrodePositionMatchCount = hasCustomElecPos
     ? customMatched.length
-    : !isIntracranial
+    : !detectedIsSeeg
       ? standard1005Matched.length
       : undefined;
   const electrodePositionTotalCount =
-    hasCustomElecPos || !isIntracranial ? channelNames.length : undefined;
+    hasCustomElecPos || !detectedIsSeeg ? channelNames.length : undefined;
   const isElectrodePositionMatchGoodForLed = hasCustomElecPos
     ? channelNames.length > 0 &&
       customMatched.length / channelNames.length >= MIN_CUSTOM_MATCH_RATIO_FOR_LED
     : isStandardMatchGoodForLed;
 
   return {
-    isIntracranial,
+    detectedIsSeeg,
     electrodes,
     matched,
     isStandardElectrodes,
