@@ -9,6 +9,8 @@ import {
   ijkIndexToFlatIndex,
   buildAffineMatrix,
   buildSourceVolumeGrid,
+  matchChannelsToInverseSolution,
+  matchVoltagesToInverseSolution,
 } from '@/utils/electricalSourceImagingUtils';
 import { ESI_LAYER_URL } from '@/utils/NiiViewer.utils';
 import { estimateGridSpacing } from '../../utils/electricalSourceImagingUtils';
@@ -702,6 +704,44 @@ const MINIMAL_MODEL = {
 const SCALP_SNAPSHOT = { isIntracranial: false, channelNames: ['1', '2'], voltages: [2, 3] };
 const IEEG_SNAPSHOT = { isIntracranial: true, channelNames: ['B1', 'B2'], voltages: [2, 3] };
 
+describe('matchChannelsToInverseSolution', () => {
+  it('reports a full match when every channelLabel has a same-named recording channel', () => {
+    const result = matchChannelsToInverseSolution(['1', '2', 'ECG'], ['1', '2']);
+    expect(result).toEqual({ matchCount: 2, totalCount: 2, isGoodMatch: true });
+  });
+
+  it('reports a partial match and isGoodMatch: false when a channelLabel has no match', () => {
+    const result = matchChannelsToInverseSolution(['1'], ['1', '2']);
+    expect(result).toEqual({ matchCount: 1, totalCount: 2, isGoodMatch: false });
+  });
+
+  it('matches names using the same normalization as electrode-position matching', () => {
+    // "1-Ref" normalizes to "1" — the recording-side "-Ref" suffix convention
+    // normalizeChannelName already strips for electrode-position matching, not a montage-editor
+    // artifact (montage row labels never reach channelSnapshot.channelNames — see PatientView.jsx).
+    const result = matchChannelsToInverseSolution(['1-Ref', '2-Ref'], ['1', '2']);
+    expect(result).toEqual({ matchCount: 2, totalCount: 2, isGoodMatch: true });
+  });
+});
+
+describe('matchVoltagesToInverseSolution', () => {
+  it('reorders voltages into the channelLabels order when the recording order differs', () => {
+    // channel '2' (voltage 3) listed before channel '1' (voltage 2) — the model wants ['1','2'].
+    const result = matchVoltagesToInverseSolution(['2', '1'], [3, 2], ['1', '2']);
+    expect(result).toEqual([2, 3]);
+  });
+
+  it('ignores recording channels the model does not need', () => {
+    const result = matchVoltagesToInverseSolution(['1', 'ECG', '2'], [2, 999, 3], ['1', '2']);
+    expect(result).toEqual([2, 3]);
+  });
+
+  it('returns null when a channelLabel has no matching recording channel', () => {
+    const result = matchVoltagesToInverseSolution(['1'], [2], ['1', '2']);
+    expect(result).toBeNull();
+  });
+});
+
 describe('electricalSourceImaging', () => {
   it('returns null when inverseSolution is null (not yet loaded)', () => {
     expect(electricalSourceImaging(null, SCALP_SNAPSHOT)).toBeNull();
@@ -717,6 +757,19 @@ describe('electricalSourceImaging', () => {
 
   it('returns null for iEEG recordings — ESI inverse filters require scalp EEG', () => {
     expect(electricalSourceImaging(MINIMAL_MODEL, IEEG_SNAPSHOT)).toBeNull();
+  });
+
+  it('returns null when the recording is missing a channel the model needs', () => {
+    const snapshot = { isIntracranial: false, channelNames: ['1'], voltages: [2] }; // missing '2'
+    expect(electricalSourceImaging(MINIMAL_MODEL, snapshot)).toBeNull();
+  });
+
+  it('matches channels by name rather than position, so a shuffled recording order still computes correctly', () => {
+    // Same voltages as the happy-path case (channel '1'→2, channel '2'→3), just listed in the
+    // opposite order — if this were still positional, source powers would come out wrong.
+    const shuffledSnapshot = { isIntracranial: false, channelNames: ['2', '1'], voltages: [3, 2] };
+    const result = electricalSourceImaging(MINIMAL_MODEL, shuffledSnapshot);
+    expect(result.sourcePowerConnectomes.boundMax).toBe(25); // matches the [2,3]-ordered case
   });
 
   it('returns [] when flatSourceFilters is empty', () => {

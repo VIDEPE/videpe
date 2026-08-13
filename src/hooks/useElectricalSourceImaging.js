@@ -1,7 +1,10 @@
 import { useState, useMemo, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { parseInverseSolutionFieldtrip } from '../loaders/parseInverseSolutionFieldtrip';
-import { electricalSourceImaging } from '../utils/electricalSourceImagingUtils';
+import {
+  electricalSourceImaging,
+  matchChannelsToInverseSolution,
+} from '../utils/electricalSourceImagingUtils';
 
 /**
  * Owns the inverse-solution file and the Electrical Source Imaging (ESI) layer derived
@@ -16,6 +19,12 @@ import { electricalSourceImaging } from '../utils/electricalSourceImagingUtils';
  *   The latest per-channel voltage snapshot lifted out of EegViewer (captured on each
  *   topography click, already average-referenced from good channels only). Fed into the
  *   ESI computation alongside the inverse solution to produce `esiLayer`.
+ * @param {string[]} params.channelNames
+ *   The recording's full channel-name list — available as soon as a recording loads,
+ *   independent of any plot click. Used only to drive the Inverse Solution status LED's
+ *   match count against the loaded file's own channels; the actual `esiLayer` computation
+ *   matches per-click against `channelSnapshot.channelNames` instead (see
+ *   electricalSourceImagingUtils.js's matchVoltagesToInverseSolution).
  * @param {boolean} params.esiEnabled
  *   Whether the ESI toggle in EegViewer is currently on. `esiLayer` is only computed
  *   while this is true — mirrors PatientView's electrodeRenderEnabled gating of
@@ -25,17 +34,34 @@ import { electricalSourceImaging } from '../utils/electricalSourceImagingUtils';
  *     `null` if none has been loaded.
  *   - `inverseSolutionFileName` (string|null) — the filename (without extension) of the
  *     loaded inverse-solution file, or `null` if none.
+ *   - `esiChannelMatchCount`/`esiChannelTotalCount` (number|undefined) — how many of the
+ *     inverse solution's own channels have a same-named match in `channelNames`, paired
+ *     with the model's total channel count. `undefined` when there's no file loaded yet
+ *     (nothing to match against).
+ *   - `isEsiChannelMatchGoodForLed` (boolean) — true only for a *full* match (every one of
+ *     the model's channels found) — unlike Electrode Position, a partial match here means
+ *     ESI can't compute at all, not just degrade.
  *   - `esiLayer` (object|null) — the computed ESI source-power layer
  *     ({ sourcePowerConnectomes, sourcePowerVolume }), or `null` when there's nothing to
- *     show (no inverse solution, no channel data yet, intracranial, or `esiEnabled` is
- *     false).
+ *     show (no inverse solution, no channel data yet, intracranial, a partial channel
+ *     match, or `esiEnabled` is false).
  *   - `handleInverseSolutionFile` (file: File) => Promise<void> — parses and activates
  *     a single inverse-solution (.mat) file.
  *   - `resetInverseSolution` () => void — clears the inverse solution and its filename.
  */
-export function useElectricalSourceImaging({ channelSnapshot, esiEnabled }) {
+export function useElectricalSourceImaging({ channelSnapshot, channelNames, esiEnabled }) {
   const [inverseSolution, setInverseSolution] = useState(null);
   const [inverseSolutionFileName, setInverseSolutionFileName] = useState(null);
+
+  // Independent of any plot click — drives the Inverse Solution LED's match count as soon
+  // as both a file and a recording are present, same timing as Electrode Position's LED.
+  const esiChannelMatch = useMemo(
+    () =>
+      inverseSolution && channelNames?.length
+        ? matchChannelsToInverseSolution(channelNames, inverseSolution.channelLabels)
+        : null,
+    [inverseSolution, channelNames]
+  );
 
   /**
    * Parses one inverse-solution file and, if parsing succeeds, makes it the active
@@ -99,6 +125,9 @@ export function useElectricalSourceImaging({ channelSnapshot, esiEnabled }) {
   return {
     inverseSolution,
     inverseSolutionFileName,
+    esiChannelMatchCount: esiChannelMatch?.matchCount,
+    esiChannelTotalCount: esiChannelMatch?.totalCount,
+    isEsiChannelMatchGoodForLed: esiChannelMatch?.isGoodMatch ?? false,
     esiLayer,
     handleInverseSolutionFile,
     resetInverseSolution,
