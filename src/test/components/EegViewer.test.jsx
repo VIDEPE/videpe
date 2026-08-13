@@ -738,13 +738,12 @@ describe('EegViewer — ESI toggle wiring', () => {
     expect(button).toHaveAttribute('aria-pressed', 'true');
   });
 
-  it('stays disabled in iEEG mode even with an inverse solution loaded', async () => {
+  it('stays disabled for an intracranial-shaped recording even with an inverse solution loaded', async () => {
     const provider = makeIntracranialProvider();
     render(
       <EegViewer
         provider={provider}
         channelNames={provider.channelNames}
-        recordingType="ieeg"
         inverseSolutionFileName="my_inverse_solution"
       />
     );
@@ -1502,26 +1501,20 @@ const makeIntracranialProvider = () => ({
 });
 
 describe('EegViewer — recording type detection', () => {
-  // recordingType is now a controlled prop (PatientView owns the state and shows/drives the
-  // EEG/iEEG toggle in the SplitPane title) — EegViewer only reports detection results upward
-  // via onRecordingTypeChange and reads the effective value back down via the recordingType
-  // prop. These tests exercise both halves of that contract directly, instead of a UI toggle
-  // that no longer lives in this component.
+  // There's no manual EEG/SEEG toggle anymore — intracranial-mode is derived from a
+  // majority vote over per-channel channelSettings, which itself is seeded from
+  // useElectrodeMatching's channel-name auto-detection the first time each channel is
+  // seen. These tests exercise how EegViewer wires that derived state into its children
+  // (EegTopoViewer); the detection heuristic itself is unit-tested directly in
+  // useElectrodeMatching.test.js.
   beforeEach(async () => {
     const { default: toast } = await import('react-hot-toast');
     toast.mockClear();
   });
 
-  // Detection logic itself (onRecordingTypeChange + toast for both scalp and intracranial
-  // channel shapes) is unit-tested directly in useElectrodeMatching.test.js. The tests below
-  // only cover what that hook test can't: how EegViewer wires the resulting isIntracranial
-  // state into its children (EegTopoViewer).
-
-  it('disables the topo toggle for an intracranial recordingType with no known electrode positions at all', async () => {
+  it('disables the topo toggle for an intracranial-shaped recording with no known electrode positions at all', async () => {
     const provider = makeIntracranialProvider();
-    render(
-      <EegViewer provider={provider} channelNames={provider.channelNames} recordingType="ieeg" />
-    );
+    render(<EegViewer provider={provider} channelNames={provider.channelNames} />);
     await act(async () => {
       await Promise.resolve();
       await Promise.resolve();
@@ -1532,21 +1525,17 @@ describe('EegViewer — recording type detection', () => {
     expect(screen.getByRole('button', { name: /topograph map/i })).toBeDisabled();
   });
 
-  it('keeps matched empty for an intracranial recordingType whose custom positions do not match any channel, even though standard_1005 was fetched', async () => {
+  it('keeps matched empty for an intracranial-shaped recording whose custom positions do not match any channel, even though standard_1005 was fetched', async () => {
     const provider = makeIntracranialProvider();
     // A position file is loaded (so the topo toggle is enabled), but none of its labels
     // match this recording's channel names — mirrors loading the wrong patient's/montage's
     // position file, as opposed to no file at all (which is covered by the "disables the
     // topo toggle" test above and can no longer reach this code path via the UI).
     const customElectrodes = [{ label: 'X1', x: 0, y: 0, z: 0 }];
-    // recordingType is normally fed back down as a prop by the parent in response to the
-    // onRecordingTypeChange callback above (see PatientView) — passed directly here to
-    // exercise the same isIntracranial-driven behavior without reimplementing that parent.
     render(
       <EegViewer
         provider={provider}
         channelNames={provider.channelNames}
-        recordingType="ieeg"
         customElectrodes={customElectrodes}
       />
     );
@@ -1561,10 +1550,10 @@ describe('EegViewer — recording type detection', () => {
     expect(screen.getByTestId('topo-is-intracranial')).toHaveTextContent('true');
   });
 
-  it('switches intracranial-mode behavior when the recordingType prop changes (simulating a manual override)', async () => {
-    const provider = makeProvider(); // scalp-shaped fixture
+  it('re-derives intracranial-mode from channel-name auto-detection when a new recording is loaded', async () => {
+    const scalpProvider = makeProvider(); // scalp-shaped fixture
     const { rerender } = render(
-      <EegViewer provider={provider} channelNames={provider.channelNames} recordingType="eeg" />
+      <EegViewer provider={scalpProvider} channelNames={scalpProvider.channelNames} />
     );
     await act(async () => {
       await Promise.resolve();
@@ -1573,10 +1562,17 @@ describe('EegViewer — recording type detection', () => {
     await enableTopoAndClick();
     expect(screen.getByTestId('topo-is-intracranial')).toHaveTextContent('false');
 
+    const intracranialProvider = makeIntracranialProvider();
     rerender(
-      <EegViewer provider={provider} channelNames={provider.channelNames} recordingType="ieeg" />
+      <EegViewer provider={intracranialProvider} channelNames={intracranialProvider.channelNames} />
     );
-    expect(screen.getByTestId('topo-is-intracranial')).toHaveTextContent('true');
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId('topo-is-intracranial')).toHaveTextContent('true')
+    );
   });
 });
 
@@ -1729,7 +1725,9 @@ describe('EegViewer — persistent electrode position dropzone', () => {
   it('shows the electrode position LED with a 0-match count, colored red, when the standard template matches no channels', async () => {
     global.fetch = vi.fn().mockResolvedValue({ text: () => Promise.resolve(MOCK_ELC) });
     const provider = makeProvider();
-    provider.channelNames = ['NoMatch1', 'NoMatch2'];
+    // No trailing digits — doesn't parse as an electrode-contact shape (unlike e.g.
+    // "NoMatch1"), so this stays detected as scalp EEG rather than accidentally SEEG.
+    provider.channelNames = ['Marker', 'Trigger'];
     render(<EegViewer provider={provider} channelNames={provider.channelNames} />);
     await act(async () => {
       await Promise.resolve();
@@ -1868,7 +1866,6 @@ describe('EegViewer — persistent electrode position dropzone', () => {
       <EegViewer
         provider={provider}
         channelNames={provider.channelNames}
-        recordingType="ieeg"
         customElecPosFileName="my_positions"
         customElectrodes={[
           { label: 'B1', x: 0, y: 0, z: 0 },
@@ -1916,7 +1913,6 @@ describe('EegViewer — persistent electrode position dropzone', () => {
       <EegViewer
         provider={provider}
         channelNames={provider.channelNames}
-        recordingType="ieeg"
         inverseSolutionFileName="my_inverse_solution"
       />
     );
@@ -1999,9 +1995,7 @@ describe('EegViewer — persistent electrode position dropzone', () => {
 describe('EegViewer — hovering a disabled toggle highlights the LED that explains why', () => {
   it('highlights the Electrode Position LED red while hovering the disabled topo toggle, and reverts on unhover', async () => {
     const provider = makeIntracranialProvider();
-    render(
-      <EegViewer provider={provider} channelNames={provider.channelNames} recordingType="ieeg" />
-    );
+    render(<EegViewer provider={provider} channelNames={provider.channelNames} />);
     await act(async () => {
       await Promise.resolve();
       await Promise.resolve();
@@ -2023,9 +2017,7 @@ describe('EegViewer — hovering a disabled toggle highlights the LED that expla
 
   it('highlights the Electrode Position LED red while hovering the disabled 3D-render toggle', async () => {
     const provider = makeIntracranialProvider();
-    render(
-      <EegViewer provider={provider} channelNames={provider.channelNames} recordingType="ieeg" />
-    );
+    render(<EegViewer provider={provider} channelNames={provider.channelNames} />);
     await act(async () => {
       await Promise.resolve();
       await Promise.resolve();
@@ -2072,7 +2064,6 @@ describe('EegViewer — hovering a disabled toggle highlights the LED that expla
       <EegViewer
         provider={provider}
         channelNames={provider.channelNames}
-        recordingType="ieeg"
         inverseSolutionFileName="my_inverse_solution"
       />
     );

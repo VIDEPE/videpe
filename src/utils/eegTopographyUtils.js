@@ -300,22 +300,42 @@ export function buildSurfaceEegConnectome(matched, voltages) {
  * PatientView.jsx can stay a thin orchestrator with no electrode-specific logic
  * of its own.
  *
- * @param {{ isIntracranial: boolean, matched: object[], voltages: number[] }} args
+ * @param {{ matched: object[], voltages: number[] }} args
  * @returns {object | null}
  */
-export function buildElectrodeLayer({ isIntracranial, matched, voltages }) {
+export function buildElectrodeLayer({ matched, voltages }) {
   if (!matched?.length) return null; // nothing to render yet
 
-  // declare variables
-  let nodes, edges, subtype;
+  // split matched up in seeg and eeg
+  // first get the indices for each
+  const seegIdx = [];
+  const eegIdx = [];
+  matched.forEach((m, i) => {
+    if (m.type === 'seeg') seegIdx.push(i);
+    else if (m.type === 'eeg') eegIdx.push(i);
+  });
 
-  if (isIntracranial) {
-    ({ nodes, edges } = buildIntracranialConnectome(matched, voltages));
-    subtype = 'Intracranial EEG';
-  } else {
-    ({ nodes, edges } = buildSurfaceEegConnectome(matched, voltages));
-    subtype = 'Surface EEG';
-  }
+  // helper function to split matched
+  const pick = (idx, matched, voltages) => ({
+    matched: idx.map((i) => matched[i]),
+    voltages: idx.map((i) => voltages[i]),
+  });
+
+  const seeg = pick(seegIdx, matched, voltages);
+  const eeg = pick(eegIdx, matched, voltages);
+
+  const { nodes: seegNodes, edges } = buildIntracranialConnectome(seeg.matched, seeg.voltages);
+  const { nodes: eegNodes } = buildSurfaceEegConnectome(eeg.matched, eeg.voltages);
+
+  // seeg nodes MUST come first, otherwise the edges wouldn't be assigned to the right nodes
+  const nodes = [...seegNodes, ...eegNodes];
+  // subtypes determines the layer sub label after the 'Electrodes' type label in the draggable settings panel
+  const subtype =
+    seegIdx.length && eegIdx.length
+      ? 'Intracranial & Surface EEG'
+      : seegIdx.length
+        ? 'Intracranial EEG'
+        : 'Surface EEG';
 
   const calMax = Math.max(1e-6, ...voltages.map((v) => Math.abs(v))); // symmetric colour range; floor avoids div-by-zero downstream
 

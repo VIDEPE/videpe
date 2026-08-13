@@ -117,8 +117,6 @@ export const EegViewer = ({
   onInverseSolutionFile,
   onElectrodeSnapshotChange,
   onChannelSnapshotChange,
-  recordingType = 'eeg', // 'eeg' | 'ieeg' — controlled by PatientView, which shows/drives the toggle in the panel title
-  onRecordingTypeChange,
   onTopoHasContentChange, // whether the topography NiiVue canvas currently has a mesh, so PatientView can enable/disable the cross-panel rotation link accordingly
   electrodeRenderEnabled, // boolean — owned by PatientView => whether electrode 3D render is enabled
   onElectrodeRenderChange, // handle for electrodeRender changes
@@ -198,11 +196,11 @@ export const EegViewer = ({
         ((topoTimepoint - startTime) / windowSize) * (plotWidth - Y_AXIS_WIDTH - PLOT_RIGHT_PAD)
       : null;
 
-  // Electrode-position matching + recording-type (EEG/iEEG) auto-detection — PatientView
-  // owns recordingType and shows/drives the EEG/iEEG toggle in the panel title, since this
-  // component no longer renders it itself.
+  // Electrode-position matching + recording-type (EEG/SEEG) auto-detection — feeds
+  // channelSettings' initial seed below (see useChannelSettings) now that the manual
+  // EEGTypeToggle is gone.
   const {
-    isIntracranial,
+    detectedIsSeeg,
     electrodes,
     matched,
     isStandardElectrodes,
@@ -213,16 +211,20 @@ export const EegViewer = ({
     channelNames,
     customElectrodes,
     customElecPosFileName,
-    recordingType,
-    onRecordingTypeChange,
   });
 
   // Per-channel type/bad-channel state, edited via the EegMontageEditor window — new
-  // channels are seeded from the whole-recording isIntracranial detection above.
+  // channels are seeded from the whole-recording auto-detection above; from then on the
+  // per-channel value (and the majorityIsSeeg aggregate derived from it, below) is what
+  // the rest of this component reads — detectedIsSeeg itself is never read again below.
   const { channelSettings, applyChannelSettings } = useChannelSettings(
     channelNames,
-    isIntracranial ? 'seeg' : 'eeg'
+    detectedIsSeeg ? 'seeg' : 'eeg'
   );
+
+  const majorityIsSeeg =
+    Object.values(channelSettings).filter((c) => c.type === 'seeg').length >
+    Object.values(channelSettings).filter((c) => c.type === 'eeg').length;
 
   // File-backed montage templates (public/montage_files/TEMPLATE_MONTAGES.json), listed
   // in the sidebar quick-select alongside the None/CAR/Custom presets below — fetched here
@@ -266,11 +268,16 @@ export const EegViewer = ({
 
   // Bad channels are hidden from topography/connectome/ESI entirely, not just excluded from
   // the reference calc — a bad electrode's position never appears as a node to plot, and
-  // its own voltage never contributes to ESI's source-power computation. `matched` (from
-  // useElectrodeMatching) is kept raw for EegMontageEditor's Pos-match indicator below,
+  // its own voltage never contributes to ESI's source-power computation (voltage set to 0).
+  // `matched` (from useElectrodeMatching) is kept raw for EegMontageEditor's Pos-match indicator below,
   // which cares about position-file coverage independent of the current bad-channel flags.
+  // visibleMatched 'type' for each match => buildElectrodeLayer in eegTopographyUtils.js uses it
+  // to reconstruct proper connectome
   const visibleMatched = useMemo(
-    () => matched.filter((m) => !channelSettings[m.name]?.bad),
+    () =>
+      matched
+        .filter((m) => !channelSettings[m.name]?.bad)
+        .map((m) => ({ ...m, type: channelSettings[m.name]?.type })),
     [matched, channelSettings]
   );
 
@@ -357,7 +364,7 @@ export const EegViewer = ({
     fs: provider.fs,
     matched: visibleMatched,
     channelNames,
-    isIntracranial,
+    isIntracranial: majorityIsSeeg,
     onElectrodeSnapshotChange,
     onChannelSnapshotChange: handleChannelSnapshotChange,
   });
@@ -371,7 +378,7 @@ export const EegViewer = ({
   // || !voltages?.length skips the load) so PatientView can tell when the 3D scene it's
   // synced to is genuinely empty and disable the cross-panel rotation link accordingly.
   const topoHasContent =
-    topoEnabled && !isIntracranial && electrodes?.length > 0 && topoVoltages?.length > 0;
+    topoEnabled && !majorityIsSeeg && electrodes?.length > 0 && topoVoltages?.length > 0;
   useEffect(() => {
     onTopoHasContentChange?.(topoHasContent);
   }, [topoHasContent, onTopoHasContentChange]);
@@ -601,7 +608,7 @@ export const EegViewer = ({
                   title={
                     electrodes?.length > 0 && !isStandardElectrodes
                       ? `${electrodeRenderEnabled ? 'Close 3D Electrode Rendering' : 'Open 3D Electrode Rendering'}`
-                      : isIntracranial
+                      : majorityIsSeeg
                         ? '3D Electrode Rendering. Requires known electrode positions'
                         : "3D Electrode Rendering. Requires a patient-specific electrode position file — the standard 10-05 template is only an indicative layout, not this patient's actual head geometry"
                   }
@@ -617,7 +624,7 @@ export const EegViewer = ({
               <div
                 className=""
                 onMouseEnter={() =>
-                  (!inverseSolutionFileName || isIntracranial) &&
+                  (!inverseSolutionFileName || majorityIsSeeg) &&
                   setHoveredLedHighlight('inverseSolution')
                 }
                 onMouseLeave={() => setHoveredLedHighlight(null)}
@@ -626,15 +633,15 @@ export const EegViewer = ({
                   type="button"
                   className="button button-icon"
                   title={
-                    inverseSolutionFileName && !isIntracranial
+                    inverseSolutionFileName && !majorityIsSeeg
                       ? `${esiEnabled ? 'Disable Electrical Source Imaging' : 'Electrical Source Imaging. If enabled: click EEG plot to compute source power at selected timestamp'}`
-                      : isIntracranial
-                        ? 'Electrical Source Imaging. Not available for iEEG'
+                      : majorityIsSeeg
+                        ? 'Electrical Source Imaging. Not available for SEEG'
                         : 'Electrical Source Imaging. Requires a loaded inverse solution'
                   }
                   aria-label={`${esiEnabled ? 'Disable' : 'Enable'} Electrical Source Imaging`}
                   aria-pressed={esiEnabled}
-                  disabled={!inverseSolutionFileName || isIntracranial}
+                  disabled={!inverseSolutionFileName || majorityIsSeeg}
                   onClick={() => onEsiEnabledChange(!esiEnabled)}
                 >
                   <LocateFixed size={ICON_SIZE} />
@@ -1091,7 +1098,7 @@ export const EegViewer = ({
             <StatusLed
               label="Inverse Solution"
               fileName={inverseSolutionFileName}
-              disabled={isIntracranial}
+              disabled={majorityIsSeeg}
               highlighted={hoveredLedHighlight === 'inverseSolution'}
             />
           </div>
@@ -1123,7 +1130,7 @@ export const EegViewer = ({
           isStandardElectrodes={isStandardElectrodes}
           onElecPosFile={onElecPosFile}
           customFileName={customElecPosFileName}
-          isIntracranial={isIntracranial}
+          isIntracranial={majorityIsSeeg}
         />
       )}
 

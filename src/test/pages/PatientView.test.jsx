@@ -55,7 +55,6 @@ vi.mock('@/components/EegViewer', () => ({
       inverseSolutionFileName,
       onElectrodeSnapshotChange,
       onChannelSnapshotChange,
-      onRecordingTypeChange,
       onInverseSolutionFile,
       onTopoNvReady,
       onTopoHasContentChange,
@@ -100,7 +99,9 @@ vi.mock('@/components/EegViewer', () => ({
           onClick={() =>
             onElectrodeSnapshotChange?.({
               isIntracranial: true,
-              matched: [{ channelIdx: 0, name: 'B1', pos: { label: 'B1', x: 0, y: 0, z: 0 } }],
+              matched: [
+                { channelIdx: 0, name: 'B1', pos: { label: 'B1', x: 0, y: 0, z: 0 }, type: 'seeg' },
+              ],
               voltages: [5],
             })
           }
@@ -122,26 +123,27 @@ vi.mock('@/components/EegViewer', () => ({
         >
           trigger-channel-snapshot
         </button>
-        {/* Simulates the EEG/iEEG recording-type toggle in the panel title */}
+        {/* Same as above, but for a channel snapshot whose majority channel type reads as
+            SEEG — the only way channelSnapshot.isIntracranial (which the ESI toast/gate now
+            reads directly, there being no more recordingType prop) becomes true. */}
         <button
           type="button"
-          data-testid="set-recording-ieeg"
-          onClick={() => onRecordingTypeChange?.('ieeg')}
+          data-testid="trigger-channel-snapshot-seeg"
+          onClick={() =>
+            onChannelSnapshotChange?.({
+              isIntracranial: true,
+              channelNames: ['B1', 'B2'],
+              voltages: [5, 6],
+            })
+          }
         >
-          set-recording-ieeg
-        </button>
-        <button
-          type="button"
-          data-testid="set-recording-eeg"
-          onClick={() => onRecordingTypeChange?.('eeg')}
-        >
-          set-recording-eeg
+          trigger-channel-snapshot-seeg
         </button>
         {/* Simulates dropping a file on EegViewer's own persistent dropzone — unlike the
             initial "Drop EEG files" dropzone (which unmounts once EEG is loaded, freezing
             its onFiles closure), this prop is passed fresh on every PatientView re-render,
-            so it's the only way to exercise recordingType-dependent behaviour in
-            onInverseSolutionFile after the recording type has been toggled post-load. */}
+            so it's the only way to exercise channelSnapshot-dependent behaviour in
+            onInverseSolutionFile after the channel snapshot has changed post-load. */}
         <button
           type="button"
           data-testid="trigger-inverse-solution-file"
@@ -1087,7 +1089,7 @@ describe('PatientView — ESI iEEG warning', () => {
     });
   });
 
-  it('warns that ESI is not applicable when an inverse solution is loaded in iEEG mode', async () => {
+  it('warns that ESI is not applicable when an inverse solution is loaded while the channel snapshot reads as SEEG', async () => {
     checkEegFiles.mockReturnValue({
       formatName: 'BrainVision',
       complete: true,
@@ -1104,18 +1106,18 @@ describe('PatientView — ESI iEEG warning', () => {
     await act(async () => {
       await getEegOnFiles()([makeFile('sub01.vhdr'), makeFile('sub01.eeg')]);
     });
-    await userEvent.click(screen.getByTestId('set-recording-ieeg'));
+    await userEvent.click(screen.getByTestId('trigger-channel-snapshot-seeg'));
     toast.mockClear();
 
     // Routed through EegViewer's own persistent dropzone callback (not getEegOnFiles,
     // whose closure is frozen from before EEG loaded and would still see the stale
-    // pre-toggle recordingType).
+    // pre-snapshot channelSnapshot).
     await act(async () => {
       await userEvent.click(screen.getByTestId('trigger-inverse-solution-file'));
     });
 
     expect(toast).toHaveBeenCalledWith(
-      expect.stringMatching(/iEEG/i),
+      expect.stringMatching(/SEEG/i),
       expect.objectContaining({ icon: '⚠️' })
     );
   });

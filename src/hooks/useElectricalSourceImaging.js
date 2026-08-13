@@ -12,10 +12,6 @@ import { electricalSourceImaging } from '../utils/electricalSourceImagingUtils';
  * on `esiEnabled` and the recording being scalp EEG.
  *
  * @param {Object} params
- * @param {'eeg'|'ieeg'} params.recordingType
- *   Whether the loaded recording is scalp EEG or intracranial iEEG. Used only to warn the
- *   user when an inverse solution is loaded while in 'ieeg' mode — `esiLayer` itself still
- *   gates on `channelSnapshot.isIntracranial` once channel data exists.
  * @param {object|null} params.channelSnapshot
  *   The latest per-channel voltage snapshot lifted out of EegViewer (captured on each
  *   topography click, already average-referenced from good channels only). Fed into the
@@ -37,7 +33,7 @@ import { electricalSourceImaging } from '../utils/electricalSourceImagingUtils';
  *     a single inverse-solution (.mat) file.
  *   - `resetInverseSolution` () => void — clears the inverse solution and its filename.
  */
-export function useElectricalSourceImaging({ recordingType, channelSnapshot, esiEnabled }) {
+export function useElectricalSourceImaging({ channelSnapshot, esiEnabled }) {
   const [inverseSolution, setInverseSolution] = useState(null);
   const [inverseSolutionFileName, setInverseSolutionFileName] = useState(null);
 
@@ -64,11 +60,14 @@ export function useElectricalSourceImaging({ recordingType, channelSnapshot, esi
         toast.success(`Loaded inverse solution from ${file.name}`);
 
         // ESI only applies to scalp EEG — the file is still stored (and will take effect
-        // automatically once the user switches back to EEG mode), but tell them it has no
-        // effect right now rather than let them wonder why nothing happened.
-        if (recordingType === 'ieeg') {
+        // automatically once the majority of channel types read as EEG), but tell the user
+        // it has no effect right now rather than let them wonder why nothing happened.
+        // Relies on channelSnapshot, so this only fires once a topo click has produced a
+        // snapshot — before that there's nothing to warn about yet since esiLayer can't
+        // compute regardless.
+        if (channelSnapshot?.isIntracranial) {
           toast(
-            'Electrical Source Imaging is not available for iEEG — will apply once you switch to EEG mode',
+            'Electrical Source Imaging is not available while the majority of channels are SEEG',
             {
               icon: '⚠️',
             }
@@ -78,7 +77,7 @@ export function useElectricalSourceImaging({ recordingType, channelSnapshot, esi
         toast.error(err.message);
       }
     },
-    [recordingType]
+    [channelSnapshot]
   );
 
   const esiLayer = useMemo(
