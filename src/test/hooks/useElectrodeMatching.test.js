@@ -28,6 +28,9 @@ Cz
 `;
 
 const channelNames = ['EEG1', 'EEG2', 'EEG3'];
+// Primed group ("B'1") is always detected as SEEG, regardless of template match — see
+// intracranialDetection.js's hasPrimedGroup short-circuit.
+const seegChannelNames = ['B1', 'B2', "B'1"];
 
 beforeEach(() => {
   global.fetch = vi.fn().mockResolvedValue({ text: () => Promise.resolve(MOCK_ELC) });
@@ -39,8 +42,6 @@ const setup = (overrides = {}) =>
       channelNames,
       customElectrodes: [],
       customElecPosFileName: null,
-      recordingType: 'eeg',
-      onRecordingTypeChange: vi.fn(),
       ...overrides,
     },
   });
@@ -53,25 +54,22 @@ describe('useElectrodeMatching — standard_1005 detection', () => {
     );
   });
 
-  it('reports the auto-detected recording type via onRecordingTypeChange, and toasts it', async () => {
+  it('detects EEG from the standard_1005 match and toasts it', async () => {
     const { default: toast } = await import('react-hot-toast');
-    const onRecordingTypeChange = vi.fn();
-    setup({ onRecordingTypeChange });
+    const { result } = setup();
     // EEG1/EEG2/Cz vs EEG1/EEG2/EEG3 → 2/3 match ratio (≥ 0.3) → detected as scalp EEG
-    await waitFor(() => expect(onRecordingTypeChange).toHaveBeenCalledWith('eeg'));
+    await waitFor(() => expect(result.current.detectedIsSeeg).toBe(false));
     expect(toast).toHaveBeenCalledWith('EEG recording detected', {
       id: expect.any(String),
       icon: '🔍',
     });
   });
 
-  it('reports iEEG via onRecordingTypeChange and toasts accordingly for intracranial-shaped channel names', async () => {
+  it('detects SEEG for intracranial-shaped channel names and toasts accordingly', async () => {
     const { default: toast } = await import('react-hot-toast');
-    const onRecordingTypeChange = vi.fn();
-    // Primed group ("B'1") is always detected as iEEG, regardless of template match
-    setup({ channelNames: ['B1', 'B2', "B'1"], onRecordingTypeChange });
-    await waitFor(() => expect(onRecordingTypeChange).toHaveBeenCalledWith('ieeg'));
-    expect(toast).toHaveBeenCalledWith('iEEG recording detected', {
+    const { result } = setup({ channelNames: seegChannelNames });
+    await waitFor(() => expect(result.current.detectedIsSeeg).toBe(true));
+    expect(toast).toHaveBeenCalledWith('SEEG recording detected', {
       id: expect.any(String),
       icon: '🔍',
     });
@@ -124,23 +122,23 @@ describe('useElectrodeMatching — custom electrode positions', () => {
 
 describe('useElectrodeMatching — intracranial mode', () => {
   it('never falls back to the standard template, even with no custom file', async () => {
-    const { result } = setup({ recordingType: 'ieeg' });
-    await waitFor(() => expect(result.current.isIntracranial).toBe(true));
+    const { result } = setup({ channelNames: seegChannelNames });
+    await waitFor(() => expect(result.current.detectedIsSeeg).toBe(true));
     expect(result.current.electrodes).toEqual([]); // no custom electrodes supplied
     expect(result.current.isStandardElectrodes).toBe(false);
   });
 
   it('electrodePositionMatchCount/TotalCount are undefined with no custom file (nothing meaningful to show)', async () => {
-    const { result } = setup({ recordingType: 'ieeg' });
-    await waitFor(() => expect(result.current.isIntracranial).toBe(true));
+    const { result } = setup({ channelNames: seegChannelNames });
+    await waitFor(() => expect(result.current.detectedIsSeeg).toBe(true));
     expect(result.current.electrodePositionMatchCount).toBeUndefined();
     expect(result.current.electrodePositionTotalCount).toBeUndefined();
   });
 
-  it("still judges a custom file's own match quality in iEEG mode", async () => {
-    const customElectrodes = [{ label: 'EEG1', x: 1, y: 1, z: 1 }];
+  it("still judges a custom file's own match quality in SEEG mode", async () => {
+    const customElectrodes = [{ label: 'B1', x: 1, y: 1, z: 1 }]; // matches one of seegChannelNames
     const { result } = setup({
-      recordingType: 'ieeg',
+      channelNames: seegChannelNames,
       customElectrodes,
       customElecPosFileName: 'depth.tsv',
     });
@@ -151,21 +149,17 @@ describe('useElectrodeMatching — intracranial mode', () => {
 
 describe('useElectrodeMatching — re-detection on channel change', () => {
   it('re-fetches and re-detects when channelNames changes (new recording loaded)', async () => {
-    const onRecordingTypeChange = vi.fn();
-    const { rerender } = setup({ onRecordingTypeChange });
-    await waitFor(() => expect(onRecordingTypeChange).toHaveBeenCalledTimes(1));
+    const { rerender } = setup();
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1));
 
-    onRecordingTypeChange.mockClear();
     act(() => {
       rerender({
         channelNames: ['EEG1', 'EEG2', 'EEG3', 'EEG4'],
         customElectrodes: [],
         customElecPosFileName: null,
-        recordingType: 'eeg',
-        onRecordingTypeChange,
       });
     });
 
-    await waitFor(() => expect(onRecordingTypeChange).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(2));
   });
 });
