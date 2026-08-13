@@ -99,7 +99,9 @@ vi.mock('@/components/EegViewer', () => ({
           onClick={() =>
             onElectrodeSnapshotChange?.({
               isIntracranial: true,
-              matched: [{ channelIdx: 0, name: 'B1', pos: { label: 'B1', x: 0, y: 0, z: 0 } }],
+              matched: [
+                { channelIdx: 0, name: 'B1', pos: { label: 'B1', x: 0, y: 0, z: 0 }, type: 'seeg' },
+              ],
               voltages: [5],
             })
           }

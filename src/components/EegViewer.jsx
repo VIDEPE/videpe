@@ -268,11 +268,16 @@ export const EegViewer = ({
 
   // Bad channels are hidden from topography/connectome/ESI entirely, not just excluded from
   // the reference calc — a bad electrode's position never appears as a node to plot, and
-  // its own voltage never contributes to ESI's source-power computation. `matched` (from
-  // useElectrodeMatching) is kept raw for EegMontageEditor's Pos-match indicator below,
+  // its own voltage never contributes to ESI's source-power computation (voltage set to 0).
+  // `matched` (from useElectrodeMatching) is kept raw for EegMontageEditor's Pos-match indicator below,
   // which cares about position-file coverage independent of the current bad-channel flags.
+  // visibleMatched 'type' for each match => buildElectrodeLayer in eegTopographyUtils.js uses it
+  // to reconstruct proper connectome
   const visibleMatched = useMemo(
-    () => matched.filter((m) => !channelSettings[m.name]?.bad),
+    () =>
+      matched
+        .filter((m) => !channelSettings[m.name]?.bad)
+        .map((m) => ({ ...m, type: channelSettings[m.name]?.type })),
     [matched, channelSettings]
   );
 

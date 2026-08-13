@@ -505,37 +505,62 @@ describe('buildIntracranialConnectome', () => {
 });
 
 describe('buildElectrodeLayer', () => {
-  const matched = [
-    { channelIdx: 0, name: 'B1', pos: { label: 'B1', x: 0, y: 0, z: 0 } },
-    { channelIdx: 1, name: 'B2', pos: { label: 'B2', x: 1, y: 1, z: 1 } },
+  // Each matched entry now carries its own `type` (set by EegViewer from channelSettings) —
+  // buildElectrodeLayer splits on that instead of a single whole-recording isIntracranial flag.
+  const seegMatched = [
+    { channelIdx: 0, name: 'B1', pos: { label: 'B1', x: 0, y: 0, z: 0 }, type: 'seeg' },
+    { channelIdx: 1, name: 'B2', pos: { label: 'B2', x: 1, y: 1, z: 1 }, type: 'seeg' },
+  ];
+  const eegMatched = [
+    { channelIdx: 0, name: 'Fp1', pos: { label: 'Fp1', x: 0, y: 0, z: 0 }, type: 'eeg' },
+    { channelIdx: 1, name: 'Fp2', pos: { label: 'Fp2', x: 1, y: 1, z: 1 }, type: 'eeg' },
   ];
 
   it('returns null when there are no matched (positioned) channels yet', () => {
-    expect(buildElectrodeLayer({ isIntracranial: true, matched: [], voltages: [] })).toBeNull();
+    expect(buildElectrodeLayer({ matched: [], voltages: [] })).toBeNull();
   });
 
-  it('returns a well-formed intracranial connectome (nodes+edges) volume entry when intracranial = true', () => {
-    const volume = buildElectrodeLayer({ isIntracranial: true, matched, voltages: [10, -4] });
+  it('returns a well-formed intracranial connectome (nodes+edges) volume entry when every matched channel is seeg', () => {
+    const volume = buildElectrodeLayer({ matched: seegMatched, voltages: [10, -4] });
     expect(volume).toMatchObject({
       url: ELECTRODE_LAYER_URL,
       kind: 'connectome',
+      subtype: 'Intracranial EEG',
     });
     expect(volume.nodes).toHaveLength(2);
     expect(volume.edges).toHaveLength(1);
   });
 
-  it('returns a well-formed surfaceEEG connectome (only nodes) volume entry when intracranial = false', () => {
-    const volume = buildElectrodeLayer({ isIntracranial: false, matched, voltages: [10, -4] });
+  it('returns a well-formed surfaceEEG connectome (only nodes) volume entry when every matched channel is eeg', () => {
+    const volume = buildElectrodeLayer({ matched: eegMatched, voltages: [10, -4] });
     expect(volume).toMatchObject({
       url: ELECTRODE_LAYER_URL,
       kind: 'connectome',
+      subtype: 'Surface EEG',
     });
     expect(volume.nodes).toHaveLength(2);
     expect(volume.edges).toHaveLength(0);
   });
 
-  it('sets calMax to the maximum absolute voltage', () => {
-    const volume = buildElectrodeLayer({ isIntracranial: true, matched, voltages: [10, -25] });
+  it('splits a mixed seeg/eeg matched set into shaft-connected nodes and plain nodes, seeg first', () => {
+    const matched = [...seegMatched, ...eegMatched];
+    const volume = buildElectrodeLayer({ matched, voltages: [10, -4, 5, -5] });
+    expect(volume.subtype).toBe('Intracranial & Surface EEG');
+    expect(volume.nodes).toHaveLength(4);
+    // seeg nodes occupy indices 0-1, so the one shaft edge between them stays valid.
+    expect(volume.nodes.map((n) => n.name)).toEqual(['B1', 'B2', 'Fp1', 'Fp2']);
+    expect(volume.edges).toEqual([{ first: 0, second: 1, colorValue: 1 }]);
+  });
+
+  it('drops a matched channel whose type is neither seeg nor eeg (e.g. "other")', () => {
+    const matched = [...seegMatched, { ...eegMatched[0], type: 'other' }];
+    const volume = buildElectrodeLayer({ matched, voltages: [10, -4, 5] });
+    expect(volume.nodes).toHaveLength(2);
+    expect(volume.nodes.map((n) => n.name)).toEqual(['B1', 'B2']);
+  });
+
+  it('sets calMax to the maximum absolute voltage across the full matched set', () => {
+    const volume = buildElectrodeLayer({ matched: seegMatched, voltages: [10, -25] });
     expect(volume.calMax).toBe(25);
   });
 });
