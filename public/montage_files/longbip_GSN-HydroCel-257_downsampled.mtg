@@ -1,0 +1,133 @@
+<!DOCTYPE AnyWaveMontage>
+<Montage>
+	<Channel name="E18">
+		<type>EEG</type>
+		<reference>E226</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="E226">
+		<type>EEG</type>
+		<reference>E210</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="E210">
+		<type>EEG</type>
+		<reference>E169</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="E169">
+		<type>EEG</type>
+		<reference>E150</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="E18">
+		<type>EEG</type>
+		<reference>E2</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="E2">
+		<type>EEG</type>
+		<reference>E202</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="E202">
+		<type>EEG</type>
+		<reference>E170</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="E170">
+		<type>EEG</type>
+		<reference>E150</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="E18">
+		<type>EEG</type>
+		<reference>E224</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="E224">
+		<type>EEG</type>
+		<reference>E183</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="E183">
+		<type>EEG</type>
+		<reference>E153</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="E153">
+		<type>EEG</type>
+		<reference>E150</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="E37">
+		<type>EEG</type>
+		<reference>E36</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="E36">
+		<type>EEG</type>
+		<reference>E59</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="E59">
+		<type>EEG</type>
+		<reference>E87</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="E87">
+		<type>EEG</type>
+		<reference>E116</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="E37">
+		<type>EEG</type>
+		<reference>E47</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="E47">
+		<type>EEG</type>
+		<reference>E69</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="E69">
+		<type>EEG</type>
+		<reference>E96</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="E96">
+		<type>EEG</type>
+		<reference>E116</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="E37">
+		<type>EEG</type>
+		<reference>E252</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="E252">
+		<type>EEG</type>
+		<reference>E68</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="E68">
+		<type>EEG</type>
+		<reference>E106</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="E106">
+		<type>EEG</type>
+		<reference>E116</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="E21">
+		<type>EEG</type>
+		<reference>Cz</reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="Cz">
+		<type>EEG</type>
+		<reference>E101</reference>
+		<color>black</color>
+	</Channel>
+</Montage>

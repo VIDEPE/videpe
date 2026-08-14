@@ -1,5 +1,6 @@
 import { NVImage } from '@niivue/niivue';
 import { ESI_LAYER_URL } from '@/utils/NiiViewer.utils';
+import { normalizeChannelName } from '@/utils/eegTopographyUtils';
 import {
   median,
   euclideanDistance,
@@ -218,7 +219,7 @@ export function buildAffineMatrix(anchor, basis, minCorner) {
 //
 // @param {Float64Array} flatSourceFilters - pre-packed filter data from parseInverseSolutionFieldtrip
 // @param {number[]|Float64Array} channelVoltages - voltage at each channel at the clicked timepoint,
-//   flat 1D array ordered to match inverseSolution.channelLabels (not a column vector)
+//   flat 1D array ordered to match inverseSolution.inverseSolutionChannelNames (not a column vector)
 // @param {number} nInsideSources - number of inside-brain source points
 // @param {number} nChannels - number of EEG channels
 // @returns {Float64Array} source power per inside-brain point, length = nInsideSources
@@ -363,25 +364,134 @@ export function convertSourcePowersToVolume(
   };
 }
 
+// Builds a normalized-name → recording-channel-index lookup, reusing the same
+// normalization electrode-position matching uses (so e.g. "EEG 1-Ref" matches a model's
+// bare "1" label) — shared by both channel-matching functions below. A name that appears
+// more than once in channelNames (e.g. a SEEG and an EEG channel that happen to share a
+// name) is treated as unmatchable rather than silently resolving to whichever occurrence
+// was seen last — feeding the wrong channel's voltage into the matrix multiply is worse
+// than reporting no match at all. duplicateNames tracks which normalized names hit this
+// case, so callers can tell "genuinely missing" apart from "ambiguous" for error reporting.
+function buildChannelNameIndex(channelNames) {
+  const index = new Map();
+  const duplicateNames = new Set();
+  channelNames.forEach((name, i) => {
+    const normalized = normalizeChannelName(name);
+    if (index.has(normalized) || duplicateNames.has(normalized)) {
+      index.delete(normalized); // ambiguous — undo its earlier mapping, never re-add below
+      duplicateNames.add(normalized);
+      return;
+    }
+    index.set(normalized, i);
+  });
+  return { index, duplicateNames };
+}
+
+// Matches a recording's channel names against an inverse-solution model's own channel
+// names — drives the Inverse Solution status LED's match count, independent of any EEG-
+// plot click (channelNames is available as soon as a recording loads; channelSnapshot only
+// exists after the first click).
+//
+// @param {string[]} channelNames - the recording's own channel names
+// @param {string[]} inverseSolutionChannelNames - inverseSolution.inverseSolutionChannelNames, the
+//   model's own channel names, in the model's own order
+// @returns {{ matchCount: number, totalCount: number, isGoodMatch: boolean, duplicateChannelNames: string[] }}
+//   isGoodMatch is true only for a *full* match — unlike electrode-position matching, a
+//   partial match here isn't just a lower-quality result, it means ESI can't compute at all
+//   (see matchVoltagesToInverseSolution below). duplicateChannelNames lists which of the
+//   model's own channel names (its own spelling, not the recording's) are unmatched
+//   specifically because the recording has more than one channel with that name — worth
+//   surfacing distinctly from a channel that's simply absent.
+export function matchChannelsToInverseSolution(channelNames, inverseSolutionChannelNames) {
+  const { index, duplicateNames } = buildChannelNameIndex(channelNames);
+  const matchCount = inverseSolutionChannelNames.filter((name) =>
+    index.has(normalizeChannelName(name))
+  ).length;
+  const totalCount = inverseSolutionChannelNames.length;
+  const duplicateChannelNames = inverseSolutionChannelNames.filter((name) =>
+    duplicateNames.has(normalizeChannelName(name))
+  );
+  return { matchCount, totalCount, isGoodMatch: matchCount === totalCount, duplicateChannelNames };
+}
+
+// Finds which of the inverse-solution model's own channel names resolve (by name) to a
+// recording channel that's itself typed SEEG. Applying a scalp inverse filter to an SEEG
+// contact's voltage would produce nonsensical results even when the name happens to
+// match — this is a per-channel check, deliberately independent of the recording's
+// overall majority type: extra SEEG channels the model doesn't need are irrelevant, since
+// matchVoltagesToInverseSolution never selects them in the first place. Only a needed
+// channel actually being SEEG-typed matters.
+//
+// @param {string[]} channelNames - the recording's own channel names
+// @param {(string|undefined)[]} channelTypes - one channelSettings type per channelNames
+//   index (see EegViewer.jsx's channelTypes / useTimepointSnapshot.js)
+// @param {string[]} inverseSolutionChannelNames - inverseSolution.inverseSolutionChannelNames, the
+//   model's own channel names, in the model's own order
+// @returns {string[]} the model's own channel names (not the recording's) that hit this —
+//   empty when none do
+export function findSeegChannelsAmongNeeded(
+  channelNames,
+  channelTypes,
+  inverseSolutionChannelNames
+) {
+  const { index } = buildChannelNameIndex(channelNames);
+  return inverseSolutionChannelNames.filter((name) => {
+    const i = index.get(normalizeChannelName(name));
+    return i !== undefined && channelTypes?.[i] === 'seeg';
+  });
+}
+
+// Reorders/selects a per-click voltage snapshot into the inverse-solution model's own
+// channel order (by name, not position) — calculateSourcePower's matrix multiply assumes
+// channelVoltages[i] corresponds to inverseSolutionChannelNames[i]'s pre-computed filter
+// row, and the recording's channel order/count has no reason to already match the model's
+// (extra channels the model doesn't need are simply skipped). Returns null if any of
+// inverseSolutionChannelNames has no match in channelNames — a missing model channel has
+// no voltage to substitute, so the computation can't run at all, not just degrade.
+//
+// @param {string[]} channelNames - the recording's own channel names
+// @param {number[]} voltages - one per channelNames index
+// @param {string[]} inverseSolutionChannelNames - inverseSolution.inverseSolutionChannelNames, the
+//   model's own channel names, in the model's own order
+// @returns {number[] | null} one voltage per inverseSolutionChannelNames entry, in that
+//   same (model) order — not the recording's order — or null if any entry has no match
+export function matchVoltagesToInverseSolution(
+  channelNames,
+  voltages,
+  inverseSolutionChannelNames
+) {
+  const { index } = buildChannelNameIndex(channelNames); // recording name -> recording index
+  const matchedVoltages = [];
+  // walk the MODEL's own channel order, looking each one up in the recording's index
+  for (const modelChannelName of inverseSolutionChannelNames) {
+    const i = index.get(normalizeChannelName(modelChannelName));
+    if (i === undefined) return null;
+    matchedVoltages.push(voltages[i]);
+  }
+  // matchedVoltages are the recording voltages, but then put in the correct InverseSolution order
+  return matchedVoltages;
+}
+
 // Main entry point for Electrical Source Imaging. Called on each EEG plot click with
 // the loaded inverse filter model and a snapshot of the current channel state.
 // The model's flatSourceFilters is pre-computed at file-load time by parseInverseSolutionFieldtrip,
 // so this function only performs the fast per-click matrix multiply.
 //
 // @param {object} inverseSolution - parsed inverse filter model from parseInverseSolutionFieldtrip:
-//   { format, flatSourceFilters, insideSourcePositions, nInsideSources, nChannels, channelLabels, ... }
+//   { format, flatSourceFilters, insideSourcePositions, nInsideSources, nChannels, inverseSolutionChannelNames, ... }
 // @param {object} channelSnapshot - per-click EEG state lifted from EegViewer:
-//   { isIntracranial: boolean, channelNames: string[], voltages: number[] }
+//   { isIntracranial: boolean, channelNames: string[], channelTypes: Array, voltages: number[] }
 // @returns {{ sourcePowerConnectomes: object, sourcePowerVolume: object }|null|[]} an object
 //   exposing both representations as lazy, memoized getters — each is only actually built
 //   (and cached) the first time it's read, so the mode not currently rendered never pays for
-//   its own conversion.
+//   its own conversion. Also null when the recording is missing a channel the model needs,
+//   or one of the channels it needs is itself typed SEEG (see matchVoltagesToInverseSolution
+//   and findSeegChannelsAmongNeeded) — either way the computation can't run at all, not just
+//   degrade. Deliberately scoped to just the model's own channels, not the recording's
+//   overall majority type — extra SEEG channels the model doesn't need don't block this.
 export function electricalSourceImaging(inverseSolution, channelSnapshot) {
   if (!inverseSolution) return null;
   if (!channelSnapshot?.voltages?.length) return null;
-  // ESI inverse filters are computed from scalp EEG models — applying them to intracranial
-  // recordings would produce nonsensical results, so we guard here rather than in the caller.
-  if (channelSnapshot.isIntracranial) return null;
   if (inverseSolution.format === 'FieldTrip') {
     if (!inverseSolution?.flatSourceFilters?.length) return [];
 
@@ -394,11 +504,32 @@ export function electricalSourceImaging(inverseSolution, channelSnapshot) {
       gridDimensions,
       pixDims,
       affine,
+      inverseSolutionChannelNames,
     } = inverseSolution;
+
+    // ESI inverse filters are computed from scalp EEG models — applying them to a channel
+    // that's itself typed SEEG would produce nonsensical results, even if its name matches
+    // one of the model's own channels.
+    if (
+      findSeegChannelsAmongNeeded(
+        channelSnapshot.channelNames,
+        channelSnapshot.channelTypes,
+        inverseSolutionChannelNames
+      ).length > 0
+    ) {
+      return null;
+    }
+
+    const channelVoltages = matchVoltagesToInverseSolution(
+      channelSnapshot.channelNames,
+      channelSnapshot.voltages,
+      inverseSolutionChannelNames
+    );
+    if (!channelVoltages) return null; // recording is missing a channel the model needs
 
     const sourcePowers = calculateSourcePower({
       flatSourceFilters,
-      channelVoltages: channelSnapshot.voltages,
+      channelVoltages,
       nInsideSources,
       nChannels,
     });

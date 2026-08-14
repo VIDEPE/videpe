@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, within, fireEvent, act } from '@testing-library/react';
+import { render, screen, within, fireEvent, act, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { EegViewer } from '@/components/EegViewer';
 
@@ -75,18 +75,12 @@ vi.mock('react-hot-toast', () => {
   return { default: toastFn };
 });
 
-// Minimal .elc content whose labels match two of the three test channel names
-const MOCK_ELC = `ReferenceLabel avg
-UnitPosition mm
-NumberPositions= 3
-Positions
--29.0 84.0 -7.0
-29.0 84.0 -7.0
-0.0 0.0 88.0
-Labels
-EEG1
-EEG2
-Cz
+// Minimal fsaverage_1005.tsv-shaped content (MNE's "label" header, mm-scale here for
+// simplicity) whose labels match two of the three test channel names
+const MOCK_TSV = `label\tx\ty\tz
+EEG1\t-29.0\t84.0\t-7.0
+EEG2\t29.0\t84.0\t-7.0
+Cz\t0.0\t0.0\t88.0
 `;
 
 // jsdom does not implement ResizeObserver; use a class so `new` works,
@@ -103,7 +97,14 @@ beforeEach(() => {
     }
     disconnect() {}
   };
-  global.fetch = vi.fn().mockResolvedValue({ text: () => Promise.resolve(MOCK_ELC) });
+  global.fetch = vi.fn().mockResolvedValue({ text: () => Promise.resolve(MOCK_TSV) });
+  // EegMontageEditor's Apply/OK confirm via window.confirm when the draft has bad/missing
+  // rows — default to confirming so montage tests that mark a channel bad still commit.
+  vi.spyOn(window, 'confirm').mockReturnValue(true);
+});
+
+afterEach(() => {
+  window.confirm.mockRestore();
 });
 
 const INITIAL_Y_SCALE = 0.15; // must match the yScale useState default in EegViewer
@@ -636,7 +637,7 @@ describe('EegViewer — plot rendering', () => {
 describe('EegViewer — topography wiring', () => {
   it('fetches the electrode position file on mount', async () => {
     await renderViewer();
-    expect(global.fetch).toHaveBeenCalledWith('electrode_positions/standard_1005.elc');
+    expect(global.fetch).toHaveBeenCalledWith('electrode_positions/fsaverage_1005.tsv');
   });
 
   it('does not show EegTopoViewer on initial render', async () => {
@@ -672,7 +673,7 @@ describe('EegViewer — topography wiring', () => {
   it('passes total channel count to EegTopoViewer', async () => {
     await renderViewer();
     await enableTopoAndClick();
-    // MOCK_ELC has 2 labels matching the test channel names (EEG1, EEG2); total is 3
+    // MOCK_TSV has 2 labels matching the test channel names (EEG1, EEG2); total is 3
     expect(screen.getByText(/2\s*\/\s*3\s*channels mapped/i)).toBeTruthy();
   });
 });
@@ -686,7 +687,58 @@ describe('EegViewer — ESI toggle wiring', () => {
     expect(button).toBeDisabled();
   });
 
-  it('is enabled once an inverse solution is loaded, and toggles aria-pressed/label when clicked', async () => {
+  it('is disabled with an inverse solution loaded but a partial channel match', async () => {
+    const provider = makeProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        inverseSolutionFileName="my_inverse_solution"
+        isEsiChannelMatchGoodForLed={false}
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const button = screen.getByRole('button', { name: /enable electrical source imaging/i });
+    expect(button).toBeDisabled();
+    expect(
+      screen.getByTitle(
+        'Electrical Source Imaging. Inverse solution channels do not fully match this recording'
+      )
+    ).toBeInTheDocument();
+  });
+
+  it('shows a generic (non-enumerating) title and disables the button when a needed channel is typed SEEG, even with a full name match', async () => {
+    const provider = makeProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        inverseSolutionFileName="my_inverse_solution"
+        isEsiChannelMatchGoodForLed={false}
+        esiSeegChannelNames={['1', '2']}
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const button = screen.getByRole('button', { name: /enable electrical source imaging/i });
+    expect(button).toBeDisabled();
+    expect(
+      screen.getByTitle(
+        'Electrical Source Imaging not available when not all required channels have type EEG'
+      )
+    ).toBeInTheDocument();
+    // Deliberately doesn't enumerate the affected channels — a bulk edit can affect hundreds.
+    expect(screen.queryByTitle(/1, 2/)).not.toBeInTheDocument();
+  });
+
+  it('is enabled once an inverse solution is loaded with a full channel match, and toggles aria-pressed/label when clicked', async () => {
     const provider = makeProvider();
     const onEsiEnabledChange = vi.fn();
     render(
@@ -694,6 +746,7 @@ describe('EegViewer — ESI toggle wiring', () => {
         provider={provider}
         channelNames={provider.channelNames}
         inverseSolutionFileName="my_inverse_solution"
+        isEsiChannelMatchGoodForLed={true}
         esiEnabled={false}
         onEsiEnabledChange={onEsiEnabledChange}
       />
@@ -718,6 +771,7 @@ describe('EegViewer — ESI toggle wiring', () => {
         provider={provider}
         channelNames={provider.channelNames}
         inverseSolutionFileName="my_inverse_solution"
+        isEsiChannelMatchGoodForLed={true}
         esiEnabled={true}
         onEsiEnabledChange={() => {}}
       />
@@ -731,14 +785,14 @@ describe('EegViewer — ESI toggle wiring', () => {
     expect(button).toHaveAttribute('aria-pressed', 'true');
   });
 
-  it('stays disabled in iEEG mode even with an inverse solution loaded', async () => {
+  it('is enabled for an intracranial-shaped recording too, as long as the channel match is full — majorityIsSeeg no longer gates this button', async () => {
     const provider = makeIntracranialProvider();
     render(
       <EegViewer
         provider={provider}
         channelNames={provider.channelNames}
-        recordingType="ieeg"
         inverseSolutionFileName="my_inverse_solution"
+        isEsiChannelMatchGoodForLed={true}
       />
     );
     await act(async () => {
@@ -747,7 +801,45 @@ describe('EegViewer — ESI toggle wiring', () => {
     });
 
     const button = screen.getByRole('button', { name: /enable electrical source imaging/i });
-    expect(button).toBeDisabled();
+    expect(button).toBeEnabled();
+  });
+});
+
+describe('EegViewer — onChannelTypesChange reporting', () => {
+  it('reports one channelSettings type per channelNames index, independent of any click', async () => {
+    const provider = makeProvider(); // scalp-shaped fixture
+    const onChannelTypesChange = vi.fn();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        onChannelTypesChange={onChannelTypesChange}
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(onChannelTypesChange).toHaveBeenLastCalledWith(provider.channelNames.map(() => 'eeg'));
+  });
+
+  it('reports SEEG types for an intracranial-shaped recording', async () => {
+    const provider = makeIntracranialProvider();
+    const onChannelTypesChange = vi.fn();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        onChannelTypesChange={onChannelTypesChange}
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(onChannelTypesChange).toHaveBeenLastCalledWith(provider.channelNames.map(() => 'seeg'));
   });
 });
 
@@ -1414,66 +1506,21 @@ describe('EegViewer — loading toast', () => {
 // Cross-channel mean per sample is [4,5,6,7], so e.g. average-referenced
 // EEG1 = [1-4, 2-5, 3-6, 4-7] = [-3,-3,-3,-3].
 
-describe('EegViewer — montage controls', () => {
-  it('renders a Montage button and a dropdown defaulting to none', async () => {
+describe('EegViewer — montage', () => {
+  it('renders a Montage button, with no global reference dropdown (referencing now lives in the montage editor / is unconditional for topography)', async () => {
     await renderViewer();
     expect(screen.getByRole('button', { name: 'Montage' })).toBeInTheDocument();
-    const select = screen.getByLabelText(/montage/i);
-    expect(select.value).toBe('none');
+    expect(screen.queryByLabelText(/montage/i)).not.toBeInTheDocument();
   });
 
-  it('montage dropdown has None, Average, and Median options', async () => {
-    await renderViewer();
-    const select = screen.getByLabelText(/montage/i);
-    const values = Array.from(select.options).map((o) => o.value);
-    expect(values).toContain('none');
-    expect(values).toContain('average');
-    expect(values).toContain('median');
-  });
-
-  it('reports the selected montage via onMontageChange instead of applying it itself', async () => {
-    const onMontageChange = vi.fn();
-    const user = userEvent.setup();
-    const provider = makeProvider();
-    render(
-      <EegViewer
-        provider={provider}
-        channelNames={provider.channelNames}
-        montage="none"
-        onMontageChange={onMontageChange}
-      />
-    );
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    await user.selectOptions(screen.getByLabelText(/montage/i), 'average');
-    expect(onMontageChange).toHaveBeenCalledWith('average');
-  });
-
-  // montage is a controlled prop (PatientView owns the state so it can force 'average'
-  // when ESI needs it and react when the user switches away) — tests simulate the parent
-  // feeding the updated value back down via rerender, same pattern as recordingType below.
-  it('re-references the channel plot data when the montage prop changes to average', async () => {
+  it('does not re-reference the channel plot data (the waveform re-references per row via the montage editor; topography/connectome/ESI always use the common-average reference instead)', async () => {
     const { default: UplotReactMock } = await import('uplot-react');
-    const provider = makeProvider();
-    const { rerender } = render(
-      <EegViewer provider={provider} channelNames={provider.channelNames} montage="none" />
-    );
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await renderViewer();
 
-    UplotReactMock.mockClear();
-    rerender(
-      <EegViewer provider={provider} channelNames={provider.channelNames} montage="average" />
-    );
-
-    // EEG1 raw values for the visible window are [1,2,3]; averaged → [-3,-3,-3]
+    // EEG1 raw values for the visible window are [1,2,3] — unchanged, since with no montage
+    // rows configured every row falls back to its raw channel (referenceMode: null).
     const eeg1Data = Array.from(UplotReactMock.mock.calls[0][0].data[1]);
-    expect(eeg1Data).toEqual([-3, -3, -3]);
+    expect(eeg1Data).toEqual([1, 2, 3]);
   });
 });
 
@@ -1504,38 +1551,25 @@ describe('eeg plot resize handle', () => {
   });
 });
 
-describe('EegViewer — topography uses the montaged buffer', () => {
-  it('topography voltages reflect the montage prop', async () => {
-    const provider = makeProvider();
-    const { rerender } = render(
-      <EegViewer provider={provider} channelNames={provider.channelNames} montage="none" />
-    );
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+describe('EegViewer — topography always uses the common-average reference', () => {
+  it('topography voltages are average-referenced, unconditionally (no montage prop to toggle)', async () => {
+    await renderViewer();
 
     // Open the topography viewer at the mocked click timepoint
     await enableTopoAndClick();
-    // matched channels are EEG1 (idx0) and EEG2 (idx1); raw values at the clicked
-    // sample are EEG1=4, EEG2=7
-    expect(screen.getByTestId('topo-voltages').textContent).toBe('4,7');
-
-    rerender(
-      <EegViewer provider={provider} channelNames={provider.channelNames} montage="average" />
-    );
-
-    // cross-channel mean at that sample = (4+7+10)/3 = 7 → EEG1: 4-7=-3, EEG2: 7-7=0
+    // matched channels are EEG1 (idx0) and EEG2 (idx1); raw values at the clicked sample
+    // are EEG1=4, EEG2=7. Cross-channel mean at that sample = (4+7+10)/3 = 7 (all three
+    // channels are non-bad by default) → EEG1: 4-7=-3, EEG2: 7-7=0.
     expect(screen.getByTestId('topo-voltages').textContent).toBe('-3,0');
   });
 });
 
-// ── Recording type detection (EEG vs iEEG) ───────────────────────────────────
+// ── Channel-name auto-detection (EEG vs SEEG) ─────────────────────────────────
 // channelNames = ['EEG1','EEG2','EEG3'] against MOCK_ELC (labels EEG1, EEG2, Cz):
 // electrodeContactShapeRatio = 3/3 = 1.0, but standard1005MatchRatio = 2/3 ≈ 0.67
 // (not < 0.3), so this fixture is detected as scalp EEG, not intracranial.
 
-const INTRACRANIAL_CHANNEL_NAMES = ['B1', 'B2', "B'1"]; // primed group — always detected as iEEG
+const INTRACRANIAL_CHANNEL_NAMES = ['B1', 'B2', "B'1"]; // primed group — always detected as SEEG
 
 const makeIntracranialProvider = () => ({
   channelNames: INTRACRANIAL_CHANNEL_NAMES,
@@ -1553,26 +1587,20 @@ const makeIntracranialProvider = () => ({
 });
 
 describe('EegViewer — recording type detection', () => {
-  // recordingType is now a controlled prop (PatientView owns the state and shows/drives the
-  // EEG/iEEG toggle in the SplitPane title) — EegViewer only reports detection results upward
-  // via onRecordingTypeChange and reads the effective value back down via the recordingType
-  // prop. These tests exercise both halves of that contract directly, instead of a UI toggle
-  // that no longer lives in this component.
+  // There's no manual EEG/SEEG toggle anymore — intracranial-mode is derived from a
+  // majority vote over per-channel channelSettings, which itself is seeded from
+  // useElectrodeMatching's channel-name auto-detection the first time each channel is
+  // seen. These tests exercise how EegViewer wires that derived state into its children
+  // (EegTopoViewer); the detection heuristic itself is unit-tested directly in
+  // useElectrodeMatching.test.js.
   beforeEach(async () => {
     const { default: toast } = await import('react-hot-toast');
     toast.mockClear();
   });
 
-  // Detection logic itself (onRecordingTypeChange + toast for both scalp and intracranial
-  // channel shapes) is unit-tested directly in useElectrodeMatching.test.js. The tests below
-  // only cover what that hook test can't: how EegViewer wires the resulting isIntracranial
-  // state into its children (EegTopoViewer).
-
-  it('disables the topo toggle for an intracranial recordingType with no known electrode positions at all', async () => {
+  it('disables the topo toggle for an intracranial-shaped recording with no known electrode positions at all', async () => {
     const provider = makeIntracranialProvider();
-    render(
-      <EegViewer provider={provider} channelNames={provider.channelNames} recordingType="ieeg" />
-    );
+    render(<EegViewer provider={provider} channelNames={provider.channelNames} />);
     await act(async () => {
       await Promise.resolve();
       await Promise.resolve();
@@ -1583,21 +1611,17 @@ describe('EegViewer — recording type detection', () => {
     expect(screen.getByRole('button', { name: /topograph map/i })).toBeDisabled();
   });
 
-  it('keeps matched empty for an intracranial recordingType whose custom positions do not match any channel, even though standard_1005 was fetched', async () => {
+  it('keeps matched empty for an intracranial-shaped recording whose custom positions do not match any channel, even though fsaverage_1005 was fetched', async () => {
     const provider = makeIntracranialProvider();
     // A position file is loaded (so the topo toggle is enabled), but none of its labels
     // match this recording's channel names — mirrors loading the wrong patient's/montage's
     // position file, as opposed to no file at all (which is covered by the "disables the
     // topo toggle" test above and can no longer reach this code path via the UI).
     const customElectrodes = [{ label: 'X1', x: 0, y: 0, z: 0 }];
-    // recordingType is normally fed back down as a prop by the parent in response to the
-    // onRecordingTypeChange callback above (see PatientView) — passed directly here to
-    // exercise the same isIntracranial-driven behavior without reimplementing that parent.
     render(
       <EegViewer
         provider={provider}
         channelNames={provider.channelNames}
-        recordingType="ieeg"
         customElectrodes={customElectrodes}
       />
     );
@@ -1612,10 +1636,10 @@ describe('EegViewer — recording type detection', () => {
     expect(screen.getByTestId('topo-is-intracranial')).toHaveTextContent('true');
   });
 
-  it('switches intracranial-mode behavior when the recordingType prop changes (simulating a manual override)', async () => {
-    const provider = makeProvider(); // scalp-shaped fixture
+  it('re-derives intracranial-mode from channel-name auto-detection when a new recording is loaded', async () => {
+    const scalpProvider = makeProvider(); // scalp-shaped fixture
     const { rerender } = render(
-      <EegViewer provider={provider} channelNames={provider.channelNames} recordingType="eeg" />
+      <EegViewer provider={scalpProvider} channelNames={scalpProvider.channelNames} />
     );
     await act(async () => {
       await Promise.resolve();
@@ -1624,10 +1648,17 @@ describe('EegViewer — recording type detection', () => {
     await enableTopoAndClick();
     expect(screen.getByTestId('topo-is-intracranial')).toHaveTextContent('false');
 
+    const intracranialProvider = makeIntracranialProvider();
     rerender(
-      <EegViewer provider={provider} channelNames={provider.channelNames} recordingType="ieeg" />
+      <EegViewer provider={intracranialProvider} channelNames={intracranialProvider.channelNames} />
     );
-    expect(screen.getByTestId('topo-is-intracranial')).toHaveTextContent('true');
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId('topo-is-intracranial')).toHaveTextContent('true')
+    );
   });
 });
 
@@ -1656,8 +1687,10 @@ describe('EegViewer — lifted electrode state callback', () => {
       capturedClickHandler?.();
     });
 
+    // Always common-average-referenced now (see the topography describe block above):
+    // cross-channel mean at this sample = (4+7+10)/3 = 7 → EEG1: 4-7=-3, EEG2: 7-7=0.
     expect(onElectrodeSnapshotChange).toHaveBeenLastCalledWith(
-      expect.objectContaining({ isIntracranial: false, voltages: [4, 7] })
+      expect.objectContaining({ isIntracranial: false, voltages: [-3, 0] })
     );
   });
 });
@@ -1762,13 +1795,15 @@ describe('EegViewer — persistent electrode position dropzone', () => {
   // the right matchCount/totalCount/isGoodMatch for a given channel/template scenario —
   // color is kept as the observable proof that the MIN_STANDARD_MATCH_COUNT_FOR_LED
   // threshold was actually crossed (or not), not just that a number was rendered.
-  it('shows the electrode position LED with the standard_1005 match count, colored red, when the match is below the minimum threshold', async () => {
+  it('shows the electrode position LED with the fsaverage_1005 match count, colored red, when the match is below the minimum threshold', async () => {
     await renderViewer();
 
     expect(screen.getByText('Electrode Position')).toBeInTheDocument();
-    // MOCK_ELC matches 2 of the 3 test channel names — well under the 19 required for a
+    // MOCK_TSV matches 2 of the 3 test channel names — well under the 19 required for a
     // usable topography, so the count is shown but the LED reads red, not blue.
-    const led = screen.getByTitle('Using standard_1005 template (2/3 channels matched)');
+    const led = screen.getByTitle(
+      'Using default fsaverage_1005 (FreeSurfer) template (2/3 channels matched)'
+    );
     expect(led).toBeInTheDocument();
     expect(led.querySelector('span')).toHaveClass('bg-red-600/50');
     expect(screen.getByText('Inverse Solution')).toBeInTheDocument();
@@ -1776,51 +1811,52 @@ describe('EegViewer — persistent electrode position dropzone', () => {
   });
 
   it('shows the electrode position LED with a 0-match count, colored red, when the standard template matches no channels', async () => {
-    global.fetch = vi.fn().mockResolvedValue({ text: () => Promise.resolve(MOCK_ELC) });
+    global.fetch = vi.fn().mockResolvedValue({ text: () => Promise.resolve(MOCK_TSV) });
     const provider = makeProvider();
-    provider.channelNames = ['NoMatch1', 'NoMatch2'];
+    // No trailing digits — doesn't parse as an electrode-contact shape (unlike e.g.
+    // "NoMatch1"), so this stays detected as scalp EEG rather than accidentally SEEG.
+    provider.channelNames = ['Marker', 'Trigger'];
     render(<EegViewer provider={provider} channelNames={provider.channelNames} />);
     await act(async () => {
       await Promise.resolve();
       await Promise.resolve();
     });
 
-    const led = screen.getByTitle('Using standard_1005 template (0/2 channels matched)');
+    const led = screen.getByTitle(
+      'Using default fsaverage_1005 (FreeSurfer) template (0/2 channels matched)'
+    );
     expect(led).toBeInTheDocument();
     expect(led.querySelector('span')).toHaveClass('bg-red-600/50');
   });
 
   // Real high-density recordings (e.g. the demo dataset) can share only a handful of
-  // labels (like "Cz") with the standard_1005 template out of 200+ channels — a
+  // labels (like "Cz") with the fsaverage_1005 template out of 200+ channels — a
   // technically non-empty match too sparse to be a usable topography.
   it('shows the electrode position LED as not auto-matched (red) when only a small minority of channels match the standard template', async () => {
-    global.fetch = vi.fn().mockResolvedValue({ text: () => Promise.resolve(MOCK_ELC) });
+    global.fetch = vi.fn().mockResolvedValue({ text: () => Promise.resolve(MOCK_TSV) });
     const provider = makeProvider();
-    provider.channelNames = ['Cz', 'X1', 'X2']; // MOCK_ELC only matches "Cz" — 1/3, and 1 < 19
+    provider.channelNames = ['Cz', 'X1', 'X2']; // MOCK_TSV only matches "Cz" — 1/3, and 1 < 19
     render(<EegViewer provider={provider} channelNames={provider.channelNames} />);
     await act(async () => {
       await Promise.resolve();
       await Promise.resolve();
     });
 
-    const led = screen.getByTitle('Using standard_1005 template (1/3 channels matched)');
+    const led = screen.getByTitle(
+      'Using default fsaverage_1005 (FreeSurfer) template (1/3 channels matched)'
+    );
     expect(led).toBeInTheDocument();
     expect(led.querySelector('span')).toHaveClass('bg-red-600/50');
   });
 
   it('shows the electrode position LED as auto-matched (blue) when the standard template match meets the minimum threshold', async () => {
     const manyChannelNames = Array.from({ length: 19 }, (_, i) => `E${i + 1}`);
-    const manyMatchElc = [
-      'ReferenceLabel avg',
-      'UnitPosition mm',
-      `NumberPositions= ${manyChannelNames.length}`,
-      'Positions',
-      ...manyChannelNames.map(() => '0.0 0.0 0.0'),
-      'Labels',
-      ...manyChannelNames,
+    const manyMatchTsv = [
+      'label\tx\ty\tz',
+      ...manyChannelNames.map((name) => `${name}\t0.0\t0.0\t0.0`),
       '',
     ].join('\n');
-    global.fetch = vi.fn().mockResolvedValue({ text: () => Promise.resolve(manyMatchElc) });
+    global.fetch = vi.fn().mockResolvedValue({ text: () => Promise.resolve(manyMatchTsv) });
     const provider = {
       channelNames: manyChannelNames,
       fs: 1,
@@ -1841,7 +1877,9 @@ describe('EegViewer — persistent electrode position dropzone', () => {
       await Promise.resolve();
     });
 
-    const led = screen.getByTitle('Using standard_1005 template (19/19 channels matched)');
+    const led = screen.getByTitle(
+      'Using default fsaverage_1005 (FreeSurfer) template (19/19 channels matched)'
+    );
     expect(led).toBeInTheDocument();
     expect(led.querySelector('span')).toHaveClass('bg-blue-500');
   });
@@ -1911,13 +1949,12 @@ describe('EegViewer — persistent electrode position dropzone', () => {
     expect(led.querySelector('span')).toHaveClass('bg-amber-500');
   });
 
-  it('shows the electrode position LED match count for a custom file even in iEEG mode, where the standard template never applies', async () => {
+  it('shows the electrode position LED match count for a custom file even for an intracranial-shaped recording, where the standard template never applies', async () => {
     const provider = makeIntracranialProvider();
     render(
       <EegViewer
         provider={provider}
         channelNames={provider.channelNames}
-        recordingType="ieeg"
         customElecPosFileName="my_positions"
         customElectrodes={[
           { label: 'B1', x: 0, y: 0, z: 0 },
@@ -1950,23 +1987,74 @@ describe('EegViewer — persistent electrode position dropzone', () => {
       await Promise.resolve();
     });
 
-    // Inverse Solution has no match-count concept — loaded must mean green, not amber.
+    // Without esiChannelMatchCount/TotalCount passed, no match info — green, no count suffix.
     const led = screen.getByTitle('my_inverse_solution');
     expect(led).toBeInTheDocument();
     expect(led.querySelector('span')).toHaveClass('bg-green-500');
     expect(
-      screen.getByTitle('Using standard_1005 template (2/3 channels matched)')
+      screen.getByTitle('Using default fsaverage_1005 (FreeSurfer) template (2/3 channels matched)')
     ).toBeInTheDocument();
   });
 
-  it('greys out the inverse solution LED in iEEG mode, even with a file loaded', async () => {
+  it('shows the inverse solution LED green with a match count when every model channel matches', async () => {
+    const provider = makeProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        inverseSolutionFileName="my_inverse_solution"
+        esiChannelMatchCount={3}
+        esiChannelTotalCount={3}
+        isEsiChannelMatchGoodForLed={true}
+      />
+    );
+    // Two ticks flush useElectrodeMatching's fetch().then(r => r.text()).then(setState) chain — one tick per .then().
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const led = screen.getByTitle('Custom: my_inverse_solution (3/3 channels matched)');
+    expect(led).toBeInTheDocument();
+    expect(led.querySelector('span')).toHaveClass('bg-green-500');
+  });
+
+  it('shows the inverse solution LED amber when only some of the model channels match', async () => {
+    const provider = makeProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        inverseSolutionFileName="my_inverse_solution"
+        esiChannelMatchCount={2}
+        esiChannelTotalCount={3}
+        isEsiChannelMatchGoodForLed={false}
+      />
+    );
+    // Two ticks flush useElectrodeMatching's fetch().then(r => r.text()).then(setState) chain — one tick per .then().
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const led = screen.getByTitle('Custom: my_inverse_solution (2/3 channels matched)');
+    expect(led).toBeInTheDocument();
+    expect(led.querySelector('span')).toHaveClass('bg-amber-500');
+  });
+
+  it('does not grey out the inverse solution LED for a majority-SEEG recording — reflects the channel match instead', async () => {
+    // A majority-SEEG recording can still have a full, correctly-typed match for the
+    // channels the model actually needs (see findSeegChannelsAmongNeeded) — majority alone
+    // must not grey the LED out the way it used to.
     const provider = makeIntracranialProvider();
     render(
       <EegViewer
         provider={provider}
         channelNames={provider.channelNames}
-        recordingType="ieeg"
         inverseSolutionFileName="my_inverse_solution"
+        esiChannelMatchCount={3}
+        esiChannelTotalCount={3}
+        isEsiChannelMatchGoodForLed={true}
       />
     );
     await act(async () => {
@@ -1974,11 +2062,13 @@ describe('EegViewer — persistent electrode position dropzone', () => {
       await Promise.resolve();
     });
 
+    const led = screen
+      .getByTitle('Custom: my_inverse_solution (3/3 channels matched)')
+      .querySelector('span');
+    expect(led).toHaveClass('bg-green-500');
     expect(
-      screen.getByTitle('Inverse Solution is not applicable for iEEG recordings')
-    ).toBeInTheDocument();
-    // Electrode position stays fully active/relevant in iEEG mode.
-    expect(screen.queryByTitle(/electrode position is not applicable/i)).not.toBeInTheDocument();
+      screen.queryByTitle('Inverse Solution is not applicable for SEEG recordings')
+    ).not.toBeInTheDocument();
   });
 
   it('routes .elc and .mat to their respective handlers when dropped together', async () => {
@@ -2048,9 +2138,7 @@ describe('EegViewer — persistent electrode position dropzone', () => {
 describe('EegViewer — hovering a disabled toggle highlights the LED that explains why', () => {
   it('highlights the Electrode Position LED red while hovering the disabled topo toggle, and reverts on unhover', async () => {
     const provider = makeIntracranialProvider();
-    render(
-      <EegViewer provider={provider} channelNames={provider.channelNames} recordingType="ieeg" />
-    );
+    render(<EegViewer provider={provider} channelNames={provider.channelNames} />);
     await act(async () => {
       await Promise.resolve();
       await Promise.resolve();
@@ -2072,9 +2160,7 @@ describe('EegViewer — hovering a disabled toggle highlights the LED that expla
 
   it('highlights the Electrode Position LED red while hovering the disabled 3D-render toggle', async () => {
     const provider = makeIntracranialProvider();
-    render(
-      <EegViewer provider={provider} channelNames={provider.channelNames} recordingType="ieeg" />
-    );
+    render(<EegViewer provider={provider} channelNames={provider.channelNames} />);
     await act(async () => {
       await Promise.resolve();
       await Promise.resolve();
@@ -2097,10 +2183,10 @@ describe('EegViewer — hovering a disabled toggle highlights the LED that expla
     const esiButton = screen.getByRole('button', { name: /electrical source imaging/i });
     expect(esiButton).toBeDisabled();
     const inverseLed = screen.getByTitle('No inverse solution loaded').querySelector('span');
-    // Default renderViewer() scenario: standard_1005 matches 2/3 channels — below threshold,
+    // Default renderViewer() scenario: fsaverage_1005 matches 2/3 channels — below threshold,
     // so this LED is already red on its own merits, unrelated to any hover.
     const electrodeLed = screen
-      .getByTitle('Using standard_1005 template (2/3 channels matched)')
+      .getByTitle('Using default fsaverage_1005 (FreeSurfer) template (2/3 channels matched)')
       .querySelector('span');
 
     await userEvent.hover(esiButton.parentElement);
@@ -2115,14 +2201,19 @@ describe('EegViewer — hovering a disabled toggle highlights the LED that expla
     expect(inverseLed).toHaveClass('bg-red-600/50');
   });
 
-  it('does not highlight the Inverse Solution LED for the iEEG-disabled ESI toggle, since that LED is already greyed out for a different reason', async () => {
-    const provider = makeIntracranialProvider();
+  it('does not turn the Inverse Solution LED red for the disabled ESI toggle when it is already amber for a different reason (a poor channel match)', async () => {
+    // highlighted only ever affects StatusLed's red (off) branch (see its own doc comment)
+    // — an amber LED (file loaded, poor match) must stay amber when the disabled ESI
+    // toggle is hovered, not get forced red.
+    const provider = makeProvider();
     render(
       <EegViewer
         provider={provider}
         channelNames={provider.channelNames}
-        recordingType="ieeg"
         inverseSolutionFileName="my_inverse_solution"
+        esiChannelMatchCount={1}
+        esiChannelTotalCount={2}
+        isEsiChannelMatchGoodForLed={false}
       />
     );
     await act(async () => {
@@ -2133,12 +2224,12 @@ describe('EegViewer — hovering a disabled toggle highlights the LED that expla
     const esiButton = screen.getByRole('button', { name: /electrical source imaging/i });
     expect(esiButton).toBeDisabled();
     const led = screen
-      .getByTitle('Inverse Solution is not applicable for iEEG recordings')
+      .getByTitle('Custom: my_inverse_solution (1/2 channels matched)')
       .querySelector('span');
-    expect(led).toHaveClass('bg-foreground/20');
+    expect(led).toHaveClass('bg-amber-500');
 
     await userEvent.hover(esiButton.parentElement);
-    expect(led).toHaveClass('bg-foreground/20');
+    expect(led).toHaveClass('bg-amber-500');
   });
 });
 
@@ -2174,6 +2265,61 @@ describe('EegViewer — bad channel filtering', () => {
       .find((call) => call[0].data?.[1]?.includes(7));
     expect(eeg3Call).toBeTruthy();
     expect(Array.from(eeg3Call[0].data[1])).toEqual([7, 8, 9]);
+  });
+});
+
+describe('EegViewer — bad channels excluded from topography/connectome/ESI', () => {
+  it("excludes a bad channel's electrode from the topography match count and voltages", async () => {
+    const provider = makeProvider();
+    render(<EegViewer provider={provider} channelNames={provider.channelNames} />);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Montage' }));
+    await userEvent.click(screen.getByTestId('channel-bad-EEG1'));
+    await userEvent.click(screen.getByRole('button', { name: 'OK' }));
+
+    await enableTopoAndClick();
+
+    // MOCK_TSV matches EEG1 and EEG2 (Cz has no corresponding channel) — with EEG1 bad,
+    // only EEG2's electrode remains, and the average reference now excludes EEG1 too:
+    // (7+10)/2 = 8.5 → EEG2: 7-8.5 = -1.5.
+    expect(screen.getByText('1 / 3 channels mapped')).toBeTruthy();
+    expect(screen.getByTestId('topo-voltages').textContent).toBe('-1.5');
+  });
+
+  it("zeroes a bad channel's voltage in the all-channel snapshot fed to ESI, without dropping it from the array", async () => {
+    const onChannelSnapshotChange = vi.fn();
+    const provider = makeProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        onChannelSnapshotChange={onChannelSnapshotChange}
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Montage' }));
+    await userEvent.click(screen.getByTestId('channel-bad-EEG1'));
+    await userEvent.click(screen.getByRole('button', { name: 'OK' }));
+
+    onChannelSnapshotChange.mockClear();
+    await act(async () => {
+      capturedClickHandler?.();
+    });
+
+    // EEG1 is bad → zeroed, not dropped (the array stays channelNames-aligned for ESI's
+    // inverse-solution model). Average reference excludes EEG1: (7+10)/2 = 8.5 →
+    // EEG2: 7-8.5=-1.5, EEG3: 10-8.5=1.5.
+    expect(onChannelSnapshotChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ voltages: [0, -1.5, 1.5] })
+    );
   });
 });
 
@@ -2251,6 +2397,175 @@ describe('EegViewer — montage row wiring', () => {
 
     expect(screen.queryByText('EEG1 - EEG2')).toBeNull();
     expect(screen.queryByText('EEG1')).toBeNull();
+  });
+});
+
+describe('EegViewer — montage template dropdown', () => {
+  it('defaults to "None" with no "Custom" option, before any montage has been built', async () => {
+    await renderViewer();
+
+    expect(screen.getByTestId('montage-template-select')).toHaveValue('none');
+    const options = Array.from(screen.getByTestId('montage-template-select').options).map(
+      (option) => option.value
+    );
+    expect(options).toEqual(['none', 'average']);
+  });
+
+  it('disables the template select while the montage editor is open, and re-enables it once closed', async () => {
+    await renderViewer();
+
+    expect(screen.getByTestId('montage-template-select')).not.toBeDisabled();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Montage' }));
+    expect(screen.getByTestId('montage-template-select')).toBeDisabled();
+
+    await userEvent.click(screen.getByRole('button', { name: 'OK' }));
+    expect(screen.getByTestId('montage-template-select')).not.toBeDisabled();
+  });
+
+  it('replaces the waveform rows with one average-referenced row per channel when "Common Average Reference" is picked', async () => {
+    await renderViewer();
+
+    await userEvent.selectOptions(screen.getByTestId('montage-template-select'), 'average');
+
+    channelNames.forEach((name) => expect(screen.getByText(`${name} - Avg`)).toBeTruthy());
+  });
+
+  it('falls back to the plain channel list when "None" is picked after "Common Average Reference"', async () => {
+    await renderViewer();
+
+    await userEvent.selectOptions(screen.getByTestId('montage-template-select'), 'average');
+    await userEvent.selectOptions(screen.getByTestId('montage-template-select'), 'none');
+
+    channelNames.forEach((name) => expect(screen.getByText(name)).toBeTruthy());
+  });
+
+  it('adds a "Custom" option once a hand-built montage is applied via the editor, and restores it after switching to a template', async () => {
+    await renderViewer();
+    // change montage
+    await userEvent.click(screen.getByRole('button', { name: 'Montage' }));
+    await userEvent.click(screen.getByTestId('channel-select-EEG1'));
+    await userEvent.click(screen.getByTestId('add-selected-button'));
+    await userEvent.click(screen.getByRole('button', { name: 'OK' }));
+    // confirm change by reading channel names
+    expect(screen.getByText('EEG1')).toBeTruthy();
+    expect(screen.queryByText('EEG2')).toBeNull();
+    expect(screen.getByTestId('montage-template-select')).toHaveValue('custom');
+    // set to average and confirm channel names
+    await userEvent.selectOptions(screen.getByTestId('montage-template-select'), 'average');
+    channelNames.forEach((name) => expect(screen.getByText(`${name} - Avg`)).toBeTruthy());
+    // change back to previously set montage and confirm again it is restored
+    await userEvent.selectOptions(screen.getByTestId('montage-template-select'), 'custom');
+    expect(screen.getByText('EEG1')).toBeTruthy();
+    expect(screen.queryByText('EEG2')).toBeNull();
+  });
+});
+
+describe('EegViewer — file-backed montage templates', () => {
+  // EEG1 referential (no reference), EEG2 bipolar against EEG1 — exercises both the
+  // "just the channel name" and "channel - reference" display-row naming paths.
+  const TEMPLATE_MTG_TEXT = `<!DOCTYPE AnyWaveMontage>
+<Montage>
+	<Channel name="EEG1">
+		<type>SEEG</type>
+		<reference></reference>
+		<color>red</color>
+	</Channel>
+	<Channel name="EEG2">
+		<type>EEG</type>
+		<reference>EEG1</reference>
+		<color></color>
+	</Channel>
+</Montage>`;
+
+  const TEMPLATE_LIST = [{ name: 'Test Template', path: 'montage_files/test.mtg' }];
+
+  beforeEach(() => {
+    global.fetch = vi.fn((url) => {
+      if (url === 'montage_files/TEMPLATE_MONTAGES.json')
+        return Promise.resolve({ text: () => Promise.resolve(JSON.stringify(TEMPLATE_LIST)) });
+      if (url === 'montage_files/test.mtg')
+        return Promise.resolve({ text: () => Promise.resolve(TEMPLATE_MTG_TEXT) });
+      return Promise.resolve({ text: () => Promise.resolve(MOCK_TSV) }); // fsaverage_1005.tsv
+    });
+  });
+
+  const optionValues = () =>
+    Array.from(screen.getByTestId('montage-template-select').options).map((o) => o.value);
+
+  it('lists file-backed templates from TEMPLATE_MONTAGES.json in the dropdown', async () => {
+    await renderViewer();
+
+    await waitFor(() => expect(optionValues()).toContain('montage_files/test.mtg'));
+    expect(screen.getByText('Test Template')).toBeTruthy();
+  });
+
+  it("applies a file-backed template's rows to the live waveform and patches channel types", async () => {
+    await renderViewer();
+    await waitFor(() => expect(optionValues()).toContain('montage_files/test.mtg'));
+
+    await userEvent.selectOptions(
+      screen.getByTestId('montage-template-select'),
+      'montage_files/test.mtg'
+    );
+
+    expect(screen.getByText('EEG1')).toBeTruthy();
+    expect(screen.getByText('EEG2 - EEG1')).toBeTruthy();
+    expect(screen.queryByText('EEG3')).toBeNull();
+
+    // channel types (SEEG/EEG) patched — verify via the editor's channel-selection pane
+    await userEvent.click(screen.getByRole('button', { name: 'Montage' }));
+    expect(screen.getByTestId('channel-type-EEG1')).toHaveValue('seeg');
+    expect(screen.getByTestId('channel-type-EEG2')).toHaveValue('eeg');
+  });
+
+  it('keeps showing the template selected once applied, since the loaded rows do exactly match it', async () => {
+    await renderViewer();
+    await waitFor(() => expect(optionValues()).toContain('montage_files/test.mtg'));
+
+    await userEvent.selectOptions(
+      screen.getByTestId('montage-template-select'),
+      'montage_files/test.mtg'
+    );
+
+    expect(screen.getByTestId('montage-template-select')).toHaveValue('montage_files/test.mtg');
+  });
+
+  it('warns via toast when a template names a channel not present in this recording, and still applies the rows that do match', async () => {
+    const { default: toast } = await import('react-hot-toast');
+    toast.mockClear();
+    global.fetch = vi.fn((url) => {
+      if (url === 'montage_files/TEMPLATE_MONTAGES.json')
+        return Promise.resolve({ text: () => Promise.resolve(JSON.stringify(TEMPLATE_LIST)) });
+      if (url === 'montage_files/test.mtg')
+        return Promise.resolve({
+          text: () =>
+            Promise.resolve(`<!DOCTYPE AnyWaveMontage>
+<Montage>
+	<Channel name="EEG1">
+		<type>EEG</type>
+		<reference>EEG9</reference>
+		<color></color>
+	</Channel>
+</Montage>`),
+        });
+      return Promise.resolve({ text: () => Promise.resolve(MOCK_TSV) });
+    });
+
+    await renderViewer();
+    await waitFor(() => expect(optionValues()).toContain('montage_files/test.mtg'));
+
+    await userEvent.selectOptions(
+      screen.getByTestId('montage-template-select'),
+      'montage_files/test.mtg'
+    );
+
+    expect(toast).toHaveBeenCalledWith(
+      expect.stringContaining('EEG9'),
+      expect.objectContaining({ icon: '⚠️' })
+    );
+    // the row itself is dropped from the display since its reference channel doesn't exist
+    expect(screen.queryByText('EEG1 - EEG9')).toBeNull();
   });
 });
 

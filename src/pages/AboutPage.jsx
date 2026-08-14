@@ -232,9 +232,9 @@ export const AboutPage = () => {
                     mesh rendering; re-reference on the fly (none, average, or median); diverging
                     blue-white-red colormap with a live colorbar (µV) and a colour-blind-friendly
                     mode; individual electrode markers on the mesh, voltage-coloured for matched
-                    channels; uses Standard 10-05 electrode positions by default with support for
-                    custom <code>.elc</code> or <code>.tsv</code> files; 3D rotation is synchronised
-                    with the neuroimaging viewer — rotate one and the other follows
+                    channels; uses fsaverage_1005 (FreeSurfer) electrode positions by default with
+                    support for custom <code>.elc</code> or <code>.tsv</code> files; 3D rotation is
+                    synchronised with the neuroimaging viewer — rotate one and the other follows
                   </li>
                 </ul>
               </div>
@@ -279,7 +279,7 @@ export const AboutPage = () => {
                     view only)
                   </li>
                   <li>
-                    Adjustable node/edge size sliders for connectome layers (ESI and iEEG electrode
+                    Adjustable node/edge size sliders for connectome layers (ESI and SEEG electrode
                     connectomes)
                   </li>
                 </ul>
@@ -352,8 +352,18 @@ export const AboutPage = () => {
                   </li>
                   <li>
                     Montage pane for building referenced or bipolar rows from selected channels,
-                    with per-row colour, reordering, and sort-by-name/type
+                    with per-row colour, reordering, sort-by-name/type, and a bulk{' '}
+                    <strong>Set all as</strong> control to reference or colour every row at once
                   </li>
+                  <li>
+                    Built-in presets (e.g. double/triple banana) available from the EEG sidebar
+                    dropdown
+                  </li>
+                  <li>
+                    Re-reference on the fly — none, common average (CAR), or median — with bad or
+                    missing channels automatically excluded from the calculation
+                  </li>
+                  <li>Warns before applying a montage that references a bad or missing channel</li>
                   <li>
                     Once rows are built, the EEG waveform view shows exactly those rows instead of
                     the raw channel list
@@ -366,18 +376,18 @@ export const AboutPage = () => {
               </div>
             </div>
 
-            <div id="feature-ieeg" className="flex gap-3">
+            <div id="feature-seeg" className="flex gap-3">
               <ChartNetwork
                 size={22}
                 className="shrink-0 mt-0.5"
                 style={{ color: 'var(--c-primary)' }}
               />
               <div>
-                <p className="font-semibold text-heading">Intracranial (iEEG) support</p>
+                <p className="font-semibold text-heading">Intracranial (SEEG) support</p>
                 <p className="text-sm mt-1" style={{ color: 'var(--c-foreground)' }}>
-                  Toggle between scalp EEG and intracranial (sEEG/ECoG) recordings. Intracranial
-                  channels are auto-detected from channel naming, with a manual override always
-                  available.
+                  Each channel's type (EEG or SEEG) is auto-detected from its naming and editable
+                  per channel in the Montage Editor — mixed scalp/intracranial recordings are
+                  supported.
                 </p>
                 <ul
                   className="text-sm mt-2 flex flex-col gap-1 list-disc list-inside"

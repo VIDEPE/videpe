@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { parseElcElectrodePositions } from '@/loaders/parseElcElectrodePositions';
-import { parseTsvElectrodePositions } from '@/loaders/parseTsvElectrodePositions';
-import { matchChannelsToPositions } from '@/utils/eegTopographyUtils';
+import { parseElectrodePositionElc } from '@/loaders/parseElectrodePositionElc';
+import { parseElectrodePositionTsv } from '@/loaders/parseElectrodePositionTsv';
+import { findDuplicateChannelNames, matchChannelsToPositions } from '@/utils/eegTopographyUtils';
 
 // Minimal valid .elc with 3 fiducials + 2 electrodes
 const MINIMAL_ELC = `# ASA electrode file
@@ -31,58 +31,58 @@ Fp1	-29.0	84.0	-7.0
 Fp2	29.0	84.0	-7.0
 `;
 
-describe('parseElcElectrodePositions', () => {
+describe('parseElectrodePositionElc', () => {
   it('returns the correct number of electrodes (fiducials excluded)', () => {
-    const { electrodes } = parseElcElectrodePositions(MINIMAL_ELC);
+    const { electrodes } = parseElectrodePositionElc(MINIMAL_ELC);
     expect(electrodes.length).toBe(2);
   });
 
   it('parses electrode labels correctly', () => {
-    const { electrodes } = parseElcElectrodePositions(MINIMAL_ELC);
+    const { electrodes } = parseElectrodePositionElc(MINIMAL_ELC);
     expect(electrodes[0].label).toBe('Fp1');
     expect(electrodes[1].label).toBe('Fp2');
   });
 
   it('parses electrode xyz coordinates correctly', () => {
-    const { electrodes } = parseElcElectrodePositions(MINIMAL_ELC);
+    const { electrodes } = parseElectrodePositionElc(MINIMAL_ELC);
     expect(electrodes[0].x).toBeCloseTo(-29.0);
     expect(electrodes[0].y).toBeCloseTo(84.0);
     expect(electrodes[0].z).toBeCloseTo(-7.0);
   });
 
   it('detects all three standard fiducials', () => {
-    const { fiducials } = parseElcElectrodePositions(MINIMAL_ELC);
+    const { fiducials } = parseElectrodePositionElc(MINIMAL_ELC);
     expect(fiducials.LPA).toBeDefined();
     expect(fiducials.RPA).toBeDefined();
     expect(fiducials.Nz).toBeDefined();
   });
 
   it('parses fiducial coordinates correctly', () => {
-    const { fiducials } = parseElcElectrodePositions(MINIMAL_ELC);
+    const { fiducials } = parseElectrodePositionElc(MINIMAL_ELC);
     expect(fiducials.LPA.x).toBeCloseTo(-86.0);
     expect(fiducials.LPA.y).toBeCloseTo(-20.0);
     expect(fiducials.LPA.z).toBeCloseTo(-48.0);
   });
 
   it('reports hasFiducials true when all three are present', () => {
-    const { hasFiducials } = parseElcElectrodePositions(MINIMAL_ELC);
+    const { hasFiducials } = parseElectrodePositionElc(MINIMAL_ELC);
     expect(hasFiducials).toBe(true);
   });
 
   it('reports hasFiducials false when fiducials are missing', () => {
     const noFids = MINIMAL_ELC.replace('LPA', 'Fp3').replace('RPA', 'Fp4').replace('Nz', 'Fp5');
-    const { hasFiducials } = parseElcElectrodePositions(noFids);
+    const { hasFiducials } = parseElectrodePositionElc(noFids);
     expect(hasFiducials).toBe(false);
   });
 
   it('converts cm to mm', () => {
     const cmElc = MINIMAL_ELC.replace('UnitPosition\tmm', 'UnitPosition\tcm');
-    const { electrodes } = parseElcElectrodePositions(cmElc);
+    const { electrodes } = parseElectrodePositionElc(cmElc);
     expect(electrodes[0].x).toBeCloseTo(-290.0); // -29.0 cm × 10
   });
 
   it('returns empty arrays for empty input', () => {
-    const { electrodes, fiducials, hasFiducials } = parseElcElectrodePositions('');
+    const { electrodes, fiducials, hasFiducials } = parseElectrodePositionElc('');
     expect(electrodes).toEqual([]);
     expect(fiducials).toEqual({});
     expect(hasFiducials).toBe(false);
@@ -90,43 +90,96 @@ describe('parseElcElectrodePositions', () => {
 
   it('skips lines with missing or non-numeric coordinates', () => {
     const bad = MINIMAL_ELC.replace('-29.0 84.0 -7.0', 'n/a n/a n/a');
-    const { electrodes } = parseElcElectrodePositions(bad);
+    const { electrodes } = parseElectrodePositionElc(bad);
     expect(electrodes.length).toBe(1); // only Fp2 survives
+  });
+
+  // When UnitPosition is absent, the old behavior blindly assumed mm — wrong for a file
+  // whose coordinates are actually in meters. Infer from range instead, same heuristic
+  // as the tsv parser (see parseElectrodePositionTsv.js's METER_SCALE_RANGE_THRESHOLD).
+  it('auto-detects meter-scale coordinates and converts to mm when UnitPosition is not declared', () => {
+    const noUnitElc = `# ASA electrode file
+ReferenceLabel	avg
+NumberPositions=	5
+Positions
+-0.0860761 -0.0199897 -0.0479860
+0.0857939 -0.0200093 -0.0480310
+0.0000083 0.0868110 -0.0399830
+-0.0294367 0.0839171 -0.0069900
+0.0301123 0.0882470 -0.0017130
+Labels
+LPA
+RPA
+Nz
+Fp1
+Fp2
+`;
+    const { electrodes, fiducials } = parseElectrodePositionElc(noUnitElc);
+    expect(electrodes[0].x).toBeCloseTo(-29.4367, 3);
+    expect(fiducials.LPA.x).toBeCloseTo(-86.0761, 3);
+  });
+
+  it('assumes mm when UnitPosition is not declared and coordinates are already mm-scale', () => {
+    const noUnitElc = MINIMAL_ELC.replace('UnitPosition\tmm\n', '');
+    const { electrodes } = parseElectrodePositionElc(noUnitElc);
+    expect(electrodes[0].x).toBeCloseTo(-29.0);
+  });
+
+  it('auto-detects centimeter-scale coordinates and converts to mm when UnitPosition is not declared', () => {
+    const noUnitElc = `# ASA electrode file
+ReferenceLabel	avg
+NumberPositions=	5
+Positions
+-8.60761 -1.99897 -4.79860
+8.57939 -2.00093 -4.80310
+0.00083 8.68110 -3.99830
+-2.94367 8.39171 -0.69900
+3.01123 8.82470 -0.17130
+Labels
+LPA
+RPA
+Nz
+Fp1
+Fp2
+`;
+    const { electrodes, fiducials } = parseElectrodePositionElc(noUnitElc);
+    expect(electrodes[0].x).toBeCloseTo(-29.4367, 3);
+    expect(fiducials.LPA.x).toBeCloseTo(-86.0761, 3);
   });
 });
 
 // ---------------------------------------------------------------------------
-// parseTsvElectrodePositions
+// parseElectrodePositionTsv
 // ---------------------------------------------------------------------------
 
-describe('parseTsvElectrodePositions', () => {
+describe('parseElectrodePositionTsv', () => {
   it('returns the correct number of electrodes (fiducials excluded)', () => {
-    const { electrodes } = parseTsvElectrodePositions(MINIMAL_TSV);
+    const { electrodes } = parseElectrodePositionTsv(MINIMAL_TSV);
     expect(electrodes.length).toBe(2);
   });
 
   it('parses electrode labels correctly', () => {
-    const { electrodes } = parseTsvElectrodePositions(MINIMAL_TSV);
+    const { electrodes } = parseElectrodePositionTsv(MINIMAL_TSV);
     expect(electrodes[0].label).toBe('Fp1');
     expect(electrodes[1].label).toBe('Fp2');
   });
 
   it('parses electrode xyz coordinates correctly', () => {
-    const { electrodes } = parseTsvElectrodePositions(MINIMAL_TSV);
+    const { electrodes } = parseElectrodePositionTsv(MINIMAL_TSV);
     expect(electrodes[0].x).toBeCloseTo(-29.0);
     expect(electrodes[0].y).toBeCloseTo(84.0);
     expect(electrodes[0].z).toBeCloseTo(-7.0);
   });
 
   it('detects all three standard fiducials', () => {
-    const { fiducials } = parseTsvElectrodePositions(MINIMAL_TSV);
+    const { fiducials } = parseElectrodePositionTsv(MINIMAL_TSV);
     expect(fiducials.LPA).toBeDefined();
     expect(fiducials.RPA).toBeDefined();
     expect(fiducials.Nz).toBeDefined();
   });
 
   it('parses fiducial coordinates correctly', () => {
-    const { fiducials } = parseTsvElectrodePositions(MINIMAL_TSV);
+    const { fiducials } = parseElectrodePositionTsv(MINIMAL_TSV);
     expect(fiducials.LPA.x).toBeCloseTo(-86.0);
     expect(fiducials.LPA.y).toBeCloseTo(-20.0);
     expect(fiducials.LPA.z).toBeCloseTo(-48.0);
@@ -134,32 +187,32 @@ describe('parseTsvElectrodePositions', () => {
 
   it('matches fiducial labels case-insensitively', () => {
     const lower = MINIMAL_TSV.replace('LPA', 'lpa').replace('RPA', 'rpa').replace('Nz', 'nz');
-    const { fiducials } = parseTsvElectrodePositions(lower);
+    const { fiducials } = parseElectrodePositionTsv(lower);
     expect(fiducials.LPA).toBeDefined();
     expect(fiducials.RPA).toBeDefined();
     expect(fiducials.Nz).toBeDefined();
   });
 
   it('reports hasFiducials true when all three are present', () => {
-    const { hasFiducials } = parseTsvElectrodePositions(MINIMAL_TSV);
+    const { hasFiducials } = parseElectrodePositionTsv(MINIMAL_TSV);
     expect(hasFiducials).toBe(true);
   });
 
   it('reports hasFiducials false when fiducials are missing', () => {
     const noFids = MINIMAL_TSV.replace('LPA', 'Fp3').replace('RPA', 'Fp4').replace('Nz', 'Fp5');
-    const { hasFiducials } = parseTsvElectrodePositions(noFids);
+    const { hasFiducials } = parseElectrodePositionTsv(noFids);
     expect(hasFiducials).toBe(false);
   });
 
   it('finds columns regardless of header order or extra columns', () => {
     const reordered = `type	z	name	y	x
 EEG	-7.0	Fp1	84.0	-29.0`;
-    const { electrodes } = parseTsvElectrodePositions(reordered);
+    const { electrodes } = parseElectrodePositionTsv(reordered);
     expect(electrodes[0]).toMatchObject({ label: 'Fp1', x: -29.0, y: 84.0, z: -7.0 });
   });
 
   it('returns empty arrays for empty input', () => {
-    const { electrodes, fiducials, hasFiducials } = parseTsvElectrodePositions('');
+    const { electrodes, fiducials, hasFiducials } = parseElectrodePositionTsv('');
     expect(electrodes).toEqual([]);
     expect(fiducials).toEqual({});
     expect(hasFiducials).toBe(false);
@@ -167,12 +220,12 @@ EEG	-7.0	Fp1	84.0	-29.0`;
 
   it('skips rows with missing or non-numeric coordinates', () => {
     const bad = MINIMAL_TSV.replace('-29.0\t84.0\t-7.0', 'n/a\tn/a\tn/a');
-    const { electrodes } = parseTsvElectrodePositions(bad);
+    const { electrodes } = parseElectrodePositionTsv(bad);
     expect(electrodes.length).toBe(1); // only Fp2 survives
   });
 
   it('ignores a trailing blank line', () => {
-    const { electrodes } = parseTsvElectrodePositions(MINIMAL_TSV);
+    const { electrodes } = parseElectrodePositionTsv(MINIMAL_TSV);
     expect(electrodes.every((el) => el.label)).toBe(true); // no spurious blank-line entry
   });
 });
@@ -186,6 +239,29 @@ const ELECTRODES = [
   { label: 'Fp2', x: 29, y: 84, z: -7 },
   { label: 'Cz', x: 0, y: 0, z: 88 },
 ];
+
+describe('findDuplicateChannelNames', () => {
+  it('returns empty when every name is unique', () => {
+    expect(findDuplicateChannelNames(['1', '2', '3'])).toEqual([]);
+  });
+
+  it('reports a name that appears more than once', () => {
+    expect(findDuplicateChannelNames(['1', '2', '1'])).toEqual(['1']);
+  });
+
+  it('matches using the same normalization as electrode-position matching', () => {
+    // "EEG 1-Ref" and "1" normalize to the same name.
+    expect(findDuplicateChannelNames(['EEG 1-Ref', '1'])).toEqual(['1']);
+  });
+
+  it('does not report the same duplicate more than once for 3+ occurrences', () => {
+    expect(findDuplicateChannelNames(['1', '1', '1'])).toEqual(['1']);
+  });
+
+  it('reports multiple distinct duplicates', () => {
+    expect(findDuplicateChannelNames(['1', '2', '1', '2', '3'])).toEqual(['1', '2']);
+  });
+});
 
 describe('matchChannelsToPositions', () => {
   it('matches exact labels (case-insensitive)', () => {
@@ -505,37 +581,62 @@ describe('buildIntracranialConnectome', () => {
 });
 
 describe('buildElectrodeLayer', () => {
-  const matched = [
-    { channelIdx: 0, name: 'B1', pos: { label: 'B1', x: 0, y: 0, z: 0 } },
-    { channelIdx: 1, name: 'B2', pos: { label: 'B2', x: 1, y: 1, z: 1 } },
+  // Each matched entry now carries its own `type` (set by EegViewer from channelSettings) —
+  // buildElectrodeLayer splits on that instead of a single whole-recording isIntracranial flag.
+  const seegMatched = [
+    { channelIdx: 0, name: 'B1', pos: { label: 'B1', x: 0, y: 0, z: 0 }, type: 'seeg' },
+    { channelIdx: 1, name: 'B2', pos: { label: 'B2', x: 1, y: 1, z: 1 }, type: 'seeg' },
+  ];
+  const eegMatched = [
+    { channelIdx: 0, name: 'Fp1', pos: { label: 'Fp1', x: 0, y: 0, z: 0 }, type: 'eeg' },
+    { channelIdx: 1, name: 'Fp2', pos: { label: 'Fp2', x: 1, y: 1, z: 1 }, type: 'eeg' },
   ];
 
   it('returns null when there are no matched (positioned) channels yet', () => {
-    expect(buildElectrodeLayer({ isIntracranial: true, matched: [], voltages: [] })).toBeNull();
+    expect(buildElectrodeLayer({ matched: [], voltages: [] })).toBeNull();
   });
 
-  it('returns a well-formed intracranial connectome (nodes+edges) volume entry when intracranial = true', () => {
-    const volume = buildElectrodeLayer({ isIntracranial: true, matched, voltages: [10, -4] });
+  it('returns a well-formed intracranial connectome (nodes+edges) volume entry when every matched channel is seeg', () => {
+    const volume = buildElectrodeLayer({ matched: seegMatched, voltages: [10, -4] });
     expect(volume).toMatchObject({
       url: ELECTRODE_LAYER_URL,
       kind: 'connectome',
+      subtype: 'Intracranial EEG',
     });
     expect(volume.nodes).toHaveLength(2);
     expect(volume.edges).toHaveLength(1);
   });
 
-  it('returns a well-formed surfaceEEG connectome (only nodes) volume entry when intracranial = false', () => {
-    const volume = buildElectrodeLayer({ isIntracranial: false, matched, voltages: [10, -4] });
+  it('returns a well-formed surfaceEEG connectome (only nodes) volume entry when every matched channel is eeg', () => {
+    const volume = buildElectrodeLayer({ matched: eegMatched, voltages: [10, -4] });
     expect(volume).toMatchObject({
       url: ELECTRODE_LAYER_URL,
       kind: 'connectome',
+      subtype: 'Surface EEG',
     });
     expect(volume.nodes).toHaveLength(2);
     expect(volume.edges).toHaveLength(0);
   });
 
-  it('sets calMax to the maximum absolute voltage', () => {
-    const volume = buildElectrodeLayer({ isIntracranial: true, matched, voltages: [10, -25] });
+  it('splits a mixed seeg/eeg matched set into shaft-connected nodes and plain nodes, seeg first', () => {
+    const matched = [...seegMatched, ...eegMatched];
+    const volume = buildElectrodeLayer({ matched, voltages: [10, -4, 5, -5] });
+    expect(volume.subtype).toBe('Intracranial & Surface EEG');
+    expect(volume.nodes).toHaveLength(4);
+    // seeg nodes occupy indices 0-1, so the one shaft edge between them stays valid.
+    expect(volume.nodes.map((n) => n.name)).toEqual(['B1', 'B2', 'Fp1', 'Fp2']);
+    expect(volume.edges).toEqual([{ first: 0, second: 1, colorValue: 1 }]);
+  });
+
+  it('drops a matched channel whose type is neither seeg nor eeg (e.g. "other")', () => {
+    const matched = [...seegMatched, { ...eegMatched[0], type: 'other' }];
+    const volume = buildElectrodeLayer({ matched, voltages: [10, -4, 5] });
+    expect(volume.nodes).toHaveLength(2);
+    expect(volume.nodes.map((n) => n.name)).toEqual(['B1', 'B2']);
+  });
+
+  it('sets calMax to the maximum absolute voltage across the full matched set', () => {
+    const volume = buildElectrodeLayer({ matched: seegMatched, voltages: [10, -25] });
     expect(volume.calMax).toBe(25);
   });
 });

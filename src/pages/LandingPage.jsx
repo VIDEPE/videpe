@@ -85,15 +85,15 @@ const FEATURES = [
     icon: MonitorCog,
     label: 'Montage Editor',
     description:
-      'Build custom referenced or bipolar montages, colour and reorder rows, and import/export AnyWave or Cartool montage files.',
+      'Build custom or use preset referenced or bipolar montages, and import/export AnyWave or Cartool montage files.',
     anchor: '#feature-montage-editor',
   },
   {
     icon: ChartNetwork,
-    label: 'Intracranial EEG',
+    label: 'Intracranial SEEG',
     description:
-      'Switch to iEEG mode to auto-detect intracranial electrodes and view them as a 3D connectome or a per-electrode voltage matrix.',
-    anchor: '#feature-ieeg',
+      'Intracranial electrodes are auto-detected per channel and viewable as a 3D connectome or a per-electrode voltage matrix.',
+    anchor: '#feature-seeg',
   },
   {
     icon: FolderOpen,

@@ -33,9 +33,16 @@ export function parseAnyWaveMontage(text) {
     const typeText = (el.querySelector('type')?.textContent ?? '').trim().toLowerCase();
     const referenceText = (el.querySelector('reference')?.textContent ?? '').trim();
     const colorText = (el.querySelector('color')?.textContent ?? '').trim();
+    // AnyWave always renders on a black canvas, so its files use the literal 'black' or
+    // 'white' to mean "no color explicitly chosen" — not an intentional color pick. This
+    // app's "Default" (color: null) is theme-adaptive, so fold both of AnyWave's
+    // default spellings into null rather than rendering them literally (invisible in
+    // dark mode / light mode respectively).
+    const isAnyWaveDefaultColor = ['black', 'white'].includes(colorText.toLowerCase());
+    const color = colorText && !isAnyWaveDefaultColor ? colorText : null;
 
     channelTypes[name] = TYPE_MAP[typeText] ?? 'other';
-    rows.push({ channel: name, reference: referenceText || null, color: colorText || null });
+    rows.push({ channel: name, reference: referenceText || null, color });
   }
 
   return { rows, channelTypes };

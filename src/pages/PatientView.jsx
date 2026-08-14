@@ -9,12 +9,10 @@ import { ThemeToggle } from '../components/ThemeToggle';
 import { EegViewer } from '../components/EegViewer';
 import { NiiViewer } from '../components/NiiViewer';
 import { SplitPane } from '../components/SplitPane';
-import { EEGTypeToggle } from '../components/EEGTypeToggle';
 import { FileDropZone } from '../components/FileDropZone';
 import { filesToLayers } from '../utils/NiiViewer.utils';
 import { buildElectrodeLayer } from '../utils/eegTopographyUtils';
 import { useEegFileIntake } from '../hooks/useEegFileIntake';
-import { useMontage } from '../hooks/useMontage';
 import { useElectricalSourceImaging } from '../hooks/useElectricalSourceImaging';
 import { useDemoData } from '../hooks/useDemoData';
 
@@ -38,7 +36,7 @@ export const PatientView = () => {
   const [layers, setLayers] = useState([]); // image volumes/meshes loaded from files
   // Whether NiiViewer holds layers dropped into its own internal dropzone — those never
   // touch `layers` above, so this prevents wrongly unmounting NiiViewer (and discarding
-  // them) when e.g. switching out of iEEG mode clears electrodeLayer.
+  // them) when e.g. a montage-editor channel-type edit clears electrodeLayer.
   const [niiHasOwnContent, setNiiHasOwnContent] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const eegReadyResolveRef = useRef(null); // set before demo load; EegViewer calls it when charts are ready
@@ -48,28 +46,30 @@ export const PatientView = () => {
   // Live EEG/electrode state lifted out of EegViewer — drives the intracranial connectome
   // layer in the Neuroimaging pane. { isIntracranial, matched, voltages } | null.
   const [electrodeSnapshot, setElectrodeSnapshot] = useState(null);
-  // 'eeg' | 'ieeg' — owned here (not EegViewer) so the SplitPane title can show/drive the
-  // toggle. EegViewer reports its auto-detection result up via the same setter that the
-  // title's click handler uses, then reads the resulting value back down as a prop.
-  const [recordingType, setRecordingType] = useState('eeg');
-  const [channelSnapshot, setChannelSnapshot] = useState(null); // { isIntracranial, channelNames, voltages } lifted from EegViewer on each click
+  // Per-click voltage snapshot lifted out of EegViewer — { isIntracranial, channelNames,
+  // voltages } | null. isIntracranial here is EegViewer's live channelSettings-derived
+  // majority, not a manually-set recording type (there's no toggle anymore).
+  const [channelSnapshot, setChannelSnapshot] = useState(null);
+  // channelSettings type per channelNames index, reported independent of any plot click —
+  // lets the Inverse Solution LED/ESI toggle react to a montage-editor type edit right away
+  // instead of waiting for the next topo click to refresh channelSnapshot.
+  const [channelTypes, setChannelTypes] = useState([]);
   const [electrodeRenderEnabled, setElectrodeRenderEnabled] = useState(false); // boolean to enable/disable the 3D rendering of the electrodes
   const [esiEnabled, setEsiEnabled] = useState(false); // boolean to enable/disable showing the Electrical Source Imaging layer — same gating pattern as electrodeRenderEnabled
 
-  const { montage, setMontage, resetMontage } = useMontage();
-
   const {
     inverseSolutionFileName,
+    esiChannelMatchCount,
+    esiChannelTotalCount,
+    isEsiChannelMatchGoodForLed,
+    esiSeegChannelNames,
     esiLayer,
     handleInverseSolutionFile,
-    handleMontageChange,
     resetInverseSolution,
   } = useElectricalSourceImaging({
-    eeg,
-    recordingType,
     channelSnapshot,
-    montage,
-    setMontage,
+    channelNames: eeg?.channelNames,
+    channelTypes,
     esiEnabled,
   });
 
@@ -188,25 +188,21 @@ export const PatientView = () => {
     resetIntake();
     setElectrodeSnapshot(null);
     resetInverseSolution();
-    resetMontage();
     setChannelSnapshot(null);
-    setRecordingType('eeg');
     setElectrodeRenderEnabled(false);
     setEsiEnabled(false);
   };
 
   // SplitPane's left (EEG) panel reset button — clears only the EEG side (recording,
-  // pending files, electrode positions, inverse solution/montage/ESI, recording type).
+  // pending files, electrode positions, inverse solution/ESI).
   // Leaves `layers`/`niiHasOwnContent` untouched, so any imaging data already loaded in
   // the Neuroimaging panel survives; the electrode connectome layer built from EEG
   // state does get cleared, via setElectrodeSnapshot(null) below.
   const handleEegReset = () => {
     setEeg(null);
     resetIntake();
-    setRecordingType('eeg');
     setElectrodeSnapshot(null);
     resetInverseSolution();
-    resetMontage();
     setChannelSnapshot(null);
     setElectrodeRenderEnabled(false);
     setEsiEnabled(false);
@@ -285,13 +281,7 @@ export const PatientView = () => {
       </div>
 
       <SplitPane
-        leftLabel={
-          eeg ? (
-            <EEGTypeToggle recordingType={recordingType} onChange={setRecordingType} />
-          ) : (
-            <span className={PANEL_TITLE_CLASS}>EEG</span>
-          )
-        }
+        leftLabel={<span className={PANEL_TITLE_CLASS}>EEG</span>}
         rightLabel={<span className={PANEL_TITLE_CLASS}>Neuroimaging</span>}
         onLeftReset={eeg || pendingEegFiles.length > 0 ? handleEegReset : undefined}
         onRightReset={niiViewerHasContent ? handleNiiReset : undefined}
@@ -307,14 +297,15 @@ export const PatientView = () => {
               customElectrodes={customElectrodes}
               customElecPosFileName={customElecPosFileName}
               inverseSolutionFileName={inverseSolutionFileName}
-              recordingType={recordingType}
-              onRecordingTypeChange={setRecordingType}
-              montage={montage}
-              onMontageChange={handleMontageChange}
+              esiChannelMatchCount={esiChannelMatchCount}
+              esiChannelTotalCount={esiChannelTotalCount}
+              isEsiChannelMatchGoodForLed={isEsiChannelMatchGoodForLed}
+              esiSeegChannelNames={esiSeegChannelNames}
               onElecPosFile={handleElecPosFile}
               onInverseSolutionFile={handleInverseSolutionFile}
               onElectrodeSnapshotChange={setElectrodeSnapshot}
               onChannelSnapshotChange={setChannelSnapshot}
+              onChannelTypesChange={setChannelTypes}
               onTopoHasContentChange={setTopoHasContent}
               electrodeRenderEnabled={electrodeRenderEnabled}
               onElectrodeRenderChange={setElectrodeRenderEnabled}

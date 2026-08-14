@@ -21,7 +21,8 @@ import { EEG_NODE_POS_KEY } from '@/utils/eegColormaps';
  * @param {Object} params
  * @param {Object|null} params.esiLayer - the layer carrying both representations of the
  *   current ESI click (`sourcePowerConnectomes` and `sourcePowerVolume`), or null when there's
- *   nothing to show (e.g. no inverse solution loaded, iEEG mode, empty flatSourceFilters).
+ *   nothing to show (e.g. no inverse solution loaded, a needed channel typed SEEG, empty
+ *   flatSourceFilters).
  * @param {boolean} params.isEsiVolumeMode - true to render `esiLayer.sourcePowerVolume` (an
  *   NVImage), false to render `esiLayer.sourcePowerConnectomes` (a connectome mesh).
  * @param {React.RefObject} params.nvRef - the shared, long-lived NiiVue instance ref; both
@@ -122,8 +123,9 @@ export function useEsiLayer({
       : esiLayer;
 
     if (!activeEsiLayer) {
-      // Nothing to show (e.g. no inverse solution loaded, iEEG mode, or empty flatSourceFilters)
-      // — tear down whichever of mesh/volume is currently in the scene, if either actually is.
+      // Nothing to show (e.g. no inverse solution loaded, a needed channel typed SEEG, or
+      // empty flatSourceFilters) — tear down whichever of mesh/volume is currently in the
+      // scene, if either actually is.
       const hadMesh = esiMeshRef.current;
       const hadVolume = esiVolumeRef.current;
       if (hadMesh) {

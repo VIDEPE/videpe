@@ -1,5 +1,5 @@
 // EEG topography utilities
-// Electrode position parsing lives in src/loaders/parseElcElectrodePositions.js (and future format parsers alongside it).
+// Electrode position parsing lives in src/loaders/parseElectrodePositionElc.js (and future format parsers alongside it).
 
 import convexHull from 'convex-hull';
 import { parseElectrodeContactName } from './intracranialDetection';
@@ -19,10 +19,34 @@ export function normalizeChannelName(name) {
 }
 
 /**
+ * Finds channel names that occur more than once (after normalizeChannelName) — used to
+ * reject a recording outright at load time rather than silently mishandle it downstream.
+ * A duplicate name is more than a cosmetic problem: channelSettings keys its per-channel
+ * type/bad state by name, so two channels sharing a name already collapse into one shared
+ * entry today; ESI's channel matching likewise can't tell which physical channel a model's
+ * channel name refers to and has to refuse to compute for it (see
+ * electricalSourceImagingUtils.js's buildChannelNameIndex).
+ *
+ * @param {string[]} channelNames
+ * @returns {string[]} the (normalized) names that occur more than once, deduplicated —
+ *   empty when every name is unique
+ */
+export function findDuplicateChannelNames(channelNames) {
+  const seen = new Set();
+  const duplicates = new Set();
+  for (const name of channelNames) {
+    const normalized = normalizeChannelName(name);
+    if (seen.has(normalized)) duplicates.add(normalized);
+    seen.add(normalized);
+  }
+  return [...duplicates];
+}
+
+/**
  * Match raw EEG channel names against a parsed electrode position list.
  *
  * @param {string[]} channelNames  - channel labels from the EEG recording
- * @param {{ label: string, x: number, y: number, z: number }[]} electrodes - from parseElcElectrodePositions
+ * @param {{ label: string, x: number, y: number, z: number }[]} electrodes - from parseElectrodePositionElc
  * @returns {{ matched: { channelIdx: number, name: string, pos: object }[], unmatchedNames: string[] }}
  */
 export function matchChannelsToPositions(channelNames, electrodes) {
@@ -300,22 +324,42 @@ export function buildSurfaceEegConnectome(matched, voltages) {
  * PatientView.jsx can stay a thin orchestrator with no electrode-specific logic
  * of its own.
  *
- * @param {{ isIntracranial: boolean, matched: object[], voltages: number[] }} args
+ * @param {{ matched: object[], voltages: number[] }} args
  * @returns {object | null}
  */
-export function buildElectrodeLayer({ isIntracranial, matched, voltages }) {
+export function buildElectrodeLayer({ matched, voltages }) {
   if (!matched?.length) return null; // nothing to render yet
 
-  // declare variables
-  let nodes, edges, subtype;
+  // split matched up in seeg and eeg
+  // first get the indices for each
+  const seegIdx = [];
+  const eegIdx = [];
+  matched.forEach((m, i) => {
+    if (m.type === 'seeg') seegIdx.push(i);
+    else if (m.type === 'eeg') eegIdx.push(i);
+  });
 
-  if (isIntracranial) {
-    ({ nodes, edges } = buildIntracranialConnectome(matched, voltages));
-    subtype = 'Intracranial EEG';
-  } else {
-    ({ nodes, edges } = buildSurfaceEegConnectome(matched, voltages));
-    subtype = 'Surface EEG';
-  }
+  // helper function to split matched
+  const pick = (idx, matched, voltages) => ({
+    matched: idx.map((i) => matched[i]),
+    voltages: idx.map((i) => voltages[i]),
+  });
+
+  const seeg = pick(seegIdx, matched, voltages);
+  const eeg = pick(eegIdx, matched, voltages);
+
+  const { nodes: seegNodes, edges } = buildIntracranialConnectome(seeg.matched, seeg.voltages);
+  const { nodes: eegNodes } = buildSurfaceEegConnectome(eeg.matched, eeg.voltages);
+
+  // seeg nodes MUST come first, otherwise the edges wouldn't be assigned to the right nodes
+  const nodes = [...seegNodes, ...eegNodes];
+  // subtypes determines the layer sub label after the 'Electrodes' type label in the draggable settings panel
+  const subtype =
+    seegIdx.length && eegIdx.length
+      ? 'Intracranial & Surface EEG'
+      : seegIdx.length
+        ? 'Intracranial EEG'
+        : 'Surface EEG';
 
   const calMax = Math.max(1e-6, ...voltages.map((v) => Math.abs(v))); // symmetric colour range; floor avoids div-by-zero downstream
 

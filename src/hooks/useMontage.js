@@ -1,27 +1,41 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 
-/**
- * Owns the EEG reference montage — currently 'none' | 'average' | 'median', with room to
- * grow into more montage types (e.g. bipolar, laplacian) and bad-channel selection later.
- * Deliberately has no knowledge of any feature that depends on a particular montage (e.g.
- * Electrical Source Imaging, which requires 'average') — that dependency lives in the
- * feature's own hook, which takes `montage`/`setMontage` as inputs instead of this hook
- * reaching out to know about it.
- *
- * @returns {Object} The current montage state, plus the functions to drive it:
- *   - `montage` ('none'|'average'|'median') — the currently selected EEG reference montage.
- *   - `setMontage` (newMontage: string) => void — the raw state setter, for direct control
- *     by the caller (e.g. EegViewer's montage dropdown) or by dependent hooks/effects that
- *     need to change the montage on the user's behalf (e.g. forcing 'average' for ESI).
- *   - `resetMontage` () => void — resets the montage back to 'none'.
- */
-export function useMontage() {
-  // 'none' | 'average' | 'median'
-  const [montage, setMontage] = useState('none');
+// Helper function to create order-independent identity keys comparing montage rows to montage template rows.
+function rowKey(row) {
+  return `${row.channel} ${row.reference ?? ''} ${row.color ?? ''}`;
+}
 
-  const resetMontage = useCallback(() => setMontage('none'), []);
+// True when `rows` is exactly the same multiset (allows duplicates) of
+// {channel, reference, color} as `templateRows`
+function rowsMatchTemplate(rows, templateRows) {
+  if (rows.length !== templateRows.length) return false;
+  const sortedRows = rows.map(rowKey).sort();
+  const sortedTemplate = templateRows.map(rowKey).sort();
+  return sortedRows.every((key, i) => key === sortedTemplate[i]);
+}
 
-  return { montage, setMontage, resetMontage };
+// Identifies which built-in or file-backed montage template (if any) `rows` currently
+// matches, so the sidebar's template <select> (see EegViewer.jsx) can reflect the live
+// montage's actual state instead of drifting out of sync with it.
+// - 'none' = no rows (plot one row per non-bad channel with no reference, see buildMontageDisplayRows);
+// - 'average' = every channel has exactly one row referenced to 'average'
+//    (color is ignored — recoloring a CAR montage shouldn't demote it to Custom);
+// - template file `path` = means `rows` matches template's rows (see rowsMatchTemplate —
+// this holds even when some of those rows name channels absent from the current recording,
+// since that's still "the template, as loaded", not a hand edit);
+// - anything else = null, i.e. a hand-built montage that doesn't match any known preset.
+function getMontageTemplateMatch(rows, channelNames, fileTemplates) {
+  if (rows.length === 0) return 'none';
+  if (
+    rows.length === channelNames.length &&
+    channelNames.every((name) =>
+      rows.some((row) => row.channel === name && row.reference === 'average')
+    )
+  )
+    return 'average';
+  const fileMatch = fileTemplates.find((template) => rowsMatchTemplate(rows, template.rows));
+  if (fileMatch) return fileMatch.path;
+  return null;
 }
 
 /**
@@ -36,21 +50,63 @@ export function useMontage() {
  * "+ Add selected" / "Add by type" controls) and that draft is committed.
  *
  * @param {string[]} channelNames
+ * @param {Array<{path: string, rows: Array}>} [fileTemplates] - file-backed templates (see
+ *   useMontageTemplates) the dropdown should also recognize as a match, in addition to the
+ *   None/CAR presets.
  */
-export function useMontageChannels(channelNames) {
+export function useMontageChannels(channelNames, fileTemplates = []) {
   const [montageChannels, setMontageChannels] = useState([]);
 
-  // Drops rows for channels no longer present (e.g. a new recording loaded) — never adds
-  // rows for new channels, since row creation is always an explicit user action.
+  // ApplyMontageChannels = complete replace — commits a draft edited in EegMontageEditor (Apply/OK),
+  // same pattern as useChannelSettings.applyChannelSettings.
+  // Wrapped instead of exposing setMontageChannels directly, so logic can be added here later without changing EegMontageEditor's Apply/OK.
+  const applyMontageChannels = useCallback((next) => {
+    setMontageChannels(next);
+  }, []);
+  // (automatic housekeeping) When channelNames change (e.g. a new recording) it drops any montage rows
+  // which no longer exists in channelNames (i.e. in the recording)
+  // Note: it never adds rows for new channels, since row creation is always an explicit user action.
   useEffect(() => {
     setMontageChannels((prev) => prev.filter((row) => channelNames.includes(row.channel)));
   }, [channelNames]);
 
-  // Wholesale replace — commits a draft edited in EegMontageEditor (Apply/OK), same pattern
-  // as useChannelSettings.applyChannelSettings.
-  const applyMontageChannels = useCallback((next) => {
-    setMontageChannels(next);
-  }, []);
+  // ─── Template dropdown (None / Common Average Reference / file templates / Custom) ────
+  const montageTemplate = useMemo(
+    () => getMontageTemplateMatch(montageChannels, channelNames, fileTemplates) ?? 'custom',
+    [montageChannels, channelNames, fileTemplates]
+  );
 
-  return { montageChannels, applyMontageChannels };
+  // State stores the last hand-built (non-preset) montage,
+  // so it can be restored by selecting 'Custom' in the template dropdown in EegViewer.jsx.
+  // Starts null (no custom montage set yet)
+  const [customMontageChannels, setCustomMontageChannels] = useState(null);
+  if (montageTemplate === 'custom' && customMontageChannels !== montageChannels) {
+    setCustomMontageChannels(montageChannels);
+  }
+
+  const applyMontageTemplate = useCallback(
+    (value) => {
+      if (value === 'none') setMontageChannels([]);
+      else if (value === 'average')
+        setMontageChannels(
+          channelNames.map((name) => ({
+            id: crypto.randomUUID(),
+            channel: name,
+            reference: 'average',
+            color: null,
+          }))
+        );
+      else if (value === 'custom' && customMontageChannels)
+        setMontageChannels(customMontageChannels);
+    },
+    [channelNames, customMontageChannels]
+  );
+
+  return {
+    montageChannels,
+    applyMontageChannels,
+    montageTemplate,
+    customMontageChannels,
+    applyMontageTemplate,
+  };
 }

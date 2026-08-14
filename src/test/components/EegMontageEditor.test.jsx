@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import toast from 'react-hot-toast';
@@ -48,6 +48,17 @@ const defaultProps = {
 };
 
 describe('EegMontageEditor', () => {
+  // Apply/OK confirm the commit via window.confirm when the draft has bad/missing rows (see
+  // the "Apply/OK warns about bad or missing montage rows" describe block below) — default to
+  // confirming so every other test's Apply/OK clicks behave as before that warning existed.
+  beforeEach(() => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+  });
+
+  afterEach(() => {
+    window.confirm.mockRestore();
+  });
+
   it('renders without crashing', () => {
     const { container } = render(<EegMontageEditor {...defaultProps} />);
     expect(container.firstChild).toBeTruthy();
@@ -104,7 +115,7 @@ describe('EegMontageEditor', () => {
       render(<EegMontageEditor {...defaultProps} />);
       expect(screen.getByTestId('channel-pos-FP1')).toHaveAttribute(
         'title',
-        'Matched to electrode "FP1" in the standard 10-05 template'
+        'Matched to electrode "FP1" in the fsaverage_1005 (FreeSurfer) template'
       );
     });
 
@@ -126,7 +137,7 @@ describe('EegMontageEditor', () => {
       render(<EegMontageEditor {...defaultProps} />);
       expect(screen.getByTestId('channel-pos-FP2')).toHaveAttribute(
         'title',
-        'No match for "FP2" in the standard 10-05 template'
+        'No match for "FP2" in the fsaverage_1005 (FreeSurfer) template'
       );
     });
   });
@@ -210,6 +221,106 @@ describe('EegMontageEditor', () => {
     });
   });
 
+  describe('Apply/OK warns about bad or missing montage rows', () => {
+    it('does not prompt when no montage row is bad or missing', async () => {
+      const onApplyMontageChannels = vi.fn();
+      const montageChannels = [{ id: 'row-1', channel: 'FP1', reference: null, color: null }];
+      const channelSettings = { FP1: { type: 'eeg', bad: false } };
+      render(
+        <EegMontageEditor
+          {...defaultProps}
+          channelSettings={channelSettings}
+          montageChannels={montageChannels}
+          onApplyMontageChannels={onApplyMontageChannels}
+        />
+      );
+      await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+      expect(window.confirm).not.toHaveBeenCalled();
+      expect(onApplyMontageChannels).toHaveBeenCalled();
+    });
+
+    it('prompts for confirmation when a montage row uses a bad channel', async () => {
+      // Default montageChannels includes a row for FP2, which CHANNEL_SETTINGS marks bad.
+      const onApplyMontageChannels = vi.fn();
+      render(
+        <EegMontageEditor {...defaultProps} onApplyMontageChannels={onApplyMontageChannels} />
+      );
+      await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+      expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('FP2'));
+      expect(onApplyMontageChannels).toHaveBeenCalled();
+    });
+
+    it('prompts for confirmation when a montage row references a missing channel', async () => {
+      const onApplyMontageChannels = vi.fn();
+      const montageChannels = [{ id: 'row-1', channel: 'FP1', reference: 'GHOST', color: null }];
+      render(
+        <EegMontageEditor
+          {...defaultProps}
+          montageChannels={montageChannels}
+          onApplyMontageChannels={onApplyMontageChannels}
+        />
+      );
+      await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+      expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('GHOST'));
+      expect(onApplyMontageChannels).toHaveBeenCalled();
+    });
+
+    it('prompts for confirmation when a montage row is itself a missing channel', async () => {
+      const onApplyMontageChannels = vi.fn();
+      const montageChannels = [{ id: 'row-1', channel: 'GHOST', reference: null, color: null }];
+      render(
+        <EegMontageEditor
+          {...defaultProps}
+          montageChannels={montageChannels}
+          onApplyMontageChannels={onApplyMontageChannels}
+        />
+      );
+      await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+      expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('GHOST'));
+      expect(onApplyMontageChannels).toHaveBeenCalled();
+    });
+
+    it('does not commit when the confirmation is cancelled', async () => {
+      window.confirm.mockReturnValue(false);
+      const onApplyMontageChannels = vi.fn();
+      const onApplyChannelSettings = vi.fn();
+      render(
+        <EegMontageEditor
+          {...defaultProps}
+          onApplyMontageChannels={onApplyMontageChannels}
+          onApplyChannelSettings={onApplyChannelSettings}
+        />
+      );
+      await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+      expect(onApplyMontageChannels).not.toHaveBeenCalled();
+      expect(onApplyChannelSettings).not.toHaveBeenCalled();
+    });
+
+    it('does not close the window when OK is cancelled at the confirmation', async () => {
+      window.confirm.mockReturnValue(false);
+      const onClose = vi.fn();
+      const onApplyMontageChannels = vi.fn();
+      render(
+        <EegMontageEditor
+          {...defaultProps}
+          onClose={onClose}
+          onApplyMontageChannels={onApplyMontageChannels}
+        />
+      );
+      await userEvent.click(screen.getByRole('button', { name: 'OK' }));
+      expect(onClose).not.toHaveBeenCalled();
+      expect(onApplyMontageChannels).not.toHaveBeenCalled();
+    });
+
+    it('closes the window when OK is confirmed', async () => {
+      const onClose = vi.fn();
+      render(<EegMontageEditor {...defaultProps} onClose={onClose} />);
+      await userEvent.click(screen.getByRole('button', { name: 'OK' }));
+      expect(window.confirm).toHaveBeenCalled();
+      expect(onClose).toHaveBeenCalledOnce();
+    });
+  });
+
   describe('Set all Bad / Set all Good', () => {
     const ALL_BAD_SETTINGS = {
       FP1: { type: 'eeg', bad: true },
@@ -263,7 +374,7 @@ describe('EegMontageEditor', () => {
     it('sets every channel to the picked type when clicked', async () => {
       render(<EegMontageEditor {...defaultProps} />);
       await userEvent.selectOptions(screen.getByTestId('bulk-type-select'), 'seeg');
-      await userEvent.click(screen.getByRole('button', { name: 'Set all as' }));
+      await userEvent.click(screen.getByTestId('bulk-type-apply-button'));
 
       CHANNEL_NAMES.forEach((name) =>
         expect(screen.getByTestId(`channel-type-${name}`)).toHaveValue('seeg')
@@ -273,10 +384,161 @@ describe('EegMontageEditor', () => {
     it("leaves each channel's bad flag untouched", async () => {
       render(<EegMontageEditor {...defaultProps} />);
       await userEvent.selectOptions(screen.getByTestId('bulk-type-select'), 'other');
-      await userEvent.click(screen.getByRole('button', { name: 'Set all as' }));
+      await userEvent.click(screen.getByTestId('bulk-type-apply-button'));
 
       expect(screen.getByTestId('channel-bad-FP2')).toBeChecked();
       expect(screen.getByTestId('channel-bad-FP1')).not.toBeChecked();
+    });
+  });
+
+  describe('Set all as [reference]', () => {
+    it('disables the bulk reference button and select when there are no montage rows', () => {
+      render(<EegMontageEditor {...defaultProps} montageChannels={[]} />);
+      expect(screen.getByTestId('bulk-reference-apply-button')).toBeDisabled();
+      expect(screen.getByTestId('bulk-reference-select')).toBeDisabled();
+    });
+
+    it('defaults the bulk reference select to n/a', () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      expect(screen.getByTestId('bulk-reference-select')).toHaveValue('');
+    });
+
+    it('offers n/a, average and median above the channel names, in that order', () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      const options = Array.from(screen.getByTestId('bulk-reference-select').options).map(
+        (option) => option.value
+      );
+      expect(options.slice(0, 3)).toEqual(['', 'average', 'median']);
+      CHANNEL_NAMES.forEach((name) => expect(options).toContain(name));
+    });
+
+    it('sets every montage row to "average" when picked', async () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      await userEvent.selectOptions(screen.getByTestId('bulk-reference-select'), 'average');
+      await userEvent.click(screen.getByTestId('bulk-reference-apply-button'));
+
+      // MONTAGE_CHANNELS seeds id === channel, so these testids double as an id check.
+      CHANNEL_NAMES.forEach((name) =>
+        expect(screen.getByTestId(`reference-${name}`)).toHaveValue('average')
+      );
+    });
+
+    it('sets every montage row to "median" when picked', async () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      await userEvent.selectOptions(screen.getByTestId('bulk-reference-select'), 'median');
+      await userEvent.click(screen.getByTestId('bulk-reference-apply-button'));
+
+      CHANNEL_NAMES.forEach((name) =>
+        expect(screen.getByTestId(`reference-${name}`)).toHaveValue('median')
+      );
+    });
+
+    it('clears every row back to n/a when picked after a prior bulk set', async () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      await userEvent.selectOptions(screen.getByTestId('bulk-reference-select'), 'average');
+      await userEvent.click(screen.getByTestId('bulk-reference-apply-button'));
+
+      await userEvent.selectOptions(screen.getByTestId('bulk-reference-select'), '');
+      await userEvent.click(screen.getByTestId('bulk-reference-apply-button'));
+
+      CHANNEL_NAMES.forEach((name) =>
+        expect(screen.getByTestId(`reference-${name}`)).toHaveValue('')
+      );
+    });
+
+    it("leaves each row's color untouched", async () => {
+      const montageChannels = CHANNEL_NAMES.map((name) => ({
+        id: name,
+        channel: name,
+        reference: null,
+        color: 'red',
+      }));
+      render(<EegMontageEditor {...defaultProps} montageChannels={montageChannels} />);
+      await userEvent.selectOptions(screen.getByTestId('bulk-reference-select'), 'median');
+      await userEvent.click(screen.getByTestId('bulk-reference-apply-button'));
+
+      CHANNEL_NAMES.forEach((name) =>
+        expect(screen.getByTestId(`color-${name}`)).toHaveValue('red')
+      );
+    });
+  });
+
+  describe('Set all as [color]', () => {
+    it('disables the bulk color button and select when there are no montage rows', () => {
+      render(<EegMontageEditor {...defaultProps} montageChannels={[]} />);
+      expect(screen.getByTestId('bulk-color-apply-button')).toBeDisabled();
+      expect(screen.getByTestId('bulk-color-select')).toBeDisabled();
+    });
+
+    it('defaults the bulk color select to Default', () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      expect(screen.getByTestId('bulk-color-select')).toHaveValue('');
+    });
+
+    it('offers Default followed by the preset colors, in that order', () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      const options = Array.from(screen.getByTestId('bulk-color-select').options).map(
+        (option) => option.value
+      );
+      expect(options).toEqual(['', 'red', 'blue', 'green', 'yellow', 'cyan', 'magenta']);
+    });
+
+    it("tints each preset option's text to match the color it applies", () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      const options = Array.from(screen.getByTestId('bulk-color-select').options);
+      const byValue = Object.fromEntries(options.map((option) => [option.value, option]));
+
+      ['red', 'blue', 'green', 'yellow', 'cyan', 'magenta'].forEach((color) =>
+        expect(byValue[color].style.color).toBe(color)
+      );
+    });
+
+    it('sets every montage row to "red" when picked', async () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      await userEvent.selectOptions(screen.getByTestId('bulk-color-select'), 'red');
+      await userEvent.click(screen.getByTestId('bulk-color-apply-button'));
+
+      // MONTAGE_CHANNELS seeds id === channel, so these testids double as an id check.
+      CHANNEL_NAMES.forEach((name) =>
+        expect(screen.getByTestId(`color-${name}`)).toHaveValue('red')
+      );
+    });
+
+    it('sets every montage row to "cyan" when picked', async () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      await userEvent.selectOptions(screen.getByTestId('bulk-color-select'), 'cyan');
+      await userEvent.click(screen.getByTestId('bulk-color-apply-button'));
+
+      CHANNEL_NAMES.forEach((name) =>
+        expect(screen.getByTestId(`color-${name}`)).toHaveValue('cyan')
+      );
+    });
+
+    it('clears every row back to Default when picked after a prior bulk set', async () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      await userEvent.selectOptions(screen.getByTestId('bulk-color-select'), 'red');
+      await userEvent.click(screen.getByTestId('bulk-color-apply-button'));
+
+      await userEvent.selectOptions(screen.getByTestId('bulk-color-select'), '');
+      await userEvent.click(screen.getByTestId('bulk-color-apply-button'));
+
+      CHANNEL_NAMES.forEach((name) => expect(screen.getByTestId(`color-${name}`)).toHaveValue(''));
+    });
+
+    it("leaves each row's reference untouched", async () => {
+      const montageChannels = CHANNEL_NAMES.map((name) => ({
+        id: name,
+        channel: name,
+        reference: 'average',
+        color: null,
+      }));
+      render(<EegMontageEditor {...defaultProps} montageChannels={montageChannels} />);
+      await userEvent.selectOptions(screen.getByTestId('bulk-color-select'), 'blue');
+      await userEvent.click(screen.getByTestId('bulk-color-apply-button'));
+
+      CHANNEL_NAMES.forEach((name) =>
+        expect(screen.getByTestId(`reference-${name}`)).toHaveValue('average')
+      );
     });
   });
 
@@ -349,20 +611,30 @@ describe('EegMontageEditor', () => {
       expect(screen.getByTestId('reference-FP2').className).not.toContain('text-alert');
     });
 
-    it('colors only the reference select text-alert when the reference channel is bad, not the channel name', async () => {
+    it("colors only the bad channel's own <option> text-alert in the reference dropdown, not the select or the other options", async () => {
       render(<EegMontageEditor {...defaultProps} />);
-      // FP1 isn't bad, but referencing bad FP2 should flag only the reference select.
+      // FP1 isn't bad, but referencing bad FP2 should flag only FP2's own <option>.
       await userEvent.selectOptions(screen.getByTestId('reference-FP1'), 'FP2');
-      expect(screen.getByTestId('reference-FP1').className).toContain('text-alert');
       expect(screen.getByTestId('montage-channel-FP1').className).not.toContain('text-alert');
+      // The <select> itself must stay uncolored — a class here would cascade onto every
+      // <option> in the dropdown, not just the bad one (the bug this test guards against).
+      expect(screen.getByTestId('reference-FP1').className).not.toContain('text-alert');
+      const options = Array.from(screen.getByTestId('reference-FP1').options);
+      const fp2Option = options.find((o) => o.value === 'FP2');
+      const fp3Option = options.find((o) => o.value === 'FP3');
+      expect(fp2Option.className).toContain('text-alert');
+      expect(fp3Option.className).not.toContain('text-alert');
     });
 
-    it('colors both the channel name and reference select text-alert when both are bad', async () => {
+    it('colors both the channel name and its bad reference option text-alert when both are bad', async () => {
       render(<EegMontageEditor {...defaultProps} />);
       await userEvent.click(screen.getByTestId('channel-bad-FP1'));
       await userEvent.selectOptions(screen.getByTestId('reference-FP1'), 'FP2');
       expect(screen.getByTestId('montage-channel-FP1').className).toContain('text-alert');
-      expect(screen.getByTestId('reference-FP1').className).toContain('text-alert');
+      const fp2Option = Array.from(screen.getByTestId('reference-FP1').options).find(
+        (o) => o.value === 'FP2'
+      );
+      expect(fp2Option.className).toContain('text-alert');
     });
   });
 
@@ -970,10 +1242,15 @@ describe('EegMontageEditor', () => {
       const referenceSelect = screen.getByTestId('reference-row-1');
       expect(referenceSelect).not.toBeDisabled();
       expect(referenceSelect).toHaveValue('GHOST');
-      expect(referenceSelect.className).toContain('text-red-500');
+      // The <select> itself stays uncolored — only the injected "missing" <option> turns
+      // red, so the rest of the dropdown's channel names aren't tinted along with it.
+      expect(referenceSelect.className).not.toContain('text-red-500');
       expect(referenceSelect.title).toBe('Reference channel not found in this recording');
       const injectedOption = Array.from(referenceSelect.options).find((o) => o.value === 'GHOST');
       expect(injectedOption.textContent).toBe('GHOST (missing)');
+      expect(injectedOption.className).toContain('text-red-500');
+      const normalOption = Array.from(referenceSelect.options).find((o) => o.value === 'FP2');
+      expect(normalOption.className).not.toContain('text-red-500');
       expect(screen.getByTestId('color-row-1')).not.toBeDisabled();
     });
 
@@ -1117,6 +1394,18 @@ describe('EegMontageEditor', () => {
       expect(select).toHaveValue('darkblue');
       const injectedOption = Array.from(select.options).find((o) => o.value === 'darkblue');
       expect(injectedOption).toBeTruthy();
+      expect(injectedOption.style.color).toBe('darkblue');
+    });
+
+    it("tints each preset option's text to match the color it applies, in a row's Color select", () => {
+      const montageChannels = [{ id: 'FP1', channel: 'FP1', reference: null, color: null }];
+      render(<EegMontageEditor {...defaultProps} montageChannels={montageChannels} />);
+      const options = Array.from(screen.getByTestId('color-FP1').options);
+      const byValue = Object.fromEntries(options.map((option) => [option.value, option]));
+
+      ['red', 'blue', 'green', 'yellow', 'cyan', 'magenta'].forEach((color) =>
+        expect(byValue[color].style.color).toBe(color)
+      );
     });
   });
 });
