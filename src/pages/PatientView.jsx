@@ -50,6 +50,10 @@ export const PatientView = () => {
   // voltages } | null. isIntracranial here is EegViewer's live channelSettings-derived
   // majority, not a manually-set recording type (there's no toggle anymore).
   const [channelSnapshot, setChannelSnapshot] = useState(null);
+  // channelSettings type per channelNames index, reported independent of any plot click —
+  // lets the Inverse Solution LED/ESI toggle react to a montage-editor type edit right away
+  // instead of waiting for the next topo click to refresh channelSnapshot.
+  const [channelTypes, setChannelTypes] = useState([]);
   const [electrodeRenderEnabled, setElectrodeRenderEnabled] = useState(false); // boolean to enable/disable the 3D rendering of the electrodes
   const [esiEnabled, setEsiEnabled] = useState(false); // boolean to enable/disable showing the Electrical Source Imaging layer — same gating pattern as electrodeRenderEnabled
 
@@ -58,12 +62,14 @@ export const PatientView = () => {
     esiChannelMatchCount,
     esiChannelTotalCount,
     isEsiChannelMatchGoodForLed,
+    esiSeegChannelNames,
     esiLayer,
     handleInverseSolutionFile,
     resetInverseSolution,
   } = useElectricalSourceImaging({
     channelSnapshot,
     channelNames: eeg?.channelNames,
+    channelTypes,
     esiEnabled,
   });
 
@@ -294,10 +300,12 @@ export const PatientView = () => {
               esiChannelMatchCount={esiChannelMatchCount}
               esiChannelTotalCount={esiChannelTotalCount}
               isEsiChannelMatchGoodForLed={isEsiChannelMatchGoodForLed}
+              esiSeegChannelNames={esiSeegChannelNames}
               onElecPosFile={handleElecPosFile}
               onInverseSolutionFile={handleInverseSolutionFile}
               onElectrodeSnapshotChange={setElectrodeSnapshot}
               onChannelSnapshotChange={setChannelSnapshot}
+              onChannelTypesChange={setChannelTypes}
               onTopoHasContentChange={setTopoHasContent}
               electrodeRenderEnabled={electrodeRenderEnabled}
               onElectrodeRenderChange={setElectrodeRenderEnabled}

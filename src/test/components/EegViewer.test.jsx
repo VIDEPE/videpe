@@ -717,6 +717,33 @@ describe('EegViewer — ESI toggle wiring', () => {
     ).toBeInTheDocument();
   });
 
+  it('shows a generic (non-enumerating) title and disables the button when a needed channel is typed SEEG, even with a full name match', async () => {
+    const provider = makeProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        inverseSolutionFileName="my_inverse_solution"
+        isEsiChannelMatchGoodForLed={false}
+        esiSeegChannelNames={['1', '2']}
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const button = screen.getByRole('button', { name: /enable electrical source imaging/i });
+    expect(button).toBeDisabled();
+    expect(
+      screen.getByTitle(
+        'Electrical Source Imaging not available when not all required channels have type EEG'
+      )
+    ).toBeInTheDocument();
+    // Deliberately doesn't enumerate the affected channels — a bulk edit can affect hundreds.
+    expect(screen.queryByTitle(/1, 2/)).not.toBeInTheDocument();
+  });
+
   it('is enabled once an inverse solution is loaded with a full channel match, and toggles aria-pressed/label when clicked', async () => {
     const provider = makeProvider();
     const onEsiEnabledChange = vi.fn();
@@ -781,6 +808,44 @@ describe('EegViewer — ESI toggle wiring', () => {
 
     const button = screen.getByRole('button', { name: /enable electrical source imaging/i });
     expect(button).toBeEnabled();
+  });
+});
+
+describe('EegViewer — onChannelTypesChange reporting', () => {
+  it('reports one channelSettings type per channelNames index, independent of any click', async () => {
+    const provider = makeProvider(); // scalp-shaped fixture
+    const onChannelTypesChange = vi.fn();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        onChannelTypesChange={onChannelTypesChange}
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(onChannelTypesChange).toHaveBeenLastCalledWith(provider.channelNames.map(() => 'eeg'));
+  });
+
+  it('reports SEEG types for an intracranial-shaped recording', async () => {
+    const provider = makeIntracranialProvider();
+    const onChannelTypesChange = vi.fn();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        onChannelTypesChange={onChannelTypesChange}
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(onChannelTypesChange).toHaveBeenLastCalledWith(provider.channelNames.map(() => 'seeg'));
   });
 });
 

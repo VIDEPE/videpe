@@ -116,10 +116,12 @@ export const EegViewer = ({
   esiChannelMatchCount, // how many of the inverse solution's own channels have a same-named match in this recording — owned by PatientView, passed down
   esiChannelTotalCount, // paired with esiChannelMatchCount for the Inverse Solution status LED
   isEsiChannelMatchGoodForLed = false, // true only for a *full* match — a partial match means ESI can't compute at all
+  esiSeegChannelNames = [], // which of the model's own channels are matched by name but themselves typed SEEG — explains an amber/disabled state a bare match count can't
   onElecPosFile,
   onInverseSolutionFile,
   onElectrodeSnapshotChange,
   onChannelSnapshotChange,
+  onChannelTypesChange, // channelSettings type per channelNames index, independent of any plot click — lets the Inverse Solution LED/ESI toggle react to a montage-editor type edit without waiting for a topo click
   onTopoHasContentChange, // whether the topography NiiVue canvas currently has a mesh, so PatientView can enable/disable the cross-panel rotation link accordingly
   electrodeRenderEnabled, // boolean — owned by PatientView => whether electrode 3D render is enabled
   onElectrodeRenderChange, // handle for electrodeRender changes
@@ -235,6 +237,11 @@ export const EegViewer = ({
     () => channelNames.map((name) => channelSettings[name]?.type),
     [channelNames, channelSettings]
   );
+  // Reported upward if the channel types have changed (mirrors onTopoHasContentChange below) so
+  // the Inverse Solution LED/ESI toggle can react to a montage-editor type edit immediately
+  useEffect(() => {
+    onChannelTypesChange?.(channelTypes);
+  }, [channelTypes, onChannelTypesChange]);
 
   // File-backed montage templates (public/montage_files/TEMPLATE_MONTAGES.json), listed
   // in the sidebar quick-select alongside the None/CAR/Custom presets below — fetched here
@@ -647,7 +654,9 @@ export const EegViewer = ({
                     inverseSolutionFileName && isEsiChannelMatchGoodForLed
                       ? `${esiEnabled ? 'Disable Electrical Source Imaging' : 'Electrical Source Imaging. If enabled: click EEG plot to compute source power at selected timestamp'}`
                       : inverseSolutionFileName
-                        ? 'Electrical Source Imaging. Inverse solution channels do not fully match this recording'
+                        ? esiSeegChannelNames.length > 0
+                          ? 'Electrical Source Imaging not available when not all required channels have type EEG'
+                          : 'Electrical Source Imaging. Inverse solution channels do not fully match this recording'
                         : 'Electrical Source Imaging. Requires a loaded inverse solution'
                   }
                   aria-label={`${esiEnabled ? 'Disable' : 'Enable'} Electrical Source Imaging`}
@@ -1112,6 +1121,11 @@ export const EegViewer = ({
               matchCount={esiChannelMatchCount}
               totalCount={esiChannelTotalCount}
               isGoodMatch={isEsiChannelMatchGoodForLed}
+              matchIssue={
+                esiSeegChannelNames.length > 0
+                  ? "Alert: some required channels don't have EEG type"
+                  : undefined
+              }
               disabled={majorityIsSeeg}
               highlighted={hoveredLedHighlight === 'inverseSolution'}
             />
