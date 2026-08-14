@@ -38,7 +38,7 @@ const PRESET_COLORS = ['red', 'blue', 'green', 'yellow', 'cyan', 'magenta'];
 
 // ─── Window sizing constants ────────────────────────────────────────────────
 // Default/minimum window size in px — default matches the previous fixed w-96 h-80 (24rem x 20rem)
-const DEFAULT_WINDOW_SIZE = { width: 800, height: 700 };
+const DEFAULT_WINDOW_SIZE = { width: 850, height: 700 };
 const MIN_WINDOW_WIDTH = 600;
 const MIN_WINDOW_HEIGHT = 450;
 const RESIZE_DIRECTIONS = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
