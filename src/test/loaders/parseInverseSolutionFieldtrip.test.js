@@ -237,11 +237,19 @@ describe('parseInverseSolutionFieldtrip', () => {
     ['elec missing entirely', { elec: undefined }, /elec/],
     ['elec.label missing', { elec: {} }, /elec/],
     ['elec.label empty', { elec: { label: [] } }, /elec/],
+    ['elec.label has a duplicate name', { elec: { label: ['1', '1', '2'] } }, /duplicate/i],
   ])('rejects with a descriptive error when %s', async (_caseName, overrides, messagePattern) => {
     // tell readmat to return a the fixture with the specified overrides instead of actually reading a file
     readmat.mockReturnValue(withInverseFilters(overrides));
     const file = new File(['irrelevant — read() is mocked'], 'mocked_file_inversefilters.mat');
 
     await expect(parseInverseSolutionFieldtrip(file)).rejects.toThrow(messagePattern);
+  });
+
+  it('names the specific duplicate channel in the rejection message', async () => {
+    readmat.mockReturnValue(withInverseFilters({ elec: { label: ['1', '1', '2'] } }));
+    const file = new File(['irrelevant — read() is mocked'], 'mocked_file_inversefilters.mat');
+
+    await expect(parseInverseSolutionFieldtrip(file)).rejects.toThrow(/\b1\b/);
   });
 });

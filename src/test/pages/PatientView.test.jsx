@@ -472,6 +472,52 @@ describe('PatientView — EEG file accumulation', () => {
   });
 });
 
+describe('PatientView — EEG duplicate channel names', () => {
+  beforeEach(() => {
+    FileDropZone.mockClear();
+    checkEegFiles.mockReturnValue({
+      formatName: 'BrainVision',
+      complete: true,
+      missing: [],
+      warning: null,
+    });
+  });
+
+  it('rejects a recording with a duplicate channel name instead of loading it', async () => {
+    const { default: toast } = await import('react-hot-toast');
+    detectAndLoadEEG.mockResolvedValue({
+      channelNames: ['1', '1', '2'],
+      fs: 1,
+      tMax: 1,
+      getChunk: vi.fn(),
+    });
+    renderPatientView();
+
+    await act(async () => {
+      await getEegOnFiles()([makeFile('sub01.vhdr'), makeFile('sub01.eeg')]);
+    });
+
+    expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/duplicate channel name.*1/i));
+    expect(screen.queryByTestId('eeg-viewer')).not.toBeInTheDocument();
+  });
+
+  it('loads normally when every channel name is unique', async () => {
+    detectAndLoadEEG.mockResolvedValue({
+      channelNames: ['1', '2', '3'],
+      fs: 1,
+      tMax: 1,
+      getChunk: vi.fn(),
+    });
+    renderPatientView();
+
+    await act(async () => {
+      await getEegOnFiles()([makeFile('sub01.vhdr'), makeFile('sub01.eeg')]);
+    });
+
+    expect(screen.getByTestId('eeg-viewer')).toBeInTheDocument();
+  });
+});
+
 describe('PatientView — EEG dropzone rejects unsupported files', () => {
   beforeEach(() => {
     FileDropZone.mockClear();
@@ -1131,35 +1177,11 @@ describe('PatientView — ESI iEEG warning', () => {
     );
   });
 
-  it("warns that ESI can't compute when the recording has a duplicate channel name the inverse solution needs", async () => {
-    checkEegFiles.mockReturnValue({
-      formatName: 'BrainVision',
-      complete: true,
-      missing: [],
-      warning: null,
-    });
-    // Channel "1" duplicated — the default parseInverseSolutionFieldtrip mock's
-    // inverseSolutionChannelNames is ['1', '2'], so this collides with a channel the model needs.
-    detectAndLoadEEG.mockResolvedValue({
-      channelNames: ['1', '1', '2'],
-      fs: 256,
-      tMax: 10,
-      getChunk: vi.fn(),
-    });
-    renderPatientView();
-    await act(async () => {
-      await getEegOnFiles()([makeFile('sub01.vhdr'), makeFile('sub01.eeg')]);
-    });
-    toast.mockClear();
-
-    await act(async () => {
-      await userEvent.click(screen.getByTestId('trigger-inverse-solution-file'));
-    });
-
-    expect(toast.error).toHaveBeenCalledWith(
-      expect.stringMatching(/duplicate|more than one channel/i)
-    );
-  });
+  // A recording with a duplicate channel name is now rejected outright at intake time (see
+  // "PatientView — EEG duplicate channel names" below) and never reaches EegViewer/the ESI
+  // toast, so this scenario is no longer reachable through the real load flow — the
+  // matchChannelsToInverseSolution/matchVoltagesToInverseSolution duplicate-name behavior
+  // itself is still covered directly in electricalSourceImagingUtils.test.js.
 });
 
 describe('PatientView — intracranial connectome layer', () => {
