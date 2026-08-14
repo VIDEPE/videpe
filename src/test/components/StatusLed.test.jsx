@@ -16,7 +16,7 @@ describe('StatusLed — disabled', () => {
     useTheme.mockReturnValue({ isDarkMode: false });
     render(<StatusLed label="Inverse Solution" fileName="my_file" disabled />);
 
-    const dot = getDot('Inverse Solution is not applicable for iEEG recordings');
+    const dot = getDot('Inverse Solution is not applicable for SEEG recordings');
     expect(dot).toHaveClass('bg-foreground/20');
   });
 });
@@ -102,6 +102,44 @@ describe('StatusLed — with a match-count concept (e.g. Electrode Position)', (
 
     const dot = getDot('Custom: my_positions (1/3 channels matched)');
     expect(dot).toHaveClass('bg-amber-500');
+  });
+
+  it('replaces the whole title with matchIssue when the match is poor and matchIssue is given', () => {
+    useTheme.mockReturnValue({ isDarkMode: false });
+    render(
+      <StatusLed
+        label="Inverse Solution"
+        fileName="my_solution"
+        matchCount={2}
+        totalCount={2}
+        isGoodMatch={false}
+        matchIssue="Alert: some required channels don't have EEG type"
+      />
+    );
+
+    // Full name match (2/2) but still amber — the generic count text would misleadingly
+    // read as success, and matchIssue is deliberately generic (no channel names), so it
+    // replaces the title outright rather than being appended to it.
+    const dot = getDot("Alert: some required channels don't have EEG type");
+    expect(dot).toHaveClass('bg-amber-500');
+    expect(screen.queryByTitle(/2\/2 channels matched/)).not.toBeInTheDocument();
+  });
+
+  it('ignores matchIssue when the match is good, showing the generic count as usual', () => {
+    useTheme.mockReturnValue({ isDarkMode: false });
+    render(
+      <StatusLed
+        label="Inverse Solution"
+        fileName="my_solution"
+        matchCount={2}
+        totalCount={2}
+        isGoodMatch={true}
+        matchIssue="Alert: some required channels don't have EEG type"
+      />
+    );
+
+    const dot = getDot('Custom: my_solution (2/2 channels matched)');
+    expect(dot).toHaveClass('bg-green-500');
   });
 });
 

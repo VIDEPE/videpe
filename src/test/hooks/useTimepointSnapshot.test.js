@@ -20,6 +20,7 @@ const channels = [
 const referenceSeries = computeReferenceSeries(channels);
 const matched = [{ channelIdx: 0 }, { channelIdx: 1 }];
 const channelNames = ['CH1', 'CH2'];
+const channelTypes = ['eeg', 'eeg'];
 
 const setup = (overrides = {}) =>
   renderHook((props) => useTimepointSnapshot(props), {
@@ -31,6 +32,7 @@ const setup = (overrides = {}) =>
       fs: 1,
       matched,
       channelNames,
+      channelTypes,
       isIntracranial: false,
       onElectrodeSnapshotChange: vi.fn(),
       onChannelSnapshotChange: vi.fn(),
@@ -104,6 +106,7 @@ describe('useTimepointSnapshot — lifted snapshots', () => {
       fs: 1,
       matched,
       channelNames,
+      channelTypes,
       isIntracranial: false,
       onElectrodeSnapshotChange,
       onChannelSnapshotChange: vi.fn(),
@@ -128,6 +131,35 @@ describe('useTimepointSnapshot — lifted snapshots', () => {
     expect(onChannelSnapshotChange).toHaveBeenCalledWith({
       isIntracranial: false,
       channelNames,
+      channelTypes,
+      voltages: [0.5, -0.5],
+    });
+  });
+
+  it('re-fires onChannelSnapshotChange when channelTypes changes (e.g. a montage-editor edit), even with topoTimepoint unchanged', () => {
+    const onChannelSnapshotChange = vi.fn();
+    const { rerender } = setup({ onChannelSnapshotChange, topoTimepoint: 2 });
+    expect(onChannelSnapshotChange).toHaveBeenCalledTimes(1);
+
+    rerender({
+      channels,
+      referenceSeries,
+      topoTimepoint: 2, // unchanged
+      timestamps,
+      fs: 1,
+      matched,
+      channelNames,
+      channelTypes: ['seeg', 'eeg'], // channel 0's type flipped
+      isIntracranial: false,
+      onElectrodeSnapshotChange: vi.fn(),
+      onChannelSnapshotChange,
+    });
+
+    expect(onChannelSnapshotChange).toHaveBeenCalledTimes(2);
+    expect(onChannelSnapshotChange).toHaveBeenLastCalledWith({
+      isIntracranial: false,
+      channelNames,
+      channelTypes: ['seeg', 'eeg'],
       voltages: [0.5, -0.5],
     });
   });
@@ -154,6 +186,7 @@ describe('useTimepointSnapshot — lifted snapshots', () => {
       fs: 1,
       matched,
       channelNames,
+      channelTypes,
       isIntracranial: false,
       onElectrodeSnapshotChange: vi.fn(),
       onChannelSnapshotChange,

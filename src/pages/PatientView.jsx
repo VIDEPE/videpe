@@ -36,7 +36,7 @@ export const PatientView = () => {
   const [layers, setLayers] = useState([]); // image volumes/meshes loaded from files
   // Whether NiiViewer holds layers dropped into its own internal dropzone — those never
   // touch `layers` above, so this prevents wrongly unmounting NiiViewer (and discarding
-  // them) when e.g. switching out of iEEG mode clears electrodeLayer.
+  // them) when e.g. a montage-editor channel-type edit clears electrodeLayer.
   const [niiHasOwnContent, setNiiHasOwnContent] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const eegReadyResolveRef = useRef(null); // set before demo load; EegViewer calls it when charts are ready
@@ -50,14 +50,28 @@ export const PatientView = () => {
   // voltages } | null. isIntracranial here is EegViewer's live channelSettings-derived
   // majority, not a manually-set recording type (there's no toggle anymore).
   const [channelSnapshot, setChannelSnapshot] = useState(null);
+  // channelSettings type per channelNames index, reported independent of any plot click —
+  // lets the Inverse Solution LED/ESI toggle react to a montage-editor type edit right away
+  // instead of waiting for the next topo click to refresh channelSnapshot.
+  const [channelTypes, setChannelTypes] = useState([]);
   const [electrodeRenderEnabled, setElectrodeRenderEnabled] = useState(false); // boolean to enable/disable the 3D rendering of the electrodes
   const [esiEnabled, setEsiEnabled] = useState(false); // boolean to enable/disable showing the Electrical Source Imaging layer — same gating pattern as electrodeRenderEnabled
 
-  const { inverseSolutionFileName, esiLayer, handleInverseSolutionFile, resetInverseSolution } =
-    useElectricalSourceImaging({
-      channelSnapshot,
-      esiEnabled,
-    });
+  const {
+    inverseSolutionFileName,
+    esiChannelMatchCount,
+    esiChannelTotalCount,
+    isEsiChannelMatchGoodForLed,
+    esiSeegChannelNames,
+    esiLayer,
+    handleInverseSolutionFile,
+    resetInverseSolution,
+  } = useElectricalSourceImaging({
+    channelSnapshot,
+    channelNames: eeg?.channelNames,
+    channelTypes,
+    esiEnabled,
+  });
 
   const {
     pendingEegFiles,
@@ -283,10 +297,15 @@ export const PatientView = () => {
               customElectrodes={customElectrodes}
               customElecPosFileName={customElecPosFileName}
               inverseSolutionFileName={inverseSolutionFileName}
+              esiChannelMatchCount={esiChannelMatchCount}
+              esiChannelTotalCount={esiChannelTotalCount}
+              isEsiChannelMatchGoodForLed={isEsiChannelMatchGoodForLed}
+              esiSeegChannelNames={esiSeegChannelNames}
               onElecPosFile={handleElecPosFile}
               onInverseSolutionFile={handleInverseSolutionFile}
               onElectrodeSnapshotChange={setElectrodeSnapshot}
               onChannelSnapshotChange={setChannelSnapshot}
+              onChannelTypesChange={setChannelTypes}
               onTopoHasContentChange={setTopoHasContent}
               electrodeRenderEnabled={electrodeRenderEnabled}
               onElectrodeRenderChange={setElectrodeRenderEnabled}

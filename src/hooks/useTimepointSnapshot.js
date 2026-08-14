@@ -26,12 +26,16 @@ import { applyReferenceSeries } from '@/utils/eegViewerUtils';
  *   useElectrodeMatching); only matched channels contribute to `topoVoltages`.
  * @param {string[]} params.channelNames - all channel names, used for the lifted
  *   per-channel snapshot (which isn't limited to position-matched channels).
- * @param {boolean} params.isIntracranial - whether the recording is currently iEEG;
- *   passed through unchanged to both lifted snapshots.
+ * @param {(string|undefined)[]} params.channelTypes - one channelSettings type
+ *   ('eeg'|'seeg'|'other'|undefined) per channelNames index — lets ESI reject a channel
+ *   the inverse solution needs but that's itself typed SEEG, even if the name matches.
+ * @param {boolean} params.isIntracranial - whether the majority of channels are currently
+ *   typed SEEG (see EegViewer.jsx's majorityIsSeeg); passed through unchanged to both
+ *   lifted snapshots.
  * @param {(snapshot: {isIntracranial: boolean, matched: Array, voltages: number[]}) => void} params.onElectrodeSnapshotChange
  *   Called whenever the electrode-matched voltage snapshot changes, so PatientView can
  *   rebuild the intracranial 3D connectome layer.
- * @param {(snapshot: {isIntracranial: boolean, channelNames: string[], voltages: number[]}) => void} params.onChannelSnapshotChange
+ * @param {(snapshot: {isIntracranial: boolean, channelNames: string[], channelTypes: Array, voltages: number[]}) => void} params.onChannelSnapshotChange
  *   Called only when the user clicks a new topography timepoint, so PatientView/ESI can
  *   recompute source power from the full per-channel snapshot.
  * @returns {Object} The re-referenced buffer and derived voltage snapshots:
@@ -50,6 +54,7 @@ export function useTimepointSnapshot({
   fs,
   matched,
   channelNames,
+  channelTypes,
   isIntracranial,
   onElectrodeSnapshotChange,
   onChannelSnapshotChange,
@@ -102,9 +107,9 @@ export function useTimepointSnapshot({
       Math.min(timestamps.length - 1, Math.round((topoTimepoint - timestamps[0]) * fs))
     );
     const voltages = montagedChannels.map((ch) => ch?.[sampleIndex] ?? 0);
-    onChannelSnapshotChange?.({ isIntracranial, channelNames, voltages });
+    onChannelSnapshotChange?.({ isIntracranial, channelNames, channelTypes, voltages });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [topoTimepoint, isIntracranial, channelNames, onChannelSnapshotChange]);
+  }, [topoTimepoint, isIntracranial, channelNames, channelTypes, onChannelSnapshotChange]);
 
   return { montagedChannels, topoVoltages, topoVoltagesByChannel };
 }

@@ -90,10 +90,10 @@ const FEATURES = [
   },
   {
     icon: ChartNetwork,
-    label: 'Intracranial EEG',
+    label: 'Intracranial SEEG',
     description:
-      'Switch to iEEG mode to auto-detect intracranial electrodes and view them as a 3D connectome or a per-electrode voltage matrix.',
-    anchor: '#feature-ieeg',
+      'Intracranial electrodes are auto-detected per channel and viewable as a 3D connectome or a per-electrode voltage matrix.',
+    anchor: '#feature-seeg',
   },
   {
     icon: FolderOpen,

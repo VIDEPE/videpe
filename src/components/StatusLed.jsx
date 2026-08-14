@@ -22,7 +22,7 @@ import { useTheme } from '@/components/ThemeContext';
  * @param {string|null} [fileName] - name of the loaded file, if any. Presence alone
  *   (regardless of match quality) decides the green/amber branch vs. the blue/red branch
  * @param {boolean} [disabled=false] - greys the LED out for a file type that doesn't apply
- *   to the current recording mode (e.g. inverse solution in iEEG) — greyed rather than
+ *   to the current recording mode (e.g. inverse solution in SEEG) — greyed rather than
  *   removed so the layout doesn't jump and a loaded-but-unused file doesn't disappear
  * @param {number} [matchCount] - channels matched against this file/template. Provide
  *   together with totalCount to opt this LED into the "channels matched" concept — the
@@ -32,6 +32,13 @@ import { useTheme } from '@/components/ThemeContext';
  *   (thresholds live with the caller, not here). Only affects color when matchCount/
  *   totalCount are both provided — LEDs with no match concept (e.g. Inverse Solution)
  *   always read green while active, never amber
+ * @param {string} [matchIssue] - replaces the whole title with a short, generic reason when
+ *   isGoodMatch is false — e.g. ESI: a channel matched by name but disqualified for another
+ *   reason (typed SEEG), which matchCount alone can't distinguish from a channel that's
+ *   simply absent. Deliberately generic rather than naming the affected channel(s) — a bulk
+ *   edit (e.g. "Set all as SEEG") can affect hundreds of channels, and a tooltip is the
+ *   wrong place for that list. Ignored when isGoodMatch is true, or when not provided
+ *   (falls back to the generic count text, unchanged).
  * @param {boolean} [highlighted=false] - forces the red (off) dot to glow like an active LED
  *   while true — used to draw the eye to this LED while the user hovers a toggle that's
  *   disabled because this file is missing. No effect when the dot isn't red (already
@@ -44,6 +51,7 @@ export const StatusLed = ({
   matchCount,
   totalCount,
   isGoodMatch = false,
+  matchIssue,
   highlighted = false,
 }) => {
   // isDarkMode is the one source of truth that actually reflects the app's theme toggle.
@@ -98,11 +106,13 @@ export const StatusLed = ({
           : 'none';
   const matchSuffix = hasMatchInfo ? ` (${matchCount}/${totalCount} channels matched)` : '';
   const title = disabled
-    ? `${label} is not applicable for iEEG recordings`
+    ? `${label} is not applicable for SEEG recordings`
     : isActive
-      ? hasMatchInfo
-        ? `Custom: ${fileName}${matchSuffix}`
-        : fileName
+      ? !isGoodMatch && matchIssue
+        ? matchIssue
+        : hasMatchInfo
+          ? `Custom: ${fileName}${matchSuffix}`
+          : fileName
       : hasMatchInfo
         ? `Using standard_1005 template${matchSuffix}`
         : `No ${label.toLowerCase()} loaded`;
