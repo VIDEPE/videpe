@@ -950,154 +950,160 @@ export function EegMontageEditor({
             acts on row selection rather than the list as a whole, like Clear/Sort do. A
             second row below holds Load/Save side by side. */}
         <div
-          className="h-36 shrink-0 flex flex-col gap-2 p-2 border-t border-border bg-surface"
+          className="shrink-0 flex flex-col p-2 border-t border-border bg-surface"
           onClick={handleMontagePaneBackgroundClick}
         >
-          <div className="flex items-start gap-4">
-            {/* Clear group */}
-            <div className="flex flex-col gap-2">
-              <button
-                type="button"
-                className="button"
-                data-testid="clear-all-button"
-                disabled={draftMontageChannels.length === 0}
-                onClick={handleClearAllMontageRows}
-                title="Remove all montage rows"
-              >
-                Clear all
-              </button>
-            </div>
-            {/* Sort group — the arrow shows the direction the next click will sort in. */}
-            <div className="flex flex-col gap-2">
-              <button
-                type="button"
-                className="button flex items-center gap-1"
-                data-testid="sort-by-name-button"
-                disabled={draftMontageChannels.length === 0}
-                onClick={handleSortByName}
-                title={`Sort rows by channel name (${nameSortDescending ? 'descending' : 'ascending'})`}
-              >
-                Sort by Name
-                {nameSortDescending ? <ArrowDownAZ size={14} /> : <ArrowUpAZ size={14} />}
-              </button>
-              <button
-                type="button"
-                className="button flex items-center gap-1"
-                data-testid="sort-by-type-button"
-                disabled={draftMontageChannels.length === 0}
-                onClick={handleSortByType}
-                title={`Sort rows by channel type (${typeSortDescending ? 'descending' : 'ascending'})`}
-              >
-                Sort by Type
-                {typeSortDescending ? (
-                  <ArrowDownWideNarrow size={14} />
-                ) : (
-                  <ArrowUpWideNarrow size={14} />
-                )}
-              </button>
-            </div>
-            {/* Set all Ref group */}
-            <div className="flex flex-col gap-2">
-              <button
-                className="button"
-                data-testid="bulk-reference-apply-button"
-                disabled={draftMontageChannels.length === 0}
-                onClick={handleSetAllReference}
-              >
-                Set all as
-              </button>
-              <select
-                className="text-xs border border-border rounded bg-surface"
-                data-testid="bulk-reference-select"
-                disabled={draftMontageChannels.length === 0}
-                value={bulkReference}
-                onChange={(e) => setBulkReference(e.target.value)}
-              >
-                {referenceOptions}
-              </select>
-            </div>
+          {/* Scrolls horizontally as one unit when the pane is too narrow, so a single
+              scrollbar sits below Load/Save instead of one wedged between the two rows. */}
+          <div className="overflow-x-auto">
+            <div className="flex flex-col gap-4 pb-2 w-max">
+              <div className="flex items-start gap-4">
+                {/* Clear group */}
+                <div className="flex flex-col gap-2 shrink-0">
+                  <button
+                    type="button"
+                    className="button whitespace-nowrap"
+                    data-testid="clear-all-button"
+                    disabled={draftMontageChannels.length === 0}
+                    onClick={handleClearAllMontageRows}
+                    title="Remove all montage rows"
+                  >
+                    Clear all
+                  </button>
+                </div>
+                {/* Sort group — the arrow shows the direction the next click will sort in. */}
+                <div className="flex flex-col gap-2 shrink-0">
+                  <button
+                    type="button"
+                    className="button flex items-center gap-1 whitespace-nowrap"
+                    data-testid="sort-by-name-button"
+                    disabled={draftMontageChannels.length === 0}
+                    onClick={handleSortByName}
+                    title={`Sort rows by channel name (${nameSortDescending ? 'descending' : 'ascending'})`}
+                  >
+                    Sort by Name
+                    {nameSortDescending ? <ArrowDownAZ size={14} /> : <ArrowUpAZ size={14} />}
+                  </button>
+                  <button
+                    type="button"
+                    className="button flex items-center gap-1 whitespace-nowrap"
+                    data-testid="sort-by-type-button"
+                    disabled={draftMontageChannels.length === 0}
+                    onClick={handleSortByType}
+                    title={`Sort rows by channel type (${typeSortDescending ? 'descending' : 'ascending'})`}
+                  >
+                    Sort by Type
+                    {typeSortDescending ? (
+                      <ArrowDownWideNarrow size={14} />
+                    ) : (
+                      <ArrowUpWideNarrow size={14} />
+                    )}
+                  </button>
+                </div>
+                {/* Set all Ref group */}
+                <div className="flex flex-col gap-2 shrink-0">
+                  <button
+                    className="button whitespace-nowrap"
+                    data-testid="bulk-reference-apply-button"
+                    disabled={draftMontageChannels.length === 0}
+                    onClick={handleSetAllReference}
+                  >
+                    Set all as
+                  </button>
+                  <select
+                    className="text-xs border border-border rounded bg-surface"
+                    data-testid="bulk-reference-select"
+                    disabled={draftMontageChannels.length === 0}
+                    value={bulkReference}
+                    onChange={(e) => setBulkReference(e.target.value)}
+                  >
+                    {referenceOptions}
+                  </select>
+                </div>
 
-            {/* Set all Color group */}
-            <div className="flex flex-col gap-2">
-              <button
-                className="button"
-                data-testid="bulk-color-apply-button"
-                disabled={draftMontageChannels.length === 0}
-                onClick={handleSetAllColor}
-              >
-                Set all as
-              </button>
-              <select
-                className="text-xs border border-border rounded bg-surface"
-                data-testid="bulk-color-select"
-                disabled={draftMontageChannels.length === 0}
-                value={bulkColor}
-                onChange={(e) => setBulkColor(e.target.value)}
-              >
-                <option value="">Default</option>
-                {colorOptions}
-              </select>
-            </div>
+                {/* Set all Color group */}
+                <div className="flex flex-col gap-2 shrink-0">
+                  <button
+                    className="button whitespace-nowrap"
+                    data-testid="bulk-color-apply-button"
+                    disabled={draftMontageChannels.length === 0}
+                    onClick={handleSetAllColor}
+                  >
+                    Set all as
+                  </button>
+                  <select
+                    className="text-xs border border-border rounded bg-surface"
+                    data-testid="bulk-color-select"
+                    disabled={draftMontageChannels.length === 0}
+                    value={bulkColor}
+                    onChange={(e) => setBulkColor(e.target.value)}
+                  >
+                    <option value="">Default</option>
+                    {colorOptions}
+                  </select>
+                </div>
 
-            {/* Move group — acts on whichever row(s) are selected (click a row's channel
-                name above to select it); disabled with none selected since there's nothing
-                to move. */}
-            <div className="flex flex-col gap-2 ml-auto">
-              <button
-                type="button"
-                className="button button-icon"
-                data-testid="move-up-button"
-                disabled={selectedMontageRows.size === 0}
-                onClick={handleMoveSelectedUp}
-                title="Move selected row(s) up"
-              >
-                <MoveUp size={16} />
-              </button>
-              <button
-                type="button"
-                className="button button-icon"
-                data-testid="move-down-button"
-                disabled={selectedMontageRows.size === 0}
-                onClick={handleMoveSelectedDown}
-                title="Move selected row(s) down"
-              >
-                <MoveDown size={16} />
-              </button>
+                {/* Move group — acts on whichever row(s) are selected (click a row's channel
+                    name above to select it); disabled with none selected since there's nothing
+                    to move. */}
+                <div className="flex flex-col gap-2 shrink-0 ml-auto">
+                  <button
+                    type="button"
+                    className="button button-icon"
+                    data-testid="move-up-button"
+                    disabled={selectedMontageRows.size === 0}
+                    onClick={handleMoveSelectedUp}
+                    title="Move selected row(s) up"
+                  >
+                    <MoveUp size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    className="button button-icon"
+                    data-testid="move-down-button"
+                    disabled={selectedMontageRows.size === 0}
+                    onClick={handleMoveSelectedDown}
+                    title="Move selected row(s) down"
+                  >
+                    <MoveDown size={16} />
+                  </button>
+                </div>
+              </div>
+              {/* File row — Load replaces all draft rows wholesale (grouped conceptually with
+                  Clear, both whole-list-replacing); Save always exports AnyWave format
+                  regardless of the montage's origin. Both .mtg formats share the same file
+                  extension, so format detection happens by content-sniffing in
+                  parseMontageFile, not via the file input's accept filter. */}
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  className="button whitespace-nowrap"
+                  data-testid="load-montage-button"
+                  onClick={() => fileInputRef.current?.click()}
+                  title="Load a montage from an AnyWave or Cartool .mtg file (replaces all current rows)"
+                >
+                  Load
+                </button>
+                <button
+                  type="button"
+                  className="button whitespace-nowrap"
+                  data-testid="save-montage-button"
+                  disabled={draftMontageChannels.length === 0}
+                  onClick={handleSaveMontage}
+                  title="Save the current montage as an AnyWave .mtg file"
+                >
+                  Save
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".mtg"
+                  hidden
+                  data-testid="montage-file-input"
+                  onChange={handleLoadMontageFile}
+                />
+              </div>
             </div>
-          </div>
-          {/* File row — Load replaces all draft rows wholesale (grouped conceptually with
-              Clear, both whole-list-replacing); Save always exports AnyWave format
-              regardless of the montage's origin. Both .mtg formats share the same file
-              extension, so format detection happens by content-sniffing in
-              parseMontageFile, not via the file input's accept filter. */}
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              className="button"
-              data-testid="load-montage-button"
-              onClick={() => fileInputRef.current?.click()}
-              title="Load a montage from an AnyWave or Cartool .mtg file (replaces all current rows)"
-            >
-              Load
-            </button>
-            <button
-              type="button"
-              className="button"
-              data-testid="save-montage-button"
-              disabled={draftMontageChannels.length === 0}
-              onClick={handleSaveMontage}
-              title="Save the current montage as an AnyWave .mtg file"
-            >
-              Save
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".mtg"
-              hidden
-              data-testid="montage-file-input"
-              onChange={handleLoadMontageFile}
-            />
           </div>
         </div>
       </div>
