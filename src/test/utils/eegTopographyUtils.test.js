@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { parseElectrodePositionElc } from '@/loaders/parseElectrodePositionElc';
 import { parseElectrodePositionTsv } from '@/loaders/parseElectrodePositionTsv';
-import { matchChannelsToPositions } from '@/utils/eegTopographyUtils';
+import { findDuplicateChannelNames, matchChannelsToPositions } from '@/utils/eegTopographyUtils';
 
 // Minimal valid .elc with 3 fiducials + 2 electrodes
 const MINIMAL_ELC = `# ASA electrode file
