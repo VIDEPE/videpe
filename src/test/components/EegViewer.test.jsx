@@ -2411,6 +2411,18 @@ describe('EegViewer — montage template dropdown', () => {
     expect(options).toEqual(['none', 'average']);
   });
 
+  it('disables the template select while the montage editor is open, and re-enables it once closed', async () => {
+    await renderViewer();
+
+    expect(screen.getByTestId('montage-template-select')).not.toBeDisabled();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Montage' }));
+    expect(screen.getByTestId('montage-template-select')).toBeDisabled();
+
+    await userEvent.click(screen.getByRole('button', { name: 'OK' }));
+    expect(screen.getByTestId('montage-template-select')).not.toBeDisabled();
+  });
+
   it('replaces the waveform rows with one average-referenced row per channel when "Common Average Reference" is picked', async () => {
     await renderViewer();
 

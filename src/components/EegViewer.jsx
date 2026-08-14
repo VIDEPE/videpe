@@ -716,11 +716,16 @@ export const EegViewer = ({
                 Montage
               </button>
               <select
-                className="text-xs w-20 border border-border rounded bg-surface"
+                className="text-xs w-20 border border-border rounded bg-surface disabled:opacity-40 disabled:cursor-not-allowed"
                 data-testid="montage-template-select"
-                title="Montage template"
+                title={
+                  montageVisible
+                    ? 'Close the montage editor to apply a template'
+                    : 'Montage template'
+                }
                 value={montageTemplate}
                 onChange={(e) => applyTemplateSelection(e.target.value)}
+                disabled={montageVisible}
               >
                 <option value="none">None</option>
                 {customMontageChannels && <option value="custom">Custom</option>}
