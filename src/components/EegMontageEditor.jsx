@@ -658,7 +658,7 @@ export function EegMontageEditor({
       </div>
       {/* Channel Selection Settings */}
       <div
-        className="h-36 shrink-0 flex flex-col items-start gap-2 p-2 border-t border-border bg-surface"
+        className="h-32 shrink-0 flex flex-col items-start gap-2 p-2 border-t border-border bg-surface"
         onClick={handleChannelPaneBackgroundClick}
       >
         <button className="button" onClick={() => handleFlipBadChannels()}>
