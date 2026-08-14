@@ -240,6 +240,29 @@ const ELECTRODES = [
   { label: 'Cz', x: 0, y: 0, z: 88 },
 ];
 
+describe('findDuplicateChannelNames', () => {
+  it('returns empty when every name is unique', () => {
+    expect(findDuplicateChannelNames(['1', '2', '3'])).toEqual([]);
+  });
+
+  it('reports a name that appears more than once', () => {
+    expect(findDuplicateChannelNames(['1', '2', '1'])).toEqual(['1']);
+  });
+
+  it('matches using the same normalization as electrode-position matching', () => {
+    // "EEG 1-Ref" and "1" normalize to the same name.
+    expect(findDuplicateChannelNames(['EEG 1-Ref', '1'])).toEqual(['1']);
+  });
+
+  it('does not report the same duplicate more than once for 3+ occurrences', () => {
+    expect(findDuplicateChannelNames(['1', '1', '1'])).toEqual(['1']);
+  });
+
+  it('reports multiple distinct duplicates', () => {
+    expect(findDuplicateChannelNames(['1', '2', '1', '2', '3'])).toEqual(['1', '2']);
+  });
+});
+
 describe('matchChannelsToPositions', () => {
   it('matches exact labels (case-insensitive)', () => {
     const { matched } = matchChannelsToPositions(['fp1', 'FP2', 'CZ'], ELECTRODES);

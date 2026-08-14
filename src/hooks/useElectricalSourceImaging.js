@@ -1,7 +1,11 @@
 import { useState, useMemo, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { parseInverseSolutionFieldtrip } from '../loaders/parseInverseSolutionFieldtrip';
-import { electricalSourceImaging } from '../utils/electricalSourceImagingUtils';
+import {
+  electricalSourceImaging,
+  matchChannelsToInverseSolution,
+  findSeegChannelsAmongNeeded,
+} from '../utils/electricalSourceImagingUtils';
 
 /**
  * Owns the inverse-solution file and the Electrical Source Imaging (ESI) layer derived
@@ -16,6 +20,17 @@ import { electricalSourceImaging } from '../utils/electricalSourceImagingUtils';
  *   The latest per-channel voltage snapshot lifted out of EegViewer (captured on each
  *   topography click, already average-referenced from good channels only). Fed into the
  *   ESI computation alongside the inverse solution to produce `esiLayer`.
+ * @param {string[]} params.channelNames
+ *   The recording's full channel-name list — available as soon as a recording loads,
+ *   independent of any plot click. Used only to drive the Inverse Solution status LED's
+ *   match count against the loaded file's own channels; the actual `esiLayer` computation
+ *   matches per-click against `channelSnapshot.channelNames` instead (see
+ *   electricalSourceImagingUtils.js's matchVoltagesToInverseSolution).
+ * @param {(string|undefined)[]} params.channelTypes
+ *   One channelSettings type per channelNames index, reported independent of any plot
+ *   click (see EegViewer.jsx's onChannelTypesChange) — lets `isEsiChannelMatchGoodForLed`
+ *   catch a needed channel that's itself typed SEEG immediately after a montage-editor
+ *   edit, not just after the next topo click refreshes channelSnapshot.
  * @param {boolean} params.esiEnabled
  *   Whether the ESI toggle in EegViewer is currently on. `esiLayer` is only computed
  *   while this is true — mirrors PatientView's electrodeRenderEnabled gating of
@@ -25,24 +40,65 @@ import { electricalSourceImaging } from '../utils/electricalSourceImagingUtils';
  *     `null` if none has been loaded.
  *   - `inverseSolutionFileName` (string|null) — the filename (without extension) of the
  *     loaded inverse-solution file, or `null` if none.
+ *   - `esiChannelMatchCount`/`esiChannelTotalCount` (number|undefined) — how many of the
+ *     inverse solution's own channels have a same-named match in `channelNames`, paired
+ *     with the model's total channel count. `undefined` when there's no file loaded yet
+ *     (nothing to match against).
+ *   - `isEsiChannelMatchGoodForLed` (boolean) — true only for a *full* match (every one of
+ *     the model's channels found) with none of them typed SEEG — unlike Electrode
+ *     Position, a partial match (or a wrong-typed channel) here means ESI can't compute at
+ *     all, not just degrade.
+ *   - `esiSeegChannelNames` (string[]) — which of the model's own channel names are
+ *     matched by name but disqualified because that channel is itself typed SEEG. `[]`
+ *     when there's no such problem. Lets the UI explain *why* isEsiChannelMatchGoodForLed
+ *     is false instead of just showing a match count that can't distinguish "wrong type"
+ *     from "genuinely absent".
  *   - `esiLayer` (object|null) — the computed ESI source-power layer
  *     ({ sourcePowerConnectomes, sourcePowerVolume }), or `null` when there's nothing to
- *     show (no inverse solution, no channel data yet, intracranial, or `esiEnabled` is
- *     false).
+ *     show (no inverse solution, no channel data yet, a needed channel is typed SEEG, a
+ *     partial channel match, or `esiEnabled` is false).
  *   - `handleInverseSolutionFile` (file: File) => Promise<void> — parses and activates
  *     a single inverse-solution (.mat) file.
  *   - `resetInverseSolution` () => void — clears the inverse solution and its filename.
  */
-export function useElectricalSourceImaging({ channelSnapshot, esiEnabled }) {
+export function useElectricalSourceImaging({
+  channelSnapshot,
+  channelNames,
+  channelTypes,
+  esiEnabled,
+}) {
   const [inverseSolution, setInverseSolution] = useState(null);
   const [inverseSolutionFileName, setInverseSolutionFileName] = useState(null);
+
+  // matchCount/totalCount are name-only; isGoodMatch also requires no SEEG-typed needed
+  // channel, so the LED/ESI toggle never show "fully matched" for a case that would still
+  // make esiLayer come back null. seegChannelNames is exposed too, so the UI can explain
+  // *why* rather than just showing a lower-quality match count.
+  const esiChannelMatch = useMemo(() => {
+    if (!inverseSolution || !channelNames?.length) return null;
+    const nameMatch = matchChannelsToInverseSolution(
+      channelNames,
+      inverseSolution.inverseSolutionChannelNames
+    );
+    const seegChannelNames = findSeegChannelsAmongNeeded(
+      channelNames,
+      channelTypes,
+      inverseSolution.inverseSolutionChannelNames
+    );
+    return {
+      ...nameMatch,
+      isGoodMatch: nameMatch.isGoodMatch && seegChannelNames.length === 0,
+      seegChannelNames,
+    };
+  }, [inverseSolution, channelNames, channelTypes]);
 
   /**
    * Parses one inverse-solution file and, if parsing succeeds, makes it the active
    * inverse solution (replacing whatever was active before, if anything). Shows a toast
-   * confirming success or reporting a parse error, and — if the recording is currently
-   * iEEG — an extra toast noting that ESI has no effect until the user switches to EEG
-   * mode.
+   * confirming success or reporting a parse error, plus two conditional warnings: one if a
+   * channel the model needs is itself typed SEEG (ESI has no effect until that channel's
+   * type reads as EEG), and one if the recording has a duplicate channel name the model
+   * needs (ESI can never compute for that case — see matchChannelsToInverseSolution).
    *
    * @param {File} file - the dropped/selected inverse-solution (.mat, FieldTrip) file.
    * @returns {Promise<void>} Resolves once parsing finishes and state/toasts have been
@@ -60,30 +116,56 @@ export function useElectricalSourceImaging({ channelSnapshot, esiEnabled }) {
         toast.success(`Loaded inverse solution from ${file.name}`);
 
         // ESI only applies to scalp EEG — the file is still stored (and will take effect
-        // automatically once the majority of channel types read as EEG), but tell the user
-        // it has no effect right now rather than let them wonder why nothing happened.
-        // Relies on channelSnapshot, so this only fires once a topo click has produced a
-        // snapshot — before that there's nothing to warn about yet since esiLayer can't
-        // compute regardless.
-        if (channelSnapshot?.isIntracranial) {
+        // automatically once the needed channel's type reads as EEG), but tell the user it
+        // has no effect right now rather than let them wonder why nothing happened.
+        // channelNames/channelTypes are independent of any plot click, so this fires
+        // immediately rather than waiting on a prior snapshot. Deliberately scoped to just
+        // the model's own channels (not the recording's overall majority type) — see
+        // findSeegChannelsAmongNeeded. Deliberately generic rather than naming the affected
+        // channel(s) — a bulk edit (e.g. "Set all as SEEG") can affect hundreds of them.
+        const seegChannelNames = channelNames?.length
+          ? findSeegChannelsAmongNeeded(
+              channelNames,
+              channelTypes,
+              parsedInverseSolution.inverseSolutionChannelNames
+            )
+          : [];
+        if (seegChannelNames.length > 0) {
           toast(
-            'Electrical Source Imaging is not available while the majority of channels are SEEG',
+            'Electrical Source Imaging is not available — not all required channels have type EEG',
             {
               icon: '⚠️',
             }
           );
         }
+
+        // A duplicate channel name (e.g. a SEEG and an EEG channel sharing a name) makes
+        // ESI unable to compute at all for that channel, silently — surface it explicitly
+        // rather than let the toggle just sit disabled with no explanation. Computed fresh
+        // from the just-parsed file rather than the memoized esiChannelMatch below, which
+        // still reflects the *previous* inverseSolution state at this point in the callback.
+        if (channelNames?.length) {
+          const { duplicateChannelNames } = matchChannelsToInverseSolution(
+            channelNames,
+            parsedInverseSolution.inverseSolutionChannelNames
+          );
+          if (duplicateChannelNames.length > 0) {
+            toast.error(
+              `Electrical Source Imaging can't compute — this recording has more than one channel named ${duplicateChannelNames.join(', ')}`
+            );
+          }
+        }
       } catch (err) {
         toast.error(err.message);
       }
     },
-    [channelSnapshot]
+    [channelNames, channelTypes]
   );
 
   const esiLayer = useMemo(
     () => (esiEnabled ? electricalSourceImaging(inverseSolution, channelSnapshot) : null),
     [inverseSolution, channelSnapshot, esiEnabled]
-  ); // ESI source power — { sourcePowerConnectomes, sourcePowerVolume } | null | [] — electricalSourceImaging itself returns null for intracranial/missing data
+  ); // ESI source power — { sourcePowerConnectomes, sourcePowerVolume } | null | [] — electricalSourceImaging itself returns null for a needed-channel-is-SEEG/missing-channel/missing-data case
 
   /**
    * Clears the loaded inverse solution and its filename — returning this hook's state to
@@ -99,6 +181,10 @@ export function useElectricalSourceImaging({ channelSnapshot, esiEnabled }) {
   return {
     inverseSolution,
     inverseSolutionFileName,
+    esiChannelMatchCount: esiChannelMatch?.matchCount,
+    esiChannelTotalCount: esiChannelMatch?.totalCount,
+    isEsiChannelMatchGoodForLed: esiChannelMatch?.isGoodMatch ?? false,
+    esiSeegChannelNames: esiChannelMatch?.seegChannelNames ?? [],
     esiLayer,
     handleInverseSolutionFile,
     resetInverseSolution,

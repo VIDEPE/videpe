@@ -325,7 +325,7 @@ export function EegTopoViewer({
         onMouseDown={handleDragStart}
       >
         <span className="text-sm font-medium text-heading">
-          {isIntracranial ? 'iEEG Electrode Matrix' : 'EEG Topography'}
+          {isIntracranial ? 'SEEG Electrode Matrix' : 'EEG Topography'}
         </span>
         <TrafficLightButtons
           onMaximize={() => setIsMaximized((v) => !v)}

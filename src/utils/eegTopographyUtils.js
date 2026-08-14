@@ -19,6 +19,30 @@ export function normalizeChannelName(name) {
 }
 
 /**
+ * Finds channel names that occur more than once (after normalizeChannelName) — used to
+ * reject a recording outright at load time rather than silently mishandle it downstream.
+ * A duplicate name is more than a cosmetic problem: channelSettings keys its per-channel
+ * type/bad state by name, so two channels sharing a name already collapse into one shared
+ * entry today; ESI's channel matching likewise can't tell which physical channel a model's
+ * channel name refers to and has to refuse to compute for it (see
+ * electricalSourceImagingUtils.js's buildChannelNameIndex).
+ *
+ * @param {string[]} channelNames
+ * @returns {string[]} the (normalized) names that occur more than once, deduplicated —
+ *   empty when every name is unique
+ */
+export function findDuplicateChannelNames(channelNames) {
+  const seen = new Set();
+  const duplicates = new Set();
+  for (const name of channelNames) {
+    const normalized = normalizeChannelName(name);
+    if (seen.has(normalized)) duplicates.add(normalized);
+    seen.add(normalized);
+  }
+  return [...duplicates];
+}
+
+/**
  * Match raw EEG channel names against a parsed electrode position list.
  *
  * @param {string[]} channelNames  - channel labels from the EEG recording

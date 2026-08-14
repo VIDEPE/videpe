@@ -8,6 +8,7 @@ import {
   EEG_FORMAT_EXTENSIONS,
 } from '../loaders/eegFormats';
 import { parseElectrodePositionFile } from '../loaders/parseElectrodePositionFile';
+import { findDuplicateChannelNames } from '../utils/eegTopographyUtils';
 
 /**
  * Owns the EEG-recording file-drop intake pipeline:
@@ -172,7 +173,16 @@ export function useEegFileIntake({ setEeg, setIsLoading, onInverseSolutionFile }
         setEegHint(null);
         setIsLoading(true);
         try {
-          setEeg(await detectAndLoadEEG(deduped));
+          const parsed = await detectAndLoadEEG(deduped);
+          // Reject outright rather than accept and silently mishandle — channelSettings,
+          // ESI's channel matching, etc. all assume every channel name is unique.
+          const duplicateChannelNames = findDuplicateChannelNames(parsed.channelNames);
+          if (duplicateChannelNames.length > 0) {
+            throw new Error(
+              `Duplicate channel name(s): ${duplicateChannelNames.join(', ')}. Each channel must have a unique name.`
+            );
+          }
+          setEeg(parsed);
         } catch (err) {
           toast.error(`Error loading EEG:\n${err.message}`);
         } finally {

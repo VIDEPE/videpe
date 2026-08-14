@@ -279,7 +279,7 @@ export const AboutPage = () => {
                     view only)
                   </li>
                   <li>
-                    Adjustable node/edge size sliders for connectome layers (ESI and iEEG electrode
+                    Adjustable node/edge size sliders for connectome layers (ESI and SEEG electrode
                     connectomes)
                   </li>
                 </ul>
@@ -366,18 +366,18 @@ export const AboutPage = () => {
               </div>
             </div>
 
-            <div id="feature-ieeg" className="flex gap-3">
+            <div id="feature-seeg" className="flex gap-3">
               <ChartNetwork
                 size={22}
                 className="shrink-0 mt-0.5"
                 style={{ color: 'var(--c-primary)' }}
               />
               <div>
-                <p className="font-semibold text-heading">Intracranial (iEEG) support</p>
+                <p className="font-semibold text-heading">Intracranial (SEEG) support</p>
                 <p className="text-sm mt-1" style={{ color: 'var(--c-foreground)' }}>
-                  Toggle between scalp EEG and intracranial (sEEG/ECoG) recordings. Intracranial
-                  channels are auto-detected from channel naming, with a manual override always
-                  available.
+                  Each channel's type (EEG or SEEG) is auto-detected from its naming and editable
+                  per channel in the Montage Editor — mixed scalp/intracranial recordings are
+                  supported.
                 </p>
                 <ul
                   className="text-sm mt-2 flex flex-col gap-1 list-disc list-inside"

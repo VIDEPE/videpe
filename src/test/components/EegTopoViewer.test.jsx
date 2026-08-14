@@ -598,9 +598,9 @@ describe('EegTopoViewer', () => {
       expect(screen.getByTestId('eeg-matrix-viewer')).toBeTruthy();
     });
 
-    it('shows the "iEEG Electrode Matrix" title instead of "EEG Topography"', async () => {
+    it('shows the "SEEG Electrode Matrix" title instead of "EEG Topography"', async () => {
       await act(async () => render(<EegTopoViewer {...intracranialProps} />));
-      expect(screen.getByText('iEEG Electrode Matrix')).toBeTruthy();
+      expect(screen.getByText('SEEG Electrode Matrix')).toBeTruthy();
       expect(screen.queryByText('EEG Topography')).toBeNull();
     });
 

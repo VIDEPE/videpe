@@ -55,6 +55,7 @@ vi.mock('@/components/EegViewer', () => ({
       inverseSolutionFileName,
       onElectrodeSnapshotChange,
       onChannelSnapshotChange,
+      onChannelTypesChange,
       onInverseSolutionFile,
       onTopoNvReady,
       onTopoHasContentChange,
@@ -123,16 +124,30 @@ vi.mock('@/components/EegViewer', () => ({
         >
           trigger-channel-snapshot
         </button>
-        {/* Same as above, but for a channel snapshot whose majority channel type reads as
-            SEEG — the only way channelSnapshot.isIntracranial (which the ESI toast/gate now
-            reads directly, there being no more recordingType prop) becomes true. */}
+        {/* Simulates EegViewer reporting channelTypes independent of any plot click (real
+            EegViewer does this via its own onChannelTypesChange effect on every montage-
+            editor edit) — channel "1" (one of the default parseInverseSolutionFieldtrip
+            mock's inverseSolutionChannelNames, ['1','2']) is itself typed SEEG here, the
+            scenario findSeegChannelsAmongNeeded/the ESI toast and LED now check. */}
+        <button
+          type="button"
+          data-testid="trigger-channel-types-seeg"
+          onClick={() => onChannelTypesChange?.(['seeg', 'eeg'])}
+        >
+          trigger-channel-types-seeg
+        </button>
+        {/* Same as above, but channel "1" (one of the default parseInverseSolutionFieldtrip
+            mock's inverseSolutionChannelNames, ['1','2']) is itself typed SEEG — the scenario
+            findSeegChannelsAmongNeeded/the ESI toast now checks, scoped to just the
+            channels the model needs rather than the recording's overall majority type. */}
         <button
           type="button"
           data-testid="trigger-channel-snapshot-seeg"
           onClick={() =>
             onChannelSnapshotChange?.({
-              isIntracranial: true,
-              channelNames: ['B1', 'B2'],
+              isIntracranial: false,
+              channelNames: ['1', '2'],
+              channelTypes: ['seeg', 'eeg'],
               voltages: [5, 6],
             })
           }
@@ -280,7 +295,7 @@ vi.mock('@/loaders/parseInverseSolutionFieldtrip', () => ({
     insideSourcePositions: [[-5, 15, 10]],
     nInsideSources: 1,
     nChannels: 2,
-    channelLabels: ['1', '2'],
+    inverseSolutionChannelNames: ['1', '2'],
     sourcePositions: [[-5, 15, 10]],
     insideMask: [1],
     indicesInsideSources: [0],
@@ -291,9 +306,16 @@ vi.mock('@/components/ThemeToggle', () => ({ ThemeToggle: () => null }));
 // electricalSourceImaging's own computation is covered by its dedicated unit tests
 // (electricalSourceImagingUtils.test.js) — stub it here so PatientView's montage-gating
 // logic can be tested in isolation from the fixture's grid/affine data.
-vi.mock('@/utils/electricalSourceImagingUtils', () => ({
-  electricalSourceImaging: vi.fn(),
-}));
+// matchChannelsToInverseSolution/matchVoltagesToInverseSolution stay real (pure string
+// matching, no heavy fixture needed) — only the fixture-heavy electricalSourceImaging is
+// mocked.
+vi.mock('@/utils/electricalSourceImagingUtils', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    electricalSourceImaging: vi.fn(),
+  };
+});
 
 const makeFile = (name) => new File([''], name);
 
@@ -460,6 +482,52 @@ describe('PatientView — EEG file accumulation', () => {
     const vhdrFiles = lastCallFiles.filter((f) => f.name.endsWith('.vhdr'));
     expect(vhdrFiles).toHaveLength(1);
     expect(vhdrFiles[0].name).toBe('sub02.vhdr');
+  });
+});
+
+describe('PatientView — EEG duplicate channel names', () => {
+  beforeEach(() => {
+    FileDropZone.mockClear();
+    checkEegFiles.mockReturnValue({
+      formatName: 'BrainVision',
+      complete: true,
+      missing: [],
+      warning: null,
+    });
+  });
+
+  it('rejects a recording with a duplicate channel name instead of loading it', async () => {
+    const { default: toast } = await import('react-hot-toast');
+    detectAndLoadEEG.mockResolvedValue({
+      channelNames: ['1', '1', '2'],
+      fs: 1,
+      tMax: 1,
+      getChunk: vi.fn(),
+    });
+    renderPatientView();
+
+    await act(async () => {
+      await getEegOnFiles()([makeFile('sub01.vhdr'), makeFile('sub01.eeg')]);
+    });
+
+    expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/duplicate channel name.*1/i));
+    expect(screen.queryByTestId('eeg-viewer')).not.toBeInTheDocument();
+  });
+
+  it('loads normally when every channel name is unique', async () => {
+    detectAndLoadEEG.mockResolvedValue({
+      channelNames: ['1', '2', '3'],
+      fs: 1,
+      tMax: 1,
+      getChunk: vi.fn(),
+    });
+    renderPatientView();
+
+    await act(async () => {
+      await getEegOnFiles()([makeFile('sub01.vhdr'), makeFile('sub01.eeg')]);
+    });
+
+    expect(screen.getByTestId('eeg-viewer')).toBeInTheDocument();
   });
 });
 
@@ -1074,7 +1142,7 @@ describe('PatientView — inverse solution files', () => {
   });
 });
 
-describe('PatientView — ESI iEEG warning', () => {
+describe('PatientView — ESI SEEG warning', () => {
   beforeEach(() => {
     FileDropZone.mockClear();
     NiiViewer.mockClear();
@@ -1089,7 +1157,7 @@ describe('PatientView — ESI iEEG warning', () => {
     });
   });
 
-  it('warns that ESI is not applicable when an inverse solution is loaded while the channel snapshot reads as SEEG', async () => {
+  it('warns that ESI is not applicable when a channel the inverse solution needs is itself typed SEEG', async () => {
     checkEegFiles.mockReturnValue({
       formatName: 'BrainVision',
       complete: true,
@@ -1106,7 +1174,7 @@ describe('PatientView — ESI iEEG warning', () => {
     await act(async () => {
       await getEegOnFiles()([makeFile('sub01.vhdr'), makeFile('sub01.eeg')]);
     });
-    await userEvent.click(screen.getByTestId('trigger-channel-snapshot-seeg'));
+    await userEvent.click(screen.getByTestId('trigger-channel-types-seeg'));
     toast.mockClear();
 
     // Routed through EegViewer's own persistent dropzone callback (not getEegOnFiles,
@@ -1117,10 +1185,51 @@ describe('PatientView — ESI iEEG warning', () => {
     });
 
     expect(toast).toHaveBeenCalledWith(
-      expect.stringMatching(/SEEG/i),
+      expect.stringMatching(/required channels have type EEG/i),
       expect.objectContaining({ icon: '⚠️' })
     );
   });
+
+  it('keeps the Inverse Solution LED/ESI toggle gated off when a fully name-matched channel is itself typed SEEG', async () => {
+    checkEegFiles.mockReturnValue({
+      formatName: 'BrainVision',
+      complete: true,
+      missing: [],
+      warning: null,
+    });
+    detectAndLoadEEG.mockResolvedValue({
+      channelNames: ['1', '2'],
+      fs: 256,
+      tMax: 10,
+      getChunk: vi.fn(),
+    });
+    renderPatientView();
+    await act(async () => {
+      await getEegOnFiles()([makeFile('sub01.vhdr'), makeFile('sub01.eeg')]);
+    });
+
+    await act(async () => {
+      await userEvent.click(screen.getByTestId('trigger-inverse-solution-file'));
+    });
+    // Names fully match (2/2) before the SEEG type is reported — the bug this guards
+    // against: matchCount alone would say "fully matched", not accounting for type.
+    expect(EegViewer.mock.lastCall[0].esiChannelMatchCount).toBe(2);
+    expect(EegViewer.mock.lastCall[0].esiChannelTotalCount).toBe(2);
+    expect(EegViewer.mock.lastCall[0].isEsiChannelMatchGoodForLed).toBe(true);
+
+    await userEvent.click(screen.getByTestId('trigger-channel-types-seeg'));
+
+    // Still a full name match, but no longer a "good" match — a needed channel is SEEG.
+    expect(EegViewer.mock.lastCall[0].esiChannelMatchCount).toBe(2);
+    expect(EegViewer.mock.lastCall[0].esiChannelTotalCount).toBe(2);
+    expect(EegViewer.mock.lastCall[0].isEsiChannelMatchGoodForLed).toBe(false);
+  });
+
+  // A recording with a duplicate channel name is now rejected outright at intake time (see
+  // "PatientView — EEG duplicate channel names" below) and never reaches EegViewer/the ESI
+  // toast, so this scenario is no longer reachable through the real load flow — the
+  // matchChannelsToInverseSolution/matchVoltagesToInverseSolution duplicate-name behavior
+  // itself is still covered directly in electricalSourceImagingUtils.test.js.
 });
 
 describe('PatientView — intracranial connectome layer', () => {
@@ -1152,7 +1261,7 @@ describe('PatientView — intracranial connectome layer', () => {
     expect(NiiViewer.mock.lastCall[0].electrodeLayer).toMatchObject({ kind: 'connectome' });
   });
 
-  it('keeps NiiViewer mounted (and its other layers intact) when switching out of iEEG mode drops the connectome layer', async () => {
+  it('keeps NiiViewer mounted (and its other layers intact) when the electrode snapshot clearing drops the connectome layer', async () => {
     renderPatientView();
     await act(async () => {
       await getEegOnFiles()([makeFile('sub01.vhdr'), makeFile('sub01.eeg')]);
@@ -1166,8 +1275,9 @@ describe('PatientView — intracranial connectome layer', () => {
     // it has, unless NiiViewer itself reports that it now holds content.
     await userEvent.click(screen.getByTestId('trigger-nii-has-content'));
 
-    // Switching to EEG mode drops the connectome layer — this must not unmount NiiViewer
-    // and discard the volume dropped above, only the connectome layer should go away.
+    // Clearing the electrode snapshot (no more matched channels) drops the connectome
+    // layer — this must not unmount NiiViewer and discard the volume dropped above, only
+    // the connectome layer should go away.
     await userEvent.click(screen.getByTestId('trigger-intracranial-clear'));
 
     expect(screen.getByTestId('nii-viewer')).toBeInTheDocument();

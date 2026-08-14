@@ -687,7 +687,58 @@ describe('EegViewer — ESI toggle wiring', () => {
     expect(button).toBeDisabled();
   });
 
-  it('is enabled once an inverse solution is loaded, and toggles aria-pressed/label when clicked', async () => {
+  it('is disabled with an inverse solution loaded but a partial channel match', async () => {
+    const provider = makeProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        inverseSolutionFileName="my_inverse_solution"
+        isEsiChannelMatchGoodForLed={false}
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const button = screen.getByRole('button', { name: /enable electrical source imaging/i });
+    expect(button).toBeDisabled();
+    expect(
+      screen.getByTitle(
+        'Electrical Source Imaging. Inverse solution channels do not fully match this recording'
+      )
+    ).toBeInTheDocument();
+  });
+
+  it('shows a generic (non-enumerating) title and disables the button when a needed channel is typed SEEG, even with a full name match', async () => {
+    const provider = makeProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        inverseSolutionFileName="my_inverse_solution"
+        isEsiChannelMatchGoodForLed={false}
+        esiSeegChannelNames={['1', '2']}
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const button = screen.getByRole('button', { name: /enable electrical source imaging/i });
+    expect(button).toBeDisabled();
+    expect(
+      screen.getByTitle(
+        'Electrical Source Imaging not available when not all required channels have type EEG'
+      )
+    ).toBeInTheDocument();
+    // Deliberately doesn't enumerate the affected channels — a bulk edit can affect hundreds.
+    expect(screen.queryByTitle(/1, 2/)).not.toBeInTheDocument();
+  });
+
+  it('is enabled once an inverse solution is loaded with a full channel match, and toggles aria-pressed/label when clicked', async () => {
     const provider = makeProvider();
     const onEsiEnabledChange = vi.fn();
     render(
@@ -695,6 +746,7 @@ describe('EegViewer — ESI toggle wiring', () => {
         provider={provider}
         channelNames={provider.channelNames}
         inverseSolutionFileName="my_inverse_solution"
+        isEsiChannelMatchGoodForLed={true}
         esiEnabled={false}
         onEsiEnabledChange={onEsiEnabledChange}
       />
@@ -719,6 +771,7 @@ describe('EegViewer — ESI toggle wiring', () => {
         provider={provider}
         channelNames={provider.channelNames}
         inverseSolutionFileName="my_inverse_solution"
+        isEsiChannelMatchGoodForLed={true}
         esiEnabled={true}
         onEsiEnabledChange={() => {}}
       />
@@ -732,13 +785,14 @@ describe('EegViewer — ESI toggle wiring', () => {
     expect(button).toHaveAttribute('aria-pressed', 'true');
   });
 
-  it('stays disabled for an intracranial-shaped recording even with an inverse solution loaded', async () => {
+  it('is enabled for an intracranial-shaped recording too, as long as the channel match is full — majorityIsSeeg no longer gates this button', async () => {
     const provider = makeIntracranialProvider();
     render(
       <EegViewer
         provider={provider}
         channelNames={provider.channelNames}
         inverseSolutionFileName="my_inverse_solution"
+        isEsiChannelMatchGoodForLed={true}
       />
     );
     await act(async () => {
@@ -747,7 +801,45 @@ describe('EegViewer — ESI toggle wiring', () => {
     });
 
     const button = screen.getByRole('button', { name: /enable electrical source imaging/i });
-    expect(button).toBeDisabled();
+    expect(button).toBeEnabled();
+  });
+});
+
+describe('EegViewer — onChannelTypesChange reporting', () => {
+  it('reports one channelSettings type per channelNames index, independent of any click', async () => {
+    const provider = makeProvider(); // scalp-shaped fixture
+    const onChannelTypesChange = vi.fn();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        onChannelTypesChange={onChannelTypesChange}
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(onChannelTypesChange).toHaveBeenLastCalledWith(provider.channelNames.map(() => 'eeg'));
+  });
+
+  it('reports SEEG types for an intracranial-shaped recording', async () => {
+    const provider = makeIntracranialProvider();
+    const onChannelTypesChange = vi.fn();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        onChannelTypesChange={onChannelTypesChange}
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(onChannelTypesChange).toHaveBeenLastCalledWith(provider.channelNames.map(() => 'seeg'));
   });
 });
 
@@ -1472,12 +1564,12 @@ describe('EegViewer — topography always uses the common-average reference', ()
   });
 });
 
-// ── Recording type detection (EEG vs iEEG) ───────────────────────────────────
-// channelNames = ['EEG1','EEG2','EEG3'] against MOCK_TSV (labels EEG1, EEG2, Cz):
-// electrodeContactShapeRatio = 3/3 = 1.0, but fsaverage1005MatchRatio = 2/3 ≈ 0.67
+// ── Channel-name auto-detection (EEG vs SEEG) ─────────────────────────────────
+// channelNames = ['EEG1','EEG2','EEG3'] against MOCK_ELC (labels EEG1, EEG2, Cz):
+// electrodeContactShapeRatio = 3/3 = 1.0, but standard1005MatchRatio = 2/3 ≈ 0.67
 // (not < 0.3), so this fixture is detected as scalp EEG, not intracranial.
 
-const INTRACRANIAL_CHANNEL_NAMES = ['B1', 'B2', "B'1"]; // primed group — always detected as iEEG
+const INTRACRANIAL_CHANNEL_NAMES = ['B1', 'B2', "B'1"]; // primed group — always detected as SEEG
 
 const makeIntracranialProvider = () => ({
   channelNames: INTRACRANIAL_CHANNEL_NAMES,
@@ -1857,7 +1949,7 @@ describe('EegViewer — persistent electrode position dropzone', () => {
     expect(led.querySelector('span')).toHaveClass('bg-amber-500');
   });
 
-  it('shows the electrode position LED match count for a custom file even in iEEG mode, where the standard template never applies', async () => {
+  it('shows the electrode position LED match count for a custom file even for an intracranial-shaped recording, where the standard template never applies', async () => {
     const provider = makeIntracranialProvider();
     render(
       <EegViewer
@@ -1895,7 +1987,7 @@ describe('EegViewer — persistent electrode position dropzone', () => {
       await Promise.resolve();
     });
 
-    // Inverse Solution has no match-count concept — loaded must mean green, not amber.
+    // Without esiChannelMatchCount/TotalCount passed, no match info — green, no count suffix.
     const led = screen.getByTitle('my_inverse_solution');
     expect(led).toBeInTheDocument();
     expect(led.querySelector('span')).toHaveClass('bg-green-500');
@@ -1904,13 +1996,65 @@ describe('EegViewer — persistent electrode position dropzone', () => {
     ).toBeInTheDocument();
   });
 
-  it('greys out the inverse solution LED in iEEG mode, even with a file loaded', async () => {
+  it('shows the inverse solution LED green with a match count when every model channel matches', async () => {
+    const provider = makeProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        inverseSolutionFileName="my_inverse_solution"
+        esiChannelMatchCount={3}
+        esiChannelTotalCount={3}
+        isEsiChannelMatchGoodForLed={true}
+      />
+    );
+    // Two ticks flush useElectrodeMatching's fetch().then(r => r.text()).then(setState) chain — one tick per .then().
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const led = screen.getByTitle('Custom: my_inverse_solution (3/3 channels matched)');
+    expect(led).toBeInTheDocument();
+    expect(led.querySelector('span')).toHaveClass('bg-green-500');
+  });
+
+  it('shows the inverse solution LED amber when only some of the model channels match', async () => {
+    const provider = makeProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        inverseSolutionFileName="my_inverse_solution"
+        esiChannelMatchCount={2}
+        esiChannelTotalCount={3}
+        isEsiChannelMatchGoodForLed={false}
+      />
+    );
+    // Two ticks flush useElectrodeMatching's fetch().then(r => r.text()).then(setState) chain — one tick per .then().
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const led = screen.getByTitle('Custom: my_inverse_solution (2/3 channels matched)');
+    expect(led).toBeInTheDocument();
+    expect(led.querySelector('span')).toHaveClass('bg-amber-500');
+  });
+
+  it('does not grey out the inverse solution LED for a majority-SEEG recording — reflects the channel match instead', async () => {
+    // A majority-SEEG recording can still have a full, correctly-typed match for the
+    // channels the model actually needs (see findSeegChannelsAmongNeeded) — majority alone
+    // must not grey the LED out the way it used to.
     const provider = makeIntracranialProvider();
     render(
       <EegViewer
         provider={provider}
         channelNames={provider.channelNames}
         inverseSolutionFileName="my_inverse_solution"
+        esiChannelMatchCount={3}
+        esiChannelTotalCount={3}
+        isEsiChannelMatchGoodForLed={true}
       />
     );
     await act(async () => {
@@ -1918,11 +2062,13 @@ describe('EegViewer — persistent electrode position dropzone', () => {
       await Promise.resolve();
     });
 
+    const led = screen
+      .getByTitle('Custom: my_inverse_solution (3/3 channels matched)')
+      .querySelector('span');
+    expect(led).toHaveClass('bg-green-500');
     expect(
-      screen.getByTitle('Inverse Solution is not applicable for iEEG recordings')
-    ).toBeInTheDocument();
-    // Electrode position stays fully active/relevant in iEEG mode.
-    expect(screen.queryByTitle(/electrode position is not applicable/i)).not.toBeInTheDocument();
+      screen.queryByTitle('Inverse Solution is not applicable for SEEG recordings')
+    ).not.toBeInTheDocument();
   });
 
   it('routes .elc and .mat to their respective handlers when dropped together', async () => {
@@ -2055,13 +2201,19 @@ describe('EegViewer — hovering a disabled toggle highlights the LED that expla
     expect(inverseLed).toHaveClass('bg-red-600/50');
   });
 
-  it('does not highlight the Inverse Solution LED for the iEEG-disabled ESI toggle, since that LED is already greyed out for a different reason', async () => {
-    const provider = makeIntracranialProvider();
+  it('does not turn the Inverse Solution LED red for the disabled ESI toggle when it is already amber for a different reason (a poor channel match)', async () => {
+    // highlighted only ever affects StatusLed's red (off) branch (see its own doc comment)
+    // — an amber LED (file loaded, poor match) must stay amber when the disabled ESI
+    // toggle is hovered, not get forced red.
+    const provider = makeProvider();
     render(
       <EegViewer
         provider={provider}
         channelNames={provider.channelNames}
         inverseSolutionFileName="my_inverse_solution"
+        esiChannelMatchCount={1}
+        esiChannelTotalCount={2}
+        isEsiChannelMatchGoodForLed={false}
       />
     );
     await act(async () => {
@@ -2072,12 +2224,12 @@ describe('EegViewer — hovering a disabled toggle highlights the LED that expla
     const esiButton = screen.getByRole('button', { name: /electrical source imaging/i });
     expect(esiButton).toBeDisabled();
     const led = screen
-      .getByTitle('Inverse Solution is not applicable for iEEG recordings')
+      .getByTitle('Custom: my_inverse_solution (1/2 channels matched)')
       .querySelector('span');
-    expect(led).toHaveClass('bg-foreground/20');
+    expect(led).toHaveClass('bg-amber-500');
 
     await userEvent.hover(esiButton.parentElement);
-    expect(led).toHaveClass('bg-foreground/20');
+    expect(led).toHaveClass('bg-amber-500');
   });
 });
 
