@@ -551,7 +551,7 @@ export function EegMontageEditor({
 
   // Human-readable name of the electrode position source, for the Pos tooltip text below.
   const electrodePositionSourceLabel = isStandardElectrodes
-    ? 'the standard 10-05 template'
+    ? 'the fsaverage_1005 (FreeSurfer) template'
     : customFileName
       ? `"${customFileName}"`
       : 'the loaded electrode position file';

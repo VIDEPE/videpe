@@ -56,6 +56,10 @@ export function parseElectrodePositionTsv(text) {
   }
   if (rows.length === 0) return result;
 
+  // TSV format lacks unit size => do automated unit estimation
+  // Typical human brain: 10-30 cm (estimation) =>
+  // Meter-scale files: range ≈ 0.1-0.3 → always way below 10.
+  // Mm-scale files (old .elc-style / typical head coordinates): range ≈ 150-300 → always way above 10.
   const coords = rows.flatMap((r) => [r.x, r.y, r.z]);
   const range = Math.max(...coords) - Math.min(...coords);
   const scale = range < METER_SCALE_RANGE_THRESHOLD ? 1000 : 1; // meters→mm, or already mm

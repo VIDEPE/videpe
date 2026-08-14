@@ -386,7 +386,9 @@ export function EegTopoViewer({
       {/* Electrode source row */}
       <div className="flex items-center justify-between px-2 py-1 text-xs border-t border-border shrink-0 bg-surface">
         <span className="text-foreground/60">
-          {isStandardElectrodes ? 'Default: Standard 10-05' : (customFileName ?? 'Custom')}
+          {isStandardElectrodes
+            ? 'Default: fsaverage_1005 (FreeSurfer)'
+            : (customFileName ?? 'Custom')}
         </span>
         <button
           type="button"

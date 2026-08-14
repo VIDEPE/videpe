@@ -33,6 +33,7 @@ Fp2\t29.0\t84.0\t-7.0
   });
 
   // fsaverage_1005.tsv (MNE-Python) ships coordinates in meters with no unit header.
+  // Typical human brain: 10-30 cm (estimation) =>
   // Meter-scale files: range ≈ 0.1-0.3 → always way below 10.
   // Mm-scale files (old .elc-style / typical head coordinates): range ≈ 150-300 → always way above 10.
   it('auto-detects meter-scale coordinates (small range, no unit header) and converts to mm', () => {
