@@ -352,8 +352,18 @@ export const AboutPage = () => {
                   </li>
                   <li>
                     Montage pane for building referenced or bipolar rows from selected channels,
-                    with per-row colour, reordering, and sort-by-name/type
+                    with per-row colour, reordering, sort-by-name/type, and a bulk{' '}
+                    <strong>Set all as</strong> control to reference or colour every row at once
                   </li>
+                  <li>
+                    Built-in presets (e.g. double/triple banana) available from the EEG sidebar
+                    dropdown
+                  </li>
+                  <li>
+                    Re-reference on the fly — none, common average (CAR), or median — with bad or
+                    missing channels automatically excluded from the calculation
+                  </li>
+                  <li>Warns before applying a montage that references a bad or missing channel</li>
                   <li>
                     Once rows are built, the EEG waveform view shows exactly those rows instead of
                     the raw channel list

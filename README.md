@@ -1,6 +1,6 @@
 # VIDEPE
 
-![Version](https://img.shields.io/badge/version-0.13.0-blue)
+![Version](https://img.shields.io/badge/version-0.14.0-blue)
 
 **V**isualization & **I**ntegration of **D**ata for **E**pilepsy **P**resurgical **E**valuation
 
@@ -32,7 +32,7 @@ All data processing happens entirely in your browser. No files are ever uploaded
     - 3D rotation is synchronised with the neuroimaging viewer — rotate one and the other follows
   - **Intracranial (SEEG) support** — toggle between scalp EEG and intracranial (SEEG) recordings; SEEG channels are auto-detected from channel naming and shown as a per-electrode voltage matrix, or rendered as a 3D electrode connectome in the neuroimaging viewer once electrode positions are loaded
   - **Electrical Source Imaging** — When uploading an Inverse Solution file (currently only Fieldtrip `*_inversefilters.mat` supported), renders per-source power at the selected EEG time point as either a 3D connectome or a volumetric heatmap, with a toggle to switch between the two. Requires the Average montage — VIDEPE switches to it automatically when an inverse solution is loaded, and hides the layer if you switch away.
-  - **Montage Editor** — a dedicated window for building custom EEG montages. Select and flag channels (bad-channel marking, per-channel type), then build referenced or bipolar montage rows with custom per-row colors, reorder and sort them, and the waveform view switches to showing exactly those rows. Import montage files in AnyWave (XML) or Cartool (plain-text) format — auto-detected from file content — and export back out as AnyWave XML.
+  - **Montage Editor** — a dedicated window for building custom EEG montages. Select and flag channels (bad-channel marking, per-channel type), then build referenced or bipolar montage rows with custom per-row colors, reorder and sort them, and the waveform view switches to showing exactly those rows. Built-in double/triple banana presets, plus a file-backed montage template dropdown in the EEG sidebar. Re-reference on the fly (none, average/CAR, or median) and get warned before applying a montage with bad or missing channels. Import montage files in AnyWave (XML) or Cartool (plain-text) format — auto-detected from file content — and export back out as AnyWave XML.
 
 - **Neuroimaging viewer** — full multiplanar and 3D rendering powered by [NiiVue](https://niivue.com/). Load multiple volumes/meshes simultaneously and adjust each one independently.
   - Multi-layer support for e.g. MRI, PET, and SPECT in one view
