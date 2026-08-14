@@ -4,6 +4,7 @@ import { parseInverseSolutionFieldtrip } from '../loaders/parseInverseSolutionFi
 import {
   electricalSourceImaging,
   matchChannelsToInverseSolution,
+  findSeegChannelsAmongNeeded,
 } from '../utils/electricalSourceImagingUtils';
 
 /**
@@ -43,8 +44,8 @@ import {
  *     ESI can't compute at all, not just degrade.
  *   - `esiLayer` (object|null) — the computed ESI source-power layer
  *     ({ sourcePowerConnectomes, sourcePowerVolume }), or `null` when there's nothing to
- *     show (no inverse solution, no channel data yet, intracranial, a partial channel
- *     match, or `esiEnabled` is false).
+ *     show (no inverse solution, no channel data yet, a needed channel is typed SEEG, a
+ *     partial channel match, or `esiEnabled` is false).
  *   - `handleInverseSolutionFile` (file: File) => Promise<void> — parses and activates
  *     a single inverse-solution (.mat) file.
  *   - `resetInverseSolution` () => void — clears the inverse solution and its filename.
@@ -58,7 +59,7 @@ export function useElectricalSourceImaging({ channelSnapshot, channelNames, esiE
   const esiChannelMatch = useMemo(
     () =>
       inverseSolution && channelNames?.length
-        ? matchChannelsToInverseSolution(channelNames, inverseSolution.channelLabels)
+        ? matchChannelsToInverseSolution(channelNames, inverseSolution.inverseSolutionChannelNames)
         : null,
     [inverseSolution, channelNames]
   );
@@ -66,10 +67,10 @@ export function useElectricalSourceImaging({ channelSnapshot, channelNames, esiE
   /**
    * Parses one inverse-solution file and, if parsing succeeds, makes it the active
    * inverse solution (replacing whatever was active before, if anything). Shows a toast
-   * confirming success or reporting a parse error, plus two conditional warnings: one if
-   * the recording is currently SEEG-majority (ESI has no effect until channel types read
-   * as EEG), and one if the recording has a duplicate channel name the model needs (ESI
-   * can never compute for that case — see matchChannelsToInverseSolution).
+   * confirming success or reporting a parse error, plus two conditional warnings: one if a
+   * channel the model needs is itself typed SEEG (ESI has no effect until that channel's
+   * type reads as EEG), and one if the recording has a duplicate channel name the model
+   * needs (ESI can never compute for that case — see matchChannelsToInverseSolution).
    *
    * @param {File} file - the dropped/selected inverse-solution (.mat, FieldTrip) file.
    * @returns {Promise<void>} Resolves once parsing finishes and state/toasts have been
@@ -87,14 +88,22 @@ export function useElectricalSourceImaging({ channelSnapshot, channelNames, esiE
         toast.success(`Loaded inverse solution from ${file.name}`);
 
         // ESI only applies to scalp EEG — the file is still stored (and will take effect
-        // automatically once the majority of channel types read as EEG), but tell the user
-        // it has no effect right now rather than let them wonder why nothing happened.
-        // Relies on channelSnapshot, so this only fires once a topo click has produced a
-        // snapshot — before that there's nothing to warn about yet since esiLayer can't
-        // compute regardless.
-        if (channelSnapshot?.isIntracranial) {
+        // automatically once the needed channel's type reads as EEG), but tell the user it
+        // has no effect right now rather than let them wonder why nothing happened. Relies
+        // on channelSnapshot, so this only fires once a topo click has produced a snapshot
+        // — before that there's nothing to warn about yet since esiLayer can't compute
+        // regardless. Deliberately scoped to just the model's own channels (not the
+        // recording's overall majority type) — see findSeegChannelsAmongNeeded.
+        const seegChannelNames = channelSnapshot
+          ? findSeegChannelsAmongNeeded(
+              channelSnapshot.channelNames,
+              channelSnapshot.channelTypes,
+              parsedInverseSolution.inverseSolutionChannelNames
+            )
+          : [];
+        if (seegChannelNames.length > 0) {
           toast(
-            'Electrical Source Imaging is not available while the majority of channels are SEEG',
+            `Electrical Source Imaging is not available — channel(s) ${seegChannelNames.join(', ')} are typed SEEG`,
             {
               icon: '⚠️',
             }
@@ -109,7 +118,7 @@ export function useElectricalSourceImaging({ channelSnapshot, channelNames, esiE
         if (channelNames?.length) {
           const { duplicateChannelNames } = matchChannelsToInverseSolution(
             channelNames,
-            parsedInverseSolution.channelLabels
+            parsedInverseSolution.inverseSolutionChannelNames
           );
           if (duplicateChannelNames.length > 0) {
             toast.error(
@@ -127,7 +136,7 @@ export function useElectricalSourceImaging({ channelSnapshot, channelNames, esiE
   const esiLayer = useMemo(
     () => (esiEnabled ? electricalSourceImaging(inverseSolution, channelSnapshot) : null),
     [inverseSolution, channelSnapshot, esiEnabled]
-  ); // ESI source power — { sourcePowerConnectomes, sourcePowerVolume } | null | [] — electricalSourceImaging itself returns null for intracranial/missing data
+  ); // ESI source power — { sourcePowerConnectomes, sourcePowerVolume } | null | [] — electricalSourceImaging itself returns null for a needed-channel-is-SEEG/missing-channel/missing-data case
 
   /**
    * Clears the loaded inverse solution and its filename — returning this hook's state to

@@ -16,7 +16,7 @@ describe('StatusLed — disabled', () => {
     useTheme.mockReturnValue({ isDarkMode: false });
     render(<StatusLed label="Inverse Solution" fileName="my_file" disabled />);
 
-    const dot = getDot('Inverse Solution is not applicable for iEEG recordings');
+    const dot = getDot('Inverse Solution is not applicable for SEEG recordings');
     expect(dot).toHaveClass('bg-foreground/20');
   });
 });

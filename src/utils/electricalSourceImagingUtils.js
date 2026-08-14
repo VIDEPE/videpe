@@ -219,7 +219,7 @@ export function buildAffineMatrix(anchor, basis, minCorner) {
 //
 // @param {Float64Array} flatSourceFilters - pre-packed filter data from parseInverseSolutionFieldtrip
 // @param {number[]|Float64Array} channelVoltages - voltage at each channel at the clicked timepoint,
-//   flat 1D array ordered to match inverseSolution.channelLabels (not a column vector)
+//   flat 1D array ordered to match inverseSolution.inverseSolutionChannelNames (not a column vector)
 // @param {number} nInsideSources - number of inside-brain source points
 // @param {number} nChannels - number of EEG channels
 // @returns {Float64Array} source power per inside-brain point, length = nInsideSources
@@ -393,7 +393,7 @@ function buildChannelNameIndex(channelNames) {
 // exists after the first click).
 //
 // @param {string[]} channelNames - the recording's own channel names
-// @param {string[]} inverseSolutionChannelNames - inverseSolution.channelLabels, the
+// @param {string[]} inverseSolutionChannelNames - inverseSolution.inverseSolutionChannelNames, the
 //   model's own channel names, in the model's own order
 // @returns {{ matchCount: number, totalCount: number, isGoodMatch: boolean, duplicateChannelNames: string[] }}
 //   isGoodMatch is true only for a *full* match — unlike electrode-position matching, a
@@ -414,6 +414,33 @@ export function matchChannelsToInverseSolution(channelNames, inverseSolutionChan
   return { matchCount, totalCount, isGoodMatch: matchCount === totalCount, duplicateChannelNames };
 }
 
+// Finds which of the inverse-solution model's own channel names resolve (by name) to a
+// recording channel that's itself typed SEEG. Applying a scalp inverse filter to an SEEG
+// contact's voltage would produce nonsensical results even when the name happens to
+// match — this is a per-channel check, deliberately independent of the recording's
+// overall majority type: extra SEEG channels the model doesn't need are irrelevant, since
+// matchVoltagesToInverseSolution never selects them in the first place. Only a needed
+// channel actually being SEEG-typed matters.
+//
+// @param {string[]} channelNames - the recording's own channel names
+// @param {(string|undefined)[]} channelTypes - one channelSettings type per channelNames
+//   index (see EegViewer.jsx's channelTypes / useTimepointSnapshot.js)
+// @param {string[]} inverseSolutionChannelNames - inverseSolution.inverseSolutionChannelNames, the
+//   model's own channel names, in the model's own order
+// @returns {string[]} the model's own channel names (not the recording's) that hit this —
+//   empty when none do
+export function findSeegChannelsAmongNeeded(
+  channelNames,
+  channelTypes,
+  inverseSolutionChannelNames
+) {
+  const { index } = buildChannelNameIndex(channelNames);
+  return inverseSolutionChannelNames.filter((name) => {
+    const i = index.get(normalizeChannelName(name));
+    return i !== undefined && channelTypes?.[i] === 'seeg';
+  });
+}
+
 // Reorders/selects a per-click voltage snapshot into the inverse-solution model's own
 // channel order (by name, not position) — calculateSourcePower's matrix multiply assumes
 // channelVoltages[i] corresponds to inverseSolutionChannelNames[i]'s pre-computed filter
@@ -424,7 +451,7 @@ export function matchChannelsToInverseSolution(channelNames, inverseSolutionChan
 //
 // @param {string[]} channelNames - the recording's own channel names
 // @param {number[]} voltages - one per channelNames index
-// @param {string[]} inverseSolutionChannelNames - inverseSolution.channelLabels, the
+// @param {string[]} inverseSolutionChannelNames - inverseSolution.inverseSolutionChannelNames, the
 //   model's own channel names, in the model's own order
 // @returns {number[] | null} one voltage per inverseSolutionChannelNames entry, in that
 //   same (model) order — not the recording's order — or null if any entry has no match
@@ -451,20 +478,20 @@ export function matchVoltagesToInverseSolution(
 // so this function only performs the fast per-click matrix multiply.
 //
 // @param {object} inverseSolution - parsed inverse filter model from parseInverseSolutionFieldtrip:
-//   { format, flatSourceFilters, insideSourcePositions, nInsideSources, nChannels, channelLabels, ... }
+//   { format, flatSourceFilters, insideSourcePositions, nInsideSources, nChannels, inverseSolutionChannelNames, ... }
 // @param {object} channelSnapshot - per-click EEG state lifted from EegViewer:
-//   { isIntracranial: boolean, channelNames: string[], voltages: number[] }
+//   { isIntracranial: boolean, channelNames: string[], channelTypes: Array, voltages: number[] }
 // @returns {{ sourcePowerConnectomes: object, sourcePowerVolume: object }|null|[]} an object
 //   exposing both representations as lazy, memoized getters — each is only actually built
 //   (and cached) the first time it's read, so the mode not currently rendered never pays for
-//   its own conversion. Also null when the recording is missing a channel the model needs
-//   (see matchVoltagesToInverseSolution) — a partial channel match can't compute at all.
+//   its own conversion. Also null when the recording is missing a channel the model needs,
+//   or one of the channels it needs is itself typed SEEG (see matchVoltagesToInverseSolution
+//   and findSeegChannelsAmongNeeded) — either way the computation can't run at all, not just
+//   degrade. Deliberately scoped to just the model's own channels, not the recording's
+//   overall majority type — extra SEEG channels the model doesn't need don't block this.
 export function electricalSourceImaging(inverseSolution, channelSnapshot) {
   if (!inverseSolution) return null;
   if (!channelSnapshot?.voltages?.length) return null;
-  // ESI inverse filters are computed from scalp EEG models — applying them to intracranial
-  // recordings would produce nonsensical results, so we guard here rather than in the caller.
-  if (channelSnapshot.isIntracranial) return null;
   if (inverseSolution.format === 'FieldTrip') {
     if (!inverseSolution?.flatSourceFilters?.length) return [];
 
@@ -477,13 +504,26 @@ export function electricalSourceImaging(inverseSolution, channelSnapshot) {
       gridDimensions,
       pixDims,
       affine,
-      channelLabels,
+      inverseSolutionChannelNames,
     } = inverseSolution;
+
+    // ESI inverse filters are computed from scalp EEG models — applying them to a channel
+    // that's itself typed SEEG would produce nonsensical results, even if its name matches
+    // one of the model's own channels.
+    if (
+      findSeegChannelsAmongNeeded(
+        channelSnapshot.channelNames,
+        channelSnapshot.channelTypes,
+        inverseSolutionChannelNames
+      ).length > 0
+    ) {
+      return null;
+    }
 
     const channelVoltages = matchVoltagesToInverseSolution(
       channelSnapshot.channelNames,
       channelSnapshot.voltages,
-      channelLabels
+      inverseSolutionChannelNames
     );
     if (!channelVoltages) return null; // recording is missing a channel the model needs
 

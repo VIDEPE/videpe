@@ -42,14 +42,14 @@ export const parseInverseSolutionFieldtrip = async (file) => {
     throw new Error(`${file.name} has a missing/empty 'inside' array.`);
   }
   // elec: an array of channel name strings
-  const channelLabels = result.data.inverse_filters.elec?.label;
-  if (!channelLabels?.length) {
+  const inverseSolutionChannelNames = result.data.inverse_filters.elec?.label;
+  if (!inverseSolutionChannelNames?.length) {
     throw new Error(`${file.name} has a missing/empty 'elec.label' array.`);
   }
 
   // Pre-compute the fields at parse time so the per-click ESI computation only
   // needs to call calculateSourcePower — no flattening work on every EEG click.
-  const nChannels = channelLabels.length;
+  const nChannels = inverseSolutionChannelNames.length;
 
   // Find all grid indices where the source is inside the brain/headmodel
   const indicesInsideSources = insideMask.reduce(
@@ -115,7 +115,7 @@ export const parseInverseSolutionFieldtrip = async (file) => {
     format: 'FieldTrip',
     sourcePositions,
     insideMask,
-    channelLabels,
+    inverseSolutionChannelNames,
     indicesInsideSources,
     insideSourcePositions,
     flatSourceFilters,

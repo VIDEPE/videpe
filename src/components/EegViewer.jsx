@@ -229,6 +229,13 @@ export const EegViewer = ({
     Object.values(channelSettings).filter((c) => c.type === 'seeg').length >
     Object.values(channelSettings).filter((c) => c.type === 'eeg').length;
 
+  // One channelSettings type per channelNames index — lets ESI reject a channel it needs
+  // that's itself typed SEEG, even if its name happens to match (see channelSnapshot below).
+  const channelTypes = useMemo(
+    () => channelNames.map((name) => channelSettings[name]?.type),
+    [channelNames, channelSettings]
+  );
+
   // File-backed montage templates (public/montage_files/TEMPLATE_MONTAGES.json), listed
   // in the sidebar quick-select alongside the None/CAR/Custom presets below — fetched here
   // (rather than where it's applied, further down) so useMontageChannels can recognize a
@@ -367,6 +374,7 @@ export const EegViewer = ({
     fs: provider.fs,
     matched: visibleMatched,
     channelNames,
+    channelTypes,
     isIntracranial: majorityIsSeeg,
     onElectrodeSnapshotChange,
     onChannelSnapshotChange: handleChannelSnapshotChange,

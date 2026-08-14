@@ -1995,7 +1995,7 @@ describe('EegViewer — persistent electrode position dropzone', () => {
     });
 
     expect(
-      screen.getByTitle('Inverse Solution is not applicable for iEEG recordings')
+      screen.getByTitle('Inverse Solution is not applicable for SEEG recordings')
     ).toBeInTheDocument();
     // Electrode position stays fully active/relevant in iEEG mode.
     expect(screen.queryByTitle(/electrode position is not applicable/i)).not.toBeInTheDocument();
@@ -2148,7 +2148,7 @@ describe('EegViewer — hovering a disabled toggle highlights the LED that expla
     const esiButton = screen.getByRole('button', { name: /electrical source imaging/i });
     expect(esiButton).toBeDisabled();
     const led = screen
-      .getByTitle('Inverse Solution is not applicable for iEEG recordings')
+      .getByTitle('Inverse Solution is not applicable for SEEG recordings')
       .querySelector('span');
     expect(led).toHaveClass('bg-foreground/20');
 

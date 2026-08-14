@@ -11,6 +11,7 @@ import {
   buildSourceVolumeGrid,
   matchChannelsToInverseSolution,
   matchVoltagesToInverseSolution,
+  findSeegChannelsAmongNeeded,
 } from '@/utils/electricalSourceImagingUtils';
 import { ESI_LAYER_URL } from '@/utils/NiiViewer.utils';
 import { estimateGridSpacing } from '../../utils/electricalSourceImagingUtils';
@@ -682,7 +683,7 @@ const MINIMAL_MODEL = {
     [-5, 15, 10],
     [0, 10, 15],
   ],
-  channelLabels: ['1', '2'],
+  inverseSolutionChannelNames: ['1', '2'],
   // Volume-grid structure, as parseInverseSolutionFieldtrip would precompute once at parse
   // time — doesn't need to geometrically correspond to insideSourcePositions above, since
   // convertSourcePowersToVolume/buildSourceVolumeGrid only consume these, not the raw positions.
@@ -702,7 +703,14 @@ const MINIMAL_MODEL = {
 
 // channelSnapshot fixtures — the per-click EEG state lifted from EegViewer
 const SCALP_SNAPSHOT = { isIntracranial: false, channelNames: ['1', '2'], voltages: [2, 3] };
-const IEEG_SNAPSHOT = { isIntracranial: true, channelNames: ['B1', 'B2'], voltages: [2, 3] };
+// Names match the model (inverseSolutionChannelNames: ['1', '2']), but channel '1' is itself typed SEEG —
+// the gate this is meant to exercise is per-channel-type, not name matching.
+const SEEG_TYPED_CHANNEL_SNAPSHOT = {
+  isIntracranial: false,
+  channelNames: ['1', '2'],
+  channelTypes: ['seeg', 'eeg'],
+  voltages: [2, 3],
+};
 
 describe('matchChannelsToInverseSolution', () => {
   it('reports a full match when every channelLabel has a same-named recording channel', () => {
@@ -751,8 +759,35 @@ describe('matchChannelsToInverseSolution', () => {
   });
 });
 
+describe('findSeegChannelsAmongNeeded', () => {
+  it('returns empty when every needed channel is typed eeg', () => {
+    const result = findSeegChannelsAmongNeeded(['1', '2'], ['eeg', 'eeg'], ['1', '2']);
+    expect(result).toEqual([]);
+  });
+
+  it('reports the model channel name for a needed channel typed seeg', () => {
+    const result = findSeegChannelsAmongNeeded(['1', '2'], ['seeg', 'eeg'], ['1', '2']);
+    expect(result).toEqual(['1']);
+  });
+
+  it('ignores an SEEG-typed channel the model does not need', () => {
+    // "B1" is typed seeg but isn't one of the model's own channels — irrelevant.
+    const result = findSeegChannelsAmongNeeded(
+      ['1', '2', 'B1'],
+      ['eeg', 'eeg', 'seeg'],
+      ['1', '2']
+    );
+    expect(result).toEqual([]);
+  });
+
+  it('does not flag a channel with no type info (undefined)', () => {
+    const result = findSeegChannelsAmongNeeded(['1', '2'], [undefined, 'eeg'], ['1', '2']);
+    expect(result).toEqual([]);
+  });
+});
+
 describe('matchVoltagesToInverseSolution', () => {
-  it('reorders voltages into the channelLabels order when the recording order differs', () => {
+  it('reorders voltages into the inverseSolutionChannelNames order when the recording order differs', () => {
     // channel '2' (voltage 3) listed before channel '1' (voltage 2) — the model wants ['1','2'].
     const result = matchVoltagesToInverseSolution(['2', '1'], [3, 2], ['1', '2']);
     expect(result).toEqual([2, 3]);
@@ -787,8 +822,21 @@ describe('electricalSourceImaging', () => {
     expect(electricalSourceImaging(MINIMAL_MODEL, { ...SCALP_SNAPSHOT, voltages: [] })).toBeNull();
   });
 
-  it('returns null for iEEG recordings — ESI inverse filters require scalp EEG', () => {
-    expect(electricalSourceImaging(MINIMAL_MODEL, IEEG_SNAPSHOT)).toBeNull();
+  it('returns null when a channel the model needs is itself typed SEEG, even though its name matches', () => {
+    expect(electricalSourceImaging(MINIMAL_MODEL, SEEG_TYPED_CHANNEL_SNAPSHOT)).toBeNull();
+  });
+
+  it('computes normally for a recording with unrelated extra SEEG channels the model does not need', () => {
+    // Extra SEEG channel "B1" alongside the two EEG channels the model actually needs —
+    // majority-by-headcount is irrelevant here; only the model's own channels matter.
+    const mixedSnapshot = {
+      isIntracranial: false,
+      channelNames: ['1', '2', 'B1'],
+      channelTypes: ['eeg', 'eeg', 'seeg'],
+      voltages: [2, 3, 999],
+    };
+    const result = electricalSourceImaging(MINIMAL_MODEL, mixedSnapshot);
+    expect(result.sourcePowerConnectomes.boundMax).toBe(25); // same as the plain [2,3] case
   });
 
   it('returns null when the recording is missing a channel the model needs', () => {

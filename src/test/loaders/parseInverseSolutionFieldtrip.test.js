@@ -75,7 +75,7 @@ describe('parseInverseSolutionFieldtrip', () => {
     expect(result.format).toBe('FieldTrip');
     expect(result.sourcePositions).toEqual(FIXTURE.data.inverse_filters.pos);
     expect(result.insideMask).toEqual(FIXTURE.data.inverse_filters.inside);
-    expect(result.channelLabels).toEqual(FIXTURE.data.inverse_filters.elec.label);
+    expect(result.inverseSolutionChannelNames).toEqual(FIXTURE.data.inverse_filters.elec.label);
 
     // Pre-computed fields derived from the above (exact values tested in dedicated tests below)
     expect(result.nChannels).toBe(FIXTURE.data.inverse_filters.elec.label.length);

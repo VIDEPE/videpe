@@ -123,16 +123,18 @@ vi.mock('@/components/EegViewer', () => ({
         >
           trigger-channel-snapshot
         </button>
-        {/* Same as above, but for a channel snapshot whose majority channel type reads as
-            SEEG — the only way channelSnapshot.isIntracranial (which the ESI toast/gate now
-            reads directly, there being no more recordingType prop) becomes true. */}
+        {/* Same as above, but channel "1" (one of the default parseInverseSolutionFieldtrip
+            mock's inverseSolutionChannelNames, ['1','2']) is itself typed SEEG — the scenario
+            findSeegChannelsAmongNeeded/the ESI toast now checks, scoped to just the
+            channels the model needs rather than the recording's overall majority type. */}
         <button
           type="button"
           data-testid="trigger-channel-snapshot-seeg"
           onClick={() =>
             onChannelSnapshotChange?.({
-              isIntracranial: true,
-              channelNames: ['B1', 'B2'],
+              isIntracranial: false,
+              channelNames: ['1', '2'],
+              channelTypes: ['seeg', 'eeg'],
               voltages: [5, 6],
             })
           }
@@ -280,7 +282,7 @@ vi.mock('@/loaders/parseInverseSolutionFieldtrip', () => ({
     insideSourcePositions: [[-5, 15, 10]],
     nInsideSources: 1,
     nChannels: 2,
-    channelLabels: ['1', '2'],
+    inverseSolutionChannelNames: ['1', '2'],
     sourcePositions: [[-5, 15, 10]],
     insideMask: [1],
     indicesInsideSources: [0],
@@ -1096,7 +1098,7 @@ describe('PatientView — ESI iEEG warning', () => {
     });
   });
 
-  it('warns that ESI is not applicable when an inverse solution is loaded while the channel snapshot reads as SEEG', async () => {
+  it('warns that ESI is not applicable when a channel the inverse solution needs is itself typed SEEG', async () => {
     checkEegFiles.mockReturnValue({
       formatName: 'BrainVision',
       complete: true,
@@ -1137,7 +1139,7 @@ describe('PatientView — ESI iEEG warning', () => {
       warning: null,
     });
     // Channel "1" duplicated — the default parseInverseSolutionFieldtrip mock's
-    // channelLabels is ['1', '2'], so this collides with a channel the model needs.
+    // inverseSolutionChannelNames is ['1', '2'], so this collides with a channel the model needs.
     detectAndLoadEEG.mockResolvedValue({
       channelNames: ['1', '1', '2'],
       fs: 256,
