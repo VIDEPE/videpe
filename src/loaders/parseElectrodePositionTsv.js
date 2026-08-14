@@ -1,3 +1,5 @@
+import { inferMmScaleFromRange } from '@/utils/inferElectrodePositionUnitScale';
+
 // Labels used by different recording systems for the three standard fiducials.
 const FIDUCIAL_LABELS = {
   LPA: ['lpa', 'fidt9', 'las', 'left'],
@@ -12,11 +14,6 @@ function classifyFiducial(label) {
   }
   return null;
 }
-
-// No unit header in this format, so units are inferred from coordinate magnitude.
-// Meter-scale files: range ≈ 0.1-0.3 → always way below 10.
-// Mm-scale files (old .elc-style / typical head coordinates): range ≈ 150-300 → always way above 10.
-const METER_SCALE_RANGE_THRESHOLD = 10;
 
 // Parse a .tsv file text into electrode positions and fiducials.
 //
@@ -56,13 +53,8 @@ export function parseElectrodePositionTsv(text) {
   }
   if (rows.length === 0) return result;
 
-  // TSV format lacks unit size => do automated unit estimation
-  // Typical human brain: 10-30 cm (estimation) =>
-  // Meter-scale files: range ≈ 0.1-0.3 → always way below 10.
-  // Mm-scale files (old .elc-style / typical head coordinates): range ≈ 150-300 → always way above 10.
-  const coords = rows.flatMap((r) => [r.x, r.y, r.z]);
-  const range = Math.max(...coords) - Math.min(...coords);
-  const scale = range < METER_SCALE_RANGE_THRESHOLD ? 1000 : 1; // meters→mm, or already mm
+  // No unit header in this format, so units are inferred from coordinate magnitude.
+  const scale = inferMmScaleFromRange(rows.flatMap((r) => [r.x, r.y, r.z]));
 
   for (const { label, x, y, z } of rows) {
     const scaled = { x: x * scale, y: y * scale, z: z * scale };

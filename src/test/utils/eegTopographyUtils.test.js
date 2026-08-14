@@ -124,6 +124,28 @@ Fp2
     const { electrodes } = parseElectrodePositionElc(noUnitElc);
     expect(electrodes[0].x).toBeCloseTo(-29.0);
   });
+
+  it('auto-detects centimeter-scale coordinates and converts to mm when UnitPosition is not declared', () => {
+    const noUnitElc = `# ASA electrode file
+ReferenceLabel	avg
+NumberPositions=	5
+Positions
+-8.60761 -1.99897 -4.79860
+8.57939 -2.00093 -4.80310
+0.00083 8.68110 -3.99830
+-2.94367 8.39171 -0.69900
+3.01123 8.82470 -0.17130
+Labels
+LPA
+RPA
+Nz
+Fp1
+Fp2
+`;
+    const { electrodes, fiducials } = parseElectrodePositionElc(noUnitElc);
+    expect(electrodes[0].x).toBeCloseTo(-29.4367, 3);
+    expect(fiducials.LPA.x).toBeCloseTo(-86.0761, 3);
+  });
 });
 
 // ---------------------------------------------------------------------------

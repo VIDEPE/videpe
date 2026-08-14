@@ -49,6 +49,18 @@ Fp1\t-0.0292811604883705\t0.0839923366306848\t0.00271669935250412
     expect(electrodes[0].x).toBeCloseTo(-29.2811604883705, 5);
   });
 
+  it('auto-detects centimeter-scale coordinates and converts to mm', () => {
+    const text = `label\tx\ty\tz
+LPA\t-8.20787224767085\t-2.93041925438933\t-4.11245510037724
+RPA\t8.34811119150642\t-2.85034070849422\t-4.07909563372145
+Fp1\t-2.92811604883705\t8.39923366306848\t0.271669935250412
+`;
+    const { electrodes, fiducials } = parseElectrodePositionTsv(text);
+    expect(fiducials.LPA.x).toBeCloseTo(-82.0787224767085, 5);
+    expect(electrodes[0]).toMatchObject({ label: 'Fp1' });
+    expect(electrodes[0].x).toBeCloseTo(-29.2811604883705, 5);
+  });
+
   it('classifies fiducials from a meter-scale file after conversion', () => {
     const text = `label\tx\ty\tz
 LPA\t-0.082\t-0.029\t-0.041
