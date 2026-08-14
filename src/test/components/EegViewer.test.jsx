@@ -2045,13 +2045,19 @@ describe('EegViewer — persistent electrode position dropzone', () => {
     expect(led.querySelector('span')).toHaveClass('bg-amber-500');
   });
 
-  it('greys out the inverse solution LED for a majority-SEEG recording, even with a file loaded', async () => {
+  it('does not grey out the inverse solution LED for a majority-SEEG recording — reflects the channel match instead', async () => {
+    // A majority-SEEG recording can still have a full, correctly-typed match for the
+    // channels the model actually needs (see findSeegChannelsAmongNeeded) — majority alone
+    // must not grey the LED out the way it used to.
     const provider = makeIntracranialProvider();
     render(
       <EegViewer
         provider={provider}
         channelNames={provider.channelNames}
         inverseSolutionFileName="my_inverse_solution"
+        esiChannelMatchCount={3}
+        esiChannelTotalCount={3}
+        isEsiChannelMatchGoodForLed={true}
       />
     );
     await act(async () => {
@@ -2059,11 +2065,13 @@ describe('EegViewer — persistent electrode position dropzone', () => {
       await Promise.resolve();
     });
 
+    const led = screen
+      .getByTitle('Custom: my_inverse_solution (3/3 channels matched)')
+      .querySelector('span');
+    expect(led).toHaveClass('bg-green-500');
     expect(
-      screen.getByTitle('Inverse Solution is not applicable for SEEG recordings')
-    ).toBeInTheDocument();
-    // Electrode position stays fully active/relevant for a majority-SEEG recording.
-    expect(screen.queryByTitle(/electrode position is not applicable/i)).not.toBeInTheDocument();
+      screen.queryByTitle('Inverse Solution is not applicable for SEEG recordings')
+    ).not.toBeInTheDocument();
   });
 
   it('routes .elc and .mat to their respective handlers when dropped together', async () => {
@@ -2196,13 +2204,19 @@ describe('EegViewer — hovering a disabled toggle highlights the LED that expla
     expect(inverseLed).toHaveClass('bg-red-600/50');
   });
 
-  it('does not highlight the Inverse Solution LED for the disabled ESI toggle, since that LED is already greyed out for a different reason', async () => {
-    const provider = makeIntracranialProvider();
+  it('does not turn the Inverse Solution LED red for the disabled ESI toggle when it is already amber for a different reason (a poor channel match)', async () => {
+    // highlighted only ever affects StatusLed's red (off) branch (see its own doc comment)
+    // — an amber LED (file loaded, poor match) must stay amber when the disabled ESI
+    // toggle is hovered, not get forced red.
+    const provider = makeProvider();
     render(
       <EegViewer
         provider={provider}
         channelNames={provider.channelNames}
         inverseSolutionFileName="my_inverse_solution"
+        esiChannelMatchCount={1}
+        esiChannelTotalCount={2}
+        isEsiChannelMatchGoodForLed={false}
       />
     );
     await act(async () => {
@@ -2213,12 +2227,12 @@ describe('EegViewer — hovering a disabled toggle highlights the LED that expla
     const esiButton = screen.getByRole('button', { name: /electrical source imaging/i });
     expect(esiButton).toBeDisabled();
     const led = screen
-      .getByTitle('Inverse Solution is not applicable for SEEG recordings')
+      .getByTitle('Custom: my_inverse_solution (1/2 channels matched)')
       .querySelector('span');
-    expect(led).toHaveClass('bg-foreground/20');
+    expect(led).toHaveClass('bg-amber-500');
 
     await userEvent.hover(esiButton.parentElement);
-    expect(led).toHaveClass('bg-foreground/20');
+    expect(led).toHaveClass('bg-amber-500');
   });
 });
 

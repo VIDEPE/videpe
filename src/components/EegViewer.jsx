@@ -1126,7 +1126,6 @@ export const EegViewer = ({
                   ? "Alert: some required channels don't have EEG type"
                   : undefined
               }
-              disabled={majorityIsSeeg}
               highlighted={hoveredLedHighlight === 'inverseSolution'}
             />
           </div>
