@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { parseElectrodeContactName, detectIsIntracranial } from '@/utils/intracranialDetection';
 
-// A small stand-in for the standard_1005 template — just enough labels to exercise
+// A small stand-in for the fsaverage_1005 template — just enough labels to exercise
 // match-ratio behavior without needing the full 346-entry asset.
-const STANDARD_1005_FIXTURE = [
+const FSAVERAGE_1005_FIXTURE = [
   { label: 'Fp1', x: 0, y: 0, z: 0 },
   { label: 'Fp2', x: 0, y: 0, z: 0 },
   { label: 'Fz', x: 0, y: 0, z: 0 },
@@ -50,22 +50,22 @@ describe('parseElectrodeContactName', () => {
 describe('detectIsIntracranial', () => {
   it('returns false for an all-scalp channel set with a high template match ratio', () => {
     const channelNames = ['Fp1', 'Fp2', 'Cz', 'Fz'];
-    expect(detectIsIntracranial(channelNames, STANDARD_1005_FIXTURE)).toBe(false);
+    expect(detectIsIntracranial(channelNames, FSAVERAGE_1005_FIXTURE)).toBe(false);
   });
 
   it('returns true for a primed sEEG group even with zero template matches', () => {
     const channelNames = ["B'1", "B'2", "B'3"];
-    expect(detectIsIntracranial(channelNames, STANDARD_1005_FIXTURE)).toBe(true);
+    expect(detectIsIntracranial(channelNames, FSAVERAGE_1005_FIXTURE)).toBe(true);
   });
 
   it('returns true for a non-primed sEEG group with a low template match ratio', () => {
     const channelNames = ['LA1', 'LA2', 'LA3', 'LA4'];
-    expect(detectIsIntracranial(channelNames, STANDARD_1005_FIXTURE)).toBe(true);
+    expect(detectIsIntracranial(channelNames, FSAVERAGE_1005_FIXTURE)).toBe(true);
   });
 
   it('returns false for scalp names that coincidentally match the contact-name shape but match the template well', () => {
     const channelNames = ['C3', 'C4', 'Cz'];
-    expect(detectIsIntracranial(channelNames, STANDARD_1005_FIXTURE)).toBe(false);
+    expect(detectIsIntracranial(channelNames, FSAVERAGE_1005_FIXTURE)).toBe(false);
   });
 
   it('returns true for a realistic mixed sEEG set with a couple of non-electrode marker channels', () => {
@@ -87,33 +87,33 @@ describe('detectIsIntracranial', () => {
       'ECG',
       'Status',
     ];
-    expect(detectIsIntracranial(channelNames, STANDARD_1005_FIXTURE)).toBe(true);
+    expect(detectIsIntracranial(channelNames, FSAVERAGE_1005_FIXTURE)).toBe(true);
   });
 
   it('returns false for an empty channel list', () => {
-    expect(detectIsIntracranial([], STANDARD_1005_FIXTURE)).toBe(false);
+    expect(detectIsIntracranial([], FSAVERAGE_1005_FIXTURE)).toBe(false);
   });
 
   it('handles a single scalp channel without crashing', () => {
-    expect(detectIsIntracranial(['Cz'], STANDARD_1005_FIXTURE)).toBe(false);
+    expect(detectIsIntracranial(['Cz'], FSAVERAGE_1005_FIXTURE)).toBe(false);
   });
 
   it('handles a single non-primed sEEG-shaped channel without crashing', () => {
-    expect(detectIsIntracranial(['T1'], STANDARD_1005_FIXTURE)).toBe(true);
+    expect(detectIsIntracranial(['T1'], FSAVERAGE_1005_FIXTURE)).toBe(true);
   });
 
   it('returns false for a dense scalp net using one letter across all channels (e.g. EGI E1-E208)', () => {
     const channelNames = Array.from({ length: 208 }, (_, i) => `E${i + 1}`);
-    expect(detectIsIntracranial(channelNames, STANDARD_1005_FIXTURE)).toBe(false);
+    expect(detectIsIntracranial(channelNames, FSAVERAGE_1005_FIXTURE)).toBe(false);
   });
 
   it('returns false when a single group exceeds the plausible max contacts per electrode', () => {
     const channelNames = Array.from({ length: 65 }, (_, i) => `G${i + 1}`);
-    expect(detectIsIntracranial(channelNames, STANDARD_1005_FIXTURE)).toBe(false);
+    expect(detectIsIntracranial(channelNames, FSAVERAGE_1005_FIXTURE)).toBe(false);
   });
 
   it('still returns true for a group at the plausible max contact count (e.g. an 8x8 ECoG grid)', () => {
     const channelNames = Array.from({ length: 64 }, (_, i) => `G${i + 1}`);
-    expect(detectIsIntracranial(channelNames, STANDARD_1005_FIXTURE)).toBe(true);
+    expect(detectIsIntracranial(channelNames, FSAVERAGE_1005_FIXTURE)).toBe(true);
   });
 });

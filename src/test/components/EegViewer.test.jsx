@@ -643,7 +643,7 @@ describe('EegViewer — plot rendering', () => {
 describe('EegViewer — topography wiring', () => {
   it('fetches the electrode position file on mount', async () => {
     await renderViewer();
-    expect(global.fetch).toHaveBeenCalledWith('electrode_positions/standard_1005.elc');
+    expect(global.fetch).toHaveBeenCalledWith('electrode_positions/fsaverage_1005.tsv');
   });
 
   it('does not show EegTopoViewer on initial render', async () => {
@@ -1480,7 +1480,7 @@ describe('EegViewer — topography always uses the common-average reference', ()
 
 // ── Recording type detection (EEG vs iEEG) ───────────────────────────────────
 // channelNames = ['EEG1','EEG2','EEG3'] against MOCK_ELC (labels EEG1, EEG2, Cz):
-// electrodeContactShapeRatio = 3/3 = 1.0, but standard1005MatchRatio = 2/3 ≈ 0.67
+// electrodeContactShapeRatio = 3/3 = 1.0, but fsaverage1005MatchRatio = 2/3 ≈ 0.67
 // (not < 0.3), so this fixture is detected as scalp EEG, not intracranial.
 
 const INTRACRANIAL_CHANNEL_NAMES = ['B1', 'B2', "B'1"]; // primed group — always detected as iEEG
@@ -1525,7 +1525,7 @@ describe('EegViewer — recording type detection', () => {
     expect(screen.getByRole('button', { name: /topograph map/i })).toBeDisabled();
   });
 
-  it('keeps matched empty for an intracranial-shaped recording whose custom positions do not match any channel, even though standard_1005 was fetched', async () => {
+  it('keeps matched empty for an intracranial-shaped recording whose custom positions do not match any channel, even though fsaverage_1005 was fetched', async () => {
     const provider = makeIntracranialProvider();
     // A position file is loaded (so the topo toggle is enabled), but none of its labels
     // match this recording's channel names — mirrors loading the wrong patient's/montage's
@@ -1709,13 +1709,13 @@ describe('EegViewer — persistent electrode position dropzone', () => {
   // the right matchCount/totalCount/isGoodMatch for a given channel/template scenario —
   // color is kept as the observable proof that the MIN_STANDARD_MATCH_COUNT_FOR_LED
   // threshold was actually crossed (or not), not just that a number was rendered.
-  it('shows the electrode position LED with the standard_1005 match count, colored red, when the match is below the minimum threshold', async () => {
+  it('shows the electrode position LED with the fsaverage_1005 match count, colored red, when the match is below the minimum threshold', async () => {
     await renderViewer();
 
     expect(screen.getByText('Electrode Position')).toBeInTheDocument();
     // MOCK_ELC matches 2 of the 3 test channel names — well under the 19 required for a
     // usable topography, so the count is shown but the LED reads red, not blue.
-    const led = screen.getByTitle('Using standard_1005 template (2/3 channels matched)');
+    const led = screen.getByTitle('Using fsaverage_1005 template (2/3 channels matched)');
     expect(led).toBeInTheDocument();
     expect(led.querySelector('span')).toHaveClass('bg-red-600/50');
     expect(screen.getByText('Inverse Solution')).toBeInTheDocument();
@@ -1734,13 +1734,13 @@ describe('EegViewer — persistent electrode position dropzone', () => {
       await Promise.resolve();
     });
 
-    const led = screen.getByTitle('Using standard_1005 template (0/2 channels matched)');
+    const led = screen.getByTitle('Using fsaverage_1005 template (0/2 channels matched)');
     expect(led).toBeInTheDocument();
     expect(led.querySelector('span')).toHaveClass('bg-red-600/50');
   });
 
   // Real high-density recordings (e.g. the demo dataset) can share only a handful of
-  // labels (like "Cz") with the standard_1005 template out of 200+ channels — a
+  // labels (like "Cz") with the fsaverage_1005 template out of 200+ channels — a
   // technically non-empty match too sparse to be a usable topography.
   it('shows the electrode position LED as not auto-matched (red) when only a small minority of channels match the standard template', async () => {
     global.fetch = vi.fn().mockResolvedValue({ text: () => Promise.resolve(MOCK_ELC) });
@@ -1752,7 +1752,7 @@ describe('EegViewer — persistent electrode position dropzone', () => {
       await Promise.resolve();
     });
 
-    const led = screen.getByTitle('Using standard_1005 template (1/3 channels matched)');
+    const led = screen.getByTitle('Using fsaverage_1005 template (1/3 channels matched)');
     expect(led).toBeInTheDocument();
     expect(led.querySelector('span')).toHaveClass('bg-red-600/50');
   });
@@ -1790,7 +1790,7 @@ describe('EegViewer — persistent electrode position dropzone', () => {
       await Promise.resolve();
     });
 
-    const led = screen.getByTitle('Using standard_1005 template (19/19 channels matched)');
+    const led = screen.getByTitle('Using fsaverage_1005 template (19/19 channels matched)');
     expect(led).toBeInTheDocument();
     expect(led.querySelector('span')).toHaveClass('bg-blue-500');
   });
@@ -1903,7 +1903,7 @@ describe('EegViewer — persistent electrode position dropzone', () => {
     expect(led).toBeInTheDocument();
     expect(led.querySelector('span')).toHaveClass('bg-green-500');
     expect(
-      screen.getByTitle('Using standard_1005 template (2/3 channels matched)')
+      screen.getByTitle('Using fsaverage_1005 template (2/3 channels matched)')
     ).toBeInTheDocument();
   });
 
@@ -2040,10 +2040,10 @@ describe('EegViewer — hovering a disabled toggle highlights the LED that expla
     const esiButton = screen.getByRole('button', { name: /electrical source imaging/i });
     expect(esiButton).toBeDisabled();
     const inverseLed = screen.getByTitle('No inverse solution loaded').querySelector('span');
-    // Default renderViewer() scenario: standard_1005 matches 2/3 channels — below threshold,
+    // Default renderViewer() scenario: fsaverage_1005 matches 2/3 channels — below threshold,
     // so this LED is already red on its own merits, unrelated to any hover.
     const electrodeLed = screen
-      .getByTitle('Using standard_1005 template (2/3 channels matched)')
+      .getByTitle('Using fsaverage_1005 template (2/3 channels matched)')
       .querySelector('span');
 
     await userEvent.hover(esiButton.parentElement);
@@ -2325,7 +2325,7 @@ describe('EegViewer — file-backed montage templates', () => {
         return Promise.resolve({ text: () => Promise.resolve(JSON.stringify(TEMPLATE_LIST)) });
       if (url === 'montage_files/test.mtg')
         return Promise.resolve({ text: () => Promise.resolve(TEMPLATE_MTG_TEXT) });
-      return Promise.resolve({ text: () => Promise.resolve(MOCK_ELC) }); // standard_1005.elc
+      return Promise.resolve({ text: () => Promise.resolve(MOCK_ELC) }); // fsaverage_1005.tsv
     });
   });
 

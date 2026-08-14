@@ -1045,7 +1045,7 @@ export const EegViewer = ({
 
         {/* Persistent electrode-position dropzone — always available once EEG is loaded,
             not just buried in the topography popup. Overwrites whatever positions are
-            currently active (standard_1005, or a file loaded via any of the other entry
+            currently active (fsaverage_1005, or a file loaded via any of the other entry
             points) — onElecPosFile has no "only if empty" guard. */}
         <FileDropZone
           onFiles={(files) => {

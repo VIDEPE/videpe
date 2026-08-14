@@ -52,7 +52,7 @@ describe('StatusLed — with a match-count concept (e.g. Electrode Position)', (
       />
     );
 
-    const dot = getDot('Using standard_1005 template (19/32 channels matched)');
+    const dot = getDot('Using fsaverage_1005 (FreeSurfer) template (19/32 channels matched)');
     expect(dot).toHaveClass('bg-blue-500');
   });
 
@@ -68,7 +68,7 @@ describe('StatusLed — with a match-count concept (e.g. Electrode Position)', (
       />
     );
 
-    const dot = getDot('Using standard_1005 template (1/208 channels matched)');
+    const dot = getDot('Using fsaverage_1005 template (1/208 channels matched)');
     expect(dot).toHaveClass('bg-red-600/50');
   });
 

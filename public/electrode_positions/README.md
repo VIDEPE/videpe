@@ -1,6 +1,6 @@
 # Electrode Positions
 
-## standard_1005.elc
+## fsaverage_1005.tsv
 
 This file is sourced from [MNE-Python](https://mne.tools/), an open-source Python package for processing MEG and EEG data.
 

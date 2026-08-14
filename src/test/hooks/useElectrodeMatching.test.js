@@ -46,15 +46,15 @@ const setup = (overrides = {}) =>
     },
   });
 
-describe('useElectrodeMatching — standard_1005 detection', () => {
-  it('fetches the standard_1005 template on mount', async () => {
+describe('useElectrodeMatching — fsaverage_1005 detection', () => {
+  it('fetches the fsaverage_1005 template on mount', async () => {
     setup();
     await waitFor(() =>
-      expect(global.fetch).toHaveBeenCalledWith('electrode_positions/standard_1005.elc')
+      expect(global.fetch).toHaveBeenCalledWith('electrode_positions/fsaverage_1005.tsv')
     );
   });
 
-  it('detects EEG from the standard_1005 match and toasts it', async () => {
+  it('detects EEG from the fsaverage_1005 match and toasts it', async () => {
     const { default: toast } = await import('react-hot-toast');
     const { result } = setup();
     // EEG1/EEG2/Cz vs EEG1/EEG2/EEG3 → 2/3 match ratio (≥ 0.3) → detected as scalp EEG
@@ -75,7 +75,7 @@ describe('useElectrodeMatching — standard_1005 detection', () => {
     });
   });
 
-  it('uses the standard_1005 template as the render-facing electrodes when EEG with no custom file', async () => {
+  it('uses the fsaverage_1005 template as the render-facing electrodes when EEG with no custom file', async () => {
     const { result } = setup();
     await waitFor(() => expect(result.current.matched.length).toBe(2));
     expect(result.current.electrodes.length).toBe(3); // the parsed template (3 positions)

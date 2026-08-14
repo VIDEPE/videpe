@@ -28,8 +28,8 @@ export function parseElectrodeContactName(name) {
 const MAX_PLAUSIBLE_CONTACTS_PER_GROUP = 64;
 
 // Heuristic intracranial detector — see the implementation plan for the full
-// rationale behind electrodeContactShapeRatio vs. standard1005MatchRatio.
-export function detectIsIntracranial(channelNames, standard1005Electrodes) {
+// rationale behind electrodeContactShapeRatio vs. fsaverage1005MatchRatio.
+export function detectIsIntracranial(channelNames, fsaverage1005Electrodes) {
   if (!channelNames || channelNames.length === 0) return false;
 
   const parsed = channelNames.map(parseElectrodeContactName);
@@ -37,13 +37,13 @@ export function detectIsIntracranial(channelNames, standard1005Electrodes) {
   if (hasPrimedGroup) return true;
 
   const electrodeContactShapeRatio = parsed.filter(Boolean).length / channelNames.length;
-  const standard1005MatchRatio =
-    matchChannelsToPositions(channelNames, standard1005Electrodes).matched.length /
+  const fsaverage1005MatchRatio =
+    matchChannelsToPositions(channelNames, fsaverage1005Electrodes).matched.length /
     channelNames.length;
 
   // Neither ratio clears its threshold, so this doesn't look like iEEG regardless of
   // group sizes — no need to check further.
-  if (electrodeContactShapeRatio < 0.8 || standard1005MatchRatio >= 0.3) return false;
+  if (electrodeContactShapeRatio < 0.8 || fsaverage1005MatchRatio >= 0.3) return false;
 
   // When the ratios above lean toward iEEG, also count the group sizes.
   // If a single letter-number group has more than MAX_PLAUSIBLE_CONTACTS_PER_GROUP (default 64)
