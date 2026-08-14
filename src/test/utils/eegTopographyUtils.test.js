@@ -93,6 +93,37 @@ describe('parseElectrodePositionElc', () => {
     const { electrodes } = parseElectrodePositionElc(bad);
     expect(electrodes.length).toBe(1); // only Fp2 survives
   });
+
+  // When UnitPosition is absent, the old behavior blindly assumed mm — wrong for a file
+  // whose coordinates are actually in meters. Infer from range instead, same heuristic
+  // as the tsv parser (see parseElectrodePositionTsv.js's METER_SCALE_RANGE_THRESHOLD).
+  it('auto-detects meter-scale coordinates and converts to mm when UnitPosition is not declared', () => {
+    const noUnitElc = `# ASA electrode file
+ReferenceLabel	avg
+NumberPositions=	5
+Positions
+-0.0860761 -0.0199897 -0.0479860
+0.0857939 -0.0200093 -0.0480310
+0.0000083 0.0868110 -0.0399830
+-0.0294367 0.0839171 -0.0069900
+0.0301123 0.0882470 -0.0017130
+Labels
+LPA
+RPA
+Nz
+Fp1
+Fp2
+`;
+    const { electrodes, fiducials } = parseElectrodePositionElc(noUnitElc);
+    expect(electrodes[0].x).toBeCloseTo(-29.4367, 3);
+    expect(fiducials.LPA.x).toBeCloseTo(-86.0761, 3);
+  });
+
+  it('assumes mm when UnitPosition is not declared and coordinates are already mm-scale', () => {
+    const noUnitElc = MINIMAL_ELC.replace('UnitPosition\tmm\n', '');
+    const { electrodes } = parseElectrodePositionElc(noUnitElc);
+    expect(electrodes[0].x).toBeCloseTo(-29.0);
+  });
 });
 
 // ---------------------------------------------------------------------------
