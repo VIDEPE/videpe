@@ -29,8 +29,9 @@ import { applyReferenceSeries } from '@/utils/eegViewerUtils';
  * @param {(string|undefined)[]} params.channelTypes - one channelSettings type
  *   ('eeg'|'seeg'|'other'|undefined) per channelNames index — lets ESI reject a channel
  *   the inverse solution needs but that's itself typed SEEG, even if the name matches.
- * @param {boolean} params.isIntracranial - whether the recording is currently iEEG;
- *   passed through unchanged to both lifted snapshots.
+ * @param {boolean} params.isIntracranial - whether the majority of channels are currently
+ *   typed SEEG (see EegViewer.jsx's majorityIsSeeg); passed through unchanged to both
+ *   lifted snapshots.
  * @param {(snapshot: {isIntracranial: boolean, matched: Array, voltages: number[]}) => void} params.onElectrodeSnapshotChange
  *   Called whenever the electrode-matched voltage snapshot changes, so PatientView can
  *   rebuild the intracranial 3D connectome layer.

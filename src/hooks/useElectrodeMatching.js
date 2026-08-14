@@ -92,9 +92,10 @@ export function useElectrodeMatching({ channelNames, customElectrodes, customEle
 
   // Electrode Position status LED — matchCount/totalCount are shown regardless of quality
   // (isGoodMatch just picks the color). A custom file's match is judged against
-  // customMatched even in iEEG mode (no standard-template fallback there, but a custom
-  // file's own match quality is still meaningful); the standard-template count only
-  // applies in EEG mode, since standard_1005 doesn't apply to iEEG at all.
+  // customMatched even when the recording is detected as SEEG (no standard-template
+  // fallback there, but a custom file's own match quality is still meaningful); the
+  // standard-template count only applies when it isn't, since standard_1005 doesn't apply
+  // to SEEG at all.
   const hasCustomElecPos = Boolean(customElecPosFileName);
   const electrodePositionMatchCount = hasCustomElecPos
     ? customMatched.length

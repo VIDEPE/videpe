@@ -1142,7 +1142,7 @@ describe('PatientView — inverse solution files', () => {
   });
 });
 
-describe('PatientView — ESI iEEG warning', () => {
+describe('PatientView — ESI SEEG warning', () => {
   beforeEach(() => {
     FileDropZone.mockClear();
     NiiViewer.mockClear();
@@ -1261,7 +1261,7 @@ describe('PatientView — intracranial connectome layer', () => {
     expect(NiiViewer.mock.lastCall[0].electrodeLayer).toMatchObject({ kind: 'connectome' });
   });
 
-  it('keeps NiiViewer mounted (and its other layers intact) when switching out of iEEG mode drops the connectome layer', async () => {
+  it('keeps NiiViewer mounted (and its other layers intact) when the electrode snapshot clearing drops the connectome layer', async () => {
     renderPatientView();
     await act(async () => {
       await getEegOnFiles()([makeFile('sub01.vhdr'), makeFile('sub01.eeg')]);
@@ -1275,8 +1275,9 @@ describe('PatientView — intracranial connectome layer', () => {
     // it has, unless NiiViewer itself reports that it now holds content.
     await userEvent.click(screen.getByTestId('trigger-nii-has-content'));
 
-    // Switching to EEG mode drops the connectome layer — this must not unmount NiiViewer
-    // and discard the volume dropped above, only the connectome layer should go away.
+    // Clearing the electrode snapshot (no more matched channels) drops the connectome
+    // layer — this must not unmount NiiViewer and discard the volume dropped above, only
+    // the connectome layer should go away.
     await userEvent.click(screen.getByTestId('trigger-intracranial-clear'));
 
     expect(screen.getByTestId('nii-viewer')).toBeInTheDocument();

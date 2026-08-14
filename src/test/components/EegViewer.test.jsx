@@ -1570,12 +1570,12 @@ describe('EegViewer — topography always uses the common-average reference', ()
   });
 });
 
-// ── Recording type detection (EEG vs iEEG) ───────────────────────────────────
+// ── Channel-name auto-detection (EEG vs SEEG) ─────────────────────────────────
 // channelNames = ['EEG1','EEG2','EEG3'] against MOCK_ELC (labels EEG1, EEG2, Cz):
 // electrodeContactShapeRatio = 3/3 = 1.0, but standard1005MatchRatio = 2/3 ≈ 0.67
 // (not < 0.3), so this fixture is detected as scalp EEG, not intracranial.
 
-const INTRACRANIAL_CHANNEL_NAMES = ['B1', 'B2', "B'1"]; // primed group — always detected as iEEG
+const INTRACRANIAL_CHANNEL_NAMES = ['B1', 'B2', "B'1"]; // primed group — always detected as SEEG
 
 const makeIntracranialProvider = () => ({
   channelNames: INTRACRANIAL_CHANNEL_NAMES,
@@ -1952,7 +1952,7 @@ describe('EegViewer — persistent electrode position dropzone', () => {
     expect(led.querySelector('span')).toHaveClass('bg-amber-500');
   });
 
-  it('shows the electrode position LED match count for a custom file even in iEEG mode, where the standard template never applies', async () => {
+  it('shows the electrode position LED match count for a custom file even for an intracranial-shaped recording, where the standard template never applies', async () => {
     const provider = makeIntracranialProvider();
     render(
       <EegViewer
@@ -2045,7 +2045,7 @@ describe('EegViewer — persistent electrode position dropzone', () => {
     expect(led.querySelector('span')).toHaveClass('bg-amber-500');
   });
 
-  it('greys out the inverse solution LED in iEEG mode, even with a file loaded', async () => {
+  it('greys out the inverse solution LED for a majority-SEEG recording, even with a file loaded', async () => {
     const provider = makeIntracranialProvider();
     render(
       <EegViewer
@@ -2062,7 +2062,7 @@ describe('EegViewer — persistent electrode position dropzone', () => {
     expect(
       screen.getByTitle('Inverse Solution is not applicable for SEEG recordings')
     ).toBeInTheDocument();
-    // Electrode position stays fully active/relevant in iEEG mode.
+    // Electrode position stays fully active/relevant for a majority-SEEG recording.
     expect(screen.queryByTitle(/electrode position is not applicable/i)).not.toBeInTheDocument();
   });
 
@@ -2196,7 +2196,7 @@ describe('EegViewer — hovering a disabled toggle highlights the LED that expla
     expect(inverseLed).toHaveClass('bg-red-600/50');
   });
 
-  it('does not highlight the Inverse Solution LED for the iEEG-disabled ESI toggle, since that LED is already greyed out for a different reason', async () => {
+  it('does not highlight the Inverse Solution LED for the disabled ESI toggle, since that LED is already greyed out for a different reason', async () => {
     const provider = makeIntracranialProvider();
     render(
       <EegViewer
