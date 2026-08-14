@@ -628,7 +628,7 @@ export const EegViewer = ({
                       ? `${electrodeRenderEnabled ? 'Close 3D Electrode Rendering' : 'Open 3D Electrode Rendering'}`
                       : majorityIsSeeg
                         ? '3D Electrode Rendering. Requires known electrode positions'
-                        : "3D Electrode Rendering. Requires a patient-specific electrode position file — the standard 10-05 template is only an indicative layout, not this patient's actual head geometry"
+                        : "3D Electrode Rendering. Requires a patient-specific electrode position file — the fsaverage_1005 (FreeSurfer) template is only an indicative layout, not this patient's actual head geometry"
                   }
                   aria-label={`${electrodeRenderEnabled ? 'Hide' : 'Show'} 3D Electrode Rendering`}
                   aria-pressed={electrodeRenderEnabled}
@@ -1065,7 +1065,7 @@ export const EegViewer = ({
 
         {/* Persistent electrode-position dropzone — always available once EEG is loaded,
             not just buried in the topography popup. Overwrites whatever positions are
-            currently active (standard_1005, or a file loaded via any of the other entry
+            currently active (fsaverage_1005, or a file loaded via any of the other entry
             points) — onElecPosFile has no "only if empty" guard. */}
         <FileDropZone
           onFiles={(files) => {

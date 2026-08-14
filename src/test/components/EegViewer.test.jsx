@@ -75,18 +75,12 @@ vi.mock('react-hot-toast', () => {
   return { default: toastFn };
 });
 
-// Minimal .elc content whose labels match two of the three test channel names
-const MOCK_ELC = `ReferenceLabel avg
-UnitPosition mm
-NumberPositions= 3
-Positions
--29.0 84.0 -7.0
-29.0 84.0 -7.0
-0.0 0.0 88.0
-Labels
-EEG1
-EEG2
-Cz
+// Minimal fsaverage_1005.tsv-shaped content (MNE's "label" header, mm-scale here for
+// simplicity) whose labels match two of the three test channel names
+const MOCK_TSV = `label\tx\ty\tz
+EEG1\t-29.0\t84.0\t-7.0
+EEG2\t29.0\t84.0\t-7.0
+Cz\t0.0\t0.0\t88.0
 `;
 
 // jsdom does not implement ResizeObserver; use a class so `new` works,
@@ -103,7 +97,7 @@ beforeEach(() => {
     }
     disconnect() {}
   };
-  global.fetch = vi.fn().mockResolvedValue({ text: () => Promise.resolve(MOCK_ELC) });
+  global.fetch = vi.fn().mockResolvedValue({ text: () => Promise.resolve(MOCK_TSV) });
   // EegMontageEditor's Apply/OK confirm via window.confirm when the draft has bad/missing
   // rows — default to confirming so montage tests that mark a channel bad still commit.
   vi.spyOn(window, 'confirm').mockReturnValue(true);
@@ -643,7 +637,7 @@ describe('EegViewer — plot rendering', () => {
 describe('EegViewer — topography wiring', () => {
   it('fetches the electrode position file on mount', async () => {
     await renderViewer();
-    expect(global.fetch).toHaveBeenCalledWith('electrode_positions/standard_1005.elc');
+    expect(global.fetch).toHaveBeenCalledWith('electrode_positions/fsaverage_1005.tsv');
   });
 
   it('does not show EegTopoViewer on initial render', async () => {
@@ -679,7 +673,7 @@ describe('EegViewer — topography wiring', () => {
   it('passes total channel count to EegTopoViewer', async () => {
     await renderViewer();
     await enableTopoAndClick();
-    // MOCK_ELC has 2 labels matching the test channel names (EEG1, EEG2); total is 3
+    // MOCK_TSV has 2 labels matching the test channel names (EEG1, EEG2); total is 3
     expect(screen.getByText(/2\s*\/\s*3\s*channels mapped/i)).toBeTruthy();
   });
 });
@@ -1617,7 +1611,7 @@ describe('EegViewer — recording type detection', () => {
     expect(screen.getByRole('button', { name: /topograph map/i })).toBeDisabled();
   });
 
-  it('keeps matched empty for an intracranial-shaped recording whose custom positions do not match any channel, even though standard_1005 was fetched', async () => {
+  it('keeps matched empty for an intracranial-shaped recording whose custom positions do not match any channel, even though fsaverage_1005 was fetched', async () => {
     const provider = makeIntracranialProvider();
     // A position file is loaded (so the topo toggle is enabled), but none of its labels
     // match this recording's channel names — mirrors loading the wrong patient's/montage's
@@ -1801,13 +1795,15 @@ describe('EegViewer — persistent electrode position dropzone', () => {
   // the right matchCount/totalCount/isGoodMatch for a given channel/template scenario —
   // color is kept as the observable proof that the MIN_STANDARD_MATCH_COUNT_FOR_LED
   // threshold was actually crossed (or not), not just that a number was rendered.
-  it('shows the electrode position LED with the standard_1005 match count, colored red, when the match is below the minimum threshold', async () => {
+  it('shows the electrode position LED with the fsaverage_1005 match count, colored red, when the match is below the minimum threshold', async () => {
     await renderViewer();
 
     expect(screen.getByText('Electrode Position')).toBeInTheDocument();
-    // MOCK_ELC matches 2 of the 3 test channel names — well under the 19 required for a
+    // MOCK_TSV matches 2 of the 3 test channel names — well under the 19 required for a
     // usable topography, so the count is shown but the LED reads red, not blue.
-    const led = screen.getByTitle('Using standard_1005 template (2/3 channels matched)');
+    const led = screen.getByTitle(
+      'Using default fsaverage_1005 (FreeSurfer) template (2/3 channels matched)'
+    );
     expect(led).toBeInTheDocument();
     expect(led.querySelector('span')).toHaveClass('bg-red-600/50');
     expect(screen.getByText('Inverse Solution')).toBeInTheDocument();
@@ -1815,7 +1811,7 @@ describe('EegViewer — persistent electrode position dropzone', () => {
   });
 
   it('shows the electrode position LED with a 0-match count, colored red, when the standard template matches no channels', async () => {
-    global.fetch = vi.fn().mockResolvedValue({ text: () => Promise.resolve(MOCK_ELC) });
+    global.fetch = vi.fn().mockResolvedValue({ text: () => Promise.resolve(MOCK_TSV) });
     const provider = makeProvider();
     // No trailing digits — doesn't parse as an electrode-contact shape (unlike e.g.
     // "NoMatch1"), so this stays detected as scalp EEG rather than accidentally SEEG.
@@ -1826,42 +1822,41 @@ describe('EegViewer — persistent electrode position dropzone', () => {
       await Promise.resolve();
     });
 
-    const led = screen.getByTitle('Using standard_1005 template (0/2 channels matched)');
+    const led = screen.getByTitle(
+      'Using default fsaverage_1005 (FreeSurfer) template (0/2 channels matched)'
+    );
     expect(led).toBeInTheDocument();
     expect(led.querySelector('span')).toHaveClass('bg-red-600/50');
   });
 
   // Real high-density recordings (e.g. the demo dataset) can share only a handful of
-  // labels (like "Cz") with the standard_1005 template out of 200+ channels — a
+  // labels (like "Cz") with the fsaverage_1005 template out of 200+ channels — a
   // technically non-empty match too sparse to be a usable topography.
   it('shows the electrode position LED as not auto-matched (red) when only a small minority of channels match the standard template', async () => {
-    global.fetch = vi.fn().mockResolvedValue({ text: () => Promise.resolve(MOCK_ELC) });
+    global.fetch = vi.fn().mockResolvedValue({ text: () => Promise.resolve(MOCK_TSV) });
     const provider = makeProvider();
-    provider.channelNames = ['Cz', 'X1', 'X2']; // MOCK_ELC only matches "Cz" — 1/3, and 1 < 19
+    provider.channelNames = ['Cz', 'X1', 'X2']; // MOCK_TSV only matches "Cz" — 1/3, and 1 < 19
     render(<EegViewer provider={provider} channelNames={provider.channelNames} />);
     await act(async () => {
       await Promise.resolve();
       await Promise.resolve();
     });
 
-    const led = screen.getByTitle('Using standard_1005 template (1/3 channels matched)');
+    const led = screen.getByTitle(
+      'Using default fsaverage_1005 (FreeSurfer) template (1/3 channels matched)'
+    );
     expect(led).toBeInTheDocument();
     expect(led.querySelector('span')).toHaveClass('bg-red-600/50');
   });
 
   it('shows the electrode position LED as auto-matched (blue) when the standard template match meets the minimum threshold', async () => {
     const manyChannelNames = Array.from({ length: 19 }, (_, i) => `E${i + 1}`);
-    const manyMatchElc = [
-      'ReferenceLabel avg',
-      'UnitPosition mm',
-      `NumberPositions= ${manyChannelNames.length}`,
-      'Positions',
-      ...manyChannelNames.map(() => '0.0 0.0 0.0'),
-      'Labels',
-      ...manyChannelNames,
+    const manyMatchTsv = [
+      'label\tx\ty\tz',
+      ...manyChannelNames.map((name) => `${name}\t0.0\t0.0\t0.0`),
       '',
     ].join('\n');
-    global.fetch = vi.fn().mockResolvedValue({ text: () => Promise.resolve(manyMatchElc) });
+    global.fetch = vi.fn().mockResolvedValue({ text: () => Promise.resolve(manyMatchTsv) });
     const provider = {
       channelNames: manyChannelNames,
       fs: 1,
@@ -1882,7 +1877,9 @@ describe('EegViewer — persistent electrode position dropzone', () => {
       await Promise.resolve();
     });
 
-    const led = screen.getByTitle('Using standard_1005 template (19/19 channels matched)');
+    const led = screen.getByTitle(
+      'Using default fsaverage_1005 (FreeSurfer) template (19/19 channels matched)'
+    );
     expect(led).toBeInTheDocument();
     expect(led.querySelector('span')).toHaveClass('bg-blue-500');
   });
@@ -1995,7 +1992,7 @@ describe('EegViewer — persistent electrode position dropzone', () => {
     expect(led).toBeInTheDocument();
     expect(led.querySelector('span')).toHaveClass('bg-green-500');
     expect(
-      screen.getByTitle('Using standard_1005 template (2/3 channels matched)')
+      screen.getByTitle('Using default fsaverage_1005 (FreeSurfer) template (2/3 channels matched)')
     ).toBeInTheDocument();
   });
 
@@ -2186,10 +2183,10 @@ describe('EegViewer — hovering a disabled toggle highlights the LED that expla
     const esiButton = screen.getByRole('button', { name: /electrical source imaging/i });
     expect(esiButton).toBeDisabled();
     const inverseLed = screen.getByTitle('No inverse solution loaded').querySelector('span');
-    // Default renderViewer() scenario: standard_1005 matches 2/3 channels — below threshold,
+    // Default renderViewer() scenario: fsaverage_1005 matches 2/3 channels — below threshold,
     // so this LED is already red on its own merits, unrelated to any hover.
     const electrodeLed = screen
-      .getByTitle('Using standard_1005 template (2/3 channels matched)')
+      .getByTitle('Using default fsaverage_1005 (FreeSurfer) template (2/3 channels matched)')
       .querySelector('span');
 
     await userEvent.hover(esiButton.parentElement);
@@ -2286,7 +2283,7 @@ describe('EegViewer — bad channels excluded from topography/connectome/ESI', (
 
     await enableTopoAndClick();
 
-    // MOCK_ELC matches EEG1 and EEG2 (Cz has no corresponding channel) — with EEG1 bad,
+    // MOCK_TSV matches EEG1 and EEG2 (Cz has no corresponding channel) — with EEG1 bad,
     // only EEG2's electrode remains, and the average reference now excludes EEG1 too:
     // (7+10)/2 = 8.5 → EEG2: 7-8.5 = -1.5.
     expect(screen.getByText('1 / 3 channels mapped')).toBeTruthy();
@@ -2477,7 +2474,7 @@ describe('EegViewer — file-backed montage templates', () => {
         return Promise.resolve({ text: () => Promise.resolve(JSON.stringify(TEMPLATE_LIST)) });
       if (url === 'montage_files/test.mtg')
         return Promise.resolve({ text: () => Promise.resolve(TEMPLATE_MTG_TEXT) });
-      return Promise.resolve({ text: () => Promise.resolve(MOCK_ELC) }); // standard_1005.elc
+      return Promise.resolve({ text: () => Promise.resolve(MOCK_TSV) }); // fsaverage_1005.tsv
     });
   });
 
@@ -2540,7 +2537,7 @@ describe('EegViewer — file-backed montage templates', () => {
 	</Channel>
 </Montage>`),
         });
-      return Promise.resolve({ text: () => Promise.resolve(MOCK_ELC) });
+      return Promise.resolve({ text: () => Promise.resolve(MOCK_TSV) });
     });
 
     await renderViewer();

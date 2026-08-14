@@ -25,13 +25,13 @@ Fp2	29.0	84.0	-7.0
 `;
 
 describe('parseElectrodePositionFile', () => {
-  it('routes .elc files to parseElcElectrodePositions', async () => {
+  it('routes .elc files to parseElectrodePositionElc', async () => {
     const file = new File([MINIMAL_ELC], 'positions.elc');
     const { electrodes } = await parseElectrodePositionFile(file);
     expect(electrodes.map((e) => e.label)).toEqual(['Fp1', 'Fp2']);
   });
 
-  it('routes .tsv files to parseTsvElectrodePositions', async () => {
+  it('routes .tsv files to parseElectrodePositionTsv', async () => {
     const file = new File([MINIMAL_TSV], 'positions.tsv');
     const { electrodes } = await parseElectrodePositionFile(file);
     expect(electrodes.map((e) => e.label)).toEqual(['Fp1', 'Fp2']);

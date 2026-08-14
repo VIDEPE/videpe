@@ -232,9 +232,9 @@ export const AboutPage = () => {
                     mesh rendering; re-reference on the fly (none, average, or median); diverging
                     blue-white-red colormap with a live colorbar (µV) and a colour-blind-friendly
                     mode; individual electrode markers on the mesh, voltage-coloured for matched
-                    channels; uses Standard 10-05 electrode positions by default with support for
-                    custom <code>.elc</code> or <code>.tsv</code> files; 3D rotation is synchronised
-                    with the neuroimaging viewer — rotate one and the other follows
+                    channels; uses fsaverage_1005 (FreeSurfer) electrode positions by default with
+                    support for custom <code>.elc</code> or <code>.tsv</code> files; 3D rotation is
+                    synchronised with the neuroimaging viewer — rotate one and the other follows
                   </li>
                 </ul>
               </div>

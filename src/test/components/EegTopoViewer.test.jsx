@@ -305,11 +305,11 @@ describe('EegTopoViewer', () => {
   });
 
   describe('electrode source', () => {
-    it('shows "Default: Standard 10-05" label when isStandardElectrodes is true', async () => {
+    it('shows "Default: fsaverage_1005 (FreeSurfer)" label when isStandardElectrodes is true', async () => {
       await act(async () =>
         render(<EegTopoViewer {...defaultProps} isStandardElectrodes={true} />)
       );
-      expect(screen.getByText(/default: standard 10-05/i)).toBeTruthy();
+      expect(screen.getByText(/default: fsaverage_1005 \(freesurfer\)/i)).toBeTruthy();
     });
 
     it('shows the customFileName prop when isStandardElectrodes is false', async () => {

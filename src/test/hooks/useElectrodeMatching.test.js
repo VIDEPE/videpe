@@ -13,18 +13,12 @@ vi.mock('react-hot-toast', () => {
   return { default: toastFn };
 });
 
-// Minimal .elc content whose labels match two of the three test channel names
-const MOCK_ELC = `ReferenceLabel avg
-UnitPosition mm
-NumberPositions= 3
-Positions
--29.0 84.0 -7.0
-29.0 84.0 -7.0
-0.0 0.0 88.0
-Labels
-EEG1
-EEG2
-Cz
+// Minimal fsaverage_1005.tsv-shaped content (MNE's "label" header, mm-scale here for
+// simplicity) whose labels match two of the three test channel names
+const MOCK_TSV = `label\tx\ty\tz
+EEG1\t-29.0\t84.0\t-7.0
+EEG2\t29.0\t84.0\t-7.0
+Cz\t0.0\t0.0\t88.0
 `;
 
 const channelNames = ['EEG1', 'EEG2', 'EEG3'];
@@ -33,7 +27,7 @@ const channelNames = ['EEG1', 'EEG2', 'EEG3'];
 const seegChannelNames = ['B1', 'B2', "B'1"];
 
 beforeEach(() => {
-  global.fetch = vi.fn().mockResolvedValue({ text: () => Promise.resolve(MOCK_ELC) });
+  global.fetch = vi.fn().mockResolvedValue({ text: () => Promise.resolve(MOCK_TSV) });
 });
 
 const setup = (overrides = {}) =>
@@ -46,15 +40,15 @@ const setup = (overrides = {}) =>
     },
   });
 
-describe('useElectrodeMatching — standard_1005 detection', () => {
-  it('fetches the standard_1005 template on mount', async () => {
+describe('useElectrodeMatching — fsaverage_1005 detection', () => {
+  it('fetches the fsaverage_1005 template on mount', async () => {
     setup();
     await waitFor(() =>
-      expect(global.fetch).toHaveBeenCalledWith('electrode_positions/standard_1005.elc')
+      expect(global.fetch).toHaveBeenCalledWith('electrode_positions/fsaverage_1005.tsv')
     );
   });
 
-  it('detects EEG from the standard_1005 match and toasts it', async () => {
+  it('detects EEG from the fsaverage_1005 match and toasts it', async () => {
     const { default: toast } = await import('react-hot-toast');
     const { result } = setup();
     // EEG1/EEG2/Cz vs EEG1/EEG2/EEG3 → 2/3 match ratio (≥ 0.3) → detected as scalp EEG
@@ -75,7 +69,7 @@ describe('useElectrodeMatching — standard_1005 detection', () => {
     });
   });
 
-  it('uses the standard_1005 template as the render-facing electrodes when EEG with no custom file', async () => {
+  it('uses the fsaverage_1005 template as the render-facing electrodes when EEG with no custom file', async () => {
     const { result } = setup();
     await waitFor(() => expect(result.current.matched.length).toBe(2));
     expect(result.current.electrodes.length).toBe(3); // the parsed template (3 positions)

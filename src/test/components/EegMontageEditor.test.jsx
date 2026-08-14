@@ -115,7 +115,7 @@ describe('EegMontageEditor', () => {
       render(<EegMontageEditor {...defaultProps} />);
       expect(screen.getByTestId('channel-pos-FP1')).toHaveAttribute(
         'title',
-        'Matched to electrode "FP1" in the standard 10-05 template'
+        'Matched to electrode "FP1" in the fsaverage_1005 (FreeSurfer) template'
       );
     });
 
@@ -137,7 +137,7 @@ describe('EegMontageEditor', () => {
       render(<EegMontageEditor {...defaultProps} />);
       expect(screen.getByTestId('channel-pos-FP2')).toHaveAttribute(
         'title',
-        'No match for "FP2" in the standard 10-05 template'
+        'No match for "FP2" in the fsaverage_1005 (FreeSurfer) template'
       );
     });
   });
