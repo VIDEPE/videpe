@@ -23,6 +23,9 @@ import {
 // ─── EEG Montage settings ────────────────────────────────────────
 // Shared title styling — keeps panes titles visually consistent, with the same height (TrafficLightButtons are 16px tall).
 const PANEL_TITLE_CLASS = 'h-5 flex items-center text-xs font-medium leading-none text-header';
+// Shared Channel column sizing for both row lists' header and rows — flex-1 so it fills
+// leftover width, min-w so it stops shrinking there and the other columns scroll instead.
+const CHANNEL_COL_CLASS = 'flex-1 min-w-8';
 const TYPE_LIST = {
   eeg: 'EEG',
   seeg: 'SEEG',
@@ -38,7 +41,7 @@ const PRESET_COLORS = ['red', 'blue', 'green', 'yellow', 'cyan', 'magenta'];
 
 // ─── Window sizing constants ────────────────────────────────────────────────
 // Default/minimum window size in px — default matches the previous fixed w-96 h-80 (24rem x 20rem)
-const DEFAULT_WINDOW_SIZE = { width: 800, height: 700 };
+const DEFAULT_WINDOW_SIZE = { width: 850, height: 700 };
 const MIN_WINDOW_WIDTH = 600;
 const MIN_WINDOW_HEIGHT = 450;
 const RESIZE_DIRECTIONS = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
@@ -563,102 +566,110 @@ export function EegMontageEditor({
           surrounding bg-surface visible as a border around this section. flex-1 min-h-0
           claims all remaining height above the fixed-height settings section below. */}
       <div className="flex-1 min-h-0 flex flex-col pl-2 pt-2 bg-background">
-        {/* Column headers — widths mirror each row's controls below so labels stay aligned */}
-        <div
-          className="shrink-0 flex items-center gap-2 px-1 py-0.5 text-xs font-medium text-header border-b border-border"
-          onClick={handleChannelPaneBackgroundClick}
-        >
-          <span className="flex-1">Channel</span>
-          <span className="w-13 text-center" title="Electrode Position Match">
-            Pos
-          </span>
-          <span className="w-8" title="Channel Type">
-            Type
-          </span>
-          <span className="w-11 text-center" title="Bad channel">
-            Bad
-          </span>
-        </div>
-        <div
-          className="flex-1 min-h-0 pb-4 overflow-y-auto border-header"
-          data-testid="channel-list"
-          onClick={handleChannelPaneBackgroundClick}
-        >
-          {channelNames.map((name) => {
-            // take channel settings from draftChannelSetting (if exist) or default (type: 'eeg', bad: false)
-            const settings = draftChannelSettings[name] ?? { type: 'eeg', bad: false };
-            const matchedElectrode = matchedElectrodeByName.get(name);
-            const posTooltip = matchedElectrode
-              ? `Matched to electrode "${matchedElectrode}" in ${electrodePositionSourceLabel}`
-              : `No match for "${name}" in ${electrodePositionSourceLabel}`;
-            return (
-              <div
-                key={name}
-                style={{
-                  overflow: 'visible',
-                  borderBottom: `1px solid ${channelDividerColor}`,
-                }}
-                className={cn(
-                  'relative flex items-center gap-2 px-1 py-0.5',
-                  settings.bad ? (isDarkMode ? 'bg-alert/10' : 'bg-alert/20') : '',
-                  selectedChannels.has(name) && (isDarkMode ? 'bg-primary/15' : 'bg-primary/20')
-                )}
-              >
-                {/* Channel name — click to select/deselect for "+ Add selected" in the
-                    montage settings pane. */}
-                <span
-                  className={cn(
-                    'flex-1 truncate text-sm cursor-pointer select-none',
-                    settings.bad && 'text-alert'
-                  )}
-                  data-testid={`channel-select-${name}`}
-                  title="Click to select for adding to the montage"
-                  onClick={() => toggleChannelSelected(name)}
-                >
-                  {name}
-                </span>
-                {/* Electrode Position Match */}
-                <div className="w-4 flex justify-center">
-                  <input
-                    type="checkbox"
-                    className="text-xs rounded accent-border opacity-60 cursor-help"
-                    data-testid={`channel-pos-${name}`}
-                    title={posTooltip}
-                    checked={Boolean(matchedElectrode)}
-                    disabled={true}
-                  ></input>
-                </div>
-                {/* Channel Type */}
-                <select
-                  className="w-16 text-xs border border-border rounded bg-surface"
-                  data-testid={`channel-type-${name}`}
-                  value={settings.type}
-                  onChange={(e) => setDraftChannelType(name, e.target.value)}
-                >
-                  {Object.entries(TYPE_LIST).map(([typeValue, typeLabel]) => (
-                    <option key={typeValue} value={typeValue}>
-                      {typeLabel}
-                    </option>
-                  ))}
-                </select>
-                {/* Bad Channel */}
-                <div className="w-4 flex justify-center">
-                  <input
-                    type="checkbox"
-                    className="accent-alert"
-                    data-testid={`channel-bad-${name}`}
-                    checked={settings.bad}
-                    onChange={(e) => setDraftChannelBad(name, e.target.checked)}
-                  />
-                </div>
-              </div>
-            );
-          })}
+        {/* Header + rows share one horizontal-scroll wrapper (w-max/min-w-full inner) so
+            Channel stays a fixed width and visible, while Pos/Type/Bad scroll out of view
+            together instead of squeezing when the pane is narrow. */}
+        <div className="flex-1 min-h-0 overflow-x-auto">
+          <div className="h-full flex flex-col w-max min-w-full">
+            {/* Column headers — widths mirror each row's controls below so labels stay aligned */}
+            <div
+              className="shrink-0 flex items-center gap-2 px-1 py-0.5 text-xs font-medium text-header border-b border-border"
+              onClick={handleChannelPaneBackgroundClick}
+            >
+              <span className={CHANNEL_COL_CLASS}>Channel</span>
+              <span className="w-13 shrink-0 text-center" title="Electrode Position Match">
+                Pos
+              </span>
+              <span className="w-8 shrink-0" title="Channel Type">
+                Type
+              </span>
+              <span className="w-11 shrink-0 text-center" title="Bad channel">
+                Bad
+              </span>
+            </div>
+            <div
+              className="flex-1 min-h-0 pb-4 overflow-y-auto border-header"
+              data-testid="channel-list"
+              onClick={handleChannelPaneBackgroundClick}
+            >
+              {channelNames.map((name) => {
+                // take channel settings from draftChannelSetting (if exist) or default (type: 'eeg', bad: false)
+                const settings = draftChannelSettings[name] ?? { type: 'eeg', bad: false };
+                const matchedElectrode = matchedElectrodeByName.get(name);
+                const posTooltip = matchedElectrode
+                  ? `Matched to electrode "${matchedElectrode}" in ${electrodePositionSourceLabel}`
+                  : `No match for "${name}" in ${electrodePositionSourceLabel}`;
+                return (
+                  <div
+                    key={name}
+                    style={{
+                      overflow: 'visible',
+                      borderBottom: `1px solid ${channelDividerColor}`,
+                    }}
+                    className={cn(
+                      'relative flex items-center gap-2 px-1 py-0.5',
+                      settings.bad ? (isDarkMode ? 'bg-alert/10' : 'bg-alert/20') : '',
+                      selectedChannels.has(name) && (isDarkMode ? 'bg-primary/15' : 'bg-primary/20')
+                    )}
+                  >
+                    {/* Channel name — click to select/deselect for "+ Add selected" in the
+                        montage settings pane. */}
+                    <span
+                      className={cn(
+                        CHANNEL_COL_CLASS,
+                        'truncate text-sm cursor-pointer select-none',
+                        settings.bad && 'text-alert'
+                      )}
+                      data-testid={`channel-select-${name}`}
+                      title="Click to select for adding to the montage"
+                      onClick={() => toggleChannelSelected(name)}
+                    >
+                      {name}
+                    </span>
+                    {/* Electrode Position Match */}
+                    <div className="w-4 shrink-0 flex justify-center">
+                      <input
+                        type="checkbox"
+                        className="text-xs rounded accent-border opacity-60 cursor-help"
+                        data-testid={`channel-pos-${name}`}
+                        title={posTooltip}
+                        checked={Boolean(matchedElectrode)}
+                        disabled={true}
+                      ></input>
+                    </div>
+                    {/* Channel Type */}
+                    <select
+                      className="w-16 shrink-0 text-xs border border-border rounded bg-surface"
+                      data-testid={`channel-type-${name}`}
+                      value={settings.type}
+                      onChange={(e) => setDraftChannelType(name, e.target.value)}
+                    >
+                      {Object.entries(TYPE_LIST).map(([typeValue, typeLabel]) => (
+                        <option key={typeValue} value={typeValue}>
+                          {typeLabel}
+                        </option>
+                      ))}
+                    </select>
+                    {/* Bad Channel */}
+                    <div className="w-4 shrink-0 flex justify-center">
+                      <input
+                        type="checkbox"
+                        className="accent-alert"
+                        data-testid={`channel-bad-${name}`}
+                        checked={settings.bad}
+                        onChange={(e) => setDraftChannelBad(name, e.target.checked)}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
       </div>
       {/* Channel Selection Settings */}
       <div
-        className="h-36 shrink-0 flex flex-col items-start gap-2 p-2 border-t border-border bg-surface"
+        className="h-32 shrink-0 flex flex-col items-start gap-2 p-2 border-t border-border bg-surface"
         onClick={handleChannelPaneBackgroundClick}
       >
         <button className="button" onClick={() => handleFlipBadChannels()}>
@@ -771,333 +782,355 @@ export function EegMontageEditor({
           isPanesSwapped ? 'order-1' : 'order-2'
         )}
       >
-        {/* Column headers — widths mirror each row's controls below so labels stay aligned */}
-        <div
-          className="shrink-0 flex items-center gap-2 pl-3 pr-1 py-0.5 text-xs font-medium text-header border-b border-border"
-          onClick={handleMontagePaneBackgroundClick}
-        >
-          <span className="flex-1" title="Montage Channel">
-            Channel
-          </span>
-          <span className="w-17 text-center" title="Channel Type">
-            Type
-          </span>
-          <span className="w-22 text-center" title="Reference Channel">
-            Ref
-          </span>
-          <span className="w-18" title="Montage Channel Color">
-            Color
-          </span>
-        </div>
-        <div
-          className="flex-1 min-h-0 pb-4 overflow-y-auto border-header"
-          data-testid="montage-row-list"
-          onClick={handleMontagePaneBackgroundClick}
-        >
-          {draftMontageChannels.length === 0 && (
-            <p className="text-xs text-header pl-3 pr-1 py-2">
-              {`No montage rows yet — select channel(s) in the Channel Selection pane (${isPanesSwapped ? 'right' : 'left'}) 
+        {/* Header + rows share one horizontal-scroll wrapper (w-max/min-w-full inner) so
+            Channel stays a fixed width and visible, while Type/Ref/Color scroll out of view
+            together instead of squeezing when the pane is narrow. */}
+        <div className="flex-1 min-h-0 overflow-x-auto">
+          <div className="h-full flex flex-col w-max min-w-full">
+            {/* Column headers — widths mirror each row's controls below so labels stay aligned */}
+            <div
+              className="shrink-0 flex items-center gap-2 pl-3 pr-1 py-0.5 text-xs font-medium text-header border-b border-border"
+              onClick={handleMontagePaneBackgroundClick}
+            >
+              <span className={CHANNEL_COL_CLASS} title="Montage Channel">
+                Channel
+              </span>
+              <span className="w-17 shrink-0 text-center" title="Channel Type">
+                Type
+              </span>
+              <span className="w-23 shrink-0 text-center" title="Reference Channel">
+                Ref
+              </span>
+              <span className="w-20 shrink-0" title="Montage Channel Color">
+                Color
+              </span>
+            </div>
+            <div
+              className="flex-1 min-h-0 pb-4 overflow-y-auto border-header"
+              data-testid="montage-row-list"
+              onClick={handleMontagePaneBackgroundClick}
+            >
+              {draftMontageChannels.length === 0 && (
+                <p className="max-w-sm text-xs text-header pl-3 pr-1 py-2">
+                  {`No montage rows yet — select channel(s) in the Channel Selection pane (${isPanesSwapped ? 'right' : 'left'})
               and use the + / Add buttons to add them to the montage row list (${isPanesSwapped ? 'left' : 'right'}).`}
-            </p>
-          )}
-          {draftMontageChannels.map((row) => {
-            // A row is "bad" if either its source channel or its reference channel (for
-            // bipolar rows) is marked bad — either one means the row can't be displayed.
-            // Tracked separately so the channel name and reference select can each be
-            // flagged individually, instead of both turning text-alert whenever either is bad.
-            const isChannelBad = draftChannelSettings[row.channel]?.bad;
-            const isReferenceBad = row.reference && draftChannelSettings[row.reference]?.bad;
-            const isRowBad = isChannelBad || isReferenceBad;
-            // "Missing" (channel/reference not in this recording, only possible via a
-            // loaded file) is unfixable when it's the row's own channel — nothing about
-            // the row can be edited to recover it, so it's greyed out and its Reference/
-            // Color controls disabled (Remove still works). A missing reference alone
-            // (channel is fine) stays interactive, since picking a different reference from
-            // the select is literally the fix.
-            const isChannelMissing = !channelNames.includes(row.channel);
-            const isReferenceMissing =
-              Boolean(row.reference) &&
-              row.reference !== 'average' &&
-              row.reference !== 'median' &&
-              !channelNames.includes(row.reference);
-            const channelType = isChannelMissing
-              ? null
-              : (draftChannelSettings[row.channel]?.type ?? 'eeg');
-            return (
-              <div
-                key={row.id}
-                style={{
-                  overflow: 'visible',
-                  borderBottom: `1px solid ${channelDividerColor}`,
-                  // The row's selected color tints its background, but is overwrited by bg-alert when
-                  // the channel is bad (applied via className, not inline style, which always wins)
-                  // color-mix keeps this a subtle tint rather than the fully-saturated color used in uPlot
-                  ...(!isRowBad && !isChannelMissing && row.color
-                    ? {
-                        backgroundColor: `color-mix(in srgb, ${row.color} ${isDarkMode ? 30 : 40}%, transparent)`,
+                </p>
+              )}
+              {draftMontageChannels.map((row) => {
+                // A row is "bad" if either its source channel or its reference channel (for
+                // bipolar rows) is marked bad — either one means the row can't be displayed.
+                // Tracked separately so the channel name and reference select can each be
+                // flagged individually, instead of both turning text-alert whenever either is bad.
+                const isChannelBad = draftChannelSettings[row.channel]?.bad;
+                const isReferenceBad = row.reference && draftChannelSettings[row.reference]?.bad;
+                const isRowBad = isChannelBad || isReferenceBad;
+                // "Missing" (channel/reference not in this recording, only possible via a
+                // loaded file) is unfixable when it's the row's own channel — nothing about
+                // the row can be edited to recover it, so it's greyed out and its Reference/
+                // Color controls disabled (Remove still works). A missing reference alone
+                // (channel is fine) stays interactive, since picking a different reference from
+                // the select is literally the fix.
+                const isChannelMissing = !channelNames.includes(row.channel);
+                const isReferenceMissing =
+                  Boolean(row.reference) &&
+                  row.reference !== 'average' &&
+                  row.reference !== 'median' &&
+                  !channelNames.includes(row.reference);
+                const channelType = isChannelMissing
+                  ? null
+                  : (draftChannelSettings[row.channel]?.type ?? 'eeg');
+                return (
+                  <div
+                    key={row.id}
+                    style={{
+                      overflow: 'visible',
+                      borderBottom: `1px solid ${channelDividerColor}`,
+                      // The row's selected color tints its background, but is overwrited by bg-alert when
+                      // the channel is bad (applied via className, not inline style, which always wins)
+                      // color-mix keeps this a subtle tint rather than the fully-saturated color used in uPlot
+                      ...(!isRowBad && !isChannelMissing && row.color
+                        ? {
+                            backgroundColor: `color-mix(in srgb, ${row.color} ${isDarkMode ? 30 : 40}%, transparent)`,
+                          }
+                        : {}),
+                    }}
+                    className={cn(
+                      'relative flex items-center gap-2 pl-3 pr-1 py-0.5 cursor-pointer select-none',
+                      isRowBad && (isDarkMode ? 'bg-alert/20' : 'bg-alert/30'),
+                      isChannelMissing && 'opacity-50',
+                      // A ring (not a background) marks the row selected for Move Up/Down —
+                      // background is already spoken for by the bad/color tints above, and an
+                      // inline style (row.color) would win over a background className anyway.
+                      selectedMontageRows.has(row.id) && 'ring-2 ring-inset ring-primary'
+                    )}
+                    title="Click row to select for Move Up/Down"
+                    onClick={(e) => handleMontageRowClick(e, row.id)}
+                  >
+                    {/* Channel name */}
+                    <span
+                      className={cn(
+                        CHANNEL_COL_CLASS,
+                        'truncate text-sm',
+                        isChannelBad && 'text-alert',
+                        isChannelMissing && 'text-red-500'
+                      )}
+                      title={
+                        isChannelMissing
+                          ? 'Channel not found in this recording'
+                          : isChannelBad
+                            ? 'Channel marked as bad'
+                            : undefined
                       }
-                    : {}),
-                }}
-                className={cn(
-                  'relative flex items-center gap-2 pl-3 pr-1 py-0.5 cursor-pointer select-none',
-                  isRowBad && (isDarkMode ? 'bg-alert/20' : 'bg-alert/30'),
-                  isChannelMissing && 'opacity-50',
-                  // A ring (not a background) marks the row selected for Move Up/Down —
-                  // background is already spoken for by the bad/color tints above, and an
-                  // inline style (row.color) would win over a background className anyway.
-                  selectedMontageRows.has(row.id) && 'ring-2 ring-inset ring-primary'
-                )}
-                title="Click row to select for Move Up/Down"
-                onClick={(e) => handleMontageRowClick(e, row.id)}
-              >
-                {/* Channel name */}
-                <span
-                  className={cn(
-                    'flex-1 truncate text-sm',
-                    isChannelBad && 'text-alert',
-                    isChannelMissing && 'text-red-500'
-                  )}
-                  title={
-                    isChannelMissing
-                      ? 'Channel not found in this recording'
-                      : isChannelBad
-                        ? 'Channel marked as bad'
-                        : undefined
-                  }
-                  data-testid={`montage-channel-${row.id}`}
-                >
-                  {row.channel}
-                </span>
-                {/* Channel Type — looked up live from draftChannelSettings (see channelType
-                    above), so it tracks edits made afterward in the channel-selection pane
-                    rather than freezing whatever the type was when the row was added. A
-                    missing channel has no draftChannelSettings entry to read a type from. */}
-                <span
-                  className="w-23 text-center truncate text-sm"
-                  data-testid={`montage-type-${row.id}`}
-                >
-                  {channelType ? TYPE_LIST[channelType] : '—'}
-                </span>
-                {/* Reference Channel — a reference naming a channel not in this recording
-                    (only reachable via a loaded file) gets its own injected option so it
-                    displays as selected instead of falling back to blank "— n/a —". Only
-                    disabled when the row's own channel is missing (see isChannelMissing
-                    above) — a missing reference alone is fixable by picking another one.
-                    Bad/missing coloring lives on the individual <option> elements below (not
-                    this <select>'s own className) — a color class here would cascade onto
-                    every option in the dropdown instead of just the one that's actually bad
-                    or missing. */}
-                <select
-                  className="w-16 text-xs border border-border rounded bg-surface cursor-default"
-                  title={
-                    isReferenceMissing
-                      ? 'Reference channel not found in this recording'
-                      : isReferenceBad
-                        ? 'Reference channel marked bad'
-                        : undefined
-                  }
-                  data-testid={`reference-${row.id}`}
-                  value={row.reference ?? ''}
-                  disabled={isChannelMissing}
-                  onChange={(e) => setDraftMontageRowReference(row.id, e.target.value)}
-                >
-                  {isReferenceMissing && (
-                    <option value={row.reference} className="text-red-500">
-                      {row.reference} (missing)
-                    </option>
-                  )}
-                  {referenceOptions}
-                </select>
-                {/* Channel Color — "Default" (color: null) follows the theme (white in
-                    dark mode, black in light mode) wherever it's actually plotted; this
-                    editor doesn't need to know which, so the option's value/label stay
-                    theme-independent unlike the old scheme where "Default" was literally
-                    stored as 'white' or 'black'. */}
-                <select
-                  className="w-16 text-xs border border-border rounded bg-surface cursor-default"
-                  data-testid={`color-${row.id}`}
-                  value={row.color ?? ''}
-                  disabled={isChannelMissing}
-                  onChange={(e) => setDraftMontageRowColor(row.id, e.target.value || null)}
-                >
-                  <option value="">Default</option>
-                  {/* A loaded file (AnyWave) can carry any CSS color keyword, not just the
-                      presets below — inject it as an extra option so the select shows the
-                      row's actual color instead of falling back to blank/unselected. */}
-                  {row.color && !PRESET_COLORS.includes(row.color) && (
-                    <option value={row.color} style={{ color: row.color }}>
-                      {row.color[0].toUpperCase() + row.color.slice(1)}
-                    </option>
-                  )}
-                  {colorOptions}
-                </select>
-                {/* Remove row */}
-                <button
-                  type="button"
-                  className="text-header hover:text-alert cursor-pointer"
-                  data-testid={`remove-row-${row.id}`}
-                  title={`Remove ${row.channel} from the montage`}
-                  onClick={() => handleRemoveMontageRow(row.id)}
-                >
-                  <X size={14} />
-                </button>
-              </div>
-            );
-          })}
+                      data-testid={`montage-channel-${row.id}`}
+                    >
+                      {row.channel}
+                    </span>
+                    {/* Channel Type — looked up live from draftChannelSettings (see channelType
+                        above), so it tracks edits made afterward in the channel-selection pane
+                        rather than freezing whatever the type was when the row was added. A
+                        missing channel has no draftChannelSettings entry to read a type from. */}
+                    <span
+                      className="w-23 shrink-0 text-center truncate text-sm"
+                      data-testid={`montage-type-${row.id}`}
+                    >
+                      {channelType ? TYPE_LIST[channelType] : '—'}
+                    </span>
+                    {/* Reference Channel — a reference naming a channel not in this recording
+                        (only reachable via a loaded file) gets its own injected option so it
+                        displays as selected instead of falling back to blank "— n/a —". Only
+                        disabled when the row's own channel is missing (see isChannelMissing
+                        above) — a missing reference alone is fixable by picking another one.
+                        Bad/missing coloring lives on the individual <option> elements below (not
+                        this <select>'s own className) — a color class here would cascade onto
+                        every option in the dropdown instead of just the one that's actually bad
+                        or missing. */}
+                    <select
+                      className="w-16 shrink-0 text-xs border border-border rounded bg-surface cursor-default"
+                      title={
+                        isReferenceMissing
+                          ? 'Reference channel not found in this recording'
+                          : isReferenceBad
+                            ? 'Reference channel marked bad'
+                            : undefined
+                      }
+                      data-testid={`reference-${row.id}`}
+                      value={row.reference ?? ''}
+                      disabled={isChannelMissing}
+                      onChange={(e) => setDraftMontageRowReference(row.id, e.target.value)}
+                    >
+                      {isReferenceMissing && (
+                        <option value={row.reference} className="text-red-500">
+                          {row.reference} (missing)
+                        </option>
+                      )}
+                      {referenceOptions}
+                    </select>
+                    {/* Channel Color — "Default" (color: null) follows the theme (white in
+                        dark mode, black in light mode) wherever it's actually plotted; this
+                        editor doesn't need to know which, so the option's value/label stay
+                        theme-independent unlike the old scheme where "Default" was literally
+                        stored as 'white' or 'black'. */}
+                    <select
+                      className="w-16 shrink-0 text-xs border border-border rounded bg-surface cursor-default"
+                      data-testid={`color-${row.id}`}
+                      value={row.color ?? ''}
+                      disabled={isChannelMissing}
+                      onChange={(e) => setDraftMontageRowColor(row.id, e.target.value || null)}
+                    >
+                      <option value="">Default</option>
+                      {/* A loaded file (AnyWave) can carry any CSS color keyword, not just the
+                          presets below — inject it as an extra option so the select shows the
+                          row's actual color instead of falling back to blank/unselected. */}
+                      {row.color && !PRESET_COLORS.includes(row.color) && (
+                        <option value={row.color} style={{ color: row.color }}>
+                          {row.color[0].toUpperCase() + row.color.slice(1)}
+                        </option>
+                      )}
+                      {colorOptions}
+                    </select>
+                    {/* Remove row */}
+                    <button
+                      type="button"
+                      className="shrink-0 text-header hover:text-alert cursor-pointer"
+                      data-testid={`remove-row-${row.id}`}
+                      title={`Remove ${row.channel} from the montage`}
+                      onClick={() => handleRemoveMontageRow(row.id)}
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
         {/* Montage Settings — a row of three column groups (Clear/Sort/Move), each stacking
             its own buttons; the Move group is pushed to the right edge (ml-auto) since it
             acts on row selection rather than the list as a whole, like Clear/Sort do. A
             second row below holds Load/Save side by side. */}
         <div
-          className="h-36 shrink-0 flex flex-col gap-2 p-2 border-t border-border bg-surface"
+          className="shrink-0 flex flex-col p-2 border-t border-border bg-surface"
           onClick={handleMontagePaneBackgroundClick}
         >
-          <div className="flex items-start gap-4">
-            {/* Clear group */}
-            <div className="flex flex-col gap-2">
-              <button
-                type="button"
-                className="button"
-                data-testid="clear-all-button"
-                disabled={draftMontageChannels.length === 0}
-                onClick={handleClearAllMontageRows}
-                title="Remove all montage rows"
-              >
-                Clear all
-              </button>
-            </div>
-            {/* Sort group — the arrow shows the direction the next click will sort in. */}
-            <div className="flex flex-col gap-2">
-              <button
-                type="button"
-                className="button flex items-center gap-1"
-                data-testid="sort-by-name-button"
-                disabled={draftMontageChannels.length === 0}
-                onClick={handleSortByName}
-                title={`Sort rows by channel name (${nameSortDescending ? 'descending' : 'ascending'})`}
-              >
-                Sort by Name
-                {nameSortDescending ? <ArrowDownAZ size={14} /> : <ArrowUpAZ size={14} />}
-              </button>
-              <button
-                type="button"
-                className="button flex items-center gap-1"
-                data-testid="sort-by-type-button"
-                disabled={draftMontageChannels.length === 0}
-                onClick={handleSortByType}
-                title={`Sort rows by channel type (${typeSortDescending ? 'descending' : 'ascending'})`}
-              >
-                Sort by Type
-                {typeSortDescending ? (
-                  <ArrowDownWideNarrow size={14} />
-                ) : (
-                  <ArrowUpWideNarrow size={14} />
-                )}
-              </button>
-            </div>
-            {/* Set all Ref group */}
-            <div className="flex flex-col gap-2">
-              <button
-                className="button"
-                data-testid="bulk-reference-apply-button"
-                disabled={draftMontageChannels.length === 0}
-                onClick={handleSetAllReference}
-              >
-                Set all as
-              </button>
-              <select
-                className="text-xs border border-border rounded bg-surface"
-                data-testid="bulk-reference-select"
-                disabled={draftMontageChannels.length === 0}
-                value={bulkReference}
-                onChange={(e) => setBulkReference(e.target.value)}
-              >
-                {referenceOptions}
-              </select>
-            </div>
+          {/* Scrolls horizontally as one unit when the pane is too narrow, so a single
+              scrollbar sits below Load/Save instead of one wedged between the two rows. */}
+          <div className="overflow-x-auto">
+            <div className="flex flex-col gap-4 pb-2 w-max min-w-full">
+              <div className="flex items-start gap-4">
+                {/* Clear group */}
+                <div className="flex flex-col gap-2 shrink-0">
+                  <button
+                    type="button"
+                    className="button whitespace-nowrap"
+                    data-testid="clear-all-button"
+                    disabled={draftMontageChannels.length === 0}
+                    onClick={handleClearAllMontageRows}
+                    title="Remove all montage rows"
+                  >
+                    Clear all
+                  </button>
+                </div>
+                {/* Sort group — the arrow shows the direction the next click will sort in. */}
+                <div className="flex flex-col gap-2 shrink-0">
+                  <button
+                    type="button"
+                    className="button flex items-center gap-1 whitespace-nowrap"
+                    data-testid="sort-by-name-button"
+                    disabled={draftMontageChannels.length === 0}
+                    onClick={handleSortByName}
+                    title={`Sort rows by channel name (${nameSortDescending ? 'descending' : 'ascending'})`}
+                  >
+                    Sort by Name
+                    {nameSortDescending ? <ArrowDownAZ size={15} /> : <ArrowUpAZ size={15} />}
+                  </button>
+                  <button
+                    type="button"
+                    className="button flex items-center gap-1 whitespace-nowrap"
+                    data-testid="sort-by-type-button"
+                    disabled={draftMontageChannels.length === 0}
+                    onClick={handleSortByType}
+                    title={`Sort rows by channel type (${typeSortDescending ? 'descending' : 'ascending'})`}
+                  >
+                    Sort by Type
+                    {typeSortDescending ? (
+                      <ArrowDownWideNarrow size={15} />
+                    ) : (
+                      <ArrowUpWideNarrow size={15} />
+                    )}
+                  </button>
+                </div>
+                {/* Set all Ref group */}
+                <div className="flex flex-col gap-2 shrink-0">
+                  <button
+                    className="button whitespace-nowrap"
+                    data-testid="bulk-reference-apply-button"
+                    disabled={draftMontageChannels.length === 0}
+                    onClick={handleSetAllReference}
+                  >
+                    Set all as
+                  </button>
+                  <select
+                    className="text-xs border border-border rounded bg-surface"
+                    data-testid="bulk-reference-select"
+                    disabled={draftMontageChannels.length === 0}
+                    value={bulkReference}
+                    onChange={(e) => setBulkReference(e.target.value)}
+                  >
+                    {referenceOptions}
+                  </select>
+                </div>
 
-            {/* Set all Color group */}
-            <div className="flex flex-col gap-2">
-              <button
-                className="button"
-                data-testid="bulk-color-apply-button"
-                disabled={draftMontageChannels.length === 0}
-                onClick={handleSetAllColor}
-              >
-                Set all as
-              </button>
-              <select
-                className="text-xs border border-border rounded bg-surface"
-                data-testid="bulk-color-select"
-                disabled={draftMontageChannels.length === 0}
-                value={bulkColor}
-                onChange={(e) => setBulkColor(e.target.value)}
-              >
-                <option value="">Default</option>
-                {colorOptions}
-              </select>
-            </div>
+                {/* Set all Color group */}
+                <div className="flex flex-col gap-2 shrink-0">
+                  <button
+                    className="button whitespace-nowrap"
+                    data-testid="bulk-color-apply-button"
+                    disabled={draftMontageChannels.length === 0}
+                    onClick={handleSetAllColor}
+                  >
+                    Set all as
+                  </button>
+                  <select
+                    className="text-xs border border-border rounded bg-surface"
+                    data-testid="bulk-color-select"
+                    disabled={draftMontageChannels.length === 0}
+                    value={bulkColor}
+                    onChange={(e) => setBulkColor(e.target.value)}
+                  >
+                    <option value="">Default</option>
+                    {colorOptions}
+                  </select>
+                </div>
 
-            {/* Move group — acts on whichever row(s) are selected (click a row's channel
-                name above to select it); disabled with none selected since there's nothing
-                to move. */}
-            <div className="flex flex-col gap-2 ml-auto">
-              <button
-                type="button"
-                className="button button-icon"
-                data-testid="move-up-button"
-                disabled={selectedMontageRows.size === 0}
-                onClick={handleMoveSelectedUp}
-                title="Move selected row(s) up"
-              >
-                <MoveUp size={16} />
-              </button>
-              <button
-                type="button"
-                className="button button-icon"
-                data-testid="move-down-button"
-                disabled={selectedMontageRows.size === 0}
-                onClick={handleMoveSelectedDown}
-                title="Move selected row(s) down"
-              >
-                <MoveDown size={16} />
-              </button>
+                {/* Move group — acts on whichever row(s) are selected (click a row's channel
+                    name above to select it); disabled with none selected since there's nothing
+                    to move. */}
+                <div className="flex flex-col gap-2 shrink-0 ml-auto">
+                  <button
+                    type="button"
+                    className="button button-icon"
+                    data-testid="move-up-button"
+                    disabled={selectedMontageRows.size === 0}
+                    onClick={handleMoveSelectedUp}
+                    title={
+                      selectedMontageRows.size === 0
+                        ? 'Select montage row(s) first'
+                        : 'Move selected row(s) up'
+                    }
+                  >
+                    <MoveUp size={20} />
+                  </button>
+                  <button
+                    type="button"
+                    className="button button-icon"
+                    data-testid="move-down-button"
+                    disabled={selectedMontageRows.size === 0}
+                    onClick={handleMoveSelectedDown}
+                    title={
+                      selectedMontageRows.size === 0
+                        ? 'Select montage row(s) first'
+                        : 'Move selected row(s) down'
+                    }
+                  >
+                    <MoveDown size={20} />
+                  </button>
+                </div>
+              </div>
+              {/* File row — Load replaces all draft rows wholesale (grouped conceptually with
+                  Clear, both whole-list-replacing); Save always exports AnyWave format
+                  regardless of the montage's origin. Both .mtg formats share the same file
+                  extension, so format detection happens by content-sniffing in
+                  parseMontageFile, not via the file input's accept filter. */}
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  className="button whitespace-nowrap"
+                  data-testid="load-montage-button"
+                  onClick={() => fileInputRef.current?.click()}
+                  title="Load a montage from an AnyWave or Cartool .mtg file (replaces all current rows)"
+                >
+                  Load
+                </button>
+                <button
+                  type="button"
+                  className="button whitespace-nowrap"
+                  data-testid="save-montage-button"
+                  disabled={draftMontageChannels.length === 0}
+                  onClick={handleSaveMontage}
+                  title="Save the current montage as an AnyWave .mtg file"
+                >
+                  Save
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".mtg"
+                  hidden
+                  data-testid="montage-file-input"
+                  onChange={handleLoadMontageFile}
+                />
+              </div>
             </div>
-          </div>
-          {/* File row — Load replaces all draft rows wholesale (grouped conceptually with
-              Clear, both whole-list-replacing); Save always exports AnyWave format
-              regardless of the montage's origin. Both .mtg formats share the same file
-              extension, so format detection happens by content-sniffing in
-              parseMontageFile, not via the file input's accept filter. */}
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              className="button"
-              data-testid="load-montage-button"
-              onClick={() => fileInputRef.current?.click()}
-              title="Load a montage from an AnyWave or Cartool .mtg file (replaces all current rows)"
-            >
-              Load
-            </button>
-            <button
-              type="button"
-              className="button"
-              data-testid="save-montage-button"
-              disabled={draftMontageChannels.length === 0}
-              onClick={handleSaveMontage}
-              title="Save the current montage as an AnyWave .mtg file"
-            >
-              Save
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".mtg"
-              hidden
-              data-testid="montage-file-input"
-              onChange={handleLoadMontageFile}
-            />
           </div>
         </div>
       </div>
