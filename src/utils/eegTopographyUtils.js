@@ -1,5 +1,5 @@
 // EEG topography utilities
-// Electrode position parsing lives in src/loaders/parseElcElectrodePositions.js (and future format parsers alongside it).
+// Electrode position parsing lives in src/loaders/parseElectrodePositionElc.js (and future format parsers alongside it).
 
 import convexHull from 'convex-hull';
 import { parseElectrodeContactName } from './intracranialDetection';
@@ -22,7 +22,7 @@ export function normalizeChannelName(name) {
  * Match raw EEG channel names against a parsed electrode position list.
  *
  * @param {string[]} channelNames  - channel labels from the EEG recording
- * @param {{ label: string, x: number, y: number, z: number }[]} electrodes - from parseElcElectrodePositions
+ * @param {{ label: string, x: number, y: number, z: number }[]} electrodes - from parseElectrodePositionElc
  * @returns {{ matched: { channelIdx: number, name: string, pos: object }[], unmatchedNames: string[] }}
  */
 export function matchChannelsToPositions(channelNames, electrodes) {

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { parseElcElectrodePositions } from '@/loaders/parseElcElectrodePositions';
-import { parseTsvElectrodePositions } from '@/loaders/parseTsvElectrodePositions';
+import { parseElectrodePositionElc } from '@/loaders/parseElectrodePositionElc';
+import { parseElectrodePositionTsv } from '@/loaders/parseElectrodePositionTsv';
 import { matchChannelsToPositions } from '@/utils/eegTopographyUtils';
 
 // Minimal valid .elc with 3 fiducials + 2 electrodes
@@ -31,58 +31,58 @@ Fp1	-29.0	84.0	-7.0
 Fp2	29.0	84.0	-7.0
 `;
 
-describe('parseElcElectrodePositions', () => {
+describe('parseElectrodePositionElc', () => {
   it('returns the correct number of electrodes (fiducials excluded)', () => {
-    const { electrodes } = parseElcElectrodePositions(MINIMAL_ELC);
+    const { electrodes } = parseElectrodePositionElc(MINIMAL_ELC);
     expect(electrodes.length).toBe(2);
   });
 
   it('parses electrode labels correctly', () => {
-    const { electrodes } = parseElcElectrodePositions(MINIMAL_ELC);
+    const { electrodes } = parseElectrodePositionElc(MINIMAL_ELC);
     expect(electrodes[0].label).toBe('Fp1');
     expect(electrodes[1].label).toBe('Fp2');
   });
 
   it('parses electrode xyz coordinates correctly', () => {
-    const { electrodes } = parseElcElectrodePositions(MINIMAL_ELC);
+    const { electrodes } = parseElectrodePositionElc(MINIMAL_ELC);
     expect(electrodes[0].x).toBeCloseTo(-29.0);
     expect(electrodes[0].y).toBeCloseTo(84.0);
     expect(electrodes[0].z).toBeCloseTo(-7.0);
   });
 
   it('detects all three standard fiducials', () => {
-    const { fiducials } = parseElcElectrodePositions(MINIMAL_ELC);
+    const { fiducials } = parseElectrodePositionElc(MINIMAL_ELC);
     expect(fiducials.LPA).toBeDefined();
     expect(fiducials.RPA).toBeDefined();
     expect(fiducials.Nz).toBeDefined();
   });
 
   it('parses fiducial coordinates correctly', () => {
-    const { fiducials } = parseElcElectrodePositions(MINIMAL_ELC);
+    const { fiducials } = parseElectrodePositionElc(MINIMAL_ELC);
     expect(fiducials.LPA.x).toBeCloseTo(-86.0);
     expect(fiducials.LPA.y).toBeCloseTo(-20.0);
     expect(fiducials.LPA.z).toBeCloseTo(-48.0);
   });
 
   it('reports hasFiducials true when all three are present', () => {
-    const { hasFiducials } = parseElcElectrodePositions(MINIMAL_ELC);
+    const { hasFiducials } = parseElectrodePositionElc(MINIMAL_ELC);
     expect(hasFiducials).toBe(true);
   });
 
   it('reports hasFiducials false when fiducials are missing', () => {
     const noFids = MINIMAL_ELC.replace('LPA', 'Fp3').replace('RPA', 'Fp4').replace('Nz', 'Fp5');
-    const { hasFiducials } = parseElcElectrodePositions(noFids);
+    const { hasFiducials } = parseElectrodePositionElc(noFids);
     expect(hasFiducials).toBe(false);
   });
 
   it('converts cm to mm', () => {
     const cmElc = MINIMAL_ELC.replace('UnitPosition\tmm', 'UnitPosition\tcm');
-    const { electrodes } = parseElcElectrodePositions(cmElc);
+    const { electrodes } = parseElectrodePositionElc(cmElc);
     expect(electrodes[0].x).toBeCloseTo(-290.0); // -29.0 cm × 10
   });
 
   it('returns empty arrays for empty input', () => {
-    const { electrodes, fiducials, hasFiducials } = parseElcElectrodePositions('');
+    const { electrodes, fiducials, hasFiducials } = parseElectrodePositionElc('');
     expect(electrodes).toEqual([]);
     expect(fiducials).toEqual({});
     expect(hasFiducials).toBe(false);
@@ -90,43 +90,43 @@ describe('parseElcElectrodePositions', () => {
 
   it('skips lines with missing or non-numeric coordinates', () => {
     const bad = MINIMAL_ELC.replace('-29.0 84.0 -7.0', 'n/a n/a n/a');
-    const { electrodes } = parseElcElectrodePositions(bad);
+    const { electrodes } = parseElectrodePositionElc(bad);
     expect(electrodes.length).toBe(1); // only Fp2 survives
   });
 });
 
 // ---------------------------------------------------------------------------
-// parseTsvElectrodePositions
+// parseElectrodePositionTsv
 // ---------------------------------------------------------------------------
 
-describe('parseTsvElectrodePositions', () => {
+describe('parseElectrodePositionTsv', () => {
   it('returns the correct number of electrodes (fiducials excluded)', () => {
-    const { electrodes } = parseTsvElectrodePositions(MINIMAL_TSV);
+    const { electrodes } = parseElectrodePositionTsv(MINIMAL_TSV);
     expect(electrodes.length).toBe(2);
   });
 
   it('parses electrode labels correctly', () => {
-    const { electrodes } = parseTsvElectrodePositions(MINIMAL_TSV);
+    const { electrodes } = parseElectrodePositionTsv(MINIMAL_TSV);
     expect(electrodes[0].label).toBe('Fp1');
     expect(electrodes[1].label).toBe('Fp2');
   });
 
   it('parses electrode xyz coordinates correctly', () => {
-    const { electrodes } = parseTsvElectrodePositions(MINIMAL_TSV);
+    const { electrodes } = parseElectrodePositionTsv(MINIMAL_TSV);
     expect(electrodes[0].x).toBeCloseTo(-29.0);
     expect(electrodes[0].y).toBeCloseTo(84.0);
     expect(electrodes[0].z).toBeCloseTo(-7.0);
   });
 
   it('detects all three standard fiducials', () => {
-    const { fiducials } = parseTsvElectrodePositions(MINIMAL_TSV);
+    const { fiducials } = parseElectrodePositionTsv(MINIMAL_TSV);
     expect(fiducials.LPA).toBeDefined();
     expect(fiducials.RPA).toBeDefined();
     expect(fiducials.Nz).toBeDefined();
   });
 
   it('parses fiducial coordinates correctly', () => {
-    const { fiducials } = parseTsvElectrodePositions(MINIMAL_TSV);
+    const { fiducials } = parseElectrodePositionTsv(MINIMAL_TSV);
     expect(fiducials.LPA.x).toBeCloseTo(-86.0);
     expect(fiducials.LPA.y).toBeCloseTo(-20.0);
     expect(fiducials.LPA.z).toBeCloseTo(-48.0);
@@ -134,32 +134,32 @@ describe('parseTsvElectrodePositions', () => {
 
   it('matches fiducial labels case-insensitively', () => {
     const lower = MINIMAL_TSV.replace('LPA', 'lpa').replace('RPA', 'rpa').replace('Nz', 'nz');
-    const { fiducials } = parseTsvElectrodePositions(lower);
+    const { fiducials } = parseElectrodePositionTsv(lower);
     expect(fiducials.LPA).toBeDefined();
     expect(fiducials.RPA).toBeDefined();
     expect(fiducials.Nz).toBeDefined();
   });
 
   it('reports hasFiducials true when all three are present', () => {
-    const { hasFiducials } = parseTsvElectrodePositions(MINIMAL_TSV);
+    const { hasFiducials } = parseElectrodePositionTsv(MINIMAL_TSV);
     expect(hasFiducials).toBe(true);
   });
 
   it('reports hasFiducials false when fiducials are missing', () => {
     const noFids = MINIMAL_TSV.replace('LPA', 'Fp3').replace('RPA', 'Fp4').replace('Nz', 'Fp5');
-    const { hasFiducials } = parseTsvElectrodePositions(noFids);
+    const { hasFiducials } = parseElectrodePositionTsv(noFids);
     expect(hasFiducials).toBe(false);
   });
 
   it('finds columns regardless of header order or extra columns', () => {
     const reordered = `type	z	name	y	x
 EEG	-7.0	Fp1	84.0	-29.0`;
-    const { electrodes } = parseTsvElectrodePositions(reordered);
+    const { electrodes } = parseElectrodePositionTsv(reordered);
     expect(electrodes[0]).toMatchObject({ label: 'Fp1', x: -29.0, y: 84.0, z: -7.0 });
   });
 
   it('returns empty arrays for empty input', () => {
-    const { electrodes, fiducials, hasFiducials } = parseTsvElectrodePositions('');
+    const { electrodes, fiducials, hasFiducials } = parseElectrodePositionTsv('');
     expect(electrodes).toEqual([]);
     expect(fiducials).toEqual({});
     expect(hasFiducials).toBe(false);
@@ -167,12 +167,12 @@ EEG	-7.0	Fp1	84.0	-29.0`;
 
   it('skips rows with missing or non-numeric coordinates', () => {
     const bad = MINIMAL_TSV.replace('-29.0\t84.0\t-7.0', 'n/a\tn/a\tn/a');
-    const { electrodes } = parseTsvElectrodePositions(bad);
+    const { electrodes } = parseElectrodePositionTsv(bad);
     expect(electrodes.length).toBe(1); // only Fp2 survives
   });
 
   it('ignores a trailing blank line', () => {
-    const { electrodes } = parseTsvElectrodePositions(MINIMAL_TSV);
+    const { electrodes } = parseElectrodePositionTsv(MINIMAL_TSV);
     expect(electrodes.every((el) => el.label)).toBe(true); // no spurious blank-line entry
   });
 });

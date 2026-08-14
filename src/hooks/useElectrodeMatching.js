@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import toast from 'react-hot-toast';
-import { parseElcElectrodePositions } from '@/loaders/parseElcElectrodePositions';
+import { parseElectrodePositionElc } from '@/loaders/parseElectrodePositionElc';
 import { matchChannelsToPositions } from '@/utils/eegTopographyUtils';
 import { detectIsIntracranial } from '@/utils/intracranialDetection';
 
@@ -57,7 +57,7 @@ export function useElectrodeMatching({ channelNames, customElectrodes, customEle
     fetch('electrode_positions/fsaverage_1005.tsv')
       .then((r) => r.text())
       .then((text) => {
-        const { electrodes: parsedElectrodes } = parseElcElectrodePositions(text);
+        const { electrodes: parsedElectrodes } = parseElectrodePositionElc(text);
         setFsaverage1005Electrodes(parsedElectrodes);
         setFsaverage1005Matched(matchChannelsToPositions(channelNames, parsedElectrodes).matched);
         const isSeeg = detectIsIntracranial(channelNames, parsedElectrodes);
