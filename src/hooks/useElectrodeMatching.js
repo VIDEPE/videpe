@@ -1,12 +1,15 @@
 import { useState, useEffect, useMemo } from 'react';
 import toast from 'react-hot-toast';
-import { parseElectrodePositionElc } from '@/loaders/parseElectrodePositionElc';
+import { parseElectrodePositionFile } from '@/loaders/parseElectrodePositionFile';
 import { matchChannelsToPositions } from '@/utils/eegTopographyUtils';
 import { detectIsIntracranial } from '@/utils/intracranialDetection';
 
 const MIN_STANDARD_MATCH_COUNT_FOR_LED = 19; // below this limit (=>classic 10-20 system's electrode count), the fsaverage_1005 template match is too sparse for a usable topography — status LED stays red instead of auto-matched blue
 const MIN_CUSTOM_MATCH_RATIO_FOR_LED = 0.9; // a user-supplied position file should cover nearly every channel — below this, the LED turns amber rather than green, since it likely doesn't match this recording. 90% (not 100%) tolerates the odd non-scalp channel (ECG/EOG/trigger) a position file has no reason to cover.
 const RECORDING_TYPE_TOAST_ID = 'eeg-recording-type-detected'; // fixed id so re-detection updates the toast in place instead of stacking
+// Extension drives which parser parseElectrodePositionFile picks — swapping the built-in
+// template to a different format later only means changing this path, not this hook.
+const FSAVERAGE_TEMPLATE_PATH = 'electrode_positions/fsaverage_1005.tsv';
 
 /**
  * Fetches the built-in fsaverage_1005 electrode-position template, matches it against the
@@ -54,10 +57,10 @@ export function useElectrodeMatching({ channelNames, customElectrodes, customEle
   // channel names (for detection purposes only), then (re-)detect the recording type.
   // Re-runs whenever channelNames changes (new recording loaded).
   useEffect(() => {
-    fetch('electrode_positions/fsaverage_1005.tsv')
+    fetch(FSAVERAGE_TEMPLATE_PATH)
       .then((r) => r.text())
-      .then((text) => {
-        const { electrodes: parsedElectrodes } = parseElectrodePositionElc(text);
+      .then((text) => parseElectrodePositionFile(new File([text], FSAVERAGE_TEMPLATE_PATH)))
+      .then(({ electrodes: parsedElectrodes }) => {
         setFsaverage1005Electrodes(parsedElectrodes);
         setFsaverage1005Matched(matchChannelsToPositions(channelNames, parsedElectrodes).matched);
         const isSeeg = detectIsIntracranial(channelNames, parsedElectrodes);

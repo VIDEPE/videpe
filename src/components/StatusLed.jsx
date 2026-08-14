@@ -104,7 +104,7 @@ export const StatusLed = ({
         ? `Custom: ${fileName}${matchSuffix}`
         : fileName
       : hasMatchInfo
-        ? `Using fsaverage_1005 template${matchSuffix}`
+        ? `Using default fsaverage_1005 (FreeSurfer) template${matchSuffix}`
         : `No ${label.toLowerCase()} loaded`;
   return (
     <span

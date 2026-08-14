@@ -13,18 +13,12 @@ vi.mock('react-hot-toast', () => {
   return { default: toastFn };
 });
 
-// Minimal .elc content whose labels match two of the three test channel names
-const MOCK_ELC = `ReferenceLabel avg
-UnitPosition mm
-NumberPositions= 3
-Positions
--29.0 84.0 -7.0
-29.0 84.0 -7.0
-0.0 0.0 88.0
-Labels
-EEG1
-EEG2
-Cz
+// Minimal fsaverage_1005.tsv-shaped content (MNE's "label" header, mm-scale here for
+// simplicity) whose labels match two of the three test channel names
+const MOCK_TSV = `label\tx\ty\tz
+EEG1\t-29.0\t84.0\t-7.0
+EEG2\t29.0\t84.0\t-7.0
+Cz\t0.0\t0.0\t88.0
 `;
 
 const channelNames = ['EEG1', 'EEG2', 'EEG3'];
@@ -33,7 +27,7 @@ const channelNames = ['EEG1', 'EEG2', 'EEG3'];
 const seegChannelNames = ['B1', 'B2', "B'1"];
 
 beforeEach(() => {
-  global.fetch = vi.fn().mockResolvedValue({ text: () => Promise.resolve(MOCK_ELC) });
+  global.fetch = vi.fn().mockResolvedValue({ text: () => Promise.resolve(MOCK_TSV) });
 });
 
 const setup = (overrides = {}) =>
