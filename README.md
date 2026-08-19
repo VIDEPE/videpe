@@ -1,6 +1,6 @@
 # VIDEPE
 
-![Version](https://img.shields.io/badge/version-0.14.0-blue)
+![Version](https://img.shields.io/badge/version-0.14.1-blue)
 
 **V**isualization & **I**ntegration of **D**ata for **E**pilepsy **P**resurgical **E**valuation
 
