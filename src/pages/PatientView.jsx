@@ -168,7 +168,7 @@ export const PatientView = () => {
   const handleNiiFiles = async (files) => {
     setIsLoading(true);
     try {
-      const result = await Promise.all(filesToLayers(files));
+      const result = await filesToLayers(files);
       setLayers(result);
     } catch (err) {
       toast.error(`Error loading imaging data:\n${err.message}`);
@@ -356,9 +356,9 @@ export const PatientView = () => {
             <div className="h-full p-2">
               <FileDropZone
                 onFiles={handleNiiFiles}
-                accepted_formats=".nii,.nii.gz,.mgh,.mgz,.gii,.ply,.obj"
+                accepted_formats=".nii,.nii.gz,.mgh,.mgz,.gii,.ply,.obj,.dcm"
                 label="Drop imaging files"
-                description="Volumes: NIfTI, MGH, GIFTI, PLY, OBJ, …"
+                description="Volumes: NIfTI, MGH, DICOM, GIFTI, PLY, OBJ, …"
                 className="h-full min-h-48"
               />
             </div>

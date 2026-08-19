@@ -12,6 +12,7 @@ const renderPatientView = () =>
   );
 import toast from 'react-hot-toast';
 import { Niivue } from '@niivue/niivue';
+import { dicomLoader } from '@niivue/dicom-loader';
 import { loadBrainVisionEEG } from '@/loaders/loadBrainVisionEEG';
 import { checkEegFiles, detectAndLoadEEG } from '@/loaders/eegFormatRegistry';
 import { parseInverseSolutionFieldtrip } from '@/loaders/parseInverseSolutionFieldtrip';
@@ -287,6 +288,12 @@ vi.mock('@niivue/niivue', async (importOriginal) => {
     }),
   };
 });
+
+// @niivue/dcm2niix (dicomLoader's WASM/worker dependency) doesn't load under jsdom, so it's
+// mocked here too — dropping a .dcm file exercises this instead of the real dcm2niix.
+vi.mock('@niivue/dicom-loader', () => ({
+  dicomLoader: vi.fn(),
+}));
 
 vi.mock('@/loaders/parseInverseSolutionFieldtrip', () => ({
   parseInverseSolutionFieldtrip: vi.fn().mockResolvedValue({
@@ -739,6 +746,27 @@ describe('PatientView — imaging file-type detection', () => {
     });
 
     expect(NiiViewer.mock.lastCall[0].layers[0].type).toBe('SPECT');
+  });
+
+  it('converts a dropped DICOM series to a volume layer via dicomLoader', async () => {
+    dicomLoader.mockResolvedValue([{ name: 'sub-01_T1w.nii', data: new ArrayBuffer(8) }]);
+    renderPatientView();
+
+    await act(async () => {
+      await getNiiOnFiles()([makeFile('IM0001.dcm'), makeFile('IM0002.dcm')]);
+    });
+
+    expect(dicomLoader).toHaveBeenCalledTimes(1); // one call for the whole series, not per-file
+    expect(NiiViewer.mock.lastCall[0].layers).toHaveLength(1);
+    expect(NiiViewer.mock.lastCall[0].layers[0].type).toBe('MRI');
+  });
+
+  it('accepts .dcm at the imaging dropzone', () => {
+    renderPatientView();
+    const niiDropZoneProps = FileDropZone.mock.calls.find(
+      ([p]) => p.label === 'Drop imaging files'
+    )[0];
+    expect(niiDropZoneProps.accepted_formats).toContain('.dcm');
   });
 });
 
