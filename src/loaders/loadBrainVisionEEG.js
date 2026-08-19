@@ -12,12 +12,13 @@ async function readText(source) {
 }
 
 function parseVhdr(text) {
-  const channelNames = [];
-  let nChannels = 0;
-  let samplingInterval = 0;
-  let section = '';
+  const channelNames = []; // ordered labels parsed from [Channel Infos], e.g. ['Fp1', 'Fp2', ...]
+  let nChannels = 0; // NumberOfChannels from [Common Infos]
+  let samplingInterval = 0; // SamplingInterval from [Common Infos], in microseconds
+  let section = ''; // name of the current [Section] header being parsed, e.g. 'Common Infos'
 
   for (const raw of text.split('\n')) {
+    // loop over lines, prep them and detect if they contain a section header
     const line = raw.trim();
     if (!line || line.startsWith(';')) continue;
     if (line.startsWith('[')) {
@@ -25,10 +26,12 @@ function parseVhdr(text) {
       continue;
     }
 
-    const eq = line.indexOf('=');
-    if (eq === -1) continue;
-    const key = line.slice(0, eq).trim();
-    const value = line.slice(eq + 1).trim();
+    // Split "key=value" lines on the first '=' — lines without one aren't key/value pairs, skip them.
+    const eqIndex = line.indexOf('=');
+    if (eqIndex === -1) continue;
+    // extract key and value from both sides of the equal sign
+    const key = line.slice(0, eqIndex).trim();
+    const value = line.slice(eqIndex + 1).trim();
 
     if (section === 'Common Infos') {
       if (key === 'NumberOfChannels') nChannels = parseInt(value, 10);
@@ -37,7 +40,7 @@ function parseVhdr(text) {
 
     if (section === 'Channel Infos') {
       // Format: ChN=label,,resolution  — label is before the first comma
-      channelNames.push(value.split(',')[0]);
+      channelNames.push(value.split(',')[0]); // split at ',' and take firs telement
     }
   }
 
@@ -80,6 +83,7 @@ function demuxFloat32(float32, nChannels, nSamples, sampleOffset, fs) {
  * chunk's absolute start time (so it can be a sub-range of the full recording).
  */
 export async function loadBrainVisionEEG(header, data) {
+  // extract header text from .vhdr file and parse it to get requirements for reading the binary file
   const headerText = await readText(header);
   const { nChannels, samplingInterval, channelNames } = parseVhdr(headerText);
   if (nChannels === 0 || samplingInterval === 0) {
