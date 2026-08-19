@@ -6,7 +6,7 @@ import {
   ELEC_POS_EXTENSIONS,
   INV_SOLUTIONS_EXTENSIONS,
   EEG_FORMAT_EXTENSIONS,
-} from '../loaders/eegFormats';
+} from '../loaders/eegFormatRegistry';
 import { parseElectrodePositionFile } from '../loaders/parseElectrodePositionFile';
 import { findDuplicateChannelNames } from '../utils/eegTopographyUtils';
 
@@ -156,7 +156,7 @@ export function useEegFileIntake({ setEeg, setIsLoading, onInverseSolutionFile }
       // This way, if a user drops a new .vhdr file, it will replace the previous .vhdr in the pending state, while still keeping any .eeg file that was dropped before.
       const byExtension = new Map();
       for (const file of merged) {
-        const ext = file.name.toLowerCase().match(/(\.[^.]+)$/)?.[1]; 
+        const ext = file.name.toLowerCase().match(/(\.[^.]+)$/)?.[1];
         // for each file with a recognized extension, store it in the Map keyed by that extension.
         // If a .vhdr was already in the map and another .vhdr comes along, .set() overwrites the old entry
         if (ext) byExtension.set(ext, file);

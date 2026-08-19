@@ -13,7 +13,7 @@ const renderPatientView = () =>
 import toast from 'react-hot-toast';
 import { Niivue } from '@niivue/niivue';
 import { loadBrainVisionEEG } from '@/loaders/loadBrainVisionEEG';
-import { checkEegFiles, detectAndLoadEEG } from '@/loaders/eegFormats';
+import { checkEegFiles, detectAndLoadEEG } from '@/loaders/eegFormatRegistry';
 import { parseInverseSolutionFieldtrip } from '@/loaders/parseInverseSolutionFieldtrip';
 import { electricalSourceImaging } from '@/utils/electricalSourceImagingUtils';
 import { FileDropZone } from '@/components/FileDropZone';
@@ -38,7 +38,7 @@ vi.mock('@/loaders/loadBrainVisionEEG', () => ({
     .mockResolvedValue({ channelNames: ['Ch1'], fs: 1, tMax: 1, getChunk: vi.fn() }),
 }));
 
-vi.mock('@/loaders/eegFormats', async (importOriginal) => {
+vi.mock('@/loaders/eegFormatRegistry', async (importOriginal) => {
   const actual = await importOriginal();
   return {
     ...actual, // preserves ELEC_POS_EXTENSIONS, INV_SOLUTIONS_EXTENSIONS, etc.
