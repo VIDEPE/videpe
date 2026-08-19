@@ -1,4 +1,4 @@
-import { isMeshExt } from '@niivue/niivue';
+import { isMeshExt, isDicomExtension } from '@niivue/niivue';
 
 const MRI_BIDS_SUFFIXES = new Set([
   'T1w',
@@ -271,25 +271,55 @@ export function makeSettingsMergeUpdater(layer, sentinelUrl, isEsiVolumeMode, cu
   };
 }
 
-export const filesToLayers = (files) =>
+// A DICOM series is many files (one per slice) representing a single volume, not one file per
+// layer like every other supported format, so dropped .dcm files are pulled out and converted
+// as a group instead of going through the same one-file-to-one-layer map as everything else.
+// isDicomExtension is NiiVue's own check (ext.toUpperCase() === 'DCM'), same convention as
+// isMeshExt above.
+const isDicomFile = (f) => isDicomExtension(f.name.split('.').pop() ?? '');
+
+// Runs dcm2niix (WASM, via @niivue/dicom-loader) on a group of .dcm files and turns each
+// resulting NIfTI into an image-volume layer, same shape as a regular file drop. dcm2niix
+// splits multiple series back out on its own, so a folder containing several series still
+// produces one layer per series.
+async function dicomFilesToLayers(dicomFiles) {
+  const { dicomLoader } = await import('@niivue/dicom-loader');
+  const converted = await dicomLoader(dicomFiles);
+  return converted.map(({ name, data }) => {
+    const url = URL.createObjectURL(new Blob([data]));
+    const { type, subtype } = detectVolumeType(name);
+    return { url, name, type, subtype };
+  });
+}
+
+export async function filesToLayers(files) {
   // Convert a FileList (from input or drag-and-drop) to an array of layer objects with
   // { url, name, type, subtype } for image volumes, plus { kind: 'mesh' } for surface meshes.
-  Array.from(files).map((f) => {
-    // NiiVue calls fetch(url) internally, so a blob: URL is needed — a plain filename would resolve as a relative HTTP request
-    const url = URL.createObjectURL(f);
-    // Surface meshes (GIFTI/PLY/OBJ/STL/…) are rendered as 3D meshes, not sliceable volumes,
-    // so they take a different load path in NiiViewer (nv.addMeshesFromUrl vs nv.loadVolumes).
-    // Tag them with kind: 'mesh' here so both drop entry points can route them correctly.
-    // isMeshExt is NiiVue's own extension check, so this list stays in sync with what it can parse.
-    if (isMeshExt(f.name)) {
-      return {
-        url,
-        name: f.name,
-        type: 'Mesh',
-        subtype: nameWithoutExtension(f.name),
-        kind: 'mesh',
-      };
-    }
-    const { type, subtype } = detectVolumeType(f.name);
-    return { url, name: f.name, type, subtype };
-  });
+  const fileArray = Array.from(files);
+  const dicomFiles = fileArray.filter(isDicomFile);
+
+  const otherLayers = fileArray
+    .filter((f) => !isDicomFile(f))
+    .map((f) => {
+      // NiiVue calls fetch(url) internally, so a blob: URL is needed — a plain filename would resolve as a relative HTTP request
+      const url = URL.createObjectURL(f);
+      // Surface meshes (GIFTI/PLY/OBJ/STL/…) are rendered as 3D meshes, not sliceable volumes,
+      // so they take a different load path in NiiViewer (nv.addMeshesFromUrl vs nv.loadVolumes).
+      // Tag them with kind: 'mesh' here so both drop entry points can route them correctly.
+      // isMeshExt is NiiVue's own extension check, so this list stays in sync with what it can parse.
+      if (isMeshExt(f.name)) {
+        return {
+          url,
+          name: f.name,
+          type: 'Mesh',
+          subtype: nameWithoutExtension(f.name),
+          kind: 'mesh',
+        };
+      }
+      const { type, subtype } = detectVolumeType(f.name);
+      return { url, name: f.name, type, subtype };
+    });
+
+  const dicomLayers = dicomFiles.length > 0 ? await dicomFilesToLayers(dicomFiles) : [];
+  return [...otherLayers, ...dicomLayers];
+}

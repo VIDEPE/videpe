@@ -457,7 +457,18 @@ export const NiiViewer = ({
     if (!nvRef.current) return;
     setIsLoading(true);
     setHasLoadError(false); // this internal-dropzone path never touches `layers`, so the effect above won't reset it
-    const newLayers = filesToLayers(files);
+    let newLayers;
+    try {
+      // A dropped .dcm file runs dcm2niix conversion inside filesToLayers, which can reject on
+      // corrupt/unsupported data — every other format just wraps the File in a blob: URL and
+      // can't fail. PatientView's own handleNiiFiles guards the same call for the same reason.
+      newLayers = await filesToLayers(files);
+    } catch (err) {
+      setHasLoadError(true);
+      toast.error(`Error loading imaging data:\n${err.message}`);
+      requestAnimationFrame(() => setIsLoading(false));
+      return;
+    }
     const allLayers = [...orderedLayers, ...newLayers];
     // startIndex ensures new layers get 0.6 opacity rather than being treated as the first;
     // getCurrentMeshXRay keeps a newly-dropped mesh in sync with the scene's existing
@@ -708,7 +719,7 @@ export const NiiViewer = ({
         />
         <FileDropZone
           onFiles={handleNiiFiles}
-          accepted_formats=".nii,.nii.gz,.mgh,.mgz,.gii,.ply,.obj"
+          accepted_formats=".nii,.nii.gz,.mgh,.mgz,.gii,.ply,.obj,.dcm"
           label="Drop additional files"
           compact
         />

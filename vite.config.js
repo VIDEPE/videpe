@@ -13,6 +13,14 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
+  // @niivue/dicom-loader's dcm2niix dependency ships a WASM binary + ES module worker that
+  // Vite's pre-bundler mishandles by default — exclude it and build workers as ES modules.
+  optimizeDeps: {
+    exclude: ['@niivue/dcm2niix'],
+  },
+  worker: {
+    format: 'es',
+  },
   test: {
     environment: 'jsdom',
     globals: true,
