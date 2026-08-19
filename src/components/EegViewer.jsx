@@ -37,7 +37,7 @@ import { useMontageTemplates } from '@/hooks/useMontageTemplates';
 import { useTimepointSnapshot } from '@/hooks/useTimepointSnapshot';
 import { useRowResize } from '@/hooks/useRowResize';
 
-import { ELEC_POS_EXTENSIONS, INV_SOLUTIONS_EXTENSIONS } from '@/loaders/eegFormats';
+import { ELEC_POS_EXTENSIONS, INV_SOLUTIONS_EXTENSIONS } from '@/loaders/eegFormatRegistry';
 import { EegTopoViewer } from '@/components/EegTopoViewer';
 import { FileDropZone } from '@/components/FileDropZone';
 import { StatusLed } from '@/components/StatusLed';

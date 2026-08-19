@@ -8,13 +8,14 @@ import { ELECTRODE_LAYER_URL } from '@/utils/NiiViewer.utils';
 // ─── Channel matching ───────────────────────────────────────────────────────
 // Maps raw EEG channel names onto parsed electrode template positions.
 
-// Strips recording-type prefixes ("EEG ", "MEG ") and reference suffixes ("-Ref", "-A1", " Ref", etc.)
-// so that "EEG Fp1-Ref" normalises to "fp1" for lookup.
+// Strips recording-type prefixes ("EEG ", "MEG ") and dash reference suffixes ("-Ref", "-A1", etc.)
+// so that "EEG Fp1-Ref" normalises to "fp1" for lookup. Does not touch spaces within the
+// remaining name — some formats (e.g. sEEG contact labels like "R latOrbG1") use a space
+// as part of the label itself, not as a suffix separator.
 export function normalizeChannelName(name) {
   return name
     .replace(/^(eeg|meg)\s+/i, '') // remove leading "EEG " / "MEG " prefix
     .replace(/-.*$/, '') // remove dash suffix (e.g. -Ref, -A1)
-    .split(/\s+/)[0] // take first token (handles "Fp1 Ref" after prefix removal)
     .toLowerCase();
 }
 

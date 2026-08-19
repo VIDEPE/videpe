@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { checkEegFiles, detectAndLoadEEG, EEG_FORMAT_EXTENSIONS } from '@/loaders/eegFormats';
+import {
+  checkEegFiles,
+  detectAndLoadEEG,
+  EEG_FORMAT_EXTENSIONS,
+} from '@/loaders/eegFormatRegistry';
 
 vi.mock('@/loaders/loadBrainVisionEEG', () => ({
   loadBrainVisionEEG: vi.fn(),

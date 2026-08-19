@@ -253,6 +253,16 @@ describe('findDuplicateChannelNames', () => {
     // "EEG 1-Ref" and "1" normalize to the same name.
     expect(findDuplicateChannelNames(['EEG 1-Ref', '1'])).toEqual(['1']);
   });
+  it('does not collapse sEEG-style names that share a leading word before the space', () => {
+    // The space here is part of the label (hemisphere + region), not a reference suffix —
+    // must not be truncated down to "r" for both.
+    expect(findDuplicateChannelNames(['R latOrbG1', 'R Fpole'])).toEqual([]);
+  });
+  it('does not collapse sEEG-style names that share a leading word before an underscore', () => {
+    // Same shape as the space-separated case above, but some recordings use "_" instead
+    // of a literal space between the hemisphere/region prefix and the label.
+    expect(findDuplicateChannelNames(['R_latOrbG1', 'R_Fpole'])).toEqual([]);
+  });
 
   it('does not report the same duplicate more than once for 3+ occurrences', () => {
     expect(findDuplicateChannelNames(['1', '1', '1'])).toEqual(['1']);
