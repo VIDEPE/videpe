@@ -41,7 +41,7 @@ const PRESET_COLORS = ['red', 'blue', 'green', 'yellow', 'cyan', 'magenta'];
 
 // ─── Window sizing constants ────────────────────────────────────────────────
 // Default/minimum window size in px — default matches the previous fixed w-96 h-80 (24rem x 20rem)
-const DEFAULT_WINDOW_SIZE = { width: 850, height: 700 };
+const DEFAULT_WINDOW_SIZE = { width: 870, height: 700 };
 const MIN_WINDOW_WIDTH = 600;
 const MIN_WINDOW_HEIGHT = 450;
 const RESIZE_DIRECTIONS = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
@@ -1064,8 +1064,9 @@ export function EegMontageEditor({
 
                 {/* Move group — acts on whichever row(s) are selected (click a row's channel
                     name above to select it); disabled with none selected since there's nothing
-                    to move. */}
-                <div className="flex flex-col gap-2 shrink-0 ml-auto">
+                    to move. overflow-hidden + p-1 clips the buttons' :hover scale so it can't
+                    escape into the scrollable toolbar's width and flicker the scrollbar. */}
+                <div className="flex flex-col gap-2 shrink-0 ml-auto overflow-hidden p-1">
                   <button
                     type="button"
                     className="button button-icon"
