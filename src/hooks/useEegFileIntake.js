@@ -76,7 +76,8 @@ export function useEegFileIntake({ setEeg, setIsLoading, onInverseSolutionFile }
       const { electrodes } = await parseElectrodePositionFile(file);
       if (!electrodes.length) return; // ignore empty or unparseable files
       setCustomElectrodes(electrodes);
-      setCustomElecPosFileName(file.name.replace(/\.[^.]+$/, ''));
+      // strip the file extension (everything from the last dot onward)
+      setCustomElecPosFileName(file.name.replace(/\.[^.]+$/, '')); // start with a dot \. and 1 or more chars that are not do [^.] till the string end $
       // Confirm the load — this dropzone shows no state of its own in compact mode, so
       // without this the file appears to vanish and the user can't tell it was accepted.
       toast.success(`Loaded ${electrodes.length} electrode positions from ${file.name}`);
@@ -151,11 +152,11 @@ export function useEegFileIntake({ setEeg, setIsLoading, onInverseSolutionFile }
 
       // Merge pending with new files
       const merged = [...pendingEegFiles, ...eegFiles];
-      // Then keep only the last file for each extension by createing a map of extension to file.
+      // Then keep only the last file for each extension by creating a map of extension to file.
       // This way, if a user drops a new .vhdr file, it will replace the previous .vhdr in the pending state, while still keeping any .eeg file that was dropped before.
       const byExtension = new Map();
       for (const file of merged) {
-        const ext = file.name.toLowerCase().match(/(\.[^.]+)$/)?.[1];
+        const ext = file.name.toLowerCase().match(/(\.[^.]+)$/)?.[1]; 
         // for each file with a recognized extension, store it in the Map keyed by that extension.
         // If a .vhdr was already in the map and another .vhdr comes along, .set() overwrites the old entry
         if (ext) byExtension.set(ext, file);
