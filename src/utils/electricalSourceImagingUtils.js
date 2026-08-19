@@ -13,6 +13,7 @@ import {
   matrixTrans,
   matrixInverse,
   matrixMul,
+  indexOfMax,
 } from '@/utils/arrayAndMatrixMathUtils';
 
 // ─── Grid structure ───────────────────────────────────────────────────────────
@@ -249,6 +250,13 @@ export function calculateSourcePower({
   return sourcePowers;
 }
 
+// The location (mm/world space => expected by NiiVue's mm2frac) highest powered source
+// Used as get function when the user clicks and generates a new voltageSnapshot,
+// used to snap the crosshair to the peak power.
+export function getMaxSourcePowerLocation({ sourcePowers, insideSourcePositions }) {
+  return insideSourcePositions[indexOfMax(sourcePowers)];
+}
+
 export function ijkIndexToFlatIndex(i, j, k, gridDimensions) {
   // Convert a (i,j,k) grid index into a flat array index, one scalar per voxel, in
   // i-fastest / k-slowest order (matches NIfTI's on-disk voxel layout):
@@ -481,10 +489,10 @@ export function matchVoltagesToInverseSolution(
 //   { format, flatSourceFilters, insideSourcePositions, nInsideSources, nChannels, inverseSolutionChannelNames, ... }
 // @param {object} channelSnapshot - per-click EEG state lifted from EegViewer:
 //   { isIntracranial: boolean, channelNames: string[], channelTypes: Array, voltages: number[] }
-// @returns {{ sourcePowerConnectomes: object, sourcePowerVolume: object }|null|[]} an object
-//   exposing both representations as lazy, memoized getters — each is only actually built
-//   (and cached) the first time it's read, so the mode not currently rendered never pays for
-//   its own conversion. Also null when the recording is missing a channel the model needs,
+// @returns {{ maxSourcePowerLocation: number[], sourcePowerConnectomes: object, sourcePowerVolume: object }|null|[]}
+//   an object exposing all three as lazy, memoized getters — each is only actually built (and
+//   cached) the first time it's read, so a representation nothing ends up reading this click
+//   never pays for its own conversion. Also null when the recording is missing a channel the model needs,
 //   or one of the channels it needs is itself typed SEEG (see matchVoltagesToInverseSolution
 //   and findSeegChannelsAmongNeeded) — either way the computation can't run at all, not just
 //   degrade. Deliberately scoped to just the model's own channels, not the recording's
@@ -534,27 +542,38 @@ export function electricalSourceImaging(inverseSolution, channelSnapshot) {
       nChannels,
     });
 
-    // sourcePowerConnectomes/sourcePowerVolume below are accessor ("get") properties, not
-    // plain fields — building this object doesn't run either conversion. A getter's body only
-    // executes the moment something actually reads that property (e.g. NiiViewer reading
-    // .sourcePowerConnectomes while in connectome mode); its `return` is just that getter
-    // function's own, same as any function.
+    // getMaxSourcePowerLocation/sourcePowerConnectomes/sourcePowerVolume below are accessor ("get")
+    // properties, not plain fields — building this object doesn't run either conversion.
+    // A getter's body only executes the moment something actually reads that property
+    // (e.g. NiiViewer reading .sourcePowerConnectomes while in connectome mode);
+    // its `return` is just that getter function's own, same as any function.
     //
     // The first read of a given property builds it and caches the result (see the ??= below);
     // every later read of that same property — e.g. toggling back to a mode already visited
     // this click — returns the cached value instead of recomputing. Toggling to the *other*
     // mode for the first time still pays for that mode's conversion once. Nothing explicitly
     // clears the cache — the next EEG click produces an entirely new esiLayer object (fresh
-    // cachedConnectomes/cachedVolume, starting at null), and this one is simply discarded.
+    // cachedMaxSourcePowerLocation/cachedConnectomes/cachedVolume, starting at null), and this
+    // one is simply discarded.
+    let cachedMaxSourcePowerLocation = null;
     let cachedConnectomes = null;
     let cachedVolume = null;
     return {
+      // location of the max source power => used to set crosshair automatically to the highest source loc
+      get maxSourcePowerLocation() {
+        return (cachedMaxSourcePowerLocation ??= getMaxSourcePowerLocation({
+          sourcePowers,
+          insideSourcePositions,
+        }));
+      },
+      // Source Powers visualised as connectome
       get sourcePowerConnectomes() {
         return (cachedConnectomes ??= convertSourcePowersToConnectome(
           insideSourcePositions,
           sourcePowers
         ));
       },
+      // Source Powers visualised as volume
       get sourcePowerVolume() {
         return (cachedVolume ??= convertSourcePowersToVolume(
           sourceVolumeIndices,

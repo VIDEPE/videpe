@@ -222,6 +222,7 @@ export function useEsiLayer({
 
       nv.addMesh(mesh); // actually add it to the 3D scene
       esiMeshRef.current = mesh; // track it so the next change/removal can find it
+      nv.scene.crosshairPos = nv.mm2frac(esiLayer.maxSourcePowerLocation); // move the crosshair to the location where the ESI source power is max
       nv.updateGLVolume(); // redraw with the new mesh visible
     } else {
       // Volume mode — drop any leftover mesh from a previous connectome-mode rebuild first.
@@ -266,6 +267,8 @@ export function useEsiLayer({
             const staleIndex = nv.volumes.indexOf(staleVolume);
             if (staleIndex !== -1) nv.removeVolumeByIndex(staleIndex);
           }
+
+          nv.scene.crosshairPos = nv.mm2frac(esiLayer.maxSourcePowerLocation); // move the crosshair to the location where the ESI source power is max
           nv.updateGLVolume(); // redraw with the new volume visible
         })
         .catch((err) => console.error('ESI volume failed to load', err));

@@ -31,6 +31,7 @@ import {
   vectorLength,
   mean,
   median,
+  indexOfMax,
 } from '@/utils/arrayAndMatrixMathUtils';
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
@@ -618,5 +619,17 @@ describe('median', () => {
 
   it('is robust to an outlier', () => {
     expect(median([1, 2, 3, 1000])).toBe(2.5);
+  });
+});
+
+describe('indexOfMax', () => {
+  it('returns the index of the max value in an array', () => {
+    expect(indexOfMax([1, 2, 5, 3, 4])).toBe(2);
+  });
+
+  it('does not mutate its input (sorts a copy)', () => {
+    const arr = [3, 1, 2];
+    indexOfMax(arr);
+    expect(arr).toEqual([3, 1, 2]);
   });
 });

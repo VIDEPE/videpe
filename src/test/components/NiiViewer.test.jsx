@@ -176,6 +176,10 @@ vi.mock('@niivue/niivue', () => ({
       getRadiologicalConvention: vi.fn(() => false),
       setRadiologicalConvention: vi.fn(),
       setClipPlane: vi.fn(),
+      // mm2frac/scene.crosshairPos back the ESI "snap the 3D crosshair to the peak source"
+      // behavior (see useEsiLayer.js) — identity stand-in, tests assert on what's passed in.
+      mm2frac: vi.fn((mm) => mm),
+      scene: { crosshairPos: null },
       opts: { isColorbar: false, multiplanarShowRender: null, multiplanarEqualSize: true },
       sliceTypeMultiplanar: 1,
       volumes: [],

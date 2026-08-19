@@ -29,7 +29,8 @@ const makeVolumeLayer = (overrides = {}) => ({
   ...overrides,
 });
 
-const makeEsiLayer = ({ connectome, volume } = {}) => ({
+const makeEsiLayer = ({ connectome, volume, maxSourcePowerLocation } = {}) => ({
+  maxSourcePowerLocation: maxSourcePowerLocation ?? [1, 2, 3],
   sourcePowerConnectomes: connectome ?? makeConnectomeLayer(),
   sourcePowerVolume: volume ?? makeVolumeLayer(),
 });
@@ -54,6 +55,8 @@ function makeNv() {
     setOpacity: vi.fn(),
     setColormap: vi.fn(),
     updateGLVolume: vi.fn(),
+    mm2frac: vi.fn((mm) => mm), // identity stand-in — tests assert on what's passed in, not real geometry
+    scene: { crosshairPos: null },
     opts: {},
   };
   return nv;
@@ -261,6 +264,15 @@ describe('useEsiLayer', () => {
 
       expect(result.current.layerSettings[0].isEsiVolume).toBe(false);
     });
+
+    it('snaps the crosshair to maxSourcePowerLocation on rebuild', () => {
+      const esiLayer = makeEsiLayer({ maxSourcePowerLocation: [4, 5, 6] });
+      renderHook((props) => useHarness(props), {
+        initialProps: { esiLayer, isEsiVolumeMode: false, nvRef },
+      });
+      expect(nv.mm2frac).toHaveBeenCalledWith([4, 5, 6]);
+      expect(nv.scene.crosshairPos).toEqual([4, 5, 6]); // mm2frac mock is identity, so this round-trips
+    });
   });
 
   describe('volume mode', () => {
@@ -287,6 +299,16 @@ describe('useEsiLayer', () => {
       expect(nv.volumes[0].cal_min).toBeCloseTo(1); // 0.01 * 100
       expect(nv.volumes[0].cal_max).toBe(100);
       expect(nv.volumes[0].colormapType).toBe(2); // Hard transition between transparant and opaque
+    });
+
+    it('snaps the crosshair to maxSourcePowerLocation once the volume finishes loading', async () => {
+      const esiLayer = makeEsiLayer({ maxSourcePowerLocation: [7, 8, 9] });
+      renderHook((props) => useHarness(props), {
+        initialProps: { esiLayer, isEsiVolumeMode: true, nvRef },
+      });
+      await waitFor(() => expect(nv.volumes).toHaveLength(1));
+      expect(nv.mm2frac).toHaveBeenCalledWith([7, 8, 9]);
+      expect(nv.scene.crosshairPos).toEqual([7, 8, 9]); // mm2frac mock is identity, so this round-trips
     });
 
     it('removes the stale volume only after the replacement has finished loading', async () => {
