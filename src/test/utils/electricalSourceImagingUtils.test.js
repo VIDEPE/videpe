@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   calculateSourcePower,
+  getMaxSourcePowerLocation,
   convertSourcePowersToConnectome,
   convertSourcePowersToVolume,
   electricalSourceImaging,
@@ -99,6 +100,27 @@ describe('calculateSourcePower', () => {
     const result = calculateSourcePower({ ...SINGLE_SOURCE_FILTERS, channelVoltages: [0, 0] });
 
     expect(Array.from(result)).toEqual([0]);
+  });
+});
+
+// ─── getMaxSourcePowerLocation ────────────────────────────────────────────────
+//
+// Picks out the single inside-brain position with the highest power — used to snap the
+// NiiVue 3D crosshair to the peak on each new EEG click. indexOfMax's own argmax
+// correctness is covered separately (see arrayAndMatrixMathUtils.test.js) — this only
+// needs to verify the position lookup lines up with whichever index it returns.
+
+describe('getMaxSourcePowerLocation', () => {
+  it('returns the insideSourcePositions entry at the highest-power index', () => {
+    const result = getMaxSourcePowerLocation({
+      sourcePowers: [13, 25],
+      insideSourcePositions: [
+        [-5, 15, 10],
+        [0, 10, 15],
+      ],
+    });
+
+    expect(result).toEqual([0, 10, 15]); // index 1 — the higher-power source
   });
 });
 
@@ -868,6 +890,8 @@ describe('electricalSourceImaging', () => {
     const result = electricalSourceImaging(MINIMAL_MODEL, SCALP_SNAPSHOT);
 
     // Powers from this model are already verified: source 0 → 13, source 1 → 25
+    expect(result.maxSourcePowerLocation).toEqual([0, 10, 15]); // source 1's position — the higher power
+
     expect(result.sourcePowerConnectomes.kind).toBe('connectome');
     expect(result.sourcePowerConnectomes.url).toBe(ESI_LAYER_URL);
     expect(result.sourcePowerConnectomes.nodes).toHaveLength(2);
