@@ -296,13 +296,15 @@ export const MATRIX_LINE_WIDTH = 16;
 
 /**
  * Splits one group's sorted contacts into fixed-width "lines" for rendering, using absolute
- * numberInGroup windows (1-16, 17-32, ...) shared across every group in the same section —
- * not just this group's own contacts — so number N stays in the same window (and under the
- * same header) for every probe/group in the section, matching the existing no-gap-collapsing
- * column convention (a group missing a number still gets an empty cell at that position).
+ * numberInGroup windows (1-16, 17-32, ...) — a missing number within those windows still gets
+ * an empty cell at that position (no gap-collapsing). Window boundaries are always aligned to
+ * the same 1-based grid regardless of what's passed as `maxNumberInGroup`, so if the caller
+ * passes a value shared across several groups (e.g. the section-wide max), number N lands in
+ * the same window for all of them — but EegMatrixViewer instead passes each group's own max, so
+ * a short group doesn't render trailing empty lines just to match a longer group's line count.
  *
  * @param {{numberInGroup:number, channelIdx:number, voltage:number}[]} contacts - this group's contacts
- * @param {number} maxNumberInGroup - the section-wide maximum numberInGroup (shared across groups)
+ * @param {number} maxNumberInGroup - generate windows up to this numberInGroup value
  * @param {number} lineWidth - contacts per line, default MATRIX_LINE_WIDTH
  * @returns {{start:number, end:number, contacts:object[]}[]} - one entry per line, `start`/`end`
  *   are the true (1-based) numberInGroup values that line's columns represent

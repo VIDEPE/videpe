@@ -13,8 +13,8 @@ import { interpolateDivergingColor } from '@/utils/eegColormaps';
 // enough, it'd just get overridden by the header <th>'s own content+padding. A <colgroup>
 // with table-fixed pins every column's width independent of any row's content, and matches
 // row-label-column width fixed to LABEL_COL_WIDTH.
-const CELL_WIDTH = 22;
-const CELL_HEIGHT = 22;
+const CELL_WIDTH = 28;
+const CELL_HEIGHT = 20;
 const LABEL_COL_WIDTH = 28;
 
 // Renders EEG/SEEG electrode voltages as row(group)/column(number-within-group) matrices — one
@@ -83,10 +83,6 @@ export function EegMatrixViewer({ channelNames, voltages, channelTypes, colourBl
  * @param {boolean} colourBlindMode
  */
 function MatrixSection({ sectionKey, title, groups, ungrouped, colourBlindMode }) {
-  const maxNumberInGroup = useMemo(
-    () => Math.max(0, ...groups.flatMap((g) => g.contacts.map((c) => c.numberInGroup))),
-    [groups]
-  );
   // Own colour scale per section — EEG (scalp) and SEEG (depth) voltages typically differ by
   // an order of magnitude, so a single shared scale would wash out whichever type is smaller.
   // Ungrouped entries share it too, since they're genuinely the same channel type.
@@ -104,10 +100,10 @@ function MatrixSection({ sectionKey, title, groups, ungrouped, colourBlindMode }
 
   return (
     <section
-      className="border-t border-border pt-4 mb-4 first:border-t-0 first:pt-0 last:mb-0"
+      className="border-t border-border pt-2 mb-4 first:border-t-0 first:pt-0 last:mb-0"
       data-testid={`matrix-section-${sectionKey}`}
     >
-      <h3 className="px-1 text-[11px] font-semibold text-foreground/70">{title}</h3>
+      <h3 className="px-1 text-[13px] font-semibold text-foreground/70">{title}</h3>
       {/* table-fixed with no explicit table width would still stretch to fill its container,
           proportionally redistributing any extra space across the (equally-sized) columns —
           silently ignoring the actual CELL_WIDTH value. Pinning the table's own width to the
@@ -124,61 +120,64 @@ function MatrixSection({ sectionKey, title, groups, ungrouped, colourBlindMode }
         </colgroup>
         <tbody>
           {/* ─── Grouped rows: one group (e.g. "B", "E") per iteration, wrapped into
-              numberInGroup lines via chunkContactsIntoLines. ─────────────────────────── */}
+              numberInGroup lines via chunkContactsIntoLines — capped to each group's own max,
+              not the section's, so a short group doesn't pad out to a longer one's line count. */}
           {groups.map(({ group, contacts }) =>
-            chunkContactsIntoLines(contacts, maxNumberInGroup).map((line, lineIdx) => {
-              const columns = Array.from(
-                { length: line.end - line.start + 1 },
-                (_, i) => line.start + i
-              );
-              return (
-                <Fragment key={`${group}-${lineIdx}`}>
-                  {/* leading-none overrides index.css's inherited ~26px line-height, which would
+            chunkContactsIntoLines(contacts, Math.max(...contacts.map((c) => c.numberInGroup))).map(
+              (line, lineIdx) => {
+                const columns = Array.from(
+                  { length: line.end - line.start + 1 },
+                  (_, i) => line.start + i
+                );
+                return (
+                  <Fragment key={`${group}-${lineIdx}`}>
+                    {/* leading-none overrides index.css's inherited ~26px line-height, which would
                       otherwise floor the row height. pt-1.5 grows the row (a min, not a cap) to
                       add a gap above each header. */}
-                  {/* header row: numberInGroup values for this line */}
-                  <tr style={{ height: CELL_HEIGHT }}>
-                    <th className="sticky left-0 bg-surface px-1 pt-1.5" />
-                    {columns.map((numberInGroup) => (
-                      <th
-                        key={numberInGroup}
-                        className="px-1 pt-1.5 text-foreground/60 font-normal leading-none"
-                      >
-                        {numberInGroup}
-                      </th>
-                    ))}
-                  </tr>
-                  {/* data row: group letter + one coloured cell per numberInGroup (blank = gap) */}
-                  <tr
-                    style={{ height: CELL_HEIGHT }}
-                    data-testid={`matrix-row-${sectionKey}-${group}-${lineIdx}`}
-                  >
-                    <th className="sticky left-0 bg-surface px-1 text-left text-foreground/80 leading-none">
-                      {group}
-                    </th>
-                    {columns.map((numberInGroup) => {
-                      const cell = line.contacts.find((c) => c.numberInGroup === numberInGroup);
-                      return (
-                        <td
+                    {/* header row: numberInGroup values for this line */}
+                    <tr style={{ height: CELL_HEIGHT }}>
+                      <th className="sticky left-0 bg-surface px-1 pt-1.5" />
+                      {columns.map((numberInGroup) => (
+                        <th
                           key={numberInGroup}
-                          data-testid={`matrix-cell-${sectionKey}-${group}-${numberInGroup}`}
-                          title={
-                            cell
-                              ? `${group}${numberInGroup}: ${cell.voltage.toFixed(2)} µV`
-                              : undefined
-                          }
-                          style={{
-                            backgroundColor: cell
-                              ? interpolateDivergingColor(cell.voltage, calMax, colourBlindMode)
-                              : 'transparent',
-                          }}
-                        />
-                      );
-                    })}
-                  </tr>
-                </Fragment>
-              );
-            })
+                          className="px-1 pt-1.5 text-foreground/60 font-normal leading-none"
+                        >
+                          {numberInGroup}
+                        </th>
+                      ))}
+                    </tr>
+                    {/* data row: group letter + one coloured cell per numberInGroup (blank = gap) */}
+                    <tr
+                      style={{ height: CELL_HEIGHT }}
+                      data-testid={`matrix-row-${sectionKey}-${group}-${lineIdx}`}
+                    >
+                      <th className="sticky left-0 bg-surface px-1 text-left text-foreground/80 leading-none">
+                        {group}
+                      </th>
+                      {columns.map((numberInGroup) => {
+                        const cell = line.contacts.find((c) => c.numberInGroup === numberInGroup);
+                        return (
+                          <td
+                            key={numberInGroup}
+                            data-testid={`matrix-cell-${sectionKey}-${group}-${numberInGroup}`}
+                            title={
+                              cell
+                                ? `${group}${numberInGroup}: ${cell.voltage.toFixed(2)} µV`
+                                : undefined
+                            }
+                            style={{
+                              backgroundColor: cell
+                                ? interpolateDivergingColor(cell.voltage, calMax, colourBlindMode)
+                                : 'transparent',
+                            }}
+                          />
+                        );
+                      })}
+                    </tr>
+                  </Fragment>
+                );
+              }
+            )
           )}
           {/* ─── Ungrouped rows: this type's channels with no group+number shape (e.g. "Cz"),
               wrapped positionally via chunkArrayIntoLines. Blank row label; the column header
@@ -242,7 +241,7 @@ function OtherSection({ entries, colourBlindMode }) {
 
   return (
     <section
-      className="border-t border-border pt-4 mb-4 first:border-t-0 first:pt-0 last:mb-0"
+      className="border-t border-border pt-2 mb-4 first:border-t-0 first:pt-0 last:mb-0"
       data-testid="matrix-section-other"
     >
       <h3 className="px-1 text-[11px] font-semibold text-foreground/70">Other</h3>

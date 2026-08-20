@@ -80,7 +80,7 @@ function addElectrodeMarkers(nv, markers, calMax, colourBlindMode) {
 // ─── Window sizing constants ────────────────────────────────────────────────
 
 // Default/minimum window size in px — default matches the previous fixed w-96 h-80 (24rem x 20rem)
-const DEFAULT_TOPO_SIZE = { width: 410, height: 360 };
+const DEFAULT_TOPO_SIZE = { width: 500, height: 400 };
 const MIN_TOPO_WIDTH = 220;
 const MIN_TOPO_HEIGHT = 220;
 const RESIZE_DIRECTIONS = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];

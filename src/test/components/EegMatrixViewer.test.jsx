@@ -73,7 +73,7 @@ describe('EegMatrixViewer', () => {
     expect(screen.getByText('20')).toBeInTheDocument();
   });
 
-  it('renders columns up to the maximum contact number across all groups in a section', () => {
+  it('caps each group to its own max, not the widest group in the section', () => {
     render(
       <EegMatrixViewer
         channelNames={['B1', 'B2', 'B3', 'T1']}
@@ -82,22 +82,25 @@ describe('EegMatrixViewer', () => {
         colourBlindMode={false}
       />
     );
-    // B has 3 contacts, so column 3 exists for every row, even T's (as an empty gap cell).
+    // B has 3 contacts, so its row spans columns 1-3.
     expect(screen.getByTestId('matrix-cell-seeg-B-3')).toBeInTheDocument();
-    expect(screen.getByTestId('matrix-cell-seeg-T-3')).toBeInTheDocument();
     expect(screen.queryByTestId('matrix-cell-seeg-B-4')).not.toBeInTheDocument();
+    // T only has 1 contact — it shouldn't pad out to B's max just because they share a section.
+    expect(screen.getByTestId('matrix-cell-seeg-T-1')).toBeInTheDocument();
+    expect(screen.queryByTestId('matrix-cell-seeg-T-2')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('matrix-cell-seeg-T-3')).not.toBeInTheDocument();
   });
 
-  it('renders gap cells as transparent and untitled', () => {
+  it("renders gap cells as transparent and untitled for a number missing within a group's own range", () => {
     render(
       <EegMatrixViewer
-        channelNames={['B1', 'B2', 'T1']}
-        voltages={[1, 2, 3]}
-        channelTypes={SEEG_TYPES(3)}
+        channelNames={['B1', 'B3']} // B2 missing, within B's own 1-3 range
+        voltages={[1, 3]}
+        channelTypes={SEEG_TYPES(2)}
         colourBlindMode={false}
       />
     );
-    const gapCell = screen.getByTestId('matrix-cell-seeg-T-2'); // T only has contact 1
+    const gapCell = screen.getByTestId('matrix-cell-seeg-B-2');
     // jest-dom's toHaveStyle doesn't normalize the 'transparent' keyword, so compare the style property directly.
     expect(gapCell.style.backgroundColor).toBe('transparent');
     expect(gapCell).not.toHaveAttribute('title');
