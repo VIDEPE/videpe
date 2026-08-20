@@ -607,7 +607,7 @@ describe('EegTopoViewer', () => {
     it('leaves the Matrix tab enabled and pressed', async () => {
       await act(async () => render(<EegTopoViewer {...noEegProps} />));
       expect(screen.getByTestId('topo-tab-matrix')).not.toBeDisabled();
-      expect(screen.getByTestId('topo-tab-matrix')).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByTestId('topo-tab-matrix')).toHaveAttribute('aria-selected', 'true');
     });
 
     it('still shows the channels-mapped footer', async () => {
@@ -653,14 +653,14 @@ describe('EegTopoViewer', () => {
     it('defaults to the matrix tab when isIntracranial is true', async () => {
       await act(async () => render(<EegTopoViewer {...mixedProps} />));
       expect(screen.getByTestId('eeg-matrix-viewer')).toBeTruthy();
-      expect(screen.getByTestId('topo-tab-matrix')).toHaveAttribute('aria-pressed', 'true');
-      expect(screen.getByTestId('topo-tab-mesh')).toHaveAttribute('aria-pressed', 'false');
+      expect(screen.getByTestId('topo-tab-matrix')).toHaveAttribute('aria-selected', 'true');
+      expect(screen.getByTestId('topo-tab-mesh')).toHaveAttribute('aria-selected', 'false');
     });
 
     it('defaults to the mesh tab when isIntracranial is false', async () => {
       await act(async () => render(<EegTopoViewer {...defaultProps} />));
-      expect(screen.getByTestId('topo-tab-mesh')).toHaveAttribute('aria-pressed', 'true');
-      expect(screen.getByTestId('topo-tab-matrix')).toHaveAttribute('aria-pressed', 'false');
+      expect(screen.getByTestId('topo-tab-mesh')).toHaveAttribute('aria-selected', 'true');
+      expect(screen.getByTestId('topo-tab-matrix')).toHaveAttribute('aria-selected', 'false');
     });
 
     it('still attaches NiiVue and loads the mesh even when the matrix tab is shown first, since mesh availability only depends on hasEegChannels', async () => {
@@ -681,7 +681,7 @@ describe('EegTopoViewer', () => {
 
       await userEvent.click(screen.getByTestId('topo-tab-mesh'));
 
-      expect(screen.getByTestId('topo-tab-mesh')).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByTestId('topo-tab-mesh')).toHaveAttribute('aria-selected', 'true');
       expect(screen.queryByTestId('eeg-matrix-viewer')).toBeNull();
     });
 
@@ -689,12 +689,12 @@ describe('EegTopoViewer', () => {
       await act(async () =>
         render(<EegTopoViewer {...mixedProps} isIntracranial={false} hasEegChannels={true} />)
       );
-      expect(screen.getByTestId('topo-tab-mesh')).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByTestId('topo-tab-mesh')).toHaveAttribute('aria-selected', 'true');
 
       await userEvent.click(screen.getByTestId('topo-tab-matrix'));
 
       expect(screen.getByTestId('eeg-matrix-viewer')).toBeTruthy();
-      expect(screen.getByTestId('topo-tab-matrix')).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByTestId('topo-tab-matrix')).toHaveAttribute('aria-selected', 'true');
     });
   });
 });

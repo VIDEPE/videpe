@@ -332,17 +332,32 @@ export function EegTopoViewer({
       {/* Title bar — drag handle; explicit bg-surface so NiiVue's black canvas doesn't bleed through */}
       <div
         data-testid="topo-title-bar"
-        className="flex items-center justify-between px-2 py-1 border-b border-border cursor-grab select-none shrink-0 bg-surface"
+        className="flex items-center justify-between px-2 border-b border-border cursor-grab select-none shrink-0 bg-surface"
         onMouseDown={handleDragStart}
       >
-        <div className="flex items-center gap-1">
+        {/* Underlined tabs, flush with the title bar's own bottom border — the active tab's
+            indicator overlays it so the tab reads as attached to the panel below. */}
+        <div
+          role="tablist"
+          aria-label="Topography view"
+          className="flex items-stretch gap-3 -mb-px"
+        >
           <button
             type="button"
+            role="tab"
+            id="topo-tab-mesh"
+            aria-controls="topo-panel-mesh"
+            aria-selected={activeView === 'mesh'}
             data-testid="topo-tab-mesh"
-            className="button size-xs"
-            onClick={() => setSelectedView('mesh')}
             disabled={!hasEegChannels}
-            aria-pressed={activeView === 'mesh'}
+            onClick={() => setSelectedView('mesh')}
+            className={cn(
+              'px-0.5 py-1.5 text-xs font-medium border-b-2 transition-colors cursor-pointer',
+              activeView === 'mesh'
+                ? 'border-primary text-heading'
+                : 'border-transparent text-foreground/50 hover:text-heading',
+              !hasEegChannels && 'opacity-40 cursor-not-allowed hover:text-foreground/50'
+            )}
             title={
               hasEegChannels
                 ? '3D scalp mesh'
@@ -353,20 +368,42 @@ export function EegTopoViewer({
           </button>
           <button
             type="button"
+            role="tab"
+            id="topo-tab-matrix"
+            aria-controls="topo-panel-matrix"
+            aria-selected={activeView === 'matrix'}
             data-testid="topo-tab-matrix"
-            className="button size-xs"
             onClick={() => setSelectedView('matrix')}
-            aria-pressed={activeView === 'matrix'}
+            className={cn(
+              'px-0.5 py-1.5 text-xs font-medium border-b-2 transition-colors cursor-pointer',
+              activeView === 'matrix'
+                ? 'border-primary text-heading'
+                : 'border-transparent text-foreground/50 hover:text-heading'
+            )}
             title="Electrode matrix"
           >
             Matrix
           </button>
         </div>
-        <TrafficLightButtons
-          onMaximize={() => setIsMaximized((v) => !v)}
-          isMaximized={isMaximized}
-          onClose={onClose}
-        />
+        <div className="flex items-center gap-2 shrink-0">
+          {/* ColourBlind Mode toggle — lives in the title bar (rather than floating over the
+              canvas) so it never obscures the mesh/matrix underneath. */}
+          <button
+            type="button"
+            className="button button-icon-xs"
+            onClick={() => setColourBlindMode(!colourBlindMode)}
+            title="Toggle colourblind colormap for the EEG topography"
+            aria-label="Toggle colourblind colormap for the EEG topography"
+            aria-pressed={colourBlindMode}
+          >
+            <EyeDashed size={14} />
+          </button>
+          <TrafficLightButtons
+            onMaximize={() => setIsMaximized((v) => !v)}
+            isMaximized={isMaximized}
+            onClose={onClose}
+          />
+        </div>
       </div>
 
       {/* NiiVue positions its canvas absolutely inside whatever element it attaches to.
@@ -376,7 +413,12 @@ export function EegTopoViewer({
           NiiVue or re-trigger the async mesh load. */}
       <div className="relative flex-1 min-h-0">
         {hasEegChannels && (
-          <div className={cn('absolute inset-0', activeView !== 'mesh' && 'hidden')}>
+          <div
+            id="topo-panel-mesh"
+            role="tabpanel"
+            aria-labelledby="topo-tab-mesh"
+            className={cn('absolute inset-0', activeView !== 'mesh' && 'hidden')}
+          >
             <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
             {/* NiiVue's colorbar has no unit support — label it ourselves. pointer-events-none
                 so it doesn't block dragging/rotating the 3D view underneath. */}
@@ -389,26 +431,14 @@ export function EegTopoViewer({
           </div>
         )}
         {activeView === 'matrix' && (
-          <EegMatrixViewer
-            channelNames={channelNames}
-            voltages={voltagesByChannel}
-            colourBlindMode={colourBlindMode}
-          />
+          <div id="topo-panel-matrix" role="tabpanel" aria-labelledby="topo-tab-matrix">
+            <EegMatrixViewer
+              channelNames={channelNames}
+              voltages={voltagesByChannel}
+              colourBlindMode={colourBlindMode}
+            />
+          </div>
         )}
-        {/* ColourBlind Mode colour map — shared by the mesh and the matrix */}
-        <button
-          className={cn(
-            'absolute button button-icon shrink-0',
-            activeView === 'matrix' ? 'top-7 right-5' : 'top-1.5 right-1.5'
-          )}
-          type="button"
-          onClick={() => setColourBlindMode(!colourBlindMode)}
-          title="Toggle colourblind colormap for the EEG topography"
-          aria-label="Toggle colourblind colormap for the EEG topography"
-          aria-pressed={colourBlindMode}
-        >
-          <EyeDashed size={20}></EyeDashed>
-        </button>
       </div>
 
       {/* Footer — explicit bg-surface for the same reason as the title bar */}
