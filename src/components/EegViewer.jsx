@@ -395,6 +395,22 @@ export const EegViewer = ({
     [rawTopoVoltagesByChannel, zeroBadChannelVoltages]
   );
 
+  // The 3D mesh is a scalp surface — only EEG-typed matches belong on it, even if a channel
+  // marked SEEG happens to share a name with a template position label. topoVoltages is
+  // index-aligned with visibleMatched (see useTimepointSnapshot), so both are filtered by the
+  // same predicate/order here to stay aligned.
+  const eegMesh = useMemo(() => {
+    const matched = [];
+    const voltages = [];
+    visibleMatched.forEach((m, i) => {
+      if (m.type === 'eeg') {
+        matched.push(m);
+        voltages.push(topoVoltages[i]);
+      }
+    });
+    return { matched, voltages };
+  }, [visibleMatched, topoVoltages]);
+
   // Reports whether EegTopoViewer's NiiVue canvas currently has a mesh loaded — mirrors
   // the guard in EegTopoViewer's mesh-loading effect (!hasEegChannels || !electrodes?.length
   // || !voltages?.length skips the load) so PatientView can tell when the 3D scene it's
@@ -402,7 +418,7 @@ export const EegViewer = ({
   // mesh stays loaded even while the matrix tab is the one showing (see EegTopoViewer), so
   // this doesn't need to track which of the two tabs is currently active.
   const topoHasContent =
-    topoEnabled && hasEegChannels && electrodes?.length > 0 && topoVoltages?.length > 0;
+    topoEnabled && hasEegChannels && electrodes?.length > 0 && eegMesh.voltages.length > 0;
   useEffect(() => {
     onTopoHasContentChange?.(topoHasContent);
   }, [topoHasContent, onTopoHasContentChange]);
@@ -1158,8 +1174,8 @@ export const EegViewer = ({
         <EegTopoViewer
           nvRef={nvRef_eegtopo}
           electrodes={electrodes}
-          matched={visibleMatched}
-          voltages={topoVoltages}
+          matched={eegMesh.matched}
+          voltages={eegMesh.voltages}
           channelNames={channelNames}
           channelTypes={channelTypes}
           voltagesByChannel={topoVoltagesByChannel}
