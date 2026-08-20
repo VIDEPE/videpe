@@ -443,47 +443,54 @@ export function EegTopoViewer({
         )}
       </div>
 
-      {/* Footer — explicit bg-surface for the same reason as the title bar */}
-      <div className="flex items-center justify-between px-2 py-1 text-xs border-t border-border shrink-0 bg-surface">
-        <span
-          className="text-foreground cursor-help"
-          title={`${matched.length} out of ${totalChannels} could be identified with the electrode position template below.\nUse custom electrode position file or adapt EEG channel naming to the template to increase the amount.`}
-        >
-          {matched.length} / {totalChannels} channels mapped
-        </span>
-      </div>
+      {/* Footer + electrode source row — position-file matching only means anything for the
+          3D mesh (the matrix is purely channel-name-derived, no position file involved), so
+          both are hidden while the matrix tab is showing. */}
+      {activeView === 'mesh' && (
+        <>
+          {/* Footer — explicit bg-surface for the same reason as the title bar */}
+          <div className="flex items-center justify-between px-2 py-1 text-xs border-t border-border shrink-0 bg-surface">
+            <span
+              className="text-foreground cursor-help"
+              title={`${matched.length} out of ${totalChannels} EEG channels could be identified with the electrode position template below.\nUse custom electrode position file or adapt EEG channel naming to the template to increase the amount.`}
+            >
+              {matched.length} / {totalChannels} EEG channels mapped
+            </span>
+          </div>
 
-      {/* Electrode source row */}
-      <div className="flex items-center justify-between px-2 py-1 text-xs border-t border-border shrink-0 bg-surface">
-        <span className="text-foreground/60">
-          {isStandardElectrodes
-            ? 'Default: fsaverage_1005 (FreeSurfer)'
-            : (customFileName ?? 'Custom')}
-        </span>
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          className="text-foreground/60 hover:text-heading cursor-pointer underline underline-offset-2"
-          aria-label="Click to browse file to use custom defined electrode positions"
-          title="Click to browse file to use custom defined electrode positions"
-        >
-          Use custom positions
-        </button>
-        {/* accept is .elc only for now — more parsers will extend this list later */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".elc,.tsv"
-          hidden
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) {
-              onElecPosFile?.(file); // customFileName display is owned by PatientView, derived from this callback
-            }
-            e.target.value = ''; // reset so the same file can be re-selected
-          }}
-        />
-      </div>
+          {/* Electrode source row */}
+          <div className="flex items-center justify-between px-2 py-1 text-xs border-t border-border shrink-0 bg-surface">
+            <span className="text-foreground/60">
+              {isStandardElectrodes
+                ? 'Default: fsaverage_1005 (FreeSurfer)'
+                : (customFileName ?? 'Custom')}
+            </span>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="text-foreground/60 hover:text-heading cursor-pointer underline underline-offset-2"
+              aria-label="Click to browse file to use custom defined electrode positions"
+              title="Click to browse file to use custom defined electrode positions"
+            >
+              Use custom positions
+            </button>
+            {/* accept is .elc only for now — more parsers will extend this list later */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".elc,.tsv"
+              hidden
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  onElecPosFile?.(file); // customFileName display is owned by PatientView, derived from this callback
+                }
+                e.target.value = ''; // reset so the same file can be re-selected
+              }}
+            />
+          </div>
+        </>
+      )}
 
       {/* Resize handles — hidden while maximized since the window already fills the screen.
           Rendered last so they paint above the title/footer content and stay grabbable at the edges. */}

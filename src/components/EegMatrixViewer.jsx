@@ -46,7 +46,7 @@ export function EegMatrixViewer({ channelNames, voltages, channelTypes, colourBl
 
   return (
     <div
-      className="absolute inset-0 overflow-auto themed-scrollbar p-1"
+      className="absolute inset-0 overflow-auto themed-scrollbar p-1 pb-4"
       data-testid="eeg-matrix-viewer"
     >
       <MatrixSection

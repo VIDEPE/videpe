@@ -86,9 +86,9 @@ describe('EegTopoViewer', () => {
     expect(container.querySelector('canvas')).toBeTruthy();
   });
 
-  it('shows matched vs total channel count in the footer', async () => {
+  it('shows matched vs total EEG channel count in the footer', async () => {
     await act(async () => render(<EegTopoViewer {...defaultProps} />));
-    expect(screen.getByText(/2\s*\/\s*10\s*channels mapped/i)).toBeTruthy();
+    expect(screen.getByText(/2\s*\/\s*10\s*EEG channels mapped/i)).toBeTruthy();
   });
 
   it('labels the colorbar with its unit, since NiiVue draws it without one', async () => {
@@ -610,14 +610,14 @@ describe('EegTopoViewer', () => {
       expect(screen.getByTestId('topo-tab-matrix')).toHaveAttribute('aria-selected', 'true');
     });
 
-    it('still shows the channels-mapped footer', async () => {
+    it('hides the channels-mapped footer, since position matching is only meaningful for the mesh', async () => {
       await act(async () => render(<EegTopoViewer {...noEegProps} />));
-      expect(screen.getByText(/2\s*\/\s*10\s*channels mapped/i)).toBeTruthy();
+      expect(screen.queryByText(/channels mapped/i)).toBeNull();
     });
 
-    it('still renders the "Use custom positions" button', async () => {
+    it('hides the "Use custom positions" button, since position matching is only meaningful for the mesh', async () => {
       await act(async () => render(<EegTopoViewer {...noEegProps} />));
-      expect(screen.getByRole('button', { name: /use custom.*positions/i })).toBeTruthy();
+      expect(screen.queryByRole('button', { name: /use custom.*positions/i })).toBeNull();
     });
 
     it('still renders the colourblind toggle button', async () => {
@@ -683,6 +683,19 @@ describe('EegTopoViewer', () => {
 
       expect(screen.getByTestId('topo-tab-mesh')).toHaveAttribute('aria-selected', 'true');
       expect(screen.queryByTestId('eeg-matrix-viewer')).toBeNull();
+    });
+
+    it('shows the channels-mapped footer and position row only while the mesh tab is active', async () => {
+      await act(async () => render(<EegTopoViewer {...mixedProps} />));
+      // Starts on the matrix tab (isIntracranial: true) — position matching is meaningless
+      // for the matrix, so the footer/position row should be hidden.
+      expect(screen.queryByText(/channels mapped/i)).toBeNull();
+      expect(screen.queryByRole('button', { name: /use custom.*positions/i })).toBeNull();
+
+      await userEvent.click(screen.getByTestId('topo-tab-mesh'));
+
+      expect(screen.getByText(/channels mapped/i)).toBeTruthy();
+      expect(screen.getByRole('button', { name: /use custom.*positions/i })).toBeTruthy();
     });
 
     it('switches back to the matrix view when the Matrix tab is clicked', async () => {

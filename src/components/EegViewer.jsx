@@ -235,6 +235,15 @@ export const EegViewer = ({
   // the scalp mesh has nothing to render without at least one EEG-typed channel.
   const hasEegChannels = Object.values(channelSettings).some((c) => c.type === 'eeg');
 
+  // How many channels are typed EEG — the denominator for the mesh's "X / Y channels mapped"
+  // footer. Using the whole recording's channel count there would read as if a mixed
+  // EEG+SEEG recording with every EEG channel matched still had unmatched channels (the SEEG
+  // ones, which were never eligible to match a scalp position template in the first place).
+  const eegChannelCount = useMemo(
+    () => Object.values(channelSettings).filter((c) => c.type === 'eeg').length,
+    [channelSettings]
+  );
+
   // One channelSettings type per channelNames index — lets ESI reject a channel it needs
   // that's itself typed SEEG, even if its name happens to match (see channelSnapshot below).
   const channelTypes = useMemo(
@@ -1179,7 +1188,7 @@ export const EegViewer = ({
           channelNames={channelNames}
           channelTypes={channelTypes}
           voltagesByChannel={topoVoltagesByChannel}
-          totalChannels={channelNames.length}
+          totalChannels={eegChannelCount}
           onClose={() => setTopoEnabled(false)}
           onTopoNvReady={onTopoNvReady}
           isStandardElectrodes={isStandardElectrodes}
