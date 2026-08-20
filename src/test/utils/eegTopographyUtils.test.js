@@ -495,6 +495,9 @@ import {
   buildIntracranialMatrix,
   buildIntracranialConnectome,
   buildElectrodeLayer,
+  splitChannelsByType,
+  chunkContactsIntoLines,
+  MATRIX_LINE_WIDTH,
 } from '@/utils/eegTopographyUtils';
 import { ELECTRODE_LAYER_URL } from '@/utils/NiiViewer.utils';
 
@@ -502,24 +505,38 @@ describe('buildIntracranialMatrix', () => {
   it('groups channels by electrode group, sorted by contact number ascending', () => {
     const channelNames = ['B2', 'B1', "B'1", 'T1'];
     const { groups } = buildIntracranialMatrix(channelNames, [0, 0, 0, 0]);
-    const b = groups.find((g) => g.group === 'b');
+    const b = groups.find((g) => g.group === 'B');
     expect(b.contacts.map((c) => c.contact)).toEqual([1, 2]);
   });
 
   it('separates groups, including primed groups, from their base letter', () => {
     const channelNames = ['B1', "B'1", 'T1'];
     const { groups } = buildIntracranialMatrix(channelNames, [0, 0, 0]);
-    expect(groups.map((g) => g.group).sort()).toEqual(['b', "b'", 't']);
+    expect(groups.map((g) => g.group).sort()).toEqual(['B', "B'", 'T']);
   });
 
   it('attaches the voltage and channelIdx for each contact', () => {
     const channelNames = ['B1', 'B2'];
     const { groups } = buildIntracranialMatrix(channelNames, [5, -3]);
-    const b = groups.find((g) => g.group === 'b');
+    const b = groups.find((g) => g.group === 'B');
     expect(b.contacts).toEqual([
       { contact: 1, channelIdx: 0, voltage: 5 },
       { contact: 2, channelIdx: 1, voltage: -3 },
     ]);
+  });
+
+  it('displays the group exactly as it appears in the channel names, not lowercased', () => {
+    const channelNames = ['E1', 'E2'];
+    const { groups } = buildIntracranialMatrix(channelNames, [0, 0]);
+    expect(groups.map((g) => g.group)).toEqual(['E']);
+  });
+
+  it('groups channels case-insensitively even when casing is inconsistent, using the first-seen casing to display', () => {
+    const channelNames = ['E1', 'e2'];
+    const { groups } = buildIntracranialMatrix(channelNames, [0, 0]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].group).toBe('E');
+    expect(groups[0].contacts.map((c) => c.contact)).toEqual([1, 2]);
   });
 
   it('puts channels that do not fit the group+contact pattern into unparsed, not a row', () => {
@@ -536,6 +553,72 @@ describe('buildIntracranialMatrix', () => {
     const { groups, unparsed } = buildIntracranialMatrix([], []);
     expect(groups).toHaveLength(0);
     expect(unparsed).toHaveLength(0);
+  });
+});
+
+describe('splitChannelsByType', () => {
+  it('buckets channels by their channelSettings type, keeping names/voltages aligned', () => {
+    const { eeg, seeg, other } = splitChannelsByType(
+      ['Fp1', 'B1', 'ECG'],
+      [1, 2, 3],
+      ['eeg', 'seeg', 'other']
+    );
+    expect(eeg).toEqual({ names: ['Fp1'], voltages: [1] });
+    expect(seeg).toEqual({ names: ['B1'], voltages: [2] });
+    expect(other).toEqual({ names: ['ECG'], voltages: [3] });
+  });
+
+  it('buckets an undefined or unrecognized type as other', () => {
+    const { eeg, seeg, other } = splitChannelsByType(['A1', 'A2'], [1, 2], [undefined, 'bogus']);
+    expect(eeg.names).toEqual([]);
+    expect(seeg.names).toEqual([]);
+    expect(other.names).toEqual(['A1', 'A2']);
+  });
+
+  it('defaults a missing voltage to 0', () => {
+    const { eeg } = splitChannelsByType(['Fp1'], [], ['eeg']);
+    expect(eeg.voltages).toEqual([0]);
+  });
+});
+
+describe('chunkContactsIntoLines', () => {
+  const contactsUpTo = (n) =>
+    Array.from({ length: n }, (_, i) => ({ contact: i + 1, channelIdx: i, voltage: 0 }));
+
+  it('returns a single line when the max contact fits within the line width', () => {
+    const lines = chunkContactsIntoLines(contactsUpTo(5), 5, MATRIX_LINE_WIDTH);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatchObject({ start: 1, end: 5 });
+    expect(lines[0].contacts).toHaveLength(5);
+  });
+
+  it('wraps into multiple lines once the max contact exceeds the line width', () => {
+    const lines = chunkContactsIntoLines(contactsUpTo(20), 20, 16);
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toMatchObject({ start: 1, end: 16 });
+    expect(lines[1]).toMatchObject({ start: 17, end: 20 }); // trimmed to the true max, not padded to 32
+    expect(lines[0].contacts.map((c) => c.contact)).toEqual(
+      Array.from({ length: 16 }, (_, i) => i + 1)
+    );
+    expect(lines[1].contacts.map((c) => c.contact)).toEqual([17, 18, 19, 20]);
+  });
+
+  it('shares the same window boundaries for a group smaller than the section-wide max, producing gap lines', () => {
+    // A 4-contact group in a section whose widest group has 20 contacts: still gets 2 lines
+    // (matching every other group's line count), with the second line entirely empty.
+    const lines = chunkContactsIntoLines(contactsUpTo(4), 20, 16);
+    expect(lines).toHaveLength(2);
+    expect(lines[1].contacts).toHaveLength(0);
+  });
+
+  it('leaves gaps in a line for missing contact numbers instead of collapsing them', () => {
+    const contacts = [
+      { contact: 1, channelIdx: 0, voltage: 0 },
+      { contact: 3, channelIdx: 1, voltage: 0 }, // contact 2 missing
+    ];
+    const lines = chunkContactsIntoLines(contacts, 3, 16);
+    expect(lines).toHaveLength(1);
+    expect(lines[0].contacts.map((c) => c.contact)).toEqual([1, 3]);
   });
 });
 

@@ -1161,6 +1161,7 @@ export const EegViewer = ({
           matched={visibleMatched}
           voltages={topoVoltages}
           channelNames={channelNames}
+          channelTypes={channelTypes}
           voltagesByChannel={topoVoltagesByChannel}
           totalChannels={channelNames.length}
           onClose={() => setTopoEnabled(false)}

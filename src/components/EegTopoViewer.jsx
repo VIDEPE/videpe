@@ -80,7 +80,7 @@ function addElectrodeMarkers(nv, markers, calMax, colourBlindMode) {
 // ─── Window sizing constants ────────────────────────────────────────────────
 
 // Default/minimum window size in px — default matches the previous fixed w-96 h-80 (24rem x 20rem)
-const DEFAULT_TOPO_SIZE = { width: 375, height: 360 };
+const DEFAULT_TOPO_SIZE = { width: 475, height: 360 };
 const MIN_TOPO_WIDTH = 220;
 const MIN_TOPO_HEIGHT = 220;
 const RESIZE_DIRECTIONS = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
@@ -98,6 +98,7 @@ export function EegTopoViewer({
   isIntracranial = false,
   hasEegChannels = true,
   channelNames,
+  channelTypes,
   voltagesByChannel,
   customFileName = null, // filename (no extension) of the loaded custom positions file — owned by PatientView, passed down
 }) {
@@ -435,6 +436,7 @@ export function EegTopoViewer({
             <EegMatrixViewer
               channelNames={channelNames}
               voltages={voltagesByChannel}
+              channelTypes={channelTypes}
               colourBlindMode={colourBlindMode}
             />
           </div>

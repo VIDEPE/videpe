@@ -219,7 +219,10 @@ export function buildElectrodeMarkers(electrodes, matched, voltages) {
  *   unparsed: { channelIdx: number, name: string }[]
  */
 export function buildIntracranialMatrix(channelNames, voltages) {
-  const groupMap = new Map(); // electrode group -> its contacts, accumulated in channel order
+  // Keyed by the lowercased group so casing differences never split one physical probe into
+  // two rows; the display label itself (e.g. "E", not "e") comes from the first channel seen
+  // for that group, via parseElectrodeContactName's groupLabel.
+  const groupMap = new Map(); // lowercased group -> { label, contacts }
   const unparsed = [];
 
   channelNames.forEach((name, channelIdx) => {
@@ -228,19 +231,87 @@ export function buildIntracranialMatrix(channelNames, voltages) {
       unparsed.push({ channelIdx, name }); // doesn't fit the group+contact shape — not a row
       return;
     }
-    const { group, contact } = parsed;
-    if (!groupMap.has(group)) groupMap.set(group, []);
-    groupMap.get(group).push({ contact, channelIdx, voltage: voltages[channelIdx] ?? 0 });
+    const { group, groupLabel, contact } = parsed;
+    if (!groupMap.has(group)) groupMap.set(group, { label: groupLabel, contacts: [] });
+    groupMap.get(group).contacts.push({ contact, channelIdx, voltage: voltages[channelIdx] ?? 0 });
   });
 
   const groups = Array.from(groupMap.entries())
     .sort(([a], [b]) => a.localeCompare(b)) // alphabetical row order, e.g. "b" before "b'"
-    .map(([group, contacts]) => ({
-      group,
+    .map(([, { label, contacts }]) => ({
+      group: label,
       contacts: contacts.slice().sort((a, b) => a.contact - b.contact), // ascending column order
     }));
 
   return { groups, unparsed };
+}
+
+// ─── Matrix rendering helpers ───────────────────────────────────────────────
+// Pure layout helpers for EegMatrixViewer — splitting channels by type and wrapping a wide
+// electrode group's contacts onto multiple lines are both plain array transforms, easier to
+// unit-test here than inside the component.
+
+/**
+ * Splits channel names/voltages into per-type buckets so the matrix can render EEG and
+ * SEEG contacts as separate sections (a recording can mix both, since channel type is now
+ * user-editable per channel in the Montage Editor). Each bucket keeps its entries in
+ * original channel order, with voltages aligned 1:1 to names.
+ *
+ * @param {string[]} channelNames
+ * @param {number[]} voltages - one per channelNames index
+ * @param {(string|undefined)[]} channelTypes - one channelSettings type ('eeg'|'seeg'|'other'
+ *   |undefined) per channelNames index
+ * @returns {{
+ *   eeg: { names: string[], voltages: number[] },
+ *   seeg: { names: string[], voltages: number[] },
+ *   other: { names: string[], voltages: number[] }
+ * }}
+ */
+export function splitChannelsByType(channelNames, voltages, channelTypes) {
+  const buckets = {
+    eeg: { names: [], voltages: [] },
+    seeg: { names: [], voltages: [] },
+    other: { names: [], voltages: [] },
+  };
+
+  channelNames.forEach((name, i) => {
+    const type = channelTypes?.[i];
+    const bucket = type === 'eeg' || type === 'seeg' ? buckets[type] : buckets.other;
+    bucket.names.push(name);
+    bucket.voltages.push(voltages[i] ?? 0);
+  });
+
+  return buckets;
+}
+
+// Contacts per wrapped line in the matrix view — a high-density EEG net (e.g. EGI's E1-E208
+// under one group letter) would otherwise render as one absurdly wide row.
+export const MATRIX_LINE_WIDTH = 16;
+
+/**
+ * Splits one group's sorted contacts into fixed-width "lines" for rendering, using absolute
+ * contact-number windows (1-16, 17-32, ...) shared across every group in the same section —
+ * not just this group's own contacts — so contact N stays in the same window (and under the
+ * same header) for every probe/group in the section, matching the existing no-gap-collapsing
+ * column convention (a group missing a contact still gets an empty cell at that position).
+ *
+ * @param {{contact:number, channelIdx:number, voltage:number}[]} contacts - this group's contacts
+ * @param {number} maxContact - the section-wide maximum contact number (shared across groups)
+ * @param {number} lineWidth - contacts per line, default MATRIX_LINE_WIDTH
+ * @returns {{start:number, end:number, contacts:object[]}[]} - one entry per line, `start`/`end`
+ *   are the true (1-based) contact numbers that line's columns represent
+ */
+export function chunkContactsIntoLines(contacts, maxContact, lineWidth = MATRIX_LINE_WIDTH) {
+  const lines = [];
+  for (let start = 1; start <= maxContact; start += lineWidth) {
+    const end = Math.min(start + lineWidth - 1, maxContact);
+    lines.push({
+      start,
+      end,
+      contacts: contacts.filter((c) => c.contact >= start && c.contact <= end),
+    });
+  }
+  return lines;
 }
 
 /**

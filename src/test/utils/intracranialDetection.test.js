@@ -18,19 +18,39 @@ const FSAVERAGE_1005_FIXTURE = [
 
 describe('parseElectrodeContactName', () => {
   it('parses a simple group+contact name', () => {
-    expect(parseElectrodeContactName('B1')).toEqual({ group: 'b', contact: 1 });
+    expect(parseElectrodeContactName('B1')).toEqual({ group: 'b', groupLabel: 'B', contact: 1 });
   });
 
   it('parses a primed group+contact name', () => {
-    expect(parseElectrodeContactName("B'12")).toEqual({ group: "b'", contact: 12 });
+    expect(parseElectrodeContactName("B'12")).toEqual({
+      group: "b'",
+      groupLabel: "B'",
+      contact: 12,
+    });
   });
 
   it('parses multi-letter groups', () => {
-    expect(parseElectrodeContactName('LA3')).toEqual({ group: 'la', contact: 3 });
+    expect(parseElectrodeContactName('LA3')).toEqual({
+      group: 'la',
+      groupLabel: 'LA',
+      contact: 3,
+    });
   });
 
   it('strips the same EEG/MEG prefix and -suffix normalizeChannelName handles', () => {
-    expect(parseElectrodeContactName('EEG Fp1-Ref')).toEqual({ group: 'fp', contact: 1 });
+    expect(parseElectrodeContactName('EEG Fp1-Ref')).toEqual({
+      group: 'fp',
+      groupLabel: 'Fp',
+      contact: 1,
+    });
+  });
+
+  it('preserves the group casing exactly as typed, including all-lowercase input', () => {
+    expect(parseElectrodeContactName('e208')).toEqual({
+      group: 'e',
+      groupLabel: 'e',
+      contact: 208,
+    });
   });
 
   it('returns null for names with no trailing digits', () => {
