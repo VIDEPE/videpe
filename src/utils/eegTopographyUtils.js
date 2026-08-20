@@ -199,48 +199,144 @@ export function buildElectrodeMarkers(electrodes, matched, voltages) {
   });
 }
 
-// ─── Intracranial electrode matrix & connectome ────────────────────────────
-// Groups intracranial contacts into probe shafts for the matrix view and the
-// 3D connectome layer.
+// ─── Electrode matrix & intracranial connectome ────────────────────────────
+// Groups contacts into probe/group shafts for the matrix view (any channel type —
+// EEG or SEEG) and the 3D connectome layer (SEEG-specific, see below).
 
 /**
- * Groups intracranial channel names by parsed electrode group and contact number,
- * sorted ascending within each group — the row/column structure the intracranial
- * topography matrix renders. Needs only channel names + a voltage per channel
- * index, no electrode positions, since this view has no position-file gate.
- * Channels that don't fit the group+contact shape (e.g. "ECG") aren't dropped —
- * they're returned separately in `unparsed` so the caller can still surface them,
- * just not as a matrix row/column.
+ * Groups channel names by parsed electrode group and number-within-group, sorted ascending
+ * within each group — the row/column structure the topography matrix renders. Works for
+ * any channel type (EEG or SEEG) whose names fit the group+number shape, e.g. "B1"/"B2"
+ * or a high-density EEG net's "E1".."E208". Needs only channel names + a voltage per
+ * channel index, no electrode positions, since this view has no position-file gate.
+ * Channels that don't fit the group+number shape (e.g. "ECG") aren't dropped — they're
+ * returned separately in `ungrouped`, named-column entries rather than a numbered
+ * group+number row. (Named `ungrouped`, not `other`, to avoid confusion with the
+ * channelSettings 'other' channel *type*, a separate concept.)
  *
  * @param {string[]} channelNames
  * @param {number[]} voltages  - one per channelNames index
  * @returns {{
- *   groups: { group: string, contacts: { contact: number, channelIdx: number, voltage: number }[] }[],
- *   unparsed: { channelIdx: number, name: string }[]
+ *   groups: { group: string, contacts: { numberInGroup: number, channelIdx: number, voltage: number }[] }[],
+ *   ungrouped: { channelIdx: number, name: string, voltage: number }[]
  */
-export function buildIntracranialMatrix(channelNames, voltages) {
-  const groupMap = new Map(); // electrode group -> its contacts, accumulated in channel order
-  const unparsed = [];
+export function buildElectrodeMatrix(channelNames, voltages) {
+  // Keyed by the lowercased group so casing differences never split one physical probe into
+  // two rows; the display label itself (e.g. "E", not "e") comes from the first channel seen
+  // for that group, via parseElectrodeContactName's groupLabel.
+  const groupMap = new Map(); // lowercased group -> { label, contacts }
+  const ungrouped = [];
 
   channelNames.forEach((name, channelIdx) => {
     const parsed = parseElectrodeContactName(name);
     if (!parsed) {
-      unparsed.push({ channelIdx, name }); // doesn't fit the group+contact shape — not a row
+      ungrouped.push({ channelIdx, name, voltage: voltages[channelIdx] ?? 0 }); // doesn't fit the group+number shape
       return;
     }
-    const { group, contact } = parsed;
-    if (!groupMap.has(group)) groupMap.set(group, []);
-    groupMap.get(group).push({ contact, channelIdx, voltage: voltages[channelIdx] ?? 0 });
+    const { group, groupLabel, numberInGroup } = parsed;
+    if (!groupMap.has(group)) groupMap.set(group, { label: groupLabel, contacts: [] });
+    groupMap.get(group).contacts.push({
+      numberInGroup,
+      channelIdx,
+      voltage: voltages[channelIdx] ?? 0,
+    });
   });
 
   const groups = Array.from(groupMap.entries())
     .sort(([a], [b]) => a.localeCompare(b)) // alphabetical row order, e.g. "b" before "b'"
-    .map(([group, contacts]) => ({
-      group,
-      contacts: contacts.slice().sort((a, b) => a.contact - b.contact), // ascending column order
+    .map(([, { label, contacts }]) => ({
+      group: label,
+      contacts: contacts.slice().sort((a, b) => a.numberInGroup - b.numberInGroup), // ascending column order
     }));
 
-  return { groups, unparsed };
+  return { groups, ungrouped };
+}
+
+// ─── Matrix rendering helpers ───────────────────────────────────────────────
+// Pure layout helpers for EegMatrixViewer — splitting channels by type and wrapping a wide
+// electrode group's contacts onto multiple lines are both plain array transforms, easier to
+// unit-test here than inside the component.
+
+/**
+ * Splits channel names/voltages into per-type buckets so the matrix can render EEG and
+ * SEEG contacts as separate sections (a recording can mix both, since channel type is now
+ * user-editable per channel in the Montage Editor). Each bucket keeps its entries in
+ * original channel order, with voltages aligned 1:1 to names.
+ *
+ * @param {string[]} channelNames
+ * @param {number[]} voltages - one per channelNames index
+ * @param {(string|undefined)[]} channelTypes - one channelSettings type ('eeg'|'seeg'|'other'
+ *   |undefined) per channelNames index
+ * @returns {{
+ *   eeg: { names: string[], voltages: number[] },
+ *   seeg: { names: string[], voltages: number[] },
+ *   other: { names: string[], voltages: number[] }
+ * }}
+ */
+export function splitChannelsByType(channelNames, voltages, channelTypes) {
+  const buckets = {
+    eeg: { names: [], voltages: [] },
+    seeg: { names: [], voltages: [] },
+    other: { names: [], voltages: [] },
+  };
+
+  channelNames.forEach((name, i) => {
+    const type = channelTypes?.[i];
+    const bucket = type === 'eeg' || type === 'seeg' ? buckets[type] : buckets.other;
+    bucket.names.push(name);
+    bucket.voltages.push(voltages[i] ?? 0);
+  });
+
+  return buckets;
+}
+
+// Contacts per wrapped line in the matrix view — a high-density EEG net (e.g. EGI's E1-E208
+// under one group letter) would otherwise render as one absurdly wide row.
+export const MATRIX_LINE_WIDTH = 16;
+
+/**
+ * Splits one group's sorted contacts into fixed-width "lines" for rendering, using absolute
+ * numberInGroup windows (1-16, 17-32, ...) — a missing number within those windows still gets
+ * an empty cell at that position (no gap-collapsing). Window boundaries are always aligned to
+ * the same 1-based grid regardless of what's passed as `maxNumberInGroup`, so if the caller
+ * passes a value shared across several groups (e.g. the section-wide max), number N lands in
+ * the same window for all of them — but EegMatrixViewer instead passes each group's own max, so
+ * a short group doesn't render trailing empty lines just to match a longer group's line count.
+ *
+ * @param {{numberInGroup:number, channelIdx:number, voltage:number}[]} contacts - this group's contacts
+ * @param {number} maxNumberInGroup - generate windows up to this numberInGroup value
+ * @param {number} lineWidth - contacts per line, default MATRIX_LINE_WIDTH
+ * @returns {{start:number, end:number, contacts:object[]}[]} - one entry per line, `start`/`end`
+ *   are the true (1-based) numberInGroup values that line's columns represent
+ */
+export function chunkContactsIntoLines(contacts, maxNumberInGroup, lineWidth = MATRIX_LINE_WIDTH) {
+  const lines = [];
+  for (let start = 1; start <= maxNumberInGroup; start += lineWidth) {
+    const end = Math.min(start + lineWidth - 1, maxNumberInGroup);
+    lines.push({
+      start,
+      end,
+      contacts: contacts.filter((c) => c.numberInGroup >= start && c.numberInGroup <= end),
+    });
+  }
+  return lines;
+}
+
+/**
+ * Splits a flat array into fixed-size chunks, in order — used for the matrix view's "Other"
+ * section (channels that don't fit a group+contact row), whose entries are named individually
+ * rather than positioned by contact number, so there's no gap-window logic to preserve.
+ *
+ * @param {T[]} items
+ * @param {number} lineWidth - items per line, default MATRIX_LINE_WIDTH
+ * @returns {T[][]}
+ */
+export function chunkArrayIntoLines(items, lineWidth = MATRIX_LINE_WIDTH) {
+  const lines = [];
+  for (let i = 0; i < items.length; i += lineWidth) {
+    lines.push(items.slice(i, i + lineWidth));
+  }
+  return lines;
 }
 
 /**
@@ -267,19 +363,19 @@ export function buildIntracranialConnectome(matched, voltages) {
     sizeValue: 1,
   }));
 
-  const groupMap = new Map(); // electrode group -> { contact, nodeIndex, voltage }[]
+  const groupMap = new Map(); // electrode group -> { numberInGroup, nodeIndex, voltage }[]
   matched.forEach((m, nodeIndex) => {
     const parsed = parseElectrodeContactName(m.name);
     if (!parsed) return; // not on a probe shaft — no edge to draw for this contact
     if (!groupMap.has(parsed.group)) groupMap.set(parsed.group, []);
     groupMap
       .get(parsed.group)
-      .push({ contact: parsed.contact, nodeIndex, voltage: voltages[nodeIndex] ?? 0 });
+      .push({ numberInGroup: parsed.numberInGroup, nodeIndex, voltage: voltages[nodeIndex] ?? 0 });
   });
 
   const edges = [];
   for (const contacts of groupMap.values()) {
-    const sorted = contacts.slice().sort((a, b) => a.contact - b.contact); // shaft order, gaps just absent
+    const sorted = contacts.slice().sort((a, b) => a.numberInGroup - b.numberInGroup); // shaft order, gaps just absent
     for (let i = 0; i < sorted.length - 1; i++) {
       edges.push({
         first: sorted[i].nodeIndex,

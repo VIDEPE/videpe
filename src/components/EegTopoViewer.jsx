@@ -80,7 +80,7 @@ function addElectrodeMarkers(nv, markers, calMax, colourBlindMode) {
 // ─── Window sizing constants ────────────────────────────────────────────────
 
 // Default/minimum window size in px — default matches the previous fixed w-96 h-80 (24rem x 20rem)
-const DEFAULT_TOPO_SIZE = { width: 375, height: 360 };
+const DEFAULT_TOPO_SIZE = { width: 500, height: 400 };
 const MIN_TOPO_WIDTH = 220;
 const MIN_TOPO_HEIGHT = 220;
 const RESIZE_DIRECTIONS = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
@@ -96,7 +96,9 @@ export function EegTopoViewer({
   isStandardElectrodes = true,
   onElecPosFile,
   isIntracranial = false,
+  hasEegChannels = true,
   channelNames,
+  channelTypes,
   voltagesByChannel,
   customFileName = null, // filename (no extension) of the loaded custom positions file — owned by PatientView, passed down
 }) {
@@ -111,12 +113,20 @@ export function EegTopoViewer({
   const [position, setPosition] = useState({ x: 80, y: 80 });
   const [size, setSize] = useState(DEFAULT_TOPO_SIZE);
   const [colourBlindMode, setColourBlindMode] = useState(false);
+  // Which of the two views (3D mesh / electrode matrix) the user last picked, via the title
+  // bar tabs below. Seeded from the majority-SEEG heuristic so the window opens on whichever
+  // view is most likely relevant, same as the old auto-switching behaviour.
+  const [selectedView, setSelectedView] = useState(isIntracranial ? 'matrix' : 'mesh');
+  // Derived, not stored: falls back to the matrix whenever the mesh is unavailable (e.g.
+  // every channel is retyped away from EEG in the Montage Editor) instead of leaving a dead
+  // tab selected — and remembers the user's mesh choice if EEG channels reappear later.
+  const activeView = hasEegChannels ? selectedView : 'matrix';
 
   // ─── Hooks: NiiVue lifecycle ──────────────────────────────────────────────────
-  // Initialise NiiVue once on mount — skipped entirely in intracranial mode, which
-  // renders a plain HTML matrix instead of a 3D canvas, so there's nothing to attach to.
+  // Initialise NiiVue once on mount — skipped entirely when there are no EEG-typed channels,
+  // since there's then no mesh data to ever show and nothing worth attaching a canvas to.
   useEffect(() => {
-    if (isIntracranial) return;
+    if (!hasEegChannels) return;
     const nv = nvRef.current;
     nv.setSliceType(SLICE_TYPE.RENDER); // force slicetype to render for a 3D view
     nv.addColormap(EEG_TOPO_COLORMAP_KEY, EEG_TOPO_COLORMAP);
@@ -134,24 +144,26 @@ export function EegTopoViewer({
     nv.attachToCanvas(canvasRef.current);
     nv.volScaleMultiplier = 0.85;
     onTopoNvReady?.();
-  }, [nvRef, onTopoNvReady, isIntracranial]);
+  }, [nvRef, onTopoNvReady, hasEegChannels]);
 
   // ─── Derived values ─────────────────────────────────────────────────────────
   // The convex-hull triangulation only depends on the electrode template, not on the
   // per-timepoint voltages — caching it here avoids re-triangulating on every topo
   // timepoint click, when only the voltage interpolation below actually needs to change.
-  // Skipped in intracranial mode, where there's no mesh to triangulate.
+  // Skipped when there are no EEG channels, where there's no mesh to triangulate.
   const electrodeMesh = useMemo(
-    () => (isIntracranial ? null : buildElectrodeMesh(electrodes)),
-    [electrodes, isIntracranial]
+    () => (hasEegChannels ? buildElectrodeMesh(electrodes) : null),
+    [electrodes, hasEegChannels]
   );
 
   // ─── Hooks: mesh loading ──────────────────────────────────────────────────────
   // Rebuild and reload the mesh whenever electrodes, matched channels, voltages, or
-  // re-referencing mode change. Clears any previously loaded mesh first.
+  // re-referencing mode change. Clears any previously loaded mesh first. Kept mounted (and
+  // loaded) even while the matrix tab is the one currently visible, so flipping back to the
+  // mesh tab is instant rather than re-attaching NiiVue and re-loading from scratch.
   useEffect(() => {
     const nv = nvRef.current;
-    if (isIntracranial || !nv || !electrodes?.length || !voltages?.length) return;
+    if (!hasEegChannels || !nv || !electrodes?.length || !voltages?.length) return;
 
     const { vertices, indices } = electrodeMesh;
     const scalars = interpolateMeshVoltages(electrodes, matched, voltages);
@@ -204,7 +216,7 @@ export function EegTopoViewer({
 
     // Generate mesh for current electrode layout and load into NiiVue canvas
     loadMesh();
-  }, [nvRef, electrodeMesh, electrodes, matched, voltages, colourBlindMode, isIntracranial]);
+  }, [nvRef, electrodeMesh, electrodes, matched, voltages, colourBlindMode, hasEegChannels]);
 
   // ─── Handlers: window drag/resize ──────────────────────────────────────────────
   // Drag the floating window by its title bar. Position is clamped to the viewport so the
@@ -321,31 +333,93 @@ export function EegTopoViewer({
       {/* Title bar — drag handle; explicit bg-surface so NiiVue's black canvas doesn't bleed through */}
       <div
         data-testid="topo-title-bar"
-        className="flex items-center justify-between px-2 py-1 border-b border-border cursor-grab select-none shrink-0 bg-surface"
+        className="flex items-center justify-between px-2 border-b border-border cursor-grab select-none shrink-0 bg-surface"
         onMouseDown={handleDragStart}
       >
-        <span className="text-sm font-medium text-heading">
-          {isIntracranial ? 'SEEG Electrode Matrix' : 'EEG Topography'}
-        </span>
-        <TrafficLightButtons
-          onMaximize={() => setIsMaximized((v) => !v)}
-          isMaximized={isMaximized}
-          onClose={onClose}
-        />
+        {/* Underlined tabs, flush with the title bar's own bottom border — the active tab's
+            indicator overlays it so the tab reads as attached to the panel below. */}
+        <div
+          role="tablist"
+          aria-label="Topography view"
+          className="flex items-stretch gap-3 -mb-px"
+        >
+          <button
+            type="button"
+            role="tab"
+            id="topo-tab-mesh"
+            aria-controls="topo-panel-mesh"
+            aria-selected={activeView === 'mesh'}
+            data-testid="topo-tab-mesh"
+            disabled={!hasEegChannels}
+            onClick={() => setSelectedView('mesh')}
+            className={cn(
+              'px-0.5 py-1.5 text-xs font-medium border-b-2 transition-colors cursor-pointer',
+              activeView === 'mesh'
+                ? 'border-primary text-heading'
+                : 'border-transparent text-foreground/50 hover:text-heading',
+              !hasEegChannels && 'opacity-40 cursor-not-allowed hover:text-foreground/50'
+            )}
+            title={
+              hasEegChannels
+                ? '3D scalp mesh'
+                : 'No channels are typed EEG — mark at least one channel as EEG in the Montage Editor to enable the 3D mesh'
+            }
+          >
+            3D Mesh
+          </button>
+          <button
+            type="button"
+            role="tab"
+            id="topo-tab-matrix"
+            aria-controls="topo-panel-matrix"
+            aria-selected={activeView === 'matrix'}
+            data-testid="topo-tab-matrix"
+            onClick={() => setSelectedView('matrix')}
+            className={cn(
+              'px-0.5 py-1.5 text-xs font-medium border-b-2 transition-colors cursor-pointer',
+              activeView === 'matrix'
+                ? 'border-primary text-heading'
+                : 'border-transparent text-foreground/50 hover:text-heading'
+            )}
+            title="Electrode matrix"
+          >
+            Matrix
+          </button>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {/* ColourBlind Mode toggle — lives in the title bar (rather than floating over the
+              canvas) so it never obscures the mesh/matrix underneath. */}
+          <button
+            type="button"
+            className="button button-icon-xs"
+            onClick={() => setColourBlindMode(!colourBlindMode)}
+            title="Toggle colourblind colormap for the EEG topography"
+            aria-label="Toggle colourblind colormap for the EEG topography"
+            aria-pressed={colourBlindMode}
+          >
+            <EyeDashed size={14} />
+          </button>
+          <TrafficLightButtons
+            onMaximize={() => setIsMaximized((v) => !v)}
+            isMaximized={isMaximized}
+            onClose={onClose}
+          />
+        </div>
       </div>
 
       {/* NiiVue positions its canvas absolutely inside whatever element it attaches to.
           This wrapper is the containing block so the canvas stays within the middle zone.
-          In intracranial mode there's no NiiVue canvas at all — EegMatrixViewer fills it instead. */}
+          The mesh canvas (when there are EEG channels at all) stays mounted even while the
+          matrix tab is showing — only hidden via CSS — so flipping tabs doesn't re-attach
+          NiiVue or re-trigger the async mesh load. */}
       <div className="relative flex-1 min-h-0">
-        {isIntracranial ? (
-          <EegMatrixViewer
-            channelNames={channelNames}
-            voltages={voltagesByChannel}
-            colourBlindMode={colourBlindMode}
-          />
-        ) : (
-          <>
+        {hasEegChannels && (
+          <div
+            id="topo-panel-mesh"
+            role="tabpanel"
+            aria-labelledby="topo-tab-mesh"
+            className={cn('absolute inset-0', activeView !== 'mesh' && 'hidden')}
+          >
             <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
             {/* NiiVue's colorbar has no unit support — label it ourselves. pointer-events-none
                 so it doesn't block dragging/rotating the 3D view underneath. */}
@@ -355,65 +429,68 @@ export function EegTopoViewer({
             >
               µV
             </span>
-          </>
+          </div>
         )}
-        {/* ColourBlind Mode colour map — shared by the mesh and the intracranial matrix */}
-        <button
-          className={cn(
-            'absolute button button-icon shrink-0',
-            isIntracranial ? 'top-7 right-5' : 'top-1.5 right-1.5'
-          )}
-          type="button"
-          onClick={() => setColourBlindMode(!colourBlindMode)}
-          title="Toggle colourblind colormap for the EEG topography"
-          aria-label="Toggle colourblind colormap for the EEG topography"
-          aria-pressed={colourBlindMode}
-        >
-          <EyeDashed size={20}></EyeDashed>
-        </button>
+        {activeView === 'matrix' && (
+          <div id="topo-panel-matrix" role="tabpanel" aria-labelledby="topo-tab-matrix">
+            <EegMatrixViewer
+              channelNames={channelNames}
+              voltages={voltagesByChannel}
+              channelTypes={channelTypes}
+              colourBlindMode={colourBlindMode}
+            />
+          </div>
+        )}
       </div>
 
-      {/* Footer — explicit bg-surface for the same reason as the title bar */}
-      <div className="flex items-center justify-between px-2 py-1 text-xs border-t border-border shrink-0 bg-surface">
-        <span
-          className="text-foreground cursor-help"
-          title={`${matched.length} out of ${totalChannels} could be identified with the electrode position template below.\nUse custom electrode position file or adapt EEG channel naming to the template to increase the amount.`}
-        >
-          {matched.length} / {totalChannels} channels mapped
-        </span>
-      </div>
+      {/* Footer + electrode source row — position-file matching only means anything for the
+          3D mesh (the matrix is purely channel-name-derived, no position file involved), so
+          both are hidden while the matrix tab is showing. */}
+      {activeView === 'mesh' && (
+        <>
+          {/* Footer — explicit bg-surface for the same reason as the title bar */}
+          <div className="flex items-center justify-between px-2 py-1 text-xs border-t border-border shrink-0 bg-surface">
+            <span
+              className="text-foreground cursor-help"
+              title={`${matched.length} out of ${totalChannels} EEG channels could be identified with the electrode position template below.\nUse custom electrode position file or adapt EEG channel naming to the template to increase the amount.`}
+            >
+              {matched.length} / {totalChannels} EEG channels mapped
+            </span>
+          </div>
 
-      {/* Electrode source row */}
-      <div className="flex items-center justify-between px-2 py-1 text-xs border-t border-border shrink-0 bg-surface">
-        <span className="text-foreground/60">
-          {isStandardElectrodes
-            ? 'Default: fsaverage_1005 (FreeSurfer)'
-            : (customFileName ?? 'Custom')}
-        </span>
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          className="text-foreground/60 hover:text-heading cursor-pointer underline underline-offset-2"
-          aria-label="Click to browse file to use custom defined electrode positions"
-          title="Click to browse file to use custom defined electrode positions"
-        >
-          Use custom positions
-        </button>
-        {/* accept is .elc only for now — more parsers will extend this list later */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".elc,.tsv"
-          hidden
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) {
-              onElecPosFile?.(file); // customFileName display is owned by PatientView, derived from this callback
-            }
-            e.target.value = ''; // reset so the same file can be re-selected
-          }}
-        />
-      </div>
+          {/* Electrode source row */}
+          <div className="flex items-center justify-between px-2 py-1 text-xs border-t border-border shrink-0 bg-surface">
+            <span className="text-foreground/60">
+              {isStandardElectrodes
+                ? 'Default: fsaverage_1005 (FreeSurfer)'
+                : (customFileName ?? 'Custom')}
+            </span>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="text-foreground/60 hover:text-heading cursor-pointer underline underline-offset-2"
+              aria-label="Click to browse file to use custom defined electrode positions"
+              title="Click to browse file to use custom defined electrode positions"
+            >
+              Use custom positions
+            </button>
+            {/* accept is .elc only for now — more parsers will extend this list later */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".elc,.tsv"
+              hidden
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  onElecPosFile?.(file); // customFileName display is owned by PatientView, derived from this callback
+                }
+                e.target.value = ''; // reset so the same file can be re-selected
+              }}
+            />
+          </div>
+        </>
+      )}
 
       {/* Resize handles — hidden while maximized since the window already fills the screen.
           Rendered last so they paint above the title/footer content and stay grabbable at the edges. */}

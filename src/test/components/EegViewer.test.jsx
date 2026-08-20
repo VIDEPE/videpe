@@ -1632,7 +1632,9 @@ describe('EegViewer — recording type detection', () => {
     await enableTopoAndClick();
 
     expect(global.fetch).toHaveBeenCalled(); // still fetched, just not used for rendering in this mode
-    expect(screen.getByText(/0\s*\/\s*3\s*channels mapped/i)).toBeTruthy();
+    // All 3 channels default to type 'seeg' (auto-detected intracranial), so the mesh's
+    // "EEG channels mapped" denominator is 0 too, not the recording's total channel count.
+    expect(screen.getByText(/0\s*\/\s*0\s*channels mapped/i)).toBeTruthy();
     expect(screen.getByTestId('topo-is-intracranial')).toHaveTextContent('true');
   });
 
@@ -2320,6 +2322,30 @@ describe('EegViewer — bad channels excluded from topography/connectome/ESI', (
     expect(onChannelSnapshotChange).toHaveBeenLastCalledWith(
       expect.objectContaining({ voltages: [0, -1.5, 1.5] })
     );
+  });
+});
+
+describe('EegViewer — 3D mesh only includes EEG-typed channels', () => {
+  it("excludes a channel retyped to SEEG from the mesh's matched electrodes and voltages", async () => {
+    await renderViewer();
+    await enableTopoAndClick();
+
+    // MOCK_TSV matches EEG1 and EEG2 (EEG3 has no template position) — both default to
+    // type 'eeg', so both feed the mesh.
+    expect(screen.getByText('2 / 3 channels mapped')).toBeTruthy();
+    expect(screen.getByTestId('topo-voltages').textContent).toBe('-3,0');
+
+    // Retype EEG1 to SEEG — unlike marking a channel bad, this doesn't remove it from the
+    // reference calc, only from what the scalp mesh is built from.
+    await userEvent.click(screen.getByRole('button', { name: 'Montage' }));
+    await userEvent.selectOptions(screen.getByTestId('channel-type-EEG1'), 'seeg');
+    await userEvent.click(screen.getByRole('button', { name: 'OK' }));
+
+    // Only EEG2 (still typed eeg) remains — same voltage as before (0), since the average
+    // reference is unaffected by the type change. Denominator drops to 2 (EEG2+EEG3, the
+    // now-eeg-typed channels), not 3 — EEG1 no longer counts once it's retyped away from eeg.
+    expect(screen.getByText('1 / 2 channels mapped')).toBeTruthy();
+    expect(screen.getByTestId('topo-voltages').textContent).toBe('0');
   });
 });
 

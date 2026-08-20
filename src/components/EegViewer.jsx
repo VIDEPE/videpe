@@ -231,6 +231,19 @@ export const EegViewer = ({
     Object.values(channelSettings).filter((c) => c.type === 'seeg').length >
     Object.values(channelSettings).filter((c) => c.type === 'eeg').length;
 
+  // Whether any channel is currently typed EEG — gates EegTopoViewer's 3D mesh tab, since
+  // the scalp mesh has nothing to render without at least one EEG-typed channel.
+  const hasEegChannels = Object.values(channelSettings).some((c) => c.type === 'eeg');
+
+  // How many channels are typed EEG — the denominator for the mesh's "X / Y channels mapped"
+  // footer. Using the whole recording's channel count there would read as if a mixed
+  // EEG+SEEG recording with every EEG channel matched still had unmatched channels (the SEEG
+  // ones, which were never eligible to match a scalp position template in the first place).
+  const eegChannelCount = useMemo(
+    () => Object.values(channelSettings).filter((c) => c.type === 'eeg').length,
+    [channelSettings]
+  );
+
   // One channelSettings type per channelNames index — lets ESI reject a channel it needs
   // that's itself typed SEEG, even if its name happens to match (see channelSnapshot below).
   const channelTypes = useMemo(
@@ -391,12 +404,30 @@ export const EegViewer = ({
     [rawTopoVoltagesByChannel, zeroBadChannelVoltages]
   );
 
+  // The 3D mesh is a scalp surface — only EEG-typed matches belong on it, even if a channel
+  // marked SEEG happens to share a name with a template position label. topoVoltages is
+  // index-aligned with visibleMatched (see useTimepointSnapshot), so both are filtered by the
+  // same predicate/order here to stay aligned.
+  const eegMesh = useMemo(() => {
+    const matched = [];
+    const voltages = [];
+    visibleMatched.forEach((m, i) => {
+      if (m.type === 'eeg') {
+        matched.push(m);
+        voltages.push(topoVoltages[i]);
+      }
+    });
+    return { matched, voltages };
+  }, [visibleMatched, topoVoltages]);
+
   // Reports whether EegTopoViewer's NiiVue canvas currently has a mesh loaded — mirrors
-  // the guard in EegTopoViewer's mesh-loading effect (isIntracranial || !electrodes?.length
+  // the guard in EegTopoViewer's mesh-loading effect (!hasEegChannels || !electrodes?.length
   // || !voltages?.length skips the load) so PatientView can tell when the 3D scene it's
-  // synced to is genuinely empty and disable the cross-panel rotation link accordingly.
+  // synced to is genuinely empty and disable the cross-panel rotation link accordingly. The
+  // mesh stays loaded even while the matrix tab is the one showing (see EegTopoViewer), so
+  // this doesn't need to track which of the two tabs is currently active.
   const topoHasContent =
-    topoEnabled && !majorityIsSeeg && electrodes?.length > 0 && topoVoltages?.length > 0;
+    topoEnabled && hasEegChannels && electrodes?.length > 0 && eegMesh.voltages.length > 0;
   useEffect(() => {
     onTopoHasContentChange?.(topoHasContent);
   }, [topoHasContent, onTopoHasContentChange]);
@@ -1152,17 +1183,19 @@ export const EegViewer = ({
         <EegTopoViewer
           nvRef={nvRef_eegtopo}
           electrodes={electrodes}
-          matched={visibleMatched}
-          voltages={topoVoltages}
+          matched={eegMesh.matched}
+          voltages={eegMesh.voltages}
           channelNames={channelNames}
+          channelTypes={channelTypes}
           voltagesByChannel={topoVoltagesByChannel}
-          totalChannels={channelNames.length}
+          totalChannels={eegChannelCount}
           onClose={() => setTopoEnabled(false)}
           onTopoNvReady={onTopoNvReady}
           isStandardElectrodes={isStandardElectrodes}
           onElecPosFile={onElecPosFile}
           customFileName={customElecPosFileName}
           isIntracranial={majorityIsSeeg}
+          hasEegChannels={hasEegChannels}
         />
       )}
 
