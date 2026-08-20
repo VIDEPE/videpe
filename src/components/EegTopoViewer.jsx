@@ -96,6 +96,7 @@ export function EegTopoViewer({
   isStandardElectrodes = true,
   onElecPosFile,
   isIntracranial = false,
+  hasEegChannels = true,
   channelNames,
   voltagesByChannel,
   customFileName = null, // filename (no extension) of the loaded custom positions file — owned by PatientView, passed down
@@ -111,12 +112,20 @@ export function EegTopoViewer({
   const [position, setPosition] = useState({ x: 80, y: 80 });
   const [size, setSize] = useState(DEFAULT_TOPO_SIZE);
   const [colourBlindMode, setColourBlindMode] = useState(false);
+  // Which of the two views (3D mesh / electrode matrix) the user last picked, via the title
+  // bar tabs below. Seeded from the majority-SEEG heuristic so the window opens on whichever
+  // view is most likely relevant, same as the old auto-switching behaviour.
+  const [selectedView, setSelectedView] = useState(isIntracranial ? 'matrix' : 'mesh');
+  // Derived, not stored: falls back to the matrix whenever the mesh is unavailable (e.g.
+  // every channel is retyped away from EEG in the Montage Editor) instead of leaving a dead
+  // tab selected — and remembers the user's mesh choice if EEG channels reappear later.
+  const activeView = hasEegChannels ? selectedView : 'matrix';
 
   // ─── Hooks: NiiVue lifecycle ──────────────────────────────────────────────────
-  // Initialise NiiVue once on mount — skipped entirely in intracranial mode, which
-  // renders a plain HTML matrix instead of a 3D canvas, so there's nothing to attach to.
+  // Initialise NiiVue once on mount — skipped entirely when there are no EEG-typed channels,
+  // since there's then no mesh data to ever show and nothing worth attaching a canvas to.
   useEffect(() => {
-    if (isIntracranial) return;
+    if (!hasEegChannels) return;
     const nv = nvRef.current;
     nv.setSliceType(SLICE_TYPE.RENDER); // force slicetype to render for a 3D view
     nv.addColormap(EEG_TOPO_COLORMAP_KEY, EEG_TOPO_COLORMAP);
@@ -134,24 +143,26 @@ export function EegTopoViewer({
     nv.attachToCanvas(canvasRef.current);
     nv.volScaleMultiplier = 0.85;
     onTopoNvReady?.();
-  }, [nvRef, onTopoNvReady, isIntracranial]);
+  }, [nvRef, onTopoNvReady, hasEegChannels]);
 
   // ─── Derived values ─────────────────────────────────────────────────────────
   // The convex-hull triangulation only depends on the electrode template, not on the
   // per-timepoint voltages — caching it here avoids re-triangulating on every topo
   // timepoint click, when only the voltage interpolation below actually needs to change.
-  // Skipped in intracranial mode, where there's no mesh to triangulate.
+  // Skipped when there are no EEG channels, where there's no mesh to triangulate.
   const electrodeMesh = useMemo(
-    () => (isIntracranial ? null : buildElectrodeMesh(electrodes)),
-    [electrodes, isIntracranial]
+    () => (hasEegChannels ? buildElectrodeMesh(electrodes) : null),
+    [electrodes, hasEegChannels]
   );
 
   // ─── Hooks: mesh loading ──────────────────────────────────────────────────────
   // Rebuild and reload the mesh whenever electrodes, matched channels, voltages, or
-  // re-referencing mode change. Clears any previously loaded mesh first.
+  // re-referencing mode change. Clears any previously loaded mesh first. Kept mounted (and
+  // loaded) even while the matrix tab is the one currently visible, so flipping back to the
+  // mesh tab is instant rather than re-attaching NiiVue and re-loading from scratch.
   useEffect(() => {
     const nv = nvRef.current;
-    if (isIntracranial || !nv || !electrodes?.length || !voltages?.length) return;
+    if (!hasEegChannels || !nv || !electrodes?.length || !voltages?.length) return;
 
     const { vertices, indices } = electrodeMesh;
     const scalars = interpolateMeshVoltages(electrodes, matched, voltages);
@@ -204,7 +215,7 @@ export function EegTopoViewer({
 
     // Generate mesh for current electrode layout and load into NiiVue canvas
     loadMesh();
-  }, [nvRef, electrodeMesh, electrodes, matched, voltages, colourBlindMode, isIntracranial]);
+  }, [nvRef, electrodeMesh, electrodes, matched, voltages, colourBlindMode, hasEegChannels]);
 
   // ─── Handlers: window drag/resize ──────────────────────────────────────────────
   // Drag the floating window by its title bar. Position is clamped to the viewport so the
@@ -324,9 +335,33 @@ export function EegTopoViewer({
         className="flex items-center justify-between px-2 py-1 border-b border-border cursor-grab select-none shrink-0 bg-surface"
         onMouseDown={handleDragStart}
       >
-        <span className="text-sm font-medium text-heading">
-          {isIntracranial ? 'SEEG Electrode Matrix' : 'EEG Topography'}
-        </span>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            data-testid="topo-tab-mesh"
+            className="button size-xs"
+            onClick={() => setSelectedView('mesh')}
+            disabled={!hasEegChannels}
+            aria-pressed={activeView === 'mesh'}
+            title={
+              hasEegChannels
+                ? '3D scalp mesh'
+                : 'No channels are typed EEG — mark at least one channel as EEG in the Montage Editor to enable the 3D mesh'
+            }
+          >
+            3D Mesh
+          </button>
+          <button
+            type="button"
+            data-testid="topo-tab-matrix"
+            className="button size-xs"
+            onClick={() => setSelectedView('matrix')}
+            aria-pressed={activeView === 'matrix'}
+            title="Electrode matrix"
+          >
+            Matrix
+          </button>
+        </div>
         <TrafficLightButtons
           onMaximize={() => setIsMaximized((v) => !v)}
           isMaximized={isMaximized}
@@ -336,16 +371,12 @@ export function EegTopoViewer({
 
       {/* NiiVue positions its canvas absolutely inside whatever element it attaches to.
           This wrapper is the containing block so the canvas stays within the middle zone.
-          In intracranial mode there's no NiiVue canvas at all — EegMatrixViewer fills it instead. */}
+          The mesh canvas (when there are EEG channels at all) stays mounted even while the
+          matrix tab is showing — only hidden via CSS — so flipping tabs doesn't re-attach
+          NiiVue or re-trigger the async mesh load. */}
       <div className="relative flex-1 min-h-0">
-        {isIntracranial ? (
-          <EegMatrixViewer
-            channelNames={channelNames}
-            voltages={voltagesByChannel}
-            colourBlindMode={colourBlindMode}
-          />
-        ) : (
-          <>
+        {hasEegChannels && (
+          <div className={cn('absolute inset-0', activeView !== 'mesh' && 'hidden')}>
             <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
             {/* NiiVue's colorbar has no unit support — label it ourselves. pointer-events-none
                 so it doesn't block dragging/rotating the 3D view underneath. */}
@@ -355,13 +386,20 @@ export function EegTopoViewer({
             >
               µV
             </span>
-          </>
+          </div>
         )}
-        {/* ColourBlind Mode colour map — shared by the mesh and the intracranial matrix */}
+        {activeView === 'matrix' && (
+          <EegMatrixViewer
+            channelNames={channelNames}
+            voltages={voltagesByChannel}
+            colourBlindMode={colourBlindMode}
+          />
+        )}
+        {/* ColourBlind Mode colour map — shared by the mesh and the matrix */}
         <button
           className={cn(
             'absolute button button-icon shrink-0',
-            isIntracranial ? 'top-7 right-5' : 'top-1.5 right-1.5'
+            activeView === 'matrix' ? 'top-7 right-5' : 'top-1.5 right-1.5'
           )}
           type="button"
           onClick={() => setColourBlindMode(!colourBlindMode)}

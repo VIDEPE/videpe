@@ -895,11 +895,12 @@ export function EegMontageEditor({
                     >
                       {channelType ? TYPE_LIST[channelType] : '—'}
                     </span>
-                    {/* Reference Channel — a reference naming a channel not in this recording
-                        (only reachable via a loaded file) gets its own injected option so it
-                        displays as selected instead of falling back to blank "— n/a —". Only
-                        disabled when the row's own channel is missing (see isChannelMissing
-                        above) — a missing reference alone is fixable by picking another one.
+                    {/* Reference Channel — 
+                        Disabled when the row's own channel name is missing (see isChannelMissing above).
+                        When a channel is referenced that isn't in the current recording (only reachable
+                        via a loaded montage file), gets its own injected option so it can display this 
+                        this channel as missing (instead of falling back to blank "— n/a —"). a missing 
+                        reference alone is fixable by picking another one. 
                         Bad/missing coloring lives on the individual <option> elements below (not
                         this <select>'s own className) — a color class here would cascade onto
                         every option in the dropdown instead of just the one that's actually bad
