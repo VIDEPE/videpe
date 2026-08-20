@@ -167,47 +167,66 @@ describe('EegMatrixViewer', () => {
     });
   });
 
-  it('lists unparsed channels in a footnote instead of rendering them as rows', () => {
+  it('renders a channel typed eeg/seeg but with no group+contact shape (e.g. "Cz") as a named-column row inside its own type section, not a separate section', () => {
     render(
       <EegMatrixViewer
-        channelNames={['B1', 'ECG', 'Status']}
-        voltages={[1, 0, 0]}
-        channelTypes={['seeg', 'seeg', 'seeg']}
+        channelNames={['Fp1', 'Cz']}
+        voltages={[1, 2]}
+        channelTypes={EEG_TYPES(2)}
         colourBlindMode={false}
       />
     );
-    expect(screen.queryByTestId('matrix-row-seeg-ECG-0')).not.toBeInTheDocument();
-    const footnote = screen.getByTestId('matrix-unparsed');
-    expect(footnote).toHaveTextContent('ECG');
-    expect(footnote).toHaveTextContent('Status');
+    // Still just one EEG section — Cz doesn't spawn its own.
+    expect(screen.getAllByTestId(/^matrix-section-/)).toHaveLength(1);
+    expect(screen.getByTestId('matrix-section-eeg')).toBeInTheDocument();
+    expect(screen.getByTestId('matrix-cell-eeg-ungrouped-Cz')).toBeInTheDocument();
+    expect(screen.getByText('Cz')).toBeInTheDocument(); // column header shows the name
   });
 
-  it('lists channels typed neither eeg nor seeg (e.g. "other") in the same footnote', () => {
+  it('gives an ungrouped row a blank row label instead of a group letter', () => {
+    render(
+      <EegMatrixViewer
+        channelNames={['Cz']}
+        voltages={[5]}
+        channelTypes={EEG_TYPES(1)}
+        colourBlindMode={false}
+      />
+    );
+    const row = screen.getByTestId('matrix-row-eeg-ungrouped-0');
+    const rowLabel = row.querySelector('th');
+    expect(rowLabel.textContent).toBe('');
+  });
+
+  it('shares the section calMax between grouped and ungrouped rows of the same type', () => {
+    render(
+      <EegMatrixViewer
+        channelNames={['Fp1', 'Cz']}
+        voltages={[10, -4]}
+        channelTypes={EEG_TYPES(2)}
+        colourBlindMode={false}
+      />
+    );
+    const calMax = 10; // max(|10|, |-4|) across the whole EEG section, grouped + ungrouped
+    expect(screen.getByTestId('matrix-cell-eeg-ungrouped-Cz')).toHaveStyle({
+      backgroundColor: interpolateDivergingColor(-4, calMax, false),
+    });
+  });
+
+  it('renders channels typed neither eeg nor seeg (e.g. "ECG") in a separate "Other" section', () => {
     render(
       <EegMatrixViewer
         channelNames={['B1', 'ECG']}
-        voltages={[1, 0]}
+        voltages={[1, 5]}
         channelTypes={['seeg', 'other']}
         colourBlindMode={false}
       />
     );
-    const footnote = screen.getByTestId('matrix-unparsed');
-    expect(footnote).toHaveTextContent('ECG');
+    expect(screen.getByTestId('matrix-section-other')).toBeInTheDocument();
+    expect(screen.getByTestId('matrix-cell-other-ECG')).toBeInTheDocument();
+    expect(screen.queryByTestId('matrix-cell-seeg-ungrouped-ECG')).not.toBeInTheDocument();
   });
 
-  it('renders no footnote when every channel parses', () => {
-    render(
-      <EegMatrixViewer
-        channelNames={['B1', 'B2']}
-        voltages={[1, 2]}
-        channelTypes={SEEG_TYPES(2)}
-        colourBlindMode={false}
-      />
-    );
-    expect(screen.queryByTestId('matrix-unparsed')).not.toBeInTheDocument();
-  });
-
-  it('renders no section and only the footnote when there are no eeg/seeg-typed channels at all', () => {
+  it('renders only the "Other" section when there are no eeg/seeg-typed channels at all', () => {
     render(
       <EegMatrixViewer
         channelNames={['ECG']}
@@ -218,6 +237,19 @@ describe('EegMatrixViewer', () => {
     );
     expect(screen.queryByTestId('matrix-section-eeg')).not.toBeInTheDocument();
     expect(screen.queryByTestId('matrix-section-seeg')).not.toBeInTheDocument();
-    expect(screen.getByTestId('matrix-unparsed')).toHaveTextContent('ECG');
+    expect(screen.getByTestId('matrix-section-other')).toBeInTheDocument();
+    expect(screen.getByTestId('matrix-cell-other-ECG')).toBeInTheDocument();
+  });
+
+  it('renders no "Other" section when every channel is typed eeg or seeg', () => {
+    render(
+      <EegMatrixViewer
+        channelNames={['B1', 'B2']}
+        voltages={[1, 2]}
+        channelTypes={SEEG_TYPES(2)}
+        colourBlindMode={false}
+      />
+    );
+    expect(screen.queryByTestId('matrix-section-other')).not.toBeInTheDocument();
   });
 });

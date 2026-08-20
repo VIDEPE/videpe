@@ -9,18 +9,25 @@ import { matchChannelsToPositions } from './eegTopographyUtils';
 // ("12") don't match — there's no leading letter group to anchor on.
 const CONTACT_NAME_PATTERN = /^([a-zA-Z]+'?)(\d+)$/;
 
-// Parses a channel name into its electrode group and contact number, if it has that shape.
-// Strips the same "EEG "/"MEG " prefix and "-suffix" normalizeChannelName does (so "EEG B1-Ref"
-// parses the same as "B1"), but keeps the original case so `groupLabel` displays as the
-// recording actually spells it (e.g. "E", not "e") — `group` is the lowercased version of the
-// same substring, used as a case-insensitive grouping/lookup key elsewhere (matrix rows,
+// Parses a channel name into its electrode group and number-within-that-group, if it has that
+// shape. Strips the same "EEG "/"MEG " prefix and "-suffix" normalizeChannelName does (so
+// "EEG B1-Ref" parses the same as "B1"), but keeps the original case so `groupLabel` displays as
+// the recording actually spells it (e.g. "E", not "e") — `group` is the lowercased version of
+// the same substring, used as a case-insensitive grouping/lookup key elsewhere (matrix rows,
 // connectome edges), so "b1" and "B2" of the same physical probe still merge into one group even
 // if a recording's casing is inconsistent. Returns null for names that don't fit (e.g. "ECG").
+// `numberInGroup` is a genuine physical contact number for SEEG (position along the probe), but
+// just a sequential channel index for a dense scalp net (e.g. EGI's E1-E208) — same field either
+// way, since both are the trailing digit(s) in a group+number channel name.
 export function parseElectrodeContactName(name) {
   const stripped = name.replace(/^(eeg|meg)\s+/i, '').replace(/-.*$/, '');
   const match = stripped.match(CONTACT_NAME_PATTERN);
   if (!match) return null;
-  return { group: match[1].toLowerCase(), groupLabel: match[1], contact: parseInt(match[2], 10) };
+  return {
+    group: match[1].toLowerCase(),
+    groupLabel: match[1],
+    numberInGroup: parseInt(match[2], 10),
+  };
 }
 
 // No implanted depth/strip/grid electrode carries more contacts than this under a single

@@ -17,15 +17,19 @@ const FSAVERAGE_1005_FIXTURE = [
 ];
 
 describe('parseElectrodeContactName', () => {
-  it('parses a simple group+contact name', () => {
-    expect(parseElectrodeContactName('B1')).toEqual({ group: 'b', groupLabel: 'B', contact: 1 });
+  it('parses a simple group+number name', () => {
+    expect(parseElectrodeContactName('B1')).toEqual({
+      group: 'b',
+      groupLabel: 'B',
+      numberInGroup: 1,
+    });
   });
 
-  it('parses a primed group+contact name', () => {
+  it('parses a primed group+number name', () => {
     expect(parseElectrodeContactName("B'12")).toEqual({
       group: "b'",
       groupLabel: "B'",
-      contact: 12,
+      numberInGroup: 12,
     });
   });
 
@@ -33,7 +37,7 @@ describe('parseElectrodeContactName', () => {
     expect(parseElectrodeContactName('LA3')).toEqual({
       group: 'la',
       groupLabel: 'LA',
-      contact: 3,
+      numberInGroup: 3,
     });
   });
 
@@ -41,7 +45,7 @@ describe('parseElectrodeContactName', () => {
     expect(parseElectrodeContactName('EEG Fp1-Ref')).toEqual({
       group: 'fp',
       groupLabel: 'Fp',
-      contact: 1,
+      numberInGroup: 1,
     });
   });
 
@@ -49,7 +53,7 @@ describe('parseElectrodeContactName', () => {
     expect(parseElectrodeContactName('e208')).toEqual({
       group: 'e',
       groupLabel: 'e',
-      contact: 208,
+      numberInGroup: 208,
     });
   });
 
