@@ -3,8 +3,18 @@ import {
   buildIntracranialMatrix,
   splitChannelsByType,
   chunkContactsIntoLines,
+  MATRIX_LINE_WIDTH,
 } from '@/utils/eegTopographyUtils';
 import { interpolateDivergingColor } from '@/utils/eegColormaps';
+
+// Cell size in px. table-layout:auto (the default) sizes a column from the widest cell
+// across *every* row sharing it, header included — so setting width only on the <td>s isn't
+// enough, it'd just get overridden by the header <th>'s own content+padding. A <colgroup>
+// with table-fixed pins every column's width independent of any row's content, and matches
+// row-label-column width fixed to LABEL_COL_WIDTH.
+const CELL_WIDTH = 22;
+const CELL_HEIGHT = 22;
+const LABEL_COL_WIDTH = 28;
 
 // Renders EEG/SEEG electrode voltages as row(group)/column(contact number) matrices — one
 // section per channel type, EEG first then SEEG below it, since a recording can mix both
@@ -86,7 +96,20 @@ function MatrixSection({ sectionKey, title, groups, colourBlindMode }) {
       data-testid={`matrix-section-${sectionKey}`}
     >
       <h3 className="px-1 text-[11px] font-semibold text-foreground/70">{title}</h3>
-      <table className="border-collapse text-[11px]">
+      {/* table-fixed with no explicit table width would still stretch to fill its container,
+          proportionally redistributing any extra space across the (equally-sized) columns —
+          silently ignoring the actual CELL_WIDTH value. Pinning the table's own width to the
+          sum of its columns is what makes the <colgroup> widths stick. */}
+      <table
+        className="table-fixed border-collapse text-[11px]"
+        style={{ width: LABEL_COL_WIDTH + MATRIX_LINE_WIDTH * CELL_WIDTH }}
+      >
+        <colgroup>
+          <col style={{ width: LABEL_COL_WIDTH }} />
+          {Array.from({ length: MATRIX_LINE_WIDTH }, (_, i) => (
+            <col key={i} style={{ width: CELL_WIDTH }} />
+          ))}
+        </colgroup>
         <tbody>
           {groups.map(({ group, contacts }) =>
             chunkContactsIntoLines(contacts, maxContact).map((line, lineIdx) => {
@@ -96,16 +119,29 @@ function MatrixSection({ sectionKey, title, groups, colourBlindMode }) {
               );
               return (
                 <Fragment key={`${group}-${lineIdx}`}>
-                  <tr>
-                    <th className="sticky left-0 bg-surface px-1" />
+                  {/* leading-none: index.css's root line-height (145% of an 18px base, ≈26px)
+                      inherits as that already-computed absolute length, not rescaled to these
+                      cells' own 11px font — without overriding it here, the header/label text
+                      alone would keep the row from shrinking below ~26px regardless of CELL_HEIGHT.
+                      pt-1.5: breathing room above each header row, separating it from the
+                      previous line's coloured cells — the <tr>'s own height is a minimum, so
+                      this padding grows the row rather than just squeezing the text inside it. */}
+                  <tr style={{ height: CELL_HEIGHT }}>
+                    <th className="sticky left-0 bg-surface px-1 pt-1.5" />
                     {columns.map((contact) => (
-                      <th key={contact} className="px-1 text-foreground/60 font-normal">
+                      <th
+                        key={contact}
+                        className="px-1 pt-1.5 text-foreground/60 font-normal leading-none"
+                      >
                         {contact}
                       </th>
                     ))}
                   </tr>
-                  <tr data-testid={`matrix-row-${sectionKey}-${group}-${lineIdx}`}>
-                    <th className="sticky left-0 bg-surface px-1 text-left text-foreground/80">
+                  <tr
+                    style={{ height: CELL_HEIGHT }}
+                    data-testid={`matrix-row-${sectionKey}-${group}-${lineIdx}`}
+                  >
+                    <th className="sticky left-0 bg-surface px-1 text-left text-foreground/80 leading-none">
                       {group}
                     </th>
                     {columns.map((contact) => {
@@ -121,8 +157,6 @@ function MatrixSection({ sectionKey, title, groups, colourBlindMode }) {
                             backgroundColor: cell
                               ? interpolateDivergingColor(cell.voltage, calMax, colourBlindMode)
                               : 'transparent',
-                            width: 22,
-                            height: 18,
                           }}
                         />
                       );
