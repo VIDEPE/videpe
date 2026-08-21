@@ -181,8 +181,11 @@ describe('EegViewer — controls presence', () => {
     await renderViewer();
     const label2test = screen.getByText('Channels');
     expect(label2test).toBeInTheDocument();
-    const buttons = within(containerOf(label2test)).getAllByRole('button');
-    expect(buttons).toHaveLength(2);
+    // Scoped by name rather than counting all buttons in the container — the stack/unstack
+    // toggle lives in this same bordered box (see EegViewer's Channel Controls) alongside these
+    const container = within(containerOf(label2test));
+    expect(container.getByRole('button', { name: 'Show more channels' })).toBeInTheDocument();
+    expect(container.getByRole('button', { name: 'Show fewer channels' })).toBeInTheDocument();
   });
 
   it('renders visible channel count size input with default value of 20', async () => {

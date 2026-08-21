@@ -81,13 +81,14 @@ const buildChannelOptions = ({
   yScale,
   color, // unstacked: single trace color ('red'|'blue'|...) or null/undefined for the theme default. stacked: array of those, one per channel
   stacked = false, // true: one series per channel, no OVERDRAW — the plot already fills the whole channel area, so there's no adjacent lane for a peak to bleed into. false (default): single series, y-range extended by OVERDRAW so peaks bleed into adjacent lanes instead of clipping
+  onSeriesFocus, // stacked only: (colorIdx: number | null) => void — fires when the cursor's nearest series changes, already converted from uPlot's 1-based seriesIdx to a plain index into the `color` array passed in
 }) => {
   const defaultStroke = isDarkMode ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.8)';
   const gridColor = isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)';
   const colors = stacked ? color : [color];
   // Asymptotic decay from STACKED_OPACITY_START_PCT at the minimum stacked count (2 channels)
   // toward the floor — STACKED_OPACITY_HALF_LIFE is how many channels beyond 2 it takes to
-  // fall halfway there. 
+  // fall halfway there.
   //              min |  buffer | asympt. fraction
   // opacity(n) =  c  + (s - c) * b / (b + n - 2)
   // where s = start, c = floor, b = half-life, n = channel count
@@ -100,8 +101,18 @@ const buildChannelOptions = ({
     width,
     height,
     background: 'rgba(0,0,0,0)', // transparent so peaks from adjacent channels show through
-    // All plots share the same syncKey — panning/zooming one moves all others
-    cursor: { y: false, sync: { key: syncKey } },
+    // cursor y: disables horizontal crosshair (only want vertical (x) one to mark snapshot timepoint)
+    //        sync: links panning/zooming one plot to every other uPlot instance with the same key
+    //        focus: (stacked only) marks the series nearest the cursor within prox pixels as focussed, dimming the other
+    cursor: { y: false, sync: { key: syncKey }, focus: stacked ? { prox: 15 } : undefined },
+    // hooks holds an array of callback uplos calls at specific moments (setData, draw, setCursor, setSeries, etc)
+    // cursor.focus is the detector and hooks.setSeries is the notifier
+    // when setSeries gets triggered (by cursor focus) it takes the instance and the index,
+    // converts uPlot's 1-based seriesIdx (0 is the x-series) to a plain colors-array index
+    // right here, and calls onSeriesFocus with that — so the offset never leaves this function
+    hooks: stacked
+      ? { setSeries: [(u, seriesIdx) => onSeriesFocus?.(seriesIdx != null ? seriesIdx - 1 : null)] }
+      : undefined,
     scales: {
       x: { time: false, range: [startTime, startTime + windowSize] },
       // y-range is extended by OVERDRAW so the center plotHeight pixels show ±yScale,
@@ -225,6 +236,11 @@ export const EegViewer = ({
 
   // Toggle stacked vs unStacked EEG plot
   const [eegIsStacked, setEegIsStacked] = useState(false);
+
+  // Index into displayRows the cursor is nearest to in the stacked overlay — null when
+  // nothing's focused. Converted from uPlot's 1-based onSeriesFocus index right where it's
+  // wired up below, so nowhere else needs to know about that offset.
+  const [hoveredStackedChannelIdx, setHoveredStackedChannelIdx] = useState(null);
 
   // Px position (from the plot area's left edge) of the vertical marker for topoTimepoint — the
   // timestamp the electrode voltage snapshot was taken at, shared by the topography, ESI, and
@@ -707,6 +723,25 @@ export const EegViewer = ({
     }
   }, [displayedData]);
 
+  // Memoized — uplot-react recreates the whole uPlot instance if any nested option object
+  // changes reference, which would wipe cursor focus state on every hover-triggered render
+  const stackedPlotOptions = useMemo(
+    () =>
+      buildChannelOptions({
+        isDarkMode,
+        syncKey,
+        width: plotWidth,
+        height: channelAreaHeight,
+        windowSize,
+        startTime,
+        yScale,
+        color: displayRows.map((row) => row.color),
+        stacked: true,
+        onSeriesFocus: setHoveredStackedChannelIdx,
+      }),
+    [isDarkMode, syncKey, plotWidth, channelAreaHeight, windowSize, startTime, yScale, displayRows]
+  );
+
   const renderStackedPlots = () => (
     <div className="relative">
       {/* Snapshot marker — one continuous vertical line spanning every channel, at the
@@ -733,13 +768,14 @@ export const EegViewer = ({
         }}
         className="relative"
       >
-        {/* Row name label */}
+        {/* Row name label — shows the hovered channel's name while the cursor is near a trace
+            (see onSeriesFocus below), falling back to the plain "Stacked" label otherwise */}
         <span
           className="absolute left-0 top-1/2 -translate-y-1/2 text-xs text-center select-none z-10 px-0.5 truncate"
           style={{ width: Y_AXIS_WIDTH }}
           title={`Stacked EEG/Montage channels (n=${displayRows.length})`}
         >
-          Stacked
+          {displayRows[hoveredStackedChannelIdx]?.name ?? 'Stacked'}
         </span>
         {/* Zero-line at y=0, aligned with the plot area (not drawn by uPlot to avoid grid issues) */}
         <div
@@ -763,17 +799,7 @@ export const EegViewer = ({
           }}
         >
           <UplotReact
-            options={buildChannelOptions({
-              isDarkMode,
-              syncKey,
-              width: plotWidth,
-              height: channelAreaHeight,
-              windowSize,
-              startTime,
-              yScale,
-              color: displayRows.map((row) => row.color),
-              stacked: true,
-            })}
+            options={stackedPlotOptions}
             data={stackedDisplayData}
             onCreate={(u) => {
               {
