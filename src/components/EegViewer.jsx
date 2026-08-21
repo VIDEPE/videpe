@@ -294,6 +294,15 @@ export const EegViewer = ({
     [channelNames, channelSettings, montageChannels]
   );
 
+  // visibleChannelCount is clamped inside useEegPlotControls against channelNames.length, which
+  // doesn't account for bad channels or montage rows — reclamp against displayRows here too
+  useEffect(() => {
+    if (visibleChannelCount > displayRows.length && displayRows.length > 0) {
+      updateVisibleChannelCount(displayRows.length);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- updateVisibleChannelCount isn't memoized
+  }, [visibleChannelCount, displayRows.length]);
+
   // Shared average/median reference series (see the diagram atop eegViewerUtils.js) —
   // computed once from the raw buffer's non-bad channels, then handed to both the montage
   // row waveform below (deriveMontageRowSamples) and the topography/connectome/ESI
@@ -479,6 +488,16 @@ export const EegViewer = ({
       )
     );
   }, [timestamps, channels, referenceSeries, displayRows, startTime, windowSize, plotWidth]);
+
+  // Stacking only makes sense with more than one channel — if bad-channel/montage edits drop
+  // displayedData to ≤1 row while stacked, fall back to unstacked instead of leaving the view
+  // showing a "Stacked" single trace behind a now-disabled toggle
+  useEffect(() => {
+    if (eegIsStacked && displayedData.length <= 1) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setEegIsStacked(false);
+    }
+  }, [eegIsStacked, displayedData.length]);
 
   // Signal onViewReady once the first measurement lands and charts have rendered
   const onViewReadyCalledRef = useRef(false);
@@ -752,6 +771,11 @@ export const EegViewer = ({
     </div>
   );
 
+  {
+    /* --------------
+    Main EEGViewer return
+    ----------------*/
+  }
   return (
     <>
       {/* min-h-full (not h-full) so this box grows with a dragged-taller plot row, keeping the
@@ -922,7 +946,7 @@ export const EegViewer = ({
                     type="number"
                     value={visibleChannelCountStr}
                     min={1}
-                    max={channelNames.length}
+                    max={displayRows.length}
                     style={{ width: inputWidth(visibleChannelCountStr) }}
                     onChange={onVisibleChannelCountChange}
                     onBlur={onVisibleChannelCountBlur}
@@ -942,24 +966,18 @@ export const EegViewer = ({
                   {/* Stack/Unstack EEG toggle — mt-2 sets it apart from the channel-count
                       buttons above (gap-1 already spaces those tightly together) since it's a
                       related-but-distinct control, not a third count-adjustment button */}
-                  <div
-                    className="mt-2"
-                    onMouseEnter={() =>
-                      !electrodes?.length && setHoveredLedHighlight('electrodePosition')
-                    }
-                    onMouseLeave={() => setHoveredLedHighlight(null)}
-                  >
+                  <div className="mt-2">
                     <button
                       type="button"
                       className="button button-icon"
                       title={
-                        electrodes?.length > 1
+                        displayedData.length > 1
                           ? `${eegIsStacked ? 'Unstack' : 'Stack'} EEG Plots`
                           : 'Stacking EEG plots requires more than 1 active channel'
                       }
                       aria-label={`${eegIsStacked ? 'Unstack' : 'Stack'} EEG Plots`}
                       aria-pressed={eegIsStacked}
-                      disabled={!electrodes?.length}
+                      disabled={displayedData.length <= 1}
                       onClick={() => setEegIsStacked(!eegIsStacked)}
                     >
                       {eegIsStacked ? (
