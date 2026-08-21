@@ -737,7 +737,7 @@ export const EegViewer = ({
         <span
           className="absolute left-0 top-1/2 -translate-y-1/2 text-xs text-center select-none z-10 px-0.5 truncate"
           style={{ width: Y_AXIS_WIDTH }}
-          title="Stacked EEG/Montage channels"
+          title={`Stacked EEG/Montage channels (n=${displayRows.length})`}
         >
           Stacked
         </span>
