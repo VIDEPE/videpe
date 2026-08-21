@@ -19,6 +19,8 @@ import {
   Map,
   Box,
   LocateFixed,
+  Layers,
+  LayersArrowDown,
 } from 'lucide-react';
 import { minMaxDownsample } from '@/utils/downsample';
 import {
@@ -47,6 +49,9 @@ const EEG_LOADING_TOAST_ID = 'eeg-buffer-loading'; // fixed id so the loading/su
 const Y_AXIS_WIDTH = 80; // px for the y-axis area (channel name + tick space) — must match x-axis strip left padding
 const PLOT_RIGHT_PAD = 20; // px right padding — must match in both channel plots and x-axis strip so ticks align
 const OVERDRAW = 2; // canvas height multiplier — peaks bleed ±50% into adjacent lanes instead of clipping
+const STACKED_OPACITY_START_PCT = 80; // opacity at the minimum stacked count (2 channels) — already translucent rather than fully opaque
+const STACKED_OPACITY_FLOOR_PCT = 3; // minimum per-trace opacity in the stacked overlay
+const STACKED_OPACITY_HALF_LIFE = 5; // channels (beyond the minimum stacked count of 2) needed to decay halfway from STACKED_OPACITY_START_PCT to the floor — higher = slower initial drop
 const X_AXIS_GRID_SPACE = 60; // Min px between vertical gridlines — shared by the channel plots and the x-axis =>uPlot uses it to pick an increment (1,2,5,10,etc)
 const MIN_CHANNEL_AREA_HEIGHT = 120; // px floor for the channel-plot scroll area. Below this the whole viewer overflows and the pane's scroll container takes over (mirrors NiiViewer's MIN_CANVAS_HEIGHT) instead of letting the x-axis/scrubber/controls/dropzone overlap
 const MIN_PLOT_ROW_HEIGHT = 350; // px floor for the uPlot area
@@ -62,10 +67,11 @@ const ZERO_LINE_COLOR_LIGHT = 'rgba(0,0,0,0.25)'; // y=0 reference line in light
 const inputWidth = (str) =>
   `calc(${Math.max(INPUT_MIN_CH, str.length + INPUT_EXTRA_CH)}ch + ${INPUT_PAD})`;
 
-// Builds uPlot options for a single channel. Called once per channel on each render.
+// Builds uPlot options for a channel plot — either a single unstacked lane (one series) or
+// the stacked overlay (one series per channel, sharing one uPlot instance). Called once per
+// render for however many uPlot instances are showing (one per row when unstacked, one total
+// when stacked).
 const buildChannelOptions = ({
-  channelIndex,
-  totalChannels,
   isDarkMode,
   syncKey,
   width,
@@ -73,22 +79,66 @@ const buildChannelOptions = ({
   windowSize,
   startTime,
   yScale,
-  color, // row's selected trace color ('red'|'blue'|...), or null/undefined for the theme default
+  color, // unstacked: single trace color ('red'|'blue'|...) or null/undefined for the theme default. stacked: array of those, one per channel
+  stacked = false, // true: one series per channel, no OVERDRAW — the plot already fills the whole channel area, so there's no adjacent lane for a peak to bleed into. false (default): single series, y-range extended by OVERDRAW so peaks bleed into adjacent lanes instead of clipping
+  onSeriesFocus, // stacked only: (colorIdx: number | null) => void — fires when the cursor's nearest series changes, already converted from uPlot's 1-based seriesIdx to a plain index into the `color` array passed in
 }) => {
-  const stroke = color ?? (isDarkMode ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.8)');
+  const defaultStroke = isDarkMode ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.8)';
   const gridColor = isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)';
+  const colors = stacked ? color : [color];
+  // Asymptotic decay from STACKED_OPACITY_START_PCT at the minimum stacked count (2 channels)
+  // toward the floor — STACKED_OPACITY_HALF_LIFE is how many channels beyond 2 it takes to
+  // fall halfway there.
+  //              min |  buffer | asympt. fraction
+  // opacity(n) =  c  + (s - c) * b / (b + n - 2)
+  // where s = start, c = floor, b = half-life, n = channel count
+  const stackedStrokeOpacityPct =
+    STACKED_OPACITY_FLOOR_PCT +
+    ((STACKED_OPACITY_START_PCT - STACKED_OPACITY_FLOOR_PCT) * STACKED_OPACITY_HALF_LIFE) /
+      (STACKED_OPACITY_HALF_LIFE + colors.length - 2);
+  // uPlot's cursor.focus only dims the OTHER series — it never brightens the focused one, so
+  // once every stroke is already this faint, hovering doesn't produce a visible highlight at
+  // all. The setSeries hook below manually swaps the focused series to fullStroke instead.
+  const fadedStroke = (c) =>
+    stacked
+      ? `color-mix(in srgb, ${c ?? defaultStroke} ${stackedStrokeOpacityPct}%, transparent)`
+      : (c ?? defaultStroke);
+  const fullStroke = (c) => c ?? defaultStroke;
+  // Read by each series' stroke() below on every uPlot-driven redraw — setSeries just
+  // reassigns this, no manual u.redraw() needed (see fadedStroke's comment above)
+  let focusedSeriesIdx = null;
 
   return {
     width,
     height,
     background: 'rgba(0,0,0,0)', // transparent so peaks from adjacent channels show through
-    // All plots share the same syncKey — panning/zooming one moves all others
-    cursor: { y: false, sync: { key: syncKey } },
+    // cursor y: disables horizontal crosshair (only want vertical (x) one to mark snapshot timepoint)
+    //        sync: links panning/zooming one plot to every other uPlot instance with the same key
+    //        focus: (stacked only) marks the series nearest the cursor within prox pixels as focussed, dimming the other
+    cursor: { y: false, sync: { key: syncKey }, focus: stacked ? { prox: 15 } : undefined },
+    // hooks holds an array of callback uplos calls at specific moments (setData, draw, setCursor, setSeries, etc)
+    // in our case: cursor.focus is the detector and hooks.setSeries is the notifier
+    // when setSeries gets triggered (by cursor focus) it takes the uPlot instance and the index,
+    // converts uPlot's 1-based seriesIdx (0 is the x-series) to a plain colors-array index
+    // right here, and calls onSeriesFocus with that. It also records the raw seriesIdx into
+    // focusedSeriesIdx, which each series' stroke() function (below) reads on its own — see
+    // focusedSeriesIdx's comment above for why nothing here calls u.redraw() itself
+    hooks: stacked
+      ? {
+          setSeries: [
+            (u, seriesIdx) => {
+              const colorIdx = seriesIdx != null ? seriesIdx - 1 : null;
+              focusedSeriesIdx = colorIdx;
+              onSeriesFocus?.(colorIdx);
+            },
+          ],
+        }
+      : undefined,
     scales: {
       x: { time: false, range: [startTime, startTime + windowSize] },
       // y-range is extended by OVERDRAW so the center plotHeight pixels show ±yScale,
       // while the overdraw areas above/below render values beyond ±yScale
-      y: { range: [-yScale * OVERDRAW, yScale * OVERDRAW] },
+      y: { range: stacked ? [-yScale, yScale] : [-yScale * OVERDRAW, yScale * OVERDRAW] },
     },
     axes: [
       {
@@ -102,7 +152,18 @@ const buildChannelOptions = ({
       },
       { show: false }, // y-axis hidden; left padding below takes its place
     ],
-    series: [{}, { stroke, width: 1 }],
+    // Stacked strokes go through color-mix (same technique EegMontageEditor uses for its row tint) so overlapping traces darken instead of hiding each other.
+    // stroke is a function (stacked only) so uPlot re-evaluates it on every redraw it already
+    // does for focus changes, picking fullStroke for whichever series focusedSeriesIdx names
+    series: [
+      {},
+      ...colors.map((c, i) => ({
+        stroke: stacked
+          ? () => (focusedSeriesIdx === i ? fullStroke(c) : fadedStroke(c))
+          : fadedStroke(c),
+        width: 1,
+      })),
+    ],
     legend: { show: false },
     padding: [0, PLOT_RIGHT_PAD, 0, Y_AXIS_WIDTH], // left padding replaces the hidden y-axis size; 0 top/bottom so overdraw areas aren't consumed by padding
   };
@@ -188,13 +249,21 @@ export const EegViewer = ({
   // hoveredLedHighlight indicates which StatusLED should light up when the disabled toggle
   // toggle (Topo/3D render/ESI) is hovered over => gives additional cue to user why it's disabled.
   // Set on the toggle's wrapper div rather than the <button> itself (disabled buttons don't reliably fire mouse events)
-  const [hoveredLedHighlight, setHoveredLedHighlight] = useState(null); // 'electrodePosition' | 'inverseSolution' | null
+  const [hoveredLedHighlight, setHoveredLedHighlight] = useState(null); // 'electrodePosition' | 'inverseSolution' | 'stackEeg' | null
   // Topograph window only opens when the toggle is on (topoEnabled) AND once a EEGplot
   // click has produced a timepoint to show (topoTimepoint)
   const topoVisible = topoEnabled && topoTimepoint !== null;
 
   // EEG Montage window only opens when the button is pressed
   const [montageVisible, setMontageVisible] = useState(false);
+
+  // Toggle stacked vs unStacked EEG plot
+  const [eegIsStacked, setEegIsStacked] = useState(false);
+
+  // Index into displayRows the cursor is nearest to in the stacked overlay — null when
+  // nothing's focused. Converted from uPlot's 1-based onSeriesFocus index right where it's
+  // wired up below, so nowhere else needs to know about that offset.
+  const [hoveredStackedChannelIdx, setHoveredStackedChannelIdx] = useState(null);
 
   // Px position (from the plot area's left edge) of the vertical marker for topoTimepoint — the
   // timestamp the electrode voltage snapshot was taken at, shared by the topography, ESI, and
@@ -285,6 +354,15 @@ export const EegViewer = ({
     () => buildMontageDisplayRows(channelNames, channelSettings, montageChannels),
     [channelNames, channelSettings, montageChannels]
   );
+
+  // visibleChannelCount is clamped inside useEegPlotControls against channelNames.length, which
+  // doesn't account for bad channels or montage rows — reclamp against displayRows here too
+  useEffect(() => {
+    if (visibleChannelCount > displayRows.length && displayRows.length > 0) {
+      updateVisibleChannelCount(displayRows.length);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- updateVisibleChannelCount isn't memoized
+  }, [visibleChannelCount, displayRows.length]);
 
   // Shared average/median reference series (see the diagram atop eegViewerUtils.js) —
   // computed once from the raw buffer's non-bad channels, then handed to both the montage
@@ -472,6 +550,16 @@ export const EegViewer = ({
     );
   }, [timestamps, channels, referenceSeries, displayRows, startTime, windowSize, plotWidth]);
 
+  // Stacking only makes sense with more than one channel — if bad-channel/montage edits drop
+  // displayedData to ≤1 row while stacked, fall back to unstacked instead of leaving the view
+  // showing a "Stacked" single trace behind a now-disabled toggle
+  useEffect(() => {
+    if (eegIsStacked && displayedData.length <= 1) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setEegIsStacked(false);
+    }
+  }, [eegIsStacked, displayedData.length]);
+
   // Signal onViewReady once the first measurement lands and charts have rendered
   const onViewReadyCalledRef = useRef(false);
   useEffect(() => {
@@ -559,6 +647,206 @@ export const EegViewer = ({
     }
   };
 
+  // Current default view: one uPlot instance per displayed row, each in its own
+  // horizontal lane with an independent y-baseline (see buildChannelOptions/OVERDRAW
+  // above). Kept as a plain function (not a component) so it closes over the render's
+  // variables directly — a <UnstackedPlots /> component would get a fresh identity every
+  // render and remount its uPlot instances instead of updating them in place.
+  const renderUnstackedPlots = () => (
+    <div className="relative">
+      {/* Snapshot marker — one continuous vertical line spanning every channel, at the
+          timepoint for the current topography/ESI/3D-render voltages. Rendered once
+          here (rather than per-row) so there's no seam at each row's border, and placed
+          before the rows so it paints behind their canvases like the zero-line does. */}
+      {snapshotMarkerLeft !== null && (
+        <div
+          data-testid="snapshot-marker"
+          className="absolute pointer-events-none top-0 bottom-0 w-0.25"
+          style={{
+            left: snapshotMarkerLeft,
+            backgroundColor: 'var(--c-secondary)',
+          }}
+        />
+      )}
+      {displayRows.map((row, rowIndex) => (
+        // Channel divider below each row
+        <div
+          key={row.id}
+          style={{
+            height: plotHeight,
+            overflow: 'visible',
+            borderBottom: `1px solid ${isDarkMode ? ROW_DIVIDER_COLOR_DARK : ROW_DIVIDER_COLOR_LIGHT}`,
+          }}
+          className="relative"
+        >
+          {/* Row name label */}
+          <span
+            className="absolute left-0 top-1/2 -translate-y-1/2 text-xs text-center select-none z-10 px-0.5 truncate"
+            style={{ width: Y_AXIS_WIDTH }}
+            title={row.name}
+          >
+            {row.name}
+          </span>
+          {/* Zero-line at y=0, aligned with the plot area (not drawn by uPlot to avoid grid issues) */}
+          <div
+            className="absolute pointer-events-none"
+            style={{
+              top: '50%',
+              left: Y_AXIS_WIDTH,
+              right: PLOT_RIGHT_PAD,
+              height: 1,
+              backgroundColor: isDarkMode ? ZERO_LINE_COLOR_DARK : ZERO_LINE_COLOR_LIGHT,
+            }}
+          />
+          {/* Canvas wrapper — absolutely positioned to center the taller canvas in the lane */}
+          <div
+            style={{
+              position: 'absolute',
+              top: -((plotHeight * (OVERDRAW - 1)) / 2),
+              left: 0,
+            }}
+          >
+            <UplotReact
+              options={buildChannelOptions({
+                isDarkMode,
+                syncKey,
+                width: plotWidth,
+                height: plotHeight * OVERDRAW,
+                windowSize,
+                startTime,
+                yScale,
+                color: row.color,
+                stacked: false,
+              })}
+              data={displayedData[rowIndex]}
+              onCreate={(u) => {
+                {
+                  /* click listener that converts the click's x-position into a timestamp => sets topoTimepoint */
+                }
+                u.over.addEventListener('click', () => {
+                  const t = u.posToVal(u.cursor.left, 'x');
+                  if (!isNaN(t)) {
+                    setTopoTimepoint(t);
+                  }
+                });
+              }}
+              onDelete={() => {}}
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+
+  const stackedDisplayData = useMemo(() => {
+    if (displayedData.length === 0 || displayedData[0][0].length === 0) {
+      return [];
+    } else {
+      return [displayedData[0][0], ...displayedData.map(([, ys]) => ys)];
+    }
+  }, [displayedData]);
+
+  // Memoized — uplot-react recreates the whole uPlot instance if any nested option object
+  // changes reference, which would wipe cursor focus state on every hover-triggered render
+  const stackedPlotOptions = useMemo(
+    () =>
+      buildChannelOptions({
+        isDarkMode,
+        syncKey,
+        width: plotWidth,
+        height: channelAreaHeight,
+        windowSize,
+        startTime,
+        yScale,
+        color: displayRows.map((row) => row.color),
+        stacked: true,
+        onSeriesFocus: setHoveredStackedChannelIdx,
+      }),
+    [isDarkMode, syncKey, plotWidth, channelAreaHeight, windowSize, startTime, yScale, displayRows]
+  );
+
+  const renderStackedPlots = () => (
+    <div className="relative">
+      {/* Snapshot marker — one continuous vertical line spanning every channel, at the
+          timepoint for the current topography/ESI/3D-render voltages. Rendered once
+          here (rather than per-row) so there's no seam at each row's border, and placed
+          before the rows so it paints behind their canvases like the zero-line does. */}
+      {snapshotMarkerLeft !== null && (
+        <div
+          data-testid="snapshot-marker"
+          className="absolute pointer-events-none top-0 bottom-0 w-0.25"
+          style={{
+            left: snapshotMarkerLeft,
+            backgroundColor: 'var(--c-secondary)',
+          }}
+        />
+      )}
+      {/* Single lane filling the whole channel area — same height a lane would get if
+          visibleChannelCount were 1, since every channel is overlaid into this one plot */}
+      <div
+        style={{
+          height: channelAreaHeight,
+          overflow: 'visible',
+          borderBottom: `1px solid ${isDarkMode ? ROW_DIVIDER_COLOR_DARK : ROW_DIVIDER_COLOR_LIGHT}`,
+        }}
+        className="relative"
+      >
+        {/* Row name label — shows the hovered channel's name while the cursor is near a trace
+            (see onSeriesFocus below), falling back to the plain "Stacked" label otherwise */}
+        <span
+          className="absolute left-0 top-1/2 -translate-y-1/2 text-xs text-center select-none z-10 px-0.5 truncate"
+          style={{ width: Y_AXIS_WIDTH }}
+          title={`Stacked EEG/Montage channels (n=${displayRows.length})`}
+        >
+          {displayRows[hoveredStackedChannelIdx]?.name ?? 'Stacked'}
+        </span>
+        {/* Zero-line at y=0, aligned with the plot area (not drawn by uPlot to avoid grid issues) */}
+        <div
+          className="absolute pointer-events-none"
+          style={{
+            top: '50%',
+            left: Y_AXIS_WIDTH,
+            right: PLOT_RIGHT_PAD,
+            height: 1,
+            backgroundColor: isDarkMode ? ZERO_LINE_COLOR_DARK : ZERO_LINE_COLOR_LIGHT,
+          }}
+        />
+        {/* Canvas wrapper — no OVERDRAW/offset here (unlike the unstacked lanes): the canvas
+            is exactly as tall as its container, since there's no adjacent lane for a peak to
+            bleed into once this plot already fills the whole channel area */}
+        <div
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+          }}
+        >
+          <UplotReact
+            options={stackedPlotOptions}
+            data={stackedDisplayData}
+            onCreate={(u) => {
+              {
+                /* click listener that converts the click's x-position into a timestamp => sets topoTimepoint */
+              }
+              u.over.addEventListener('click', () => {
+                const t = u.posToVal(u.cursor.left, 'x');
+                if (!isNaN(t)) {
+                  setTopoTimepoint(t);
+                }
+              });
+            }}
+            onDelete={() => {}}
+          />
+        </div>
+      </div>
+    </div>
+  );
+
+  {
+    /* --------------
+    Main EEGViewer return
+    ----------------*/
+  }
   return (
     <>
       {/* min-h-full (not h-full) so this box grows with a dragged-taller plot row, keeping the
@@ -704,7 +992,11 @@ export const EegViewer = ({
               </div>
             </div>
 
-            {/* Channel Controls*/}
+            {/* Channel Controls — the stack toggle lives at the bottom of this same bordered
+                box (rather than in the icon list above) to show it's linked to the channel-count
+                controls above it: stacking overlays every channel into one plot sized like a
+                single unstacked lane, so "how many channels" no longer applies and those
+                controls are disabled while it's active. */}
             <div className="flex-1 flex flex-row items-center">
               <div className="flex flex-row items-center gap-1 py-1 border-border/50 border-1 border-r-0 rounded-tl-md rounded-bl-md">
                 <span className="text-xs text-foreground/60 whitespace-nowrap [writing-mode:vertical-rl] rotate-180 select-none pointer-events-none">
@@ -716,6 +1008,7 @@ export const EegViewer = ({
                     className="button button-icon"
                     onClick={() => updateVisibleChannelCount(visibleChannelCount + 1)}
                     title="Show more channels"
+                    disabled={eegIsStacked}
                   >
                     <ListChevronsUpDown size={ICON_SIZE} />
                   </button>
@@ -724,21 +1017,47 @@ export const EegViewer = ({
                     type="number"
                     value={visibleChannelCountStr}
                     min={1}
-                    max={channelNames.length}
+                    max={displayRows.length}
                     style={{ width: inputWidth(visibleChannelCountStr) }}
                     onChange={onVisibleChannelCountChange}
                     onBlur={onVisibleChannelCountBlur}
-                    className="text-center border border-border rounded px-1 py-0.5 text-sm bg-background text-foreground [appearance:textfield]"
+                    className="text-center border border-border rounded px-1 py-0.5 text-sm bg-background text-foreground [appearance:textfield] disabled:opacity-40 disabled:cursor-not-allowed"
                     aria-label="Number of channels displayed"
+                    disabled={eegIsStacked}
                   />
                   <button
                     type="button"
                     className="button button-icon"
                     onClick={() => updateVisibleChannelCount(visibleChannelCount - 1)}
                     title="Show fewer channels"
+                    disabled={eegIsStacked}
                   >
                     <ListChevronsDownUp size={ICON_SIZE} />
                   </button>
+                  {/* Stack/Unstack EEG toggle — mt-2 sets it apart from the channel-count
+                      buttons above (gap-1 already spaces those tightly together) since it's a
+                      related-but-distinct control, not a third count-adjustment button */}
+                  <div className="mt-2">
+                    <button
+                      type="button"
+                      className="button button-icon"
+                      title={
+                        displayedData.length > 1
+                          ? `${eegIsStacked ? 'Unstack' : 'Stack'} EEG Plots`
+                          : 'Stacking EEG plots requires more than 1 active channel'
+                      }
+                      aria-label={`${eegIsStacked ? 'Unstack' : 'Stack'} EEG Plots`}
+                      aria-pressed={eegIsStacked}
+                      disabled={displayedData.length <= 1}
+                      onClick={() => setEegIsStacked(!eegIsStacked)}
+                    >
+                      {eegIsStacked ? (
+                        <LayersArrowDown size={ICON_SIZE} />
+                      ) : (
+                        <Layers size={ICON_SIZE} />
+                      )}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -795,94 +1114,9 @@ export const EegViewer = ({
                 style={{ scrollbarGutter: 'stable' }}
               >
                 {/* Wait for first measurements before rendering — avoids zero-size flash */}
-                {plotWidth > 0 && plotHeight > 0 && (
-                  <div className="relative">
-                    {/* Snapshot marker — one continuous vertical line spanning every channel, at the
-                        timepoint for the current topography/ESI/3D-render voltages. Rendered once
-                        here (rather than per-row) so there's no seam at each row's border, and placed
-                        before the rows so it paints behind their canvases like the zero-line does. */}
-                    {snapshotMarkerLeft !== null && (
-                      <div
-                        data-testid="snapshot-marker"
-                        className="absolute pointer-events-none top-0 bottom-0 w-0.25"
-                        style={{
-                          left: snapshotMarkerLeft,
-                          backgroundColor: 'var(--c-secondary)',
-                        }}
-                      />
-                    )}
-                    {displayRows.map((row, rowIndex) => (
-                      // Channel divider below each row
-                      <div
-                        key={row.id}
-                        style={{
-                          height: plotHeight,
-                          overflow: 'visible',
-                          borderBottom: `1px solid ${isDarkMode ? ROW_DIVIDER_COLOR_DARK : ROW_DIVIDER_COLOR_LIGHT}`,
-                        }}
-                        className="relative"
-                      >
-                        {/* Row name label */}
-                        <span
-                          className="absolute left-0 top-1/2 -translate-y-1/2 text-xs text-center select-none z-10 px-0.5 truncate"
-                          style={{ width: Y_AXIS_WIDTH }}
-                          title={row.name}
-                        >
-                          {row.name}
-                        </span>
-                        {/* Zero-line at y=0, aligned with the plot area (not drawn by uPlot to avoid grid issues) */}
-                        <div
-                          className="absolute pointer-events-none"
-                          style={{
-                            top: '50%',
-                            left: Y_AXIS_WIDTH,
-                            right: PLOT_RIGHT_PAD,
-                            height: 1,
-                            backgroundColor: isDarkMode
-                              ? ZERO_LINE_COLOR_DARK
-                              : ZERO_LINE_COLOR_LIGHT,
-                          }}
-                        />
-                        {/* Canvas wrapper — absolutely positioned to center the taller canvas in the lane */}
-                        <div
-                          style={{
-                            position: 'absolute',
-                            top: -((plotHeight * (OVERDRAW - 1)) / 2),
-                            left: 0,
-                          }}
-                        >
-                          <UplotReact
-                            options={buildChannelOptions({
-                              channelIndex: row.channelIndex,
-                              totalChannels: displayRows.length,
-                              isDarkMode,
-                              syncKey,
-                              width: plotWidth,
-                              height: plotHeight * OVERDRAW,
-                              windowSize,
-                              startTime,
-                              yScale,
-                              color: row.color,
-                            })}
-                            data={displayedData[rowIndex]}
-                            onCreate={(u) => {
-                              {
-                                /* click listener that converts the click's x-position into a timestamp => sets topoTimepoint */
-                              }
-                              u.over.addEventListener('click', () => {
-                                const t = u.posToVal(u.cursor.left, 'x');
-                                if (!isNaN(t)) {
-                                  setTopoTimepoint(t);
-                                }
-                              });
-                            }}
-                            onDelete={() => {}}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                {plotWidth > 0 &&
+                  plotHeight > 0 &&
+                  (eegIsStacked ? renderStackedPlots() : renderUnstackedPlots())}
               </div>
             </div>
 
