@@ -662,9 +662,8 @@ export const EegViewer = ({
     if (displayedData.length === 0 || displayedData[0][0].length === 0) {
       return [];
     } else {
-      return [displayedData[0][0], ...displayedData.map(([, ys]) => ys)]
+      return [displayedData[0][0], ...displayedData.map(([, ys]) => ys)];
     }
-    
   }, [displayedData]);
 
   const renderStackedPlots = () => (
@@ -683,10 +682,11 @@ export const EegViewer = ({
           }}
         />
       )}
-      {/* Channel divider below each row */}
+      {/* Single lane filling the whole channel area — same height a lane would get if
+          visibleChannelCount were 1, since every channel is overlaid into this one plot */}
       <div
         style={{
-          height: plotHeight,
+          height: channelAreaHeight,
           overflow: 'visible',
           borderBottom: `1px solid ${isDarkMode ? ROW_DIVIDER_COLOR_DARK : ROW_DIVIDER_COLOR_LIGHT}`,
         }}
@@ -698,7 +698,7 @@ export const EegViewer = ({
           style={{ width: Y_AXIS_WIDTH }}
           title="Stacked EEG/Montage channels"
         >
-          'Stacked'
+          Stacked
         </span>
         {/* Zero-line at y=0, aligned with the plot area (not drawn by uPlot to avoid grid issues) */}
         <div
@@ -711,11 +711,13 @@ export const EegViewer = ({
             backgroundColor: isDarkMode ? ZERO_LINE_COLOR_DARK : ZERO_LINE_COLOR_LIGHT,
           }}
         />
-        {/* Canvas wrapper — absolutely positioned to center the taller canvas in the lane */}
+        {/* Canvas wrapper — no OVERDRAW/offset here (unlike the unstacked lanes): the canvas
+            is exactly as tall as its container, since there's no adjacent lane for a peak to
+            bleed into once this plot already fills the whole channel area */}
         <div
           style={{
             position: 'absolute',
-            top: -((plotHeight * (OVERDRAW - 1)) / 2),
+            top: 0,
             left: 0,
           }}
         >
@@ -724,12 +726,12 @@ export const EegViewer = ({
               isDarkMode,
               syncKey,
               width: plotWidth,
-              height: plotHeight,
+              height: channelAreaHeight,
               windowSize,
               startTime,
               yScale,
               color: displayRows.map((row) => row.color),
-              stacked: true
+              stacked: true,
             })}
             data={stackedDisplayData}
             onCreate={(u) => {
@@ -893,38 +895,13 @@ export const EegViewer = ({
                   <LocateFixed size={ICON_SIZE} />
                 </button>
               </div>
-
-              {/* Stack/Unstack EEG toggle*/}
-              <div
-                className=""
-                onMouseEnter={() =>
-                  !electrodes?.length && setHoveredLedHighlight('electrodePosition')
-                }
-                onMouseLeave={() => setHoveredLedHighlight(null)}
-              >
-                <button
-                  type="button"
-                  className="button button-icon"
-                  title={
-                    electrodes?.length > 1
-                      ? `${eegIsStacked ? 'Unstack' : 'Stack'} EEG Plots`
-                      : 'Stacking EEG plots requires more than 1 active channel'
-                  }
-                  aria-label={`${eegIsStacked ? 'Unstack' : 'Stack'} EEG Plots`}
-                  aria-pressed={eegIsStacked}
-                  disabled={!electrodes?.length}
-                  onClick={() => setEegIsStacked(!eegIsStacked)}
-                >
-                  {eegIsStacked ? (
-                    <LayersArrowDown size={ICON_SIZE} />
-                  ) : (
-                    <Layers size={ICON_SIZE} />
-                  )}
-                </button>
-              </div>
             </div>
 
-            {/* Channel Controls*/}
+            {/* Channel Controls — the stack toggle lives at the bottom of this same bordered
+                box (rather than in the icon list above) to show it's linked to the channel-count
+                controls above it: stacking overlays every channel into one plot sized like a
+                single unstacked lane, so "how many channels" no longer applies and those
+                controls are disabled while it's active. */}
             <div className="flex-1 flex flex-row items-center">
               <div className="flex flex-row items-center gap-1 py-1 border-border/50 border-1 border-r-0 rounded-tl-md rounded-bl-md">
                 <span className="text-xs text-foreground/60 whitespace-nowrap [writing-mode:vertical-rl] rotate-180 select-none pointer-events-none">
@@ -936,6 +913,7 @@ export const EegViewer = ({
                     className="button button-icon"
                     onClick={() => updateVisibleChannelCount(visibleChannelCount + 1)}
                     title="Show more channels"
+                    disabled={eegIsStacked}
                   >
                     <ListChevronsUpDown size={ICON_SIZE} />
                   </button>
@@ -948,17 +926,49 @@ export const EegViewer = ({
                     style={{ width: inputWidth(visibleChannelCountStr) }}
                     onChange={onVisibleChannelCountChange}
                     onBlur={onVisibleChannelCountBlur}
-                    className="text-center border border-border rounded px-1 py-0.5 text-sm bg-background text-foreground [appearance:textfield]"
+                    className="text-center border border-border rounded px-1 py-0.5 text-sm bg-background text-foreground [appearance:textfield] disabled:opacity-40 disabled:cursor-not-allowed"
                     aria-label="Number of channels displayed"
+                    disabled={eegIsStacked}
                   />
                   <button
                     type="button"
                     className="button button-icon"
                     onClick={() => updateVisibleChannelCount(visibleChannelCount - 1)}
                     title="Show fewer channels"
+                    disabled={eegIsStacked}
                   >
                     <ListChevronsDownUp size={ICON_SIZE} />
                   </button>
+                  {/* Stack/Unstack EEG toggle — mt-2 sets it apart from the channel-count
+                      buttons above (gap-1 already spaces those tightly together) since it's a
+                      related-but-distinct control, not a third count-adjustment button */}
+                  <div
+                    className="mt-2"
+                    onMouseEnter={() =>
+                      !electrodes?.length && setHoveredLedHighlight('electrodePosition')
+                    }
+                    onMouseLeave={() => setHoveredLedHighlight(null)}
+                  >
+                    <button
+                      type="button"
+                      className="button button-icon"
+                      title={
+                        electrodes?.length > 1
+                          ? `${eegIsStacked ? 'Unstack' : 'Stack'} EEG Plots`
+                          : 'Stacking EEG plots requires more than 1 active channel'
+                      }
+                      aria-label={`${eegIsStacked ? 'Unstack' : 'Stack'} EEG Plots`}
+                      aria-pressed={eegIsStacked}
+                      disabled={!electrodes?.length}
+                      onClick={() => setEegIsStacked(!eegIsStacked)}
+                    >
+                      {eegIsStacked ? (
+                        <LayersArrowDown size={ICON_SIZE} />
+                      ) : (
+                        <Layers size={ICON_SIZE} />
+                      )}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
