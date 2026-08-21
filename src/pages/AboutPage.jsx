@@ -219,6 +219,11 @@ export const AboutPage = () => {
                     channels
                   </li>
                   <li>
+                    Stack/unstack toggle — overlay all visible channels on a single plot to spot
+                    cross-channel patterns, with fading trace opacity as channel count grows and the
+                    hovered channel's name shown on hover
+                  </li>
+                  <li>
                     EEG topography — a resizable panel showing a 3D voltage map at the selected time
                     point using{' '}
                     <a
@@ -262,7 +267,8 @@ export const AboutPage = () => {
                 >
                   <li>
                     Multi-layer support for MRI, PET, SPECT and meshes in one view. Supports NIfTI
-                    (.nii, .nii.gz), MGH/MGZ, GIFTI, PLY, OBJ
+                    (.nii, .nii.gz), MGH/MGZ, GIFTI, PLY, OBJ, and DICOM (converted to NIfTI on load
+                    via dcm2niix)
                   </li>
                   <li>
                     Per-layer opacity/mesh xray, colormap, colorbar, inversion and threshold
@@ -430,7 +436,7 @@ export const AboutPage = () => {
                     EEG: BrainVision (<code>.vhdr</code> + <code>.eeg</code>) — drop both together
                     or one at a time
                   </li>
-                  <li>Volumes: NIfTI, MGH/MGZ, GIFTI, PLY, OBJ</li>
+                  <li>Volumes: NIfTI, MGH/MGZ, GIFTI, PLY, OBJ, DICOM</li>
                   <li>
                     Drop multiple imaging files at once to load them as separate layers, or append
                     them to an already-active neuroimaging viewer
