@@ -2638,3 +2638,123 @@ describe('EegViewer — montage row color wiring', () => {
     expect(rowCall).toBeTruthy();
   });
 });
+
+// ── Stack/unstack toggle ─────────────────────────────────────────────────────
+
+// Latest UplotReact call whose options carry the stacked flag (series[0] is always the
+// x-series placeholder, so a genuine stacked call always has stacked-mode's series/hooks shape)
+const latestStackedCall = (calls) =>
+  [...calls].reverse().find((call) => call[0].options?.hooks?.setSeries);
+
+describe('EegViewer — stack/unstack toggle', () => {
+  it('renders unpressed and enabled by default, with more than one displayed channel', async () => {
+    await renderViewer();
+    const toggle = screen.getByRole('button', { name: 'Stack EEG Plots' });
+    expect(toggle).toBeInTheDocument();
+    expect(toggle).toBeEnabled();
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('disables the toggle once bad-channel edits leave only one channel displayed', async () => {
+    await renderViewer();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Montage' }));
+    await userEvent.click(screen.getByTestId('channel-bad-EEG2'));
+    await userEvent.click(screen.getByTestId('channel-bad-EEG3'));
+    await userEvent.click(screen.getByRole('button', { name: 'OK' }));
+
+    expect(screen.getByRole('button', { name: 'Stack EEG Plots' })).toBeDisabled();
+  });
+
+  it('switches to a single overlaid plot with a "Stacked" label, replacing the per-channel rows', async () => {
+    await renderViewer();
+    channelNames.forEach((name) => expect(screen.getByText(name)).toBeTruthy());
+    expect(screen.queryByTitle(/Stacked EEG\/Montage channels/i)).toBeNull();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Stack EEG Plots' }));
+
+    channelNames.forEach((name) => expect(screen.queryByText(name)).toBeNull());
+    const label = screen.getByTitle(/Stacked EEG\/Montage channels/i);
+    expect(label).toHaveTextContent('Stacked');
+    const toggle = screen.getByRole('button', { name: 'Unstack EEG Plots' });
+    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('passes one uPlot series per channel to the stacked plot instead of one uPlot instance per row', async () => {
+    const { default: UplotReactMock } = await import('uplot-react');
+    await renderViewer();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Stack EEG Plots' }));
+
+    const stackedCall = latestStackedCall(UplotReactMock.mock.calls);
+    expect(stackedCall).toBeTruthy();
+    // [0] is the x-series placeholder, one entry per channel after that
+    expect(stackedCall[0].options.series).toHaveLength(channelNames.length + 1);
+  });
+
+  it('switches back to the per-row view when toggled again', async () => {
+    await renderViewer();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Stack EEG Plots' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Unstack EEG Plots' }));
+
+    channelNames.forEach((name) => expect(screen.getByText(name)).toBeTruthy());
+    expect(screen.queryByTitle(/Stacked EEG\/Montage channels/i)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Stack EEG Plots' })).toHaveAttribute(
+      'aria-pressed',
+      'false'
+    );
+  });
+
+  it('disables the channel-count controls while stacked', async () => {
+    await renderViewer();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Stack EEG Plots' }));
+
+    expect(screen.getByRole('button', { name: 'Show more channels' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Show fewer channels' })).toBeDisabled();
+    expect(screen.getByRole('spinbutton', { name: /number of channels/i })).toBeDisabled();
+  });
+
+  it('auto-unstacks and disables the toggle if bad-channel edits leave only one channel while stacked', async () => {
+    await renderViewer();
+    await userEvent.click(screen.getByRole('button', { name: 'Stack EEG Plots' }));
+    expect(screen.getByTitle(/Stacked EEG\/Montage channels/i)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Montage' }));
+    await userEvent.click(screen.getByTestId('channel-bad-EEG2'));
+    await userEvent.click(screen.getByTestId('channel-bad-EEG3'));
+    await userEvent.click(screen.getByRole('button', { name: 'OK' }));
+
+    expect(screen.queryByTitle(/Stacked EEG\/Montage channels/i)).toBeNull();
+    expect(screen.getByText('EEG1')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Stack EEG Plots' })).toBeDisabled();
+  });
+
+  it("shows the hovered channel's name in place of the label, and reverts on unfocus", async () => {
+    const { default: UplotReactMock } = await import('uplot-react');
+    await renderViewer();
+    await userEvent.click(screen.getByRole('button', { name: 'Stack EEG Plots' }));
+
+    const setSeries = latestStackedCall(UplotReactMock.mock.calls)[0].options.hooks.setSeries[0];
+    // uPlot's series index is 1-based (0 is the x-series) — 2 is EEG2
+    await act(async () => setSeries(null, 2));
+    expect(screen.getByTitle(/Stacked EEG\/Montage channels/i)).toHaveTextContent('EEG2');
+
+    await act(async () => setSeries(null, null));
+    expect(screen.getByTitle(/Stacked EEG\/Montage channels/i)).toHaveTextContent('Stacked');
+  });
+
+  it("brightens only the focused series' stroke, leaving the others faded", async () => {
+    const { default: UplotReactMock } = await import('uplot-react');
+    await renderViewer();
+    await userEvent.click(screen.getByRole('button', { name: 'Stack EEG Plots' }));
+
+    const { series, hooks } = latestStackedCall(UplotReactMock.mock.calls)[0].options;
+    await act(async () => hooks.setSeries[0](null, 2)); // focus EEG2 (series index 2)
+
+    expect(series[1].stroke()).not.toBe('rgba(0, 0, 0, 0.8)'); // EEG1 — still faded
+    expect(series[2].stroke()).toBe('rgba(0, 0, 0, 0.8)'); // EEG2 — focused, full opacity
+    expect(series[3].stroke()).not.toBe('rgba(0, 0, 0, 0.8)'); // EEG3 — still faded
+  });
+});
