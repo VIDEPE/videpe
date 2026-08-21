@@ -197,6 +197,29 @@ describe('EegTopoViewer', () => {
       expect(NVMesh.loadFromUrl).not.toHaveBeenCalled();
     });
 
+    it('clears a stale mesh instead of leaving it stranded when voltages is empty (e.g. every EEG channel marked bad)', async () => {
+      // Regression guard: the mesh-loading effect used to bail out on an empty `voltages`
+      // prop before ever reaching `nv.meshes = []`, so marking every EEG channel bad left
+      // whatever mesh was already on screen stranded there instead of clearing it.
+      mockNvInstance.meshes = [{ id: 'stale-mesh' }];
+      await act(async () => render(<EegTopoViewer {...defaultProps} voltages={[]} />));
+      expect(mockNvInstance.meshes).toHaveLength(0);
+      expect(mockNvInstance.updateGLVolume).toHaveBeenCalled();
+    });
+
+    it('clears the mesh on a rerender where voltages transitions from populated to empty', async () => {
+      const { rerender } = await act(async () => render(<EegTopoViewer {...defaultProps} />));
+      // Stand in for the mesh the prior (non-empty-voltages) render would have left behind —
+      // the mock's addMesh doesn't itself push into nv.meshes, so this simulates that state.
+      mockNvInstance.meshes = [{ id: 'stale-mesh' }];
+
+      await act(async () => {
+        rerender(<EegTopoViewer {...defaultProps} voltages={[]} />);
+      });
+
+      expect(mockNvInstance.meshes).toHaveLength(0);
+    });
+
     it('applies a shader to each electrode marker layer, using a different shader for unmapped vs matched', async () => {
       await act(async () => render(<EegTopoViewer {...defaultProps} />));
 

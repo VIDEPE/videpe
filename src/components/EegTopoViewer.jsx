@@ -163,7 +163,22 @@ export function EegTopoViewer({
   // mesh tab is instant rather than re-attaching NiiVue and re-loading from scratch.
   useEffect(() => {
     const nv = nvRef.current;
-    if (!hasEegChannels || !nv || !electrodes?.length || !voltages?.length) return;
+    if (!hasEegChannels || !nv) return;
+
+    // Identifies this specific load — StrictMode double-invokes this effect in dev,
+    // which would otherwise let a stale call add a second, overlapping mesh once the
+    // earlier (superseded) call's loadFromUrl resolves. Invalidated (and the mesh cleared)
+    // unconditionally, before the "anything to plot" guard below, so that e.g. marking every
+    // EEG channel bad — which empties `voltages` — clears the stale mesh instead of leaving
+    // whatever was loaded previously stranded on screen.
+    const loadToken = {};
+    meshLoadRef.current = loadToken;
+    nv.meshes = [];
+
+    if (!electrodes?.length || !voltages?.length) {
+      nv.updateGLVolume();
+      return;
+    }
 
     const { vertices, indices } = electrodeMesh;
     const scalars = interpolateMeshVoltages(electrodes, matched, voltages);
@@ -172,13 +187,6 @@ export function EegTopoViewer({
 
     // Symmetric colormap range so blue/red are equal distance from zero
     const calMax = Math.max(...voltages.map(Math.abs));
-
-    // Identifies this specific load — StrictMode double-invokes this effect in dev,
-    // which would otherwise let a stale call add a second, overlapping mesh once the
-    // earlier (superseded) call's loadFromUrl resolves.
-    const loadToken = {};
-    meshLoadRef.current = loadToken;
-    nv.meshes = [];
 
     const loadMesh = async () => {
       try {
