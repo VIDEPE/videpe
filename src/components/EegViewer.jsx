@@ -19,6 +19,8 @@ import {
   Map,
   Box,
   LocateFixed,
+  Layers,
+  LayersArrowDown,
 } from 'lucide-react';
 import { minMaxDownsample } from '@/utils/downsample';
 import {
@@ -188,13 +190,16 @@ export const EegViewer = ({
   // hoveredLedHighlight indicates which StatusLED should light up when the disabled toggle
   // toggle (Topo/3D render/ESI) is hovered over => gives additional cue to user why it's disabled.
   // Set on the toggle's wrapper div rather than the <button> itself (disabled buttons don't reliably fire mouse events)
-  const [hoveredLedHighlight, setHoveredLedHighlight] = useState(null); // 'electrodePosition' | 'inverseSolution' | null
+  const [hoveredLedHighlight, setHoveredLedHighlight] = useState(null); // 'electrodePosition' | 'inverseSolution' | 'stackEeg' | null
   // Topograph window only opens when the toggle is on (topoEnabled) AND once a EEGplot
   // click has produced a timepoint to show (topoTimepoint)
   const topoVisible = topoEnabled && topoTimepoint !== null;
 
   // EEG Montage window only opens when the button is pressed
   const [montageVisible, setMontageVisible] = useState(false);
+
+  // Toggle stacked vs unStacked EEG plot
+  const [eegIsStacked, setEegIsStacked] = useState(false);
 
   // Px position (from the plot area's left edge) of the vertical marker for topoTimepoint — the
   // timestamp the electrode voltage snapshot was taken at, shared by the topography, ESI, and
@@ -700,6 +705,31 @@ export const EegViewer = ({
                   onClick={() => onEsiEnabledChange(!esiEnabled)}
                 >
                   <LocateFixed size={ICON_SIZE} />
+                </button>
+              </div>
+
+              {/* Stack/Unstack EEG toggle*/}
+              <div
+                className=""
+                onMouseEnter={() =>
+                  !electrodes?.length && setHoveredLedHighlight('electrodePosition')
+                }
+                onMouseLeave={() => setHoveredLedHighlight(null)}
+              >
+                <button
+                  type="button"
+                  className="button button-icon"
+                  title={
+                    electrodes?.length > 1
+                      ? `${eegIsStacked ? 'Unstack' : 'Stack'} EEG Plots`
+                      : "Stacking EEG plots requires more than 1 active channel"
+                  }
+                  aria-label={`${eegIsStacked ? 'Unstack' : 'Stack'} EEG Plots`}
+                  aria-pressed={eegIsStacked}
+                  disabled={!electrodes?.length}
+                  onClick={() => setEegIsStacked(!eegIsStacked)}
+                >
+                  {eegIsStacked ? <LayersArrowDown size={ICON_SIZE} /> : <Layers size={ICON_SIZE} />}
                 </button>
               </div>
             </div>
