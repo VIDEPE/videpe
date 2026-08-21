@@ -54,6 +54,10 @@ const ICON_SIZE = 22; // default size for lucide icons in the controls, used to 
 const INPUT_MIN_CH = 3; // minimum input width in ch units
 const INPUT_EXTRA_CH = 3; // extra ch of breathing room beyond the value's character length
 const INPUT_PAD = '0.5rem'; // offsets px-1 padding (box-sizing: border-box shrinks the content area by this amount)
+const ROW_DIVIDER_COLOR_DARK = 'rgba(255,255,255,0.05)'; // channel row bottom border in dark mode
+const ROW_DIVIDER_COLOR_LIGHT = 'rgba(0,0,0,0.05)'; // channel row bottom border in light mode
+const ZERO_LINE_COLOR_DARK = 'rgba(255,255,255,0.25)'; // y=0 reference line in dark mode
+const ZERO_LINE_COLOR_LIGHT = 'rgba(0,0,0,0.25)'; // y=0 reference line in light mode
 // Computes the width for the numeric inputs based on their current value, so they expand to fit large and small numbers
 const inputWidth = (str) =>
   `calc(${Math.max(INPUT_MIN_CH, str.length + INPUT_EXTRA_CH)}ch + ${INPUT_PAD})`;
@@ -814,14 +818,15 @@ export const EegViewer = ({
                         style={{
                           height: plotHeight,
                           overflow: 'visible',
-                          borderBottom: `1px solid ${isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}`,
+                          borderBottom: `1px solid ${isDarkMode ? ROW_DIVIDER_COLOR_DARK : ROW_DIVIDER_COLOR_LIGHT}`,
                         }}
                         className="relative"
                       >
                         {/* Row name label */}
                         <span
-                          className="absolute left-0 top-1/2 -translate-y-1/2 text-xs text-center pointer-events-none select-none z-10 px-0.5 truncate"
+                          className="absolute left-0 top-1/2 -translate-y-1/2 text-xs text-center select-none z-10 px-0.5 truncate"
                           style={{ width: Y_AXIS_WIDTH }}
+                          title={row.name}
                         >
                           {row.name}
                         </span>
@@ -834,8 +839,8 @@ export const EegViewer = ({
                             right: PLOT_RIGHT_PAD,
                             height: 1,
                             backgroundColor: isDarkMode
-                              ? 'rgba(255,255,255,0.25)'
-                              : 'rgba(0,0,0,0.25)',
+                              ? ZERO_LINE_COLOR_DARK
+                              : ZERO_LINE_COLOR_LIGHT,
                           }}
                         />
                         {/* Canvas wrapper — absolutely positioned to center the taller canvas in the lane */}
