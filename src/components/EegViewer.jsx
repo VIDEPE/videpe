@@ -96,6 +96,17 @@ const buildChannelOptions = ({
     STACKED_OPACITY_FLOOR_PCT +
     ((STACKED_OPACITY_START_PCT - STACKED_OPACITY_FLOOR_PCT) * STACKED_OPACITY_HALF_LIFE) /
       (STACKED_OPACITY_HALF_LIFE + colors.length - 2);
+  // uPlot's cursor.focus only dims the OTHER series — it never brightens the focused one, so
+  // once every stroke is already this faint, hovering doesn't produce a visible highlight at
+  // all. The setSeries hook below manually swaps the focused series to fullStroke instead.
+  const fadedStroke = (c) =>
+    stacked
+      ? `color-mix(in srgb, ${c ?? defaultStroke} ${stackedStrokeOpacityPct}%, transparent)`
+      : (c ?? defaultStroke);
+  const fullStroke = (c) => c ?? defaultStroke;
+  // Read by each series' stroke() below on every uPlot-driven redraw — setSeries just
+  // reassigns this, no manual u.redraw() needed (see fadedStroke's comment above)
+  let focusedSeriesIdx = null;
 
   return {
     width,
@@ -106,12 +117,22 @@ const buildChannelOptions = ({
     //        focus: (stacked only) marks the series nearest the cursor within prox pixels as focussed, dimming the other
     cursor: { y: false, sync: { key: syncKey }, focus: stacked ? { prox: 15 } : undefined },
     // hooks holds an array of callback uplos calls at specific moments (setData, draw, setCursor, setSeries, etc)
-    // cursor.focus is the detector and hooks.setSeries is the notifier
-    // when setSeries gets triggered (by cursor focus) it takes the instance and the index,
+    // in our case: cursor.focus is the detector and hooks.setSeries is the notifier
+    // when setSeries gets triggered (by cursor focus) it takes the uPlot instance and the index,
     // converts uPlot's 1-based seriesIdx (0 is the x-series) to a plain colors-array index
-    // right here, and calls onSeriesFocus with that — so the offset never leaves this function
+    // right here, and calls onSeriesFocus with that. It also records the raw seriesIdx into
+    // focusedSeriesIdx, which each series' stroke() function (below) reads on its own — see
+    // focusedSeriesIdx's comment above for why nothing here calls u.redraw() itself
     hooks: stacked
-      ? { setSeries: [(u, seriesIdx) => onSeriesFocus?.(seriesIdx != null ? seriesIdx - 1 : null)] }
+      ? {
+          setSeries: [
+            (u, seriesIdx) => {
+              const colorIdx = seriesIdx != null ? seriesIdx - 1 : null;
+              focusedSeriesIdx = colorIdx;
+              onSeriesFocus?.(colorIdx);
+            },
+          ],
+        }
       : undefined,
     scales: {
       x: { time: false, range: [startTime, startTime + windowSize] },
@@ -131,13 +152,15 @@ const buildChannelOptions = ({
       },
       { show: false }, // y-axis hidden; left padding below takes its place
     ],
-    // Stacked strokes go through color-mix (same technique EegMontageEditor uses for its row tint) so overlapping traces darken instead of hiding each other
+    // Stacked strokes go through color-mix (same technique EegMontageEditor uses for its row tint) so overlapping traces darken instead of hiding each other.
+    // stroke is a function (stacked only) so uPlot re-evaluates it on every redraw it already
+    // does for focus changes, picking fullStroke for whichever series focusedSeriesIdx names
     series: [
       {},
-      ...colors.map((c) => ({
+      ...colors.map((c, i) => ({
         stroke: stacked
-          ? `color-mix(in srgb, ${c ?? defaultStroke} ${stackedStrokeOpacityPct}%, transparent)`
-          : (c ?? defaultStroke),
+          ? () => (focusedSeriesIdx === i ? fullStroke(c) : fadedStroke(c))
+          : fadedStroke(c),
         width: 1,
       })),
     ],
