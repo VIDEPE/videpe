@@ -64,10 +64,11 @@ const ZERO_LINE_COLOR_LIGHT = 'rgba(0,0,0,0.25)'; // y=0 reference line in light
 const inputWidth = (str) =>
   `calc(${Math.max(INPUT_MIN_CH, str.length + INPUT_EXTRA_CH)}ch + ${INPUT_PAD})`;
 
-// Builds uPlot options for a single channel. Called once per channel on each render.
+// Builds uPlot options for a channel plot — either a single unstacked lane (one series) or
+// the stacked overlay (one series per channel, sharing one uPlot instance). Called once per
+// render for however many uPlot instances are showing (one per row when unstacked, one total
+// when stacked).
 const buildChannelOptions = ({
-  channelIndex,
-  totalChannels,
   isDarkMode,
   syncKey,
   width,
@@ -75,10 +76,12 @@ const buildChannelOptions = ({
   windowSize,
   startTime,
   yScale,
-  color, // row's selected trace color ('red'|'blue'|...), or null/undefined for the theme default
+  color, // unstacked: single trace color ('red'|'blue'|...) or null/undefined for the theme default. stacked: array of those, one per channel
+  stacked = false, // true: one series per channel, no OVERDRAW — the plot already fills the whole channel area, so there's no adjacent lane for a peak to bleed into. false (default): single series, y-range extended by OVERDRAW so peaks bleed into adjacent lanes instead of clipping
 }) => {
-  const stroke = color ?? (isDarkMode ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.8)');
+  const defaultStroke = isDarkMode ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.8)';
   const gridColor = isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)';
+  const colors = stacked ? color : [color];
 
   return {
     width,
@@ -90,7 +93,7 @@ const buildChannelOptions = ({
       x: { time: false, range: [startTime, startTime + windowSize] },
       // y-range is extended by OVERDRAW so the center plotHeight pixels show ±yScale,
       // while the overdraw areas above/below render values beyond ±yScale
-      y: { range: [-yScale * OVERDRAW, yScale * OVERDRAW] },
+      y: { range: stacked ? [-yScale, yScale] : [-yScale * OVERDRAW, yScale * OVERDRAW] },
     },
     axes: [
       {
@@ -104,7 +107,7 @@ const buildChannelOptions = ({
       },
       { show: false }, // y-axis hidden; left padding below takes its place
     ],
-    series: [{}, { stroke, width: 1 }],
+    series: [{}, ...colors.map((c) => ({ stroke: c ?? defaultStroke, width: 1 }))],
     legend: { show: false },
     padding: [0, PLOT_RIGHT_PAD, 0, Y_AXIS_WIDTH], // left padding replaces the hidden y-axis size; 0 top/bottom so overdraw areas aren't consumed by padding
   };
@@ -625,8 +628,6 @@ export const EegViewer = ({
           >
             <UplotReact
               options={buildChannelOptions({
-                channelIndex: row.channelIndex,
-                totalChannels: displayRows.length,
                 isDarkMode,
                 syncKey,
                 width: plotWidth,
@@ -635,6 +636,7 @@ export const EegViewer = ({
                 startTime,
                 yScale,
                 color: row.color,
+                stacked: false,
               })}
               data={displayedData[rowIndex]}
               onCreate={(u) => {
@@ -653,6 +655,98 @@ export const EegViewer = ({
           </div>
         </div>
       ))}
+    </div>
+  );
+
+  const stackedDisplayData = useMemo(() => {
+    if (displayedData.length === 0 || displayedData[0][0].length === 0) {
+      return [];
+    } else {
+      return [displayedData[0][0], ...displayedData.map(([, ys]) => ys)]
+    }
+    
+  }, [displayedData]);
+
+  const renderStackedPlots = () => (
+    <div className="relative">
+      {/* Snapshot marker — one continuous vertical line spanning every channel, at the
+          timepoint for the current topography/ESI/3D-render voltages. Rendered once
+          here (rather than per-row) so there's no seam at each row's border, and placed
+          before the rows so it paints behind their canvases like the zero-line does. */}
+      {snapshotMarkerLeft !== null && (
+        <div
+          data-testid="snapshot-marker"
+          className="absolute pointer-events-none top-0 bottom-0 w-0.25"
+          style={{
+            left: snapshotMarkerLeft,
+            backgroundColor: 'var(--c-secondary)',
+          }}
+        />
+      )}
+      {/* Channel divider below each row */}
+      <div
+        style={{
+          height: plotHeight,
+          overflow: 'visible',
+          borderBottom: `1px solid ${isDarkMode ? ROW_DIVIDER_COLOR_DARK : ROW_DIVIDER_COLOR_LIGHT}`,
+        }}
+        className="relative"
+      >
+        {/* Row name label */}
+        <span
+          className="absolute left-0 top-1/2 -translate-y-1/2 text-xs text-center select-none z-10 px-0.5 truncate"
+          style={{ width: Y_AXIS_WIDTH }}
+          title="Stacked EEG/Montage channels"
+        >
+          'Stacked'
+        </span>
+        {/* Zero-line at y=0, aligned with the plot area (not drawn by uPlot to avoid grid issues) */}
+        <div
+          className="absolute pointer-events-none"
+          style={{
+            top: '50%',
+            left: Y_AXIS_WIDTH,
+            right: PLOT_RIGHT_PAD,
+            height: 1,
+            backgroundColor: isDarkMode ? ZERO_LINE_COLOR_DARK : ZERO_LINE_COLOR_LIGHT,
+          }}
+        />
+        {/* Canvas wrapper — absolutely positioned to center the taller canvas in the lane */}
+        <div
+          style={{
+            position: 'absolute',
+            top: -((plotHeight * (OVERDRAW - 1)) / 2),
+            left: 0,
+          }}
+        >
+          <UplotReact
+            options={buildChannelOptions({
+              isDarkMode,
+              syncKey,
+              width: plotWidth,
+              height: plotHeight,
+              windowSize,
+              startTime,
+              yScale,
+              color: displayRows.map((row) => row.color),
+              stacked: true
+            })}
+            data={stackedDisplayData}
+            onCreate={(u) => {
+              {
+                /* click listener that converts the click's x-position into a timestamp => sets topoTimepoint */
+              }
+              u.over.addEventListener('click', () => {
+                const t = u.posToVal(u.cursor.left, 'x');
+                if (!isNaN(t)) {
+                  setTopoTimepoint(t);
+                }
+              });
+            }}
+            onDelete={() => {}}
+          />
+        </div>
+      </div>
     </div>
   );
 
