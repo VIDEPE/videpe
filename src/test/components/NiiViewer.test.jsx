@@ -13,6 +13,7 @@ import {
   syncVolumesAndApplySettings,
   syncMeshesAndApplySettings,
 } from '@/components/NiiViewer';
+import { dicomLoader } from '@niivue/dicom-loader';
 // Mirrors the real @niivue/niivue MESH_EXTENSIONS list closely enough to exercise
 // isMeshExt's actual extension-based routing without pulling in the real package.
 const MOCK_MESH_EXTENSIONS = [
@@ -176,6 +177,10 @@ vi.mock('@niivue/niivue', () => ({
       getRadiologicalConvention: vi.fn(() => false),
       setRadiologicalConvention: vi.fn(),
       setClipPlane: vi.fn(),
+      // mm2frac/scene.crosshairPos back the ESI "snap the 3D crosshair to the peak source"
+      // behavior (see useEsiLayer.js) — identity stand-in, tests assert on what's passed in.
+      mm2frac: vi.fn((mm) => mm),
+      scene: { crosshairPos: null },
       opts: { isColorbar: false, multiplanarShowRender: null, multiplanarEqualSize: true },
       sliceTypeMultiplanar: 1,
       volumes: [],
@@ -193,6 +198,14 @@ vi.mock('@niivue/niivue', () => ({
     RENDER: 4,
   },
   isMeshExt: vi.fn(mockIsMeshExt),
+  // Mirrors the real @niivue/niivue isDicomExtension (ext.toUpperCase() === 'DCM').
+  isDicomExtension: vi.fn((ext) => ext.toUpperCase() === 'DCM'),
+}));
+
+// @niivue/dcm2niix (the real dicomLoader's WASM/worker dependency) doesn't load under jsdom,
+// so the loader itself is mocked — tests drive its behavior per-case via mockResolvedValue etc.
+vi.mock('@niivue/dicom-loader', () => ({
+  dicomLoader: vi.fn(),
 }));
 
 describe('syncVolumesAndApplySettings', () => {
@@ -535,39 +548,99 @@ describe('detectVolumeType', () => {
 describe('filesToLayers', () => {
   const makeFile = (name) => new File(['data'], name);
 
-  it('tags a GIFTI file as a mesh layer', () => {
-    const [layer] = filesToLayers([makeFile('cortex.gii')]);
+  beforeEach(() => {
+    dicomLoader.mockReset();
+  });
+
+  it('tags a GIFTI file as a mesh layer', async () => {
+    const [layer] = await filesToLayers([makeFile('cortex.gii')]);
     expect(layer.kind).toBe('mesh');
     expect(layer.type).toBe('Mesh');
     expect(layer.subtype).toBe('cortex');
   });
 
-  it('tags a PLY file as a mesh layer', () => {
-    const [layer] = filesToLayers([makeFile('skull.ply')]);
+  it('tags a PLY file as a mesh layer', async () => {
+    const [layer] = await filesToLayers([makeFile('skull.ply')]);
     expect(layer.kind).toBe('mesh');
   });
 
-  it('tags an OBJ file as a mesh layer', () => {
-    const [layer] = filesToLayers([makeFile('head.obj')]);
+  it('tags an OBJ file as a mesh layer', async () => {
+    const [layer] = await filesToLayers([makeFile('head.obj')]);
     expect(layer.kind).toBe('mesh');
   });
 
-  it('assigns a blob url to a mesh layer, same as an image volume layer', () => {
-    const [layer] = filesToLayers([makeFile('cortex.gii')]);
+  it('assigns a blob url to a mesh layer, same as an image volume layer', async () => {
+    const [layer] = await filesToLayers([makeFile('cortex.gii')]);
     expect(layer.url).toMatch(/^blob:/);
     expect(layer.name).toBe('cortex.gii');
   });
 
-  it('does not tag a NIfTI file as a mesh layer', () => {
-    const [layer] = filesToLayers([makeFile('brain_T1w.nii.gz')]);
+  it('does not tag a NIfTI file as a mesh layer', async () => {
+    const [layer] = await filesToLayers([makeFile('brain_T1w.nii.gz')]);
     expect(layer.kind).toBeUndefined();
     expect(layer.type).toBe('MRI');
   });
 
-  it('handles a mix of image volumes and mesh files in the same drop', () => {
-    const layers = filesToLayers([makeFile('brain_T1w.nii.gz'), makeFile('cortex.gii')]);
+  it('handles a mix of image volumes and mesh files in the same drop', async () => {
+    const layers = await filesToLayers([makeFile('brain_T1w.nii.gz'), makeFile('cortex.gii')]);
     expect(layers[0].kind).toBeUndefined();
     expect(layers[1].kind).toBe('mesh');
+  });
+
+  it('converts a single dropped .dcm file into a volume layer via dicomLoader', async () => {
+    dicomLoader.mockResolvedValue([{ name: 'brain_T1w.nii', data: new ArrayBuffer(8) }]);
+    const dcmFile = makeFile('IM0001.dcm');
+
+    const layers = await filesToLayers([dcmFile]);
+
+    expect(dicomLoader).toHaveBeenCalledWith([dcmFile]);
+    expect(layers).toHaveLength(1);
+    expect(layers[0].kind).toBeUndefined(); // image volume, not a mesh
+    expect(layers[0].name).toBe('brain_T1w.nii');
+    expect(layers[0].type).toBe('MRI');
+    expect(layers[0].url).toMatch(/^blob:/);
+  });
+
+  it('groups every dropped .dcm file into one dicomLoader call, not one per file', async () => {
+    dicomLoader.mockResolvedValue([{ name: 'series1.nii', data: new ArrayBuffer(8) }]);
+    const slice1 = makeFile('IM0001.dcm');
+    const slice2 = makeFile('IM0002.dcm');
+
+    await filesToLayers([slice1, slice2]);
+
+    expect(dicomLoader).toHaveBeenCalledTimes(1);
+    expect(dicomLoader).toHaveBeenCalledWith([slice1, slice2]);
+  });
+
+  it('produces one layer per series when dicomLoader returns multiple converted files', async () => {
+    dicomLoader.mockResolvedValue([
+      { name: 'series1_T1w.nii', data: new ArrayBuffer(8) },
+      { name: 'series2_T2w.nii', data: new ArrayBuffer(8) },
+    ]);
+
+    const layers = await filesToLayers([makeFile('IM0001.dcm'), makeFile('IM0002.dcm')]);
+
+    expect(layers).toHaveLength(2);
+    expect(layers.map((l) => l.name)).toEqual(['series1_T1w.nii', 'series2_T2w.nii']);
+  });
+
+  it('handles a mix of .dcm and regular files in the same drop', async () => {
+    dicomLoader.mockResolvedValue([{ name: 'converted.nii', data: new ArrayBuffer(8) }]);
+
+    const layers = await filesToLayers([makeFile('brain_T1w.nii.gz'), makeFile('IM0001.dcm')]);
+
+    expect(layers.map((l) => l.name)).toEqual(['brain_T1w.nii.gz', 'converted.nii']);
+    expect(dicomLoader).toHaveBeenCalledWith([expect.objectContaining({ name: 'IM0001.dcm' })]);
+  });
+
+  it('does not call dicomLoader when no .dcm files are dropped', async () => {
+    await filesToLayers([makeFile('brain_T1w.nii.gz')]);
+    expect(dicomLoader).not.toHaveBeenCalled();
+  });
+
+  it('propagates a dicomLoader rejection so callers can surface the error', async () => {
+    dicomLoader.mockRejectedValue(new Error('dcm2niix failed'));
+    await expect(filesToLayers([makeFile('IM0001.dcm')])).rejects.toThrow('dcm2niix failed');
   });
 });
 
@@ -2008,6 +2081,22 @@ describe('NiiViewer', () => {
 
       // The blob: url is generated at drop time, so assert on the forwarded name instead.
       expect(nv.addMeshesFromUrl.mock.calls.at(-1)[0][0].name).toBe('cortex.gii');
+    });
+
+    it('converts a DICOM file dropped into the internal drop zone via dicomLoader', async () => {
+      dicomLoader.mockResolvedValue([{ name: 'converted.nii', data: new ArrayBuffer(8) }]);
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      render(<NiiViewer nvRef={nvRef} layers={[]} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      const nv = nvRef.current;
+      const input = document.querySelector('input[type="file"]');
+      await userEvent.upload(input, new File(['data'], 'IM0001.dcm'));
+      await waitFor(() => expect(nv.loadVolumes).toHaveBeenCalled());
+
+      expect(dicomLoader).toHaveBeenCalled();
+      expect(nv.loadVolumes.mock.calls.at(-1)[0][0].name).toBe('converted.nii');
     });
 
     it('renders a card for the mesh layer in ImagingControls', async () => {

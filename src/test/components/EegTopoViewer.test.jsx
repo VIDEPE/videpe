@@ -86,9 +86,9 @@ describe('EegTopoViewer', () => {
     expect(container.querySelector('canvas')).toBeTruthy();
   });
 
-  it('shows matched vs total channel count in the footer', async () => {
+  it('shows matched vs total EEG channel count in the footer', async () => {
     await act(async () => render(<EegTopoViewer {...defaultProps} />));
-    expect(screen.getByText(/2\s*\/\s*10\s*channels mapped/i)).toBeTruthy();
+    expect(screen.getByText(/2\s*\/\s*10\s*EEG channels mapped/i)).toBeTruthy();
   });
 
   it('labels the colorbar with its unit, since NiiVue draws it without one', async () => {
@@ -195,6 +195,29 @@ describe('EegTopoViewer', () => {
       const { NVMesh } = await import('@niivue/niivue');
       await act(async () => render(<EegTopoViewer {...defaultProps} voltages={[]} />));
       expect(NVMesh.loadFromUrl).not.toHaveBeenCalled();
+    });
+
+    it('clears a stale mesh instead of leaving it stranded when voltages is empty (e.g. every EEG channel marked bad)', async () => {
+      // Regression guard: the mesh-loading effect used to bail out on an empty `voltages`
+      // prop before ever reaching `nv.meshes = []`, so marking every EEG channel bad left
+      // whatever mesh was already on screen stranded there instead of clearing it.
+      mockNvInstance.meshes = [{ id: 'stale-mesh' }];
+      await act(async () => render(<EegTopoViewer {...defaultProps} voltages={[]} />));
+      expect(mockNvInstance.meshes).toHaveLength(0);
+      expect(mockNvInstance.updateGLVolume).toHaveBeenCalled();
+    });
+
+    it('clears the mesh on a rerender where voltages transitions from populated to empty', async () => {
+      const { rerender } = await act(async () => render(<EegTopoViewer {...defaultProps} />));
+      // Stand in for the mesh the prior (non-empty-voltages) render would have left behind —
+      // the mock's addMesh doesn't itself push into nv.meshes, so this simulates that state.
+      mockNvInstance.meshes = [{ id: 'stale-mesh' }];
+
+      await act(async () => {
+        rerender(<EegTopoViewer {...defaultProps} voltages={[]} />);
+      });
+
+      expect(mockNvInstance.meshes).toHaveLength(0);
     });
 
     it('applies a shader to each electrode marker layer, using a different shader for unmapped vs matched', async () => {
@@ -560,21 +583,22 @@ describe('EegTopoViewer', () => {
     });
   });
 
-  describe('intracranial mode', () => {
-    const intracranialProps = {
+  describe('no EEG channels (mesh unavailable)', () => {
+    const noEegProps = {
       ...defaultProps,
       isIntracranial: true,
+      hasEegChannels: false,
       channelNames: ['B1', 'B2', 'ECG'],
       voltagesByChannel: [5, -3, 0],
     };
 
     it('does not render a canvas element', async () => {
-      const { container } = await act(async () => render(<EegTopoViewer {...intracranialProps} />));
+      const { container } = await act(async () => render(<EegTopoViewer {...noEegProps} />));
       expect(container.querySelector('canvas')).toBeNull();
     });
 
     it('does not attach NiiVue to a canvas or register colormaps', async () => {
-      await act(async () => render(<EegTopoViewer {...intracranialProps} />));
+      await act(async () => render(<EegTopoViewer {...noEegProps} />));
       expect(mockNvInstance.attachToCanvas).not.toHaveBeenCalled();
       expect(mockNvInstance.addColormap).not.toHaveBeenCalled();
     });
@@ -582,54 +606,131 @@ describe('EegTopoViewer', () => {
     it('does not call onTopoNvReady', async () => {
       const onTopoNvReady = vi.fn();
       await act(async () =>
-        render(<EegTopoViewer {...intracranialProps} onTopoNvReady={onTopoNvReady} />)
+        render(<EegTopoViewer {...noEegProps} onTopoNvReady={onTopoNvReady} />)
       );
       expect(onTopoNvReady).not.toHaveBeenCalled();
     });
 
     it('does not attempt to load a mesh', async () => {
       const { NVMesh } = await import('@niivue/niivue');
-      await act(async () => render(<EegTopoViewer {...intracranialProps} />));
+      await act(async () => render(<EegTopoViewer {...noEegProps} />));
       expect(NVMesh.loadFromUrl).not.toHaveBeenCalled();
     });
 
-    it('renders the intracranial matrix instead of a canvas', async () => {
-      await act(async () => render(<EegTopoViewer {...intracranialProps} />));
+    it('renders the electrode matrix instead of a canvas', async () => {
+      await act(async () => render(<EegTopoViewer {...noEegProps} />));
       expect(screen.getByTestId('eeg-matrix-viewer')).toBeTruthy();
     });
 
-    it('shows the "SEEG Electrode Matrix" title instead of "EEG Topography"', async () => {
-      await act(async () => render(<EegTopoViewer {...intracranialProps} />));
-      expect(screen.getByText('SEEG Electrode Matrix')).toBeTruthy();
-      expect(screen.queryByText('EEG Topography')).toBeNull();
+    it('disables the 3D Mesh tab', async () => {
+      await act(async () => render(<EegTopoViewer {...noEegProps} />));
+      expect(screen.getByTestId('topo-tab-mesh')).toBeDisabled();
     });
 
-    it('still shows the channels-mapped footer', async () => {
-      await act(async () => render(<EegTopoViewer {...intracranialProps} />));
-      expect(screen.getByText(/2\s*\/\s*10\s*channels mapped/i)).toBeTruthy();
+    it('leaves the Matrix tab enabled and pressed', async () => {
+      await act(async () => render(<EegTopoViewer {...noEegProps} />));
+      expect(screen.getByTestId('topo-tab-matrix')).not.toBeDisabled();
+      expect(screen.getByTestId('topo-tab-matrix')).toHaveAttribute('aria-selected', 'true');
     });
 
-    it('still renders the "Use custom positions" button', async () => {
-      await act(async () => render(<EegTopoViewer {...intracranialProps} />));
-      expect(screen.getByRole('button', { name: /use custom.*positions/i })).toBeTruthy();
+    it('hides the channels-mapped footer, since position matching is only meaningful for the mesh', async () => {
+      await act(async () => render(<EegTopoViewer {...noEegProps} />));
+      expect(screen.queryByText(/channels mapped/i)).toBeNull();
+    });
+
+    it('hides the "Use custom positions" button, since position matching is only meaningful for the mesh', async () => {
+      await act(async () => render(<EegTopoViewer {...noEegProps} />));
+      expect(screen.queryByRole('button', { name: /use custom.*positions/i })).toBeNull();
     });
 
     it('still renders the colourblind toggle button', async () => {
-      await act(async () => render(<EegTopoViewer {...intracranialProps} />));
+      await act(async () => render(<EegTopoViewer {...noEegProps} />));
       expect(screen.getByRole('button', { name: /toggle colourblind colormap/i })).toBeTruthy();
     });
 
-    it('switching from scalp to intracranial via rerender does not crash and stops further mesh loads', async () => {
+    it('falls back to the matrix tab if the mesh tab was active and EEG channels disappear on rerender', async () => {
       const { NVMesh } = await import('@niivue/niivue');
       const { rerender } = await act(async () => render(<EegTopoViewer {...defaultProps} />));
       const callsBefore = NVMesh.loadFromUrl.mock.calls.length;
 
       await act(async () => {
-        rerender(<EegTopoViewer {...intracranialProps} />);
+        rerender(<EegTopoViewer {...noEegProps} />);
       });
 
       expect(NVMesh.loadFromUrl.mock.calls.length).toBe(callsBefore);
       expect(screen.getByTestId('eeg-matrix-viewer')).toBeTruthy();
+    });
+  });
+
+  describe('mesh/matrix tabs', () => {
+    // A mixed recording: majority SEEG (isIntracranial seeds the default tab to matrix)
+    // but with EEG channels present too, so the mesh tab stays enabled and flippable.
+    const mixedProps = {
+      ...defaultProps,
+      isIntracranial: true,
+      hasEegChannels: true,
+      channelNames: ['Fp1', 'B1', 'B2'],
+      voltagesByChannel: [10, 5, -3],
+    };
+
+    it('defaults to the matrix tab when isIntracranial is true', async () => {
+      await act(async () => render(<EegTopoViewer {...mixedProps} />));
+      expect(screen.getByTestId('eeg-matrix-viewer')).toBeTruthy();
+      expect(screen.getByTestId('topo-tab-matrix')).toHaveAttribute('aria-selected', 'true');
+      expect(screen.getByTestId('topo-tab-mesh')).toHaveAttribute('aria-selected', 'false');
+    });
+
+    it('defaults to the mesh tab when isIntracranial is false', async () => {
+      await act(async () => render(<EegTopoViewer {...defaultProps} />));
+      expect(screen.getByTestId('topo-tab-mesh')).toHaveAttribute('aria-selected', 'true');
+      expect(screen.getByTestId('topo-tab-matrix')).toHaveAttribute('aria-selected', 'false');
+    });
+
+    it('still attaches NiiVue and loads the mesh even when the matrix tab is shown first, since mesh availability only depends on hasEegChannels', async () => {
+      const { NVMesh } = await import('@niivue/niivue');
+      await act(async () => render(<EegTopoViewer {...mixedProps} />));
+      expect(mockNvInstance.attachToCanvas).toHaveBeenCalled();
+      expect(NVMesh.loadFromUrl).toHaveBeenCalled();
+    });
+
+    it('leaves the 3D Mesh tab enabled', async () => {
+      await act(async () => render(<EegTopoViewer {...mixedProps} />));
+      expect(screen.getByTestId('topo-tab-mesh')).not.toBeDisabled();
+    });
+
+    it('switches to the mesh view when the 3D Mesh tab is clicked', async () => {
+      await act(async () => render(<EegTopoViewer {...mixedProps} />));
+      expect(screen.getByTestId('eeg-matrix-viewer')).toBeTruthy(); // starts on matrix
+
+      await userEvent.click(screen.getByTestId('topo-tab-mesh'));
+
+      expect(screen.getByTestId('topo-tab-mesh')).toHaveAttribute('aria-selected', 'true');
+      expect(screen.queryByTestId('eeg-matrix-viewer')).toBeNull();
+    });
+
+    it('shows the channels-mapped footer and position row only while the mesh tab is active', async () => {
+      await act(async () => render(<EegTopoViewer {...mixedProps} />));
+      // Starts on the matrix tab (isIntracranial: true) — position matching is meaningless
+      // for the matrix, so the footer/position row should be hidden.
+      expect(screen.queryByText(/channels mapped/i)).toBeNull();
+      expect(screen.queryByRole('button', { name: /use custom.*positions/i })).toBeNull();
+
+      await userEvent.click(screen.getByTestId('topo-tab-mesh'));
+
+      expect(screen.getByText(/channels mapped/i)).toBeTruthy();
+      expect(screen.getByRole('button', { name: /use custom.*positions/i })).toBeTruthy();
+    });
+
+    it('switches back to the matrix view when the Matrix tab is clicked', async () => {
+      await act(async () =>
+        render(<EegTopoViewer {...mixedProps} isIntracranial={false} hasEegChannels={true} />)
+      );
+      expect(screen.getByTestId('topo-tab-mesh')).toHaveAttribute('aria-selected', 'true');
+
+      await userEvent.click(screen.getByTestId('topo-tab-matrix'));
+
+      expect(screen.getByTestId('eeg-matrix-viewer')).toBeTruthy();
+      expect(screen.getByTestId('topo-tab-matrix')).toHaveAttribute('aria-selected', 'true');
     });
   });
 });

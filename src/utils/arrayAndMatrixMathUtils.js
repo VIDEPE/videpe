@@ -315,3 +315,21 @@ export function median(arr) {
     : sorted[midIndex]; // odd-length: return the single middle value
 }
 // median([1,1,2]) // gets 1
+
+export function indexOfMax(arr) {
+  if (arr.length === 0) {
+    return -1;
+  }
+
+  var max = arr[0];
+  var maxIndex = 0;
+
+  for (var i = 1; i < arr.length; i++) {
+    if (arr[i] > max) {
+      maxIndex = i;
+      max = arr[i];
+    }
+  }
+  return maxIndex;
+}
+// indexOfMax([1,2,5,3,4]) gets 2

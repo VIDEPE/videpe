@@ -1,6 +1,6 @@
 # VIDEPE
 
-![Version](https://img.shields.io/badge/version-0.14.1-blue)
+![Version](https://img.shields.io/badge/version-0.15.0-blue)
 
 **V**isualization & **I**ntegration of **D**ata for **E**pilepsy **P**resurgical **E**valuation
 
@@ -24,6 +24,7 @@ All data processing happens entirely in your browser. No files are ever uploaded
   - Min-max downsampling keeps rendering fast at any zoom level
   - Sliding-window buffer — only a portion of the recording is kept in memory at once, so hour-long, high-channel-count recordings stay fast without exhausting browser memory
   - Drag-to-resize handle on the plot row to trade channel height for more visible channels
+  - Stack/unstack toggle — overlay all visible channels on a single plot to spot cross-channel patterns, with fading trace opacity as channel count grows and the hovered channel's name shown on hover
   - **EEG topography** — a resizable panel showing a 3D voltage map at the selected time point using [NiiVue](https://niivue.com/) mesh rendering
     - Re-reference on the fly: none, average, or median reference
     - Diverging blue-white-red colormap with a live colorbar (µV), plus a colour-blind-friendly mode
@@ -36,7 +37,7 @@ All data processing happens entirely in your browser. No files are ever uploaded
 
 - **Neuroimaging viewer** — full multiplanar and 3D rendering powered by [NiiVue](https://niivue.com/). Load multiple volumes/meshes simultaneously and adjust each one independently.
   - Multi-layer support for e.g. MRI, PET, and SPECT in one view
-    - Supports NIfTI (`.nii`, `.nii.gz`), MGH/MGZ, GIFTI, PLY, OBJ
+    - Supports NIfTI (`.nii`, `.nii.gz`), MGH/MGZ, GIFTI, PLY, OBJ, and DICOM (`.dcm`, converted to NIfTI on load via dcm2niix)
   - Per-layer opacity/mesh xray, colormap, inversion, colorbar and thresholding controls
   - Drag-to-reorder layers, with a modality subtype label shown on each volume
   - Slice view buttons for axial, coronal, sagittal, multiplanar, and 3D render
@@ -46,7 +47,7 @@ All data processing happens entirely in your browser. No files are ever uploaded
 - **Built-in demo** — hit **Load Demo** to instantly load a synthetic EEG recording, electrode positions and inverse solution alongside aligned MRI volumes. No upload, no account, no wait.
 - **Drag & drop file loading** — drop files directly onto either viewer panel. VIDEPE detects the format automatically and guides you when multiple files are required.
   - EEG: BrainVision (`.vhdr` + `.eeg`) — drop both together or one at a time
-  - Volumes: NIfTI, MGH/MGZ, GIFTI, PLY, OBJ
+  - Volumes: NIfTI, MGH/MGZ, GIFTI, PLY, OBJ, DICOM
   - Drop multiple imaging files at once to load them as separate layers, or append them to an already-active neuroimaging viewer
 - **Side-by-side split view** — EEG and neuroimaging panels with a draggable divider. Each panel can be independently maximised, restored, or reset, and the two panels can be swapped without reloading any data.
 - **Cross-platform** — runs entirely in the browser, no installation or plugins required. Works on modern desktop and mobile browsers. Dark/light mode follows OS preference, with a manual toggle always available.
@@ -54,11 +55,11 @@ All data processing happens entirely in your browser. No files are ever uploaded
 
 ## Supported formats
 
-| Modality            | Formats                                             |
-| ------------------- | --------------------------------------------------- |
-| EEG                 | BrainVision (`.vhdr` + `.eeg`)                      |
-| Electrode positions | `.elc`, `.tsv`                                      |
-| Volumes             | NIfTI (`.nii`, `.nii.gz`), MGH/MGZ, GIFTI, PLY, OBJ |
+| Modality            | Formats                                                             |
+| ------------------- | ------------------------------------------------------------------- |
+| EEG                 | BrainVision (`.vhdr` + `.eeg`)                                      |
+| Electrode positions | `.elc`, `.tsv`                                                      |
+| Volumes             | NIfTI (`.nii`, `.nii.gz`), MGH/MGZ, GIFTI, PLY, OBJ, DICOM (`.dcm`) |
 
 ## Tech stack
 

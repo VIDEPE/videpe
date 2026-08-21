@@ -1,24 +1,33 @@
 // Heuristic detection of intracranial (sEEG/ECoG) recordings from channel naming,
 // as opposed to scalp EEG. See the implementation plan for the full rationale.
 
-import { normalizeChannelName, matchChannelsToPositions } from './eegTopographyUtils';
+import { matchChannelsToPositions } from './eegTopographyUtils';
 
-// Matches a normalized channel name shaped like an electrode-contact label:
-// one-or-more letters, an optional trailing apostrophe (stereo-EEG "primed" group
-// notation), then digits. e.g. "b1", "t12", "b'7". Pure-digit names ("12") don't
-// match — there's no leading letter group to anchor on.
-const CONTACT_NAME_PATTERN = /^([a-z]+'?)(\d+)$/;
+// Matches a channel name (prefix/suffix already stripped, original case kept) shaped like an
+// electrode-contact label: one-or-more letters of either case, an optional trailing apostrophe
+// (stereo-EEG "primed" group notation), then digits. e.g. "B1", "t12", "b'7". Pure-digit names
+// ("12") don't match — there's no leading letter group to anchor on.
+const CONTACT_NAME_PATTERN = /^([a-zA-Z]+'?)(\d+)$/;
 
-// Parses a channel name into its electrode group and contact number, if it has that
-// shape. Reuses normalizeChannelName's prefix/suffix stripping so "EEG B1-Ref" parses
-// the same as "B1" — but unlike normalizeChannelName, which only returns a cleaned-up
-// string for exact-match lookups, this splits that string into its group ('B') and contact
-// number ('1'), since the matrix view and connectome edges need those as separate values.
-// Returns null for names that don't fit (e.g. "ECG", "Status", "12").
+// Parses a channel name into its electrode group and number-within-that-group, if it has that
+// shape. Strips the same "EEG "/"MEG " prefix and "-suffix" normalizeChannelName does (so
+// "EEG B1-Ref" parses the same as "B1"), but keeps the original case so `groupLabel` displays as
+// the recording actually spells it (e.g. "E", not "e") — `group` is the lowercased version of
+// the same substring, used as a case-insensitive grouping/lookup key elsewhere (matrix rows,
+// connectome edges), so "b1" and "B2" of the same physical probe still merge into one group even
+// if a recording's casing is inconsistent. Returns null for names that don't fit (e.g. "ECG").
+// `numberInGroup` is a genuine physical contact number for SEEG (position along the probe), but
+// just a sequential channel index for a dense scalp net (e.g. EGI's E1-E208) — same field either
+// way, since both are the trailing digit(s) in a group+number channel name.
 export function parseElectrodeContactName(name) {
-  const match = normalizeChannelName(name).match(CONTACT_NAME_PATTERN);
+  const stripped = name.replace(/^(eeg|meg)\s+/i, '').replace(/-.*$/, '');
+  const match = stripped.match(CONTACT_NAME_PATTERN);
   if (!match) return null;
-  return { group: match[1], contact: parseInt(match[2], 10) };
+  return {
+    group: match[1].toLowerCase(),
+    groupLabel: match[1],
+    numberInGroup: parseInt(match[2], 10),
+  };
 }
 
 // No implanted depth/strip/grid electrode carries more contacts than this under a single
