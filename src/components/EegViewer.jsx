@@ -49,6 +49,9 @@ const EEG_LOADING_TOAST_ID = 'eeg-buffer-loading'; // fixed id so the loading/su
 const Y_AXIS_WIDTH = 80; // px for the y-axis area (channel name + tick space) — must match x-axis strip left padding
 const PLOT_RIGHT_PAD = 20; // px right padding — must match in both channel plots and x-axis strip so ticks align
 const OVERDRAW = 2; // canvas height multiplier — peaks bleed ±50% into adjacent lanes instead of clipping
+const STACKED_OPACITY_START_PCT = 80; // opacity at the minimum stacked count (2 channels) — already translucent rather than fully opaque
+const STACKED_OPACITY_FLOOR_PCT = 3; // minimum per-trace opacity in the stacked overlay
+const STACKED_OPACITY_HALF_LIFE = 5; // channels (beyond the minimum stacked count of 2) needed to decay halfway from STACKED_OPACITY_START_PCT to the floor — higher = slower initial drop
 const X_AXIS_GRID_SPACE = 60; // Min px between vertical gridlines — shared by the channel plots and the x-axis =>uPlot uses it to pick an increment (1,2,5,10,etc)
 const MIN_CHANNEL_AREA_HEIGHT = 120; // px floor for the channel-plot scroll area. Below this the whole viewer overflows and the pane's scroll container takes over (mirrors NiiViewer's MIN_CANVAS_HEIGHT) instead of letting the x-axis/scrubber/controls/dropzone overlap
 const MIN_PLOT_ROW_HEIGHT = 350; // px floor for the uPlot area
@@ -82,6 +85,16 @@ const buildChannelOptions = ({
   const defaultStroke = isDarkMode ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.8)';
   const gridColor = isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)';
   const colors = stacked ? color : [color];
+  // Asymptotic decay from STACKED_OPACITY_START_PCT at the minimum stacked count (2 channels)
+  // toward the floor — STACKED_OPACITY_HALF_LIFE is how many channels beyond 2 it takes to
+  // fall halfway there. 
+  //              min |  buffer | asympt. fraction
+  // opacity(n) =  c  + (s - c) * b / (b + n - 2)
+  // where s = start, c = floor, b = half-life, n = channel count
+  const stackedStrokeOpacityPct =
+    STACKED_OPACITY_FLOOR_PCT +
+    ((STACKED_OPACITY_START_PCT - STACKED_OPACITY_FLOOR_PCT) * STACKED_OPACITY_HALF_LIFE) /
+      (STACKED_OPACITY_HALF_LIFE + colors.length - 2);
 
   return {
     width,
@@ -107,7 +120,16 @@ const buildChannelOptions = ({
       },
       { show: false }, // y-axis hidden; left padding below takes its place
     ],
-    series: [{}, ...colors.map((c) => ({ stroke: c ?? defaultStroke, width: 1 }))],
+    // Stacked strokes go through color-mix (same technique EegMontageEditor uses for its row tint) so overlapping traces darken instead of hiding each other
+    series: [
+      {},
+      ...colors.map((c) => ({
+        stroke: stacked
+          ? `color-mix(in srgb, ${c ?? defaultStroke} ${stackedStrokeOpacityPct}%, transparent)`
+          : (c ?? defaultStroke),
+        width: 1,
+      })),
+    ],
     legend: { show: false },
     padding: [0, PLOT_RIGHT_PAD, 0, Y_AXIS_WIDTH], // left padding replaces the hidden y-axis size; 0 top/bottom so overdraw areas aren't consumed by padding
   };
