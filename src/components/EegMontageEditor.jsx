@@ -5,7 +5,7 @@ import { useTheme } from '@/components/ThemeContext';
 import { TrafficLightButtons } from '@/components/TrafficLightButtons';
 import {} from '@/utils/eegViewerUtils';
 import { parseMontageFile } from '@/loaders/parseMontageFile';
-import { toAnyWaveMontage } from '@/loaders/toAnyWaveMontage';
+import { toAnyWaveMontage } from '@/loaders/toMontageAnyWave';
 import { downloadTextFile } from '@/utils/fileDownload';
 import { EyeDashed } from 'lucide-react';
 import { cn } from '@/utils/utils';

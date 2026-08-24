@@ -13,7 +13,7 @@ const renderPatientView = () =>
 import toast from 'react-hot-toast';
 import { Niivue } from '@niivue/niivue';
 import { dicomLoader } from '@niivue/dicom-loader';
-import { loadBrainVisionEEG } from '@/loaders/loadBrainVisionEEG';
+import { loadBrainVisionEEG } from '@/loaders/loadEEGBrainVision';
 import { checkEegFiles, detectAndLoadEEG } from '@/loaders/eegFormatRegistry';
 import { parseInverseSolutionFieldtrip } from '@/loaders/parseInverseSolutionFieldtrip';
 import { electricalSourceImaging } from '@/utils/electricalSourceImagingUtils';
@@ -33,7 +33,7 @@ vi.mock('react-hot-toast', () => {
   return { default: toastFn };
 });
 
-vi.mock('@/loaders/loadBrainVisionEEG', () => ({
+vi.mock('@/loaders/loadEEGBrainVision', () => ({
   loadBrainVisionEEG: vi
     .fn()
     .mockResolvedValue({ channelNames: ['Ch1'], fs: 1, tMax: 1, getChunk: vi.fn() }),

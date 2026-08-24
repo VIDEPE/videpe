@@ -548,6 +548,15 @@ describe('detectVolumeType', () => {
 describe('filesToLayers', () => {
   const makeFile = (name) => new File(['data'], name);
 
+  // DICOM "Part 10" files have a 128-byte preamble followed by the literal ASCII "DICM" at
+  // offset 128-131 — see isDicomFile's magic-bytes fallback in NiiViewer.utils.js, used to
+  // detect DICOM files with no extension (e.g. PACS exports like "IM000001").
+  const makeDicomBytes = () => {
+    const bytes = new Uint8Array(140);
+    bytes.set(new TextEncoder().encode('DICM'), 128);
+    return bytes;
+  };
+
   beforeEach(() => {
     dicomLoader.mockReset();
   });
@@ -636,6 +645,45 @@ describe('filesToLayers', () => {
   it('does not call dicomLoader when no .dcm files are dropped', async () => {
     await filesToLayers([makeFile('brain_T1w.nii.gz')]);
     expect(dicomLoader).not.toHaveBeenCalled();
+  });
+
+  it('treats an extensionless file as DICOM when it has the DICOM magic bytes', async () => {
+    dicomLoader.mockResolvedValue([{ name: 'converted.nii', data: new ArrayBuffer(8) }]);
+    const extensionlessDicomFile = new File([makeDicomBytes()], 'IM000001');
+
+    const layers = await filesToLayers([extensionlessDicomFile]);
+
+    expect(dicomLoader).toHaveBeenCalledWith([extensionlessDicomFile]);
+    expect(layers.map((l) => l.name)).toEqual(['converted.nii']);
+  });
+
+  it('does not treat an extensionless file as DICOM when it lacks the magic bytes', async () => {
+    const extensionlessTextFile = new File(['just some plain text content'], 'README');
+
+    const layers = await filesToLayers([extensionlessTextFile]);
+
+    expect(dicomLoader).not.toHaveBeenCalled();
+    expect(layers.map((l) => l.name)).toEqual(['README']);
+  });
+
+  it('skips the magic-bytes check for a file with a real extension, even if its content matches', async () => {
+    const fileWithMagicBytesButRealExtension = new File([makeDicomBytes()], 'notes.txt');
+
+    const layers = await filesToLayers([fileWithMagicBytesButRealExtension]);
+
+    expect(dicomLoader).not.toHaveBeenCalled();
+    expect(layers.map((l) => l.name)).toEqual(['notes.txt']);
+  });
+
+  it('groups an extensionless DICOM file (detected by magic bytes) with a .dcm file in the same dicomLoader call', async () => {
+    dicomLoader.mockResolvedValue([{ name: 'series1.nii', data: new ArrayBuffer(8) }]);
+    const dcmFile = makeFile('IM0001.dcm');
+    const extensionlessDicomFile = new File([makeDicomBytes()], 'IM0002');
+
+    await filesToLayers([dcmFile, extensionlessDicomFile]);
+
+    expect(dicomLoader).toHaveBeenCalledTimes(1);
+    expect(dicomLoader).toHaveBeenCalledWith([dcmFile, extensionlessDicomFile]);
   });
 
   it('propagates a dicomLoader rejection so callers can surface the error', async () => {

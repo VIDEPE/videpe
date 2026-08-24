@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { describe, it, expect } from 'vitest';
-import { parseCartoolMontage } from '@/loaders/parseCartoolMontage';
+import { parseCartoolMontage } from '@/loaders/parseMontageCartool';
 
 const FIXTURE_DIR = path.dirname(fileURLToPath(import.meta.url));
 const CARTOOL_FIXTURE = readFileSync(

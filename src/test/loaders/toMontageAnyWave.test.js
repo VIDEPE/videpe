@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { toAnyWaveMontage } from '@/loaders/toAnyWaveMontage';
-import { parseAnyWaveMontage } from '@/loaders/parseAnyWaveMontage';
+import { toAnyWaveMontage } from '@/loaders/toMontageAnyWave';
+import { parseAnyWaveMontage } from '@/loaders/parseMontageAnywave';
 
 describe('toAnyWaveMontage', () => {
   it('serializes rows + channel types into AnyWave XML', () => {
