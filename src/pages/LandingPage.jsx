@@ -90,7 +90,7 @@ const FEATURES = [
   },
   {
     icon: ChartNetwork,
-    label: 'Intracranial SEEG',
+    label: 'Intracranial EEG',
     description:
       'Intracranial electrodes are auto-detected per channel and viewable as a 3D connectome or a per-electrode voltage matrix.',
     anchor: '#feature-seeg',
