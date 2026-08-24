@@ -9,7 +9,7 @@ export const Footer = () => {
       )}
     >
       <p className="text-sm text-foreground">
-        &copy; {new Date().getFullYear()} Clinical NeuroScience Department HUG. All rights reserved.
+        VIDEPE v0.15.0 &copy; {new Date().getFullYear()} Clinical NeuroScience Department HUG. All rights reserved.
       </p>
     </footer>
   );
