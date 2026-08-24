@@ -5,7 +5,7 @@ import {
   EEG_FORMAT_EXTENSIONS,
 } from '@/loaders/eegFormatRegistry';
 
-vi.mock('@/loaders/loadBrainVisionEEG', () => ({
+vi.mock('@/loaders/loadEEGBrainVision', () => ({
   loadBrainVisionEEG: vi.fn(),
 }));
 
@@ -87,7 +87,7 @@ describe('detectAndLoadEEG', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('calls loadBrainVisionEEG with the correct files for a complete BrainVision set', async () => {
-    const { loadBrainVisionEEG } = await import('@/loaders/loadBrainVisionEEG');
+    const { loadBrainVisionEEG } = await import('@/loaders/loadEEGBrainVision');
     loadBrainVisionEEG.mockResolvedValue({
       channelNames: ['Ch1'],
       fs: 1,

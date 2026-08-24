@@ -1,4 +1,4 @@
-import { loadBrainVisionEEG } from './loadBrainVisionEEG';
+import { loadBrainVisionEEG } from './loadEEGBrainVision';
 
 // This module defines supported EEG formats and provides a function to detect and load them.
 

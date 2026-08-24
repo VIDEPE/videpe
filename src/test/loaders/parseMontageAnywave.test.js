@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { describe, it, expect } from 'vitest';
-import { parseAnyWaveMontage } from '@/loaders/parseAnyWaveMontage';
+import { parseAnyWaveMontage } from '@/loaders/parseMontageAnywave';
 
 // path.join + fileURLToPath (not `new URL(..., import.meta.url)`) — Vite's import-analysis
 // plugin statically rewrites that pattern into a public-asset URL reference, which breaks

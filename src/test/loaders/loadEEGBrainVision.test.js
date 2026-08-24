@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { loadBrainVisionEEG } from '@/loaders/loadBrainVisionEEG';
+import { loadBrainVisionEEG } from '@/loaders/loadEEGBrainVision';
 
 // Minimal two-channel header at 200 Hz (SamplingInterval=5000 µs)
 const VHDR = `; Created by test
