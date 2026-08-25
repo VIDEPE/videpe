@@ -10,6 +10,7 @@ import {
   DEFAULT_NODE_SCALE,
   DEFAULT_EDGE_SCALE,
 } from '@/utils/NiiViewer.utils';
+import { useDoubleClickToDefault } from '@/hooks/useSingleAndDoubleClick';
 
 // Bounds for the connectome Node/Edge size sliders. Node radius = node.sizeValue (0-1, data-
 // driven — see convertSourcePowersToConnectome) × nodeScale, so nodeScale is a plain multiplier,
@@ -234,6 +235,20 @@ function SortableSettingsCard({
     onSettingChange(index, 'cal_max', clamped);
   };
 
+  // Double click thumb to reset to default value handles
+  const handleOpacityThumbClick = useDoubleClickToDefault(commitOpacity, 100);
+  const handleCalMinThumbClick = useDoubleClickToDefault(commitCalMin, isEsiLayer ? 1 : 0);
+  const handleCalMaxThumbClick = useDoubleClickToDefault(commitCalMax, 100);
+  const handleMeshXRayThumbClick = useDoubleClickToDefault(commitMeshXRay, 100);
+  const handleNodeScaleThumbClick = useDoubleClickToDefault(
+    (val) => onSettingChange(index, 'nodeScale', val),
+    DEFAULT_NODE_SCALE
+  );
+  const handleEdgeScaleThumbClick = useDoubleClickToDefault(
+    (val) => onSettingChange(index, 'edgeScale', val),
+    DEFAULT_EDGE_SCALE
+  );
+
   return (
     <div
       ref={ref}
@@ -332,6 +347,7 @@ function SortableSettingsCard({
                   <Slider.Thumb
                     className="block h-3 w-3 rounded-full bg-primary cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/50"
                     aria-label={`${label} opacity slider`}
+                    onClick={handleOpacityThumbClick}
                   />
                 </Slider.Root>
                 <div className="flex items-center">
@@ -377,6 +393,7 @@ function SortableSettingsCard({
                   <Slider.Thumb
                     className="block h-3 w-3 rounded-full bg-primary cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/50"
                     aria-label={`${label} meshXRay slider`}
+                    onClick={handleMeshXRayThumbClick}
                   />
                 </Slider.Root>
                 <div className="flex items-center">
@@ -427,6 +444,7 @@ function SortableSettingsCard({
                     <Slider.Thumb
                       className="block h-3 w-3 rounded-full bg-primary cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:cursor-not-allowed"
                       aria-label={`${label} node size slider`}
+                      onClick={handleNodeScaleThumbClick}
                     />
                   </Slider.Root>
                 </div>
@@ -455,6 +473,7 @@ function SortableSettingsCard({
                     <Slider.Thumb
                       className="block h-3 w-3 rounded-full bg-primary cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:cursor-not-allowed"
                       aria-label={`${label} edge size slider`}
+                      onClick={handleEdgeScaleThumbClick}
                     />
                   </Slider.Root>
                 </div>
@@ -502,10 +521,12 @@ function SortableSettingsCard({
                   <Slider.Thumb
                     className="block h-3 w-3 rounded-full bg-primary cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/50"
                     aria-label={`${label} Threshold minimum slider`}
+                    onClick={handleCalMinThumbClick}
                   />
                   <Slider.Thumb
                     className="block h-3 w-3 rounded-full bg-primary cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/50"
                     aria-label={`${label} Threshold maximum slider`}
+                    onClick={handleCalMaxThumbClick}
                   />
                 </Slider.Root>
                 <div className="flex items-center">
