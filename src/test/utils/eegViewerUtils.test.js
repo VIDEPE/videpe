@@ -4,6 +4,7 @@ import {
   applyReferenceSeries,
   buildMontageDisplayRows,
   deriveMontageRowSamples,
+  compareChannelNamesNaturally,
 } from '@/utils/eegViewerUtils';
 
 // ---------------------------------------------------------------------------
@@ -328,5 +329,31 @@ describe('deriveMontageRowSamples', () => {
   it('falls back to the raw channel when no referenceSeries is given at all', () => {
     const row = { channelIndex: 0, referenceIndex: null, referenceMode: 'average' };
     expect(deriveMontageRowSamples(channels, row)).toEqual([1, 2, 3]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// compareChannelNamesNaturally
+// ---------------------------------------------------------------------------
+
+describe('compareChannelNamesNaturally', () => {
+  it('sorts contact numbers numerically, not lexicographically', () => {
+    const names = ['E100', 'E1', 'E99', 'E9'];
+    expect([...names].sort(compareChannelNamesNaturally)).toEqual(['E1', 'E9', 'E99', 'E100']);
+  });
+
+  it('groups by prefix before comparing numbers, so different electrodes never interleave', () => {
+    const names = ['B2', 'A10', 'B1', 'A2'];
+    expect([...names].sort(compareChannelNamesNaturally)).toEqual(['A2', 'A10', 'B1', 'B2']);
+  });
+
+  it('sorts a primed group ("B\'") separately from its unprimed counterpart ("B")', () => {
+    const names = ["B'2", 'B1', "B'1", 'B2'];
+    expect([...names].sort(compareChannelNamesNaturally)).toEqual(['B1', 'B2', "B'1", "B'2"]);
+  });
+
+  it('falls back to plain string comparison when either name is not contact-shaped', () => {
+    expect(compareChannelNamesNaturally('ECG', 'EOG')).toBeLessThan(0);
+    expect(compareChannelNamesNaturally('E1', 'ECG')).toBe('E1'.localeCompare('ECG'));
   });
 });

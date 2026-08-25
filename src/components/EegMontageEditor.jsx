@@ -3,7 +3,7 @@ import toast from 'react-hot-toast';
 import { SplitPane } from '@/components/SplitPane';
 import { useTheme } from '@/components/ThemeContext';
 import { TrafficLightButtons } from '@/components/TrafficLightButtons';
-import {} from '@/utils/eegViewerUtils';
+import { compareChannelNamesNaturally } from '@/utils/eegViewerUtils';
 import { parseMontageFile } from '@/loaders/parseMontageFile';
 import { toAnyWaveMontage } from '@/loaders/toMontageAnyWave';
 import { downloadTextFile } from '@/utils/fileDownload';
@@ -232,13 +232,16 @@ export function EegMontageEditor({
     });
   }, [selectedMontageRows]);
 
-  // Sorts by channel name, flipping ascending/descending on each click.
+  // Sorts by channel name, flipping ascending/descending on each click. Uses
+  // compareChannelNamesNaturally (not plain localeCompare) so contact numbers sort
+  // numerically — "E9" before "E99"/"E100" — instead of lexicographically.
   const [nameSortDescending, setNameSortDescending] = useState(false);
   const handleSortByName = useCallback(() => {
     setDraftMontageChannels((prev) =>
-      [...prev].sort((a, b) =>
-        nameSortDescending ? b.channel.localeCompare(a.channel) : a.channel.localeCompare(b.channel)
-      )
+      [...prev].sort((a, b) => {
+        const diff = compareChannelNamesNaturally(a.channel, b.channel);
+        return nameSortDescending ? -diff : diff;
+      })
     );
     setNameSortDescending((prev) => !prev);
   }, [nameSortDescending]);
@@ -253,7 +256,8 @@ export function EegMontageEditor({
         const typeA = draftChannelSettings[a.channel]?.type ?? 'eeg';
         const typeB = draftChannelSettings[b.channel]?.type ?? 'eeg';
         const typeOrderDiff = TYPE_ORDER.indexOf(typeA) - TYPE_ORDER.indexOf(typeB);
-        const diff = typeOrderDiff !== 0 ? typeOrderDiff : a.channel.localeCompare(b.channel);
+        const diff =
+          typeOrderDiff !== 0 ? typeOrderDiff : compareChannelNamesNaturally(a.channel, b.channel);
         return typeSortDescending ? -diff : diff;
       })
     );
