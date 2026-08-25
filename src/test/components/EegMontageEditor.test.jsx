@@ -1159,6 +1159,126 @@ describe('EegMontageEditor', () => {
     });
   });
 
+  describe('Create SEEG Bipolar', () => {
+    // FP1/FP2 are contact-shaped ("FP" + digit) and both 'seeg', so they pair (FP1 -> FP2).
+    // FP2 has no next-in-group partner (FP3 isn't 'seeg', so it's not indexed as one) and so
+    // is monopolar. FP3 stays 'eeg' — it must never appear in the resulting montage.
+    const PAIRABLE_SETTINGS = {
+      FP1: { type: 'seeg', bad: false },
+      FP2: { type: 'seeg', bad: false },
+      FP3: { type: 'eeg', bad: false },
+    };
+
+    it('disables the button when no SEEG group has a pairable contact', () => {
+      const ALL_EEG = {
+        FP1: { type: 'eeg', bad: false },
+        FP2: { type: 'eeg', bad: false },
+        FP3: { type: 'eeg', bad: false },
+      };
+      render(<EegMontageEditor {...defaultProps} channelSettings={ALL_EEG} />);
+      expect(screen.getByTestId('create-seeg-bipolar-button')).toBeDisabled();
+    });
+
+    it('enables the button once a SEEG group has at least one pairable contact', () => {
+      render(<EegMontageEditor {...defaultProps} channelSettings={PAIRABLE_SETTINGS} />);
+      expect(screen.getByTestId('create-seeg-bipolar-button')).not.toBeDisabled();
+    });
+
+    it('asks to confirm before replacing unsaved montage-row edits, and aborts if cancelled', async () => {
+      const onApplyMontageChannels = vi.fn();
+      render(
+        <EegMontageEditor
+          {...defaultProps}
+          channelSettings={PAIRABLE_SETTINGS}
+          onApplyMontageChannels={onApplyMontageChannels}
+        />
+      );
+      // Edit the draft first so it diverges from the montageChannels prop (isMontageModified).
+      await userEvent.click(screen.getByTestId('clear-all-button'));
+      window.confirm.mockReturnValue(false);
+
+      await userEvent.click(screen.getByTestId('create-seeg-bipolar-button'));
+      expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('replace'));
+
+      // Cancelled — the draft stays exactly as the prior edit (Clear all) left it, i.e. empty.
+      await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+      expect(onApplyMontageChannels).toHaveBeenCalledWith([]);
+    });
+
+    it('does not ask for confirmation when the montage draft has not been edited', async () => {
+      render(<EegMontageEditor {...defaultProps} channelSettings={PAIRABLE_SETTINGS} />);
+      window.confirm.mockClear();
+      await userEvent.click(screen.getByTestId('create-seeg-bipolar-button'));
+      expect(window.confirm).not.toHaveBeenCalled();
+    });
+
+    it('shows "Keep monopolar electrodes?" when a SEEG contact has no next-in-group partner', async () => {
+      render(<EegMontageEditor {...defaultProps} channelSettings={PAIRABLE_SETTINGS} />);
+      await userEvent.click(screen.getByTestId('create-seeg-bipolar-button'));
+      expect(screen.getByText('Keep monopolar electrodes?')).toBeTruthy();
+    });
+
+    it('focuses "No" by default, so Enter keeps the recommended (drop monopolar) choice', async () => {
+      render(<EegMontageEditor {...defaultProps} channelSettings={PAIRABLE_SETTINGS} />);
+      await userEvent.click(screen.getByTestId('create-seeg-bipolar-button'));
+      expect(screen.getByTestId('keep-monopolar-no')).toHaveFocus();
+    });
+
+    it('"No" drops monopolar contacts, keeping only the bipolar-paired rows', async () => {
+      const onApplyMontageChannels = vi.fn();
+      render(
+        <EegMontageEditor
+          {...defaultProps}
+          channelSettings={PAIRABLE_SETTINGS}
+          onApplyMontageChannels={onApplyMontageChannels}
+        />
+      );
+      await userEvent.click(screen.getByTestId('create-seeg-bipolar-button'));
+      await userEvent.click(screen.getByTestId('keep-monopolar-no'));
+      await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+      const committed = onApplyMontageChannels.mock.calls[0][0];
+      expect(committed).toEqual([
+        { id: expect.any(String), channel: 'FP1', reference: 'FP2', color: null },
+      ]);
+    });
+
+    it('"Yes" keeps monopolar contacts unreferenced instead of dropping them', async () => {
+      const onApplyMontageChannels = vi.fn();
+      render(
+        <EegMontageEditor
+          {...defaultProps}
+          channelSettings={PAIRABLE_SETTINGS}
+          onApplyMontageChannels={onApplyMontageChannels}
+        />
+      );
+      await userEvent.click(screen.getByTestId('create-seeg-bipolar-button'));
+      await userEvent.click(screen.getByTestId('keep-monopolar-yes'));
+      await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+      const committed = onApplyMontageChannels.mock.calls[0][0];
+      expect(committed.map((row) => row.channel).sort()).toEqual(['FP1', 'FP2']);
+      expect(committed.find((row) => row.channel === 'FP2').reference).toBeNull();
+    });
+
+    it('never adds a row for an EEG/Other channel, even ones already in the montage', async () => {
+      const onApplyMontageChannels = vi.fn();
+      render(
+        <EegMontageEditor
+          {...defaultProps}
+          channelSettings={PAIRABLE_SETTINGS}
+          onApplyMontageChannels={onApplyMontageChannels}
+        />
+      );
+      await userEvent.click(screen.getByTestId('create-seeg-bipolar-button'));
+      await userEvent.click(screen.getByTestId('keep-monopolar-yes'));
+      await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+      const committed = onApplyMontageChannels.mock.calls[0][0];
+      expect(committed.some((row) => row.channel === 'FP3')).toBe(false);
+    });
+  });
+
   describe('removing montage rows', () => {
     it('disables "Clear all" when there are no montage rows', () => {
       render(<EegMontageEditor {...defaultProps} montageChannels={[]} />);
