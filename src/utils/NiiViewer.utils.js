@@ -144,6 +144,8 @@ export async function syncVolumesAndApplySettings(nv, layers, layerSettings) {
     } else {
       await nv.addVolumesFromUrl(newLayers);
     }
+    // nv now has its own copy of the data — the blob: URL is redundant, so free it now.
+    revokeLayerUrls(newLayers);
   }
 
   // nv.volumes now matches layers 1:1, so settings can be applied by index directly.
@@ -183,6 +185,8 @@ export async function syncMeshesAndApplySettings(nv, meshLayers, meshLayerSettin
     );
     // addMeshesFromUrl returns the created meshes in input order — record each by its layer url.
     newLayers.forEach((layer, i) => meshMap.set(layer.url, addedMeshes[i]));
+    // Same as syncVolumesAndApplySettings — nv has its own copy now, free the blob: URL.
+    revokeLayerUrls(newLayers);
   }
 
   // Apply visibility/opacity to every file mesh (0 opacity is how a hidden mesh is
@@ -352,4 +356,13 @@ export async function filesToLayers(files) {
 
   const dicomLayers = dicomFiles.length > 0 ? await dicomFilesToLayers(dicomFiles) : [];
   return [...otherLayers, ...dicomLayers];
+}
+
+// Frees the blob: URLs backing dropped-file layers. Called right after nv loads a layer
+// (redundant by then) and defensively wherever a layer is discarded (failed load, deleted
+// card, unmount). Re-revoking is a harmless no-op; non-blob (sentinel/demo) URLs are skipped.
+export function revokeLayerUrls(layers) {
+  for (const layer of layers) {
+    if (layer.url?.startsWith('blob:')) URL.revokeObjectURL(layer.url);
+  }
 }
