@@ -6,6 +6,7 @@ import {
   EEG_NODE_NEG_KEY,
   EEG_NODE_NEG,
 } from '@/utils/eegColormaps';
+import { revokeLayerUrls } from '@/utils/NiiViewer.utils';
 
 /**
  * Attaches the shared, long-lived NiiVue instance to the canvas once on mount, and clears its
@@ -70,6 +71,9 @@ export function useSharedNiiVueInstance({
     return () => {
       const nv = nvRef.current;
       if (!nv) return;
+      // Defensive backstop — normally already revoked right after load.
+      revokeLayerUrls(nv.volumes);
+      revokeLayerUrls(nv.meshes ?? []);
       while (nv.volumes.length > 0) nv.removeVolumeByIndex(0);
       (nv.meshes ?? []).slice().forEach((mesh) => nv.removeMesh(mesh));
       fileMeshesRef.current.clear(); // drop tracked file meshes so they aren't re-applied on remount

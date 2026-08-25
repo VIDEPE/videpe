@@ -323,6 +323,22 @@ describe('syncVolumesAndApplySettings', () => {
     expect(nv.updateGLVolume).toHaveBeenCalledOnce();
   });
 
+  it('revokes each blob: volume url once it has been loaded into nv', async () => {
+    const revokeSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const volumes = [makeVolume('blob:mri', 'id-mri')];
+    await syncVolumesAndApplySettings(nv, volumes, [makeLayerSetting()]);
+    expect(revokeSpy).toHaveBeenCalledWith('blob:mri');
+    revokeSpy.mockRestore();
+  });
+
+  it('does not revoke a non-blob volume url (e.g. a connectome sentinel)', async () => {
+    const revokeSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const volumes = [makeVolume('__esi-source-power__', 'id-esi')];
+    await syncVolumesAndApplySettings(nv, volumes, [makeLayerSetting()]);
+    expect(revokeSpy).not.toHaveBeenCalled();
+    revokeSpy.mockRestore();
+  });
+
   describe('appending volumes to an already-loaded NiiVue instance', () => {
     beforeEach(() => {
       // Simulate an instance that already finished its initial load
@@ -363,6 +379,19 @@ describe('syncVolumesAndApplySettings', () => {
 
       expect(nv.loadVolumes).not.toHaveBeenCalled();
       expect(nv.addVolumesFromUrl).not.toHaveBeenCalled();
+    });
+
+    it('revokes only the newly added volume url, leaving the pre-existing one alone', async () => {
+      const revokeSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+      const petVolume = makeVolume('blob:pet', 'id-pet');
+      const allVolumes = [makeVolume('/mri.nii', 'id-mri'), petVolume];
+      const allSettings = [makeLayerSetting(), makeLayerSetting({ colormap: 'viridis' })];
+
+      await syncVolumesAndApplySettings(nv, allVolumes, allSettings);
+
+      expect(revokeSpy).toHaveBeenCalledWith('blob:pet');
+      expect(revokeSpy).not.toHaveBeenCalledWith('/mri.nii');
+      revokeSpy.mockRestore();
     });
   });
 });
@@ -458,6 +487,31 @@ describe('syncMeshesAndApplySettings', () => {
     await syncMeshesAndApplySettings(nv, [], [], new Map());
     expect(nv.addMeshesFromUrl).not.toHaveBeenCalled();
     expect(nv.updateGLVolume).not.toHaveBeenCalled();
+  });
+
+  it('revokes a newly loaded mesh url once it has been added to nv', async () => {
+    const revokeSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    await syncMeshesAndApplySettings(
+      nv,
+      [makeMeshLayer('blob:cortex', 'cortex.gii')],
+      [makeMeshSetting()],
+      new Map()
+    );
+    expect(revokeSpy).toHaveBeenCalledWith('blob:cortex');
+    revokeSpy.mockRestore();
+  });
+
+  it('does not revoke the url of a mesh already tracked in the map', async () => {
+    const revokeSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const map = new Map([['blob:cortex', { opacity: 1 }]]);
+    await syncMeshesAndApplySettings(
+      nv,
+      [makeMeshLayer('blob:cortex', 'cortex.gii')],
+      [makeMeshSetting()],
+      map
+    );
+    expect(revokeSpy).not.toHaveBeenCalled();
+    revokeSpy.mockRestore();
   });
 });
 
@@ -903,6 +957,36 @@ describe('NiiViewer', () => {
       );
 
       await waitFor(() => expect(onLoadError).toHaveBeenCalledWith(new Set(['/mri.nii'])));
+    });
+
+    it('revokes the blob url of a layer passed via the layers prop that fails to load', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      Niivue.mockImplementationOnce(function () {
+        return {
+          attachToCanvas: vi.fn(),
+          loadVolumes: vi.fn().mockRejectedValue(new Error('Image type not supported')),
+          setOpacity: vi.fn(),
+          setColormap: vi.fn(),
+          addColormap: vi.fn(),
+          updateGLVolume: vi.fn(),
+          setSliceType: vi.fn(),
+          setMultiplanarLayout: vi.fn(),
+          setCornerOrientationText: vi.fn(),
+          getRadiologicalConvention: vi.fn(() => false),
+          setRadiologicalConvention: vi.fn(),
+          setClipPlane: vi.fn(),
+          opts: { isColorbar: false, multiplanarShowRender: null, multiplanarEqualSize: true },
+          sliceTypeMultiplanar: 1,
+          volumes: [],
+        };
+      });
+
+      const revokeSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+      const nvRef = { current: new Niivue() };
+      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'MRI', url: 'blob:mri' }]} />);
+
+      await waitFor(() => expect(revokeSpy).toHaveBeenCalledWith('blob:mri'));
+      revokeSpy.mockRestore();
     });
 
     it('does not show the "Imaging data loaded!" success toast when a layer passed via the layers prop fails to load', async () => {
@@ -1501,6 +1585,22 @@ describe('NiiViewer', () => {
       expect(toast.success).not.toHaveBeenCalled();
     });
 
+    it('revokes the blob url of a dropped volume that fails to load', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      render(<NiiViewer nvRef={nvRef} layers={[]} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      nvRef.current.loadVolumes.mockRejectedValueOnce(new Error('Image type not supported'));
+      const revokeSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+
+      const input = document.querySelector('input[type="file"]');
+      await userEvent.upload(input, new File(['data'], 'scan.nii'));
+
+      await waitFor(() => expect(revokeSpy).toHaveBeenCalledWith(expect.stringMatching(/^blob:/)));
+      revokeSpy.mockRestore();
+    });
+
     it('names the failed file in the toast when a dropped volume fails to load', async () => {
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
@@ -1592,6 +1692,40 @@ describe('NiiViewer', () => {
       expect(screen.queryByText('MRI')).not.toBeInTheDocument();
       // expect the other settings card to still be there
       expect(screen.queryByText('PET')).toBeInTheDocument();
+    });
+
+    it('revokes the deleted volume blob url', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'MRI', url: 'blob:mri' }]} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      // Spy only from here — the initial load already revoked it once (see
+      // syncVolumesAndApplySettings), this isolates the delete-time revoke.
+      const revokeSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+      await userEvent.click(screen.getByRole('button', { name: /expand.*mri/i }));
+      await userEvent.click(screen.getByRole('button', { name: /close.*mri/i }));
+
+      expect(revokeSpy).toHaveBeenCalledWith('blob:mri');
+      revokeSpy.mockRestore();
+    });
+
+    it('does not attempt to revoke a connectome sentinel url when its card is deleted', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      render(<NiiViewer nvRef={nvRef} layers={[]} electrodeLayer={makeIntracranialLayer()} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      const revokeSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+      await userEvent.click(
+        screen.getByRole('button', { name: /expand.*electrodes - intracranial eeg/i })
+      );
+      await userEvent.click(
+        screen.getByRole('button', { name: /close.*electrodes - intracranial eeg/i })
+      );
+
+      expect(revokeSpy).not.toHaveBeenCalled();
+      revokeSpy.mockRestore();
     });
   });
 
@@ -1938,6 +2072,25 @@ describe('NiiViewer', () => {
       expect(nv.meshes.length).toBe(0);
     });
 
+    it('revokes remaining volume blob urls when the component unmounts', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const { unmount } = render(
+        <NiiViewer
+          nvRef={nvRef}
+          layers={[{ type: 'MRI', url: 'blob:mri' }]}
+          electrodeLayer={makeIntracranialLayer()}
+        />
+      );
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      const revokeSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+      unmount();
+
+      expect(revokeSpy).toHaveBeenCalledWith('blob:mri');
+      revokeSpy.mockRestore();
+    });
+
     it('clears stale volumes from nv when layers drops to empty while a connectome keeps the component mounted', async () => {
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
@@ -1959,6 +2112,25 @@ describe('NiiViewer', () => {
 
       expect(nv.volumes.length).toBe(0);
       expect(nv.meshes.length).toBe(1); // connectome mesh is untouched by this reset
+    });
+
+    it('revokes the stale volume blob url when layers drops to empty while a connectome keeps the component mounted', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const { rerender } = render(
+        <NiiViewer
+          nvRef={nvRef}
+          layers={[{ type: 'MRI', url: 'blob:mri' }]}
+          electrodeLayer={makeIntracranialLayer()}
+        />
+      );
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      const revokeSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+      rerender(<NiiViewer nvRef={nvRef} layers={[]} electrodeLayer={makeIntracranialLayer()} />);
+
+      expect(revokeSpy).toHaveBeenCalledWith('blob:mri');
+      revokeSpy.mockRestore();
     });
 
     it('drops the stale MRI card from ImagingControls on an imaging-only reset, keeping the connectome card', async () => {

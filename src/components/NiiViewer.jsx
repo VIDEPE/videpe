@@ -25,6 +25,7 @@ import {
   fractionToCalValue,
   syncVolumesAndApplySettings,
   syncMeshesAndApplySettings,
+  revokeLayerUrls,
   ESI_LAYER_URL,
   ELECTRODE_LAYER_URL,
 } from '../utils/NiiViewer.utils';
@@ -511,6 +512,11 @@ export const NiiViewer = ({
       newLayers.filter((layer) => layer.kind === 'mesh').forEach((l) => failedUrls.add(l.url));
 
     if (failedUrls.size > 0) {
+      // A rejected load never reaches syncVolumesAndApplySettings/syncMeshesAndApplySettings's
+      // own revoke, so these blobs are still live — free them here instead.
+      if (volumeResult.status === 'rejected') revokeLayerUrls(newLayers.filter(isImageVolumeLayer));
+      if (meshResult.status === 'rejected')
+        revokeLayerUrls(newLayers.filter((l) => l.kind === 'mesh'));
       setOrderedLayers((prev) => prev.filter((l) => !failedUrls.has(l.url)));
       setLayerSettings((prev) => prev.filter((s) => !failedUrls.has(s.url)));
       setHasLoadError(true); // suppresses useLoadingToast's success toast once setIsLoading(false) below fires
@@ -583,6 +589,8 @@ export const NiiViewer = ({
       if (!nvRef.current) return; // Guard clause — if NiiVue isn't initialized yet, we can't delete
       const nv = nvRef.current;
       const layer = orderedLayers[index];
+      // Defensive backstop — normally already revoked right after load; no-op for sentinel URLs.
+      if (layer) revokeLayerUrls([layer]);
 
       if (layer?.kind === 'connectome') {
         // Dispatch by URL — each connectome layer tracks its own mesh, owned by its own hook
