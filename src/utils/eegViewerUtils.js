@@ -1,4 +1,5 @@
 import { mean, median } from './arrayAndMatrixMathUtils';
+import { parseElectrodeContactName } from './intracranialDetection';
 
 // ─── EEG channel referencing ──────────────────────────────────────────────────────────
 //
@@ -132,4 +133,21 @@ export function deriveMontageRowSamples(channels, row, referenceSeries) {
   // else: substract the reference channel from the channel
   const referenceSamples = channels[row.referenceIndex];
   return channelSamples.map((v, i) => v - referenceSamples[i]);
+}
+
+// Compares two channel names for display ordering. Contact-shaped names ("E1", "E9", "b'7")
+// sort by their electrode group (case-insensitive prefix, apostrophe included) and then
+// numerically by contact number — so "E9" sorts before "E99" and "E100", where a plain string
+// compare would put "E100" and "E99" ahead of "E9". Falls back to plain localeCompare when
+// either name isn't contact-shaped (e.g. "ECG"), so non-electrode channels still sort somewhere
+// sensible instead of the comparator throwing or treating them as equal.
+export function compareChannelNamesNaturally(a, b) {
+  const parsedA = parseElectrodeContactName(a);
+  const parsedB = parseElectrodeContactName(b);
+  // one of them doesn't fit the SEEG electrode name pattern: do normal string compare
+  if (!parsedA || !parsedB) return a.localeCompare(b);
+  // else first compare groups and if the same group then compare numberInGroup
+  return parsedA.group !== parsedB.group
+    ? parsedA.group.localeCompare(parsedB.group)
+    : parsedA.numberInGroup - parsedB.numberInGroup;
 }
