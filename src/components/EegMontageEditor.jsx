@@ -3,9 +3,9 @@ import toast from 'react-hot-toast';
 import { SplitPane } from '@/components/SplitPane';
 import { useTheme } from '@/components/ThemeContext';
 import { TrafficLightButtons } from '@/components/TrafficLightButtons';
-import {} from '@/utils/eegViewerUtils';
+import { compareChannelNamesNaturally, buildSeegBipolarReferences } from '@/utils/eegViewerUtils';
 import { parseMontageFile } from '@/loaders/parseMontageFile';
-import { toAnyWaveMontage } from '@/loaders/toAnyWaveMontage';
+import { toAnyWaveMontage } from '@/loaders/toMontageAnyWave';
 import { downloadTextFile } from '@/utils/fileDownload';
 import { EyeDashed } from 'lucide-react';
 import { cn } from '@/utils/utils';
@@ -232,13 +232,16 @@ export function EegMontageEditor({
     });
   }, [selectedMontageRows]);
 
-  // Sorts by channel name, flipping ascending/descending on each click.
+  // Sorts by channel name, flipping ascending/descending on each click. Uses
+  // compareChannelNamesNaturally (not plain localeCompare) so contact numbers sort
+  // numerically — "E9" before "E99"/"E100" — instead of lexicographically.
   const [nameSortDescending, setNameSortDescending] = useState(false);
   const handleSortByName = useCallback(() => {
     setDraftMontageChannels((prev) =>
-      [...prev].sort((a, b) =>
-        nameSortDescending ? b.channel.localeCompare(a.channel) : a.channel.localeCompare(b.channel)
-      )
+      [...prev].sort((a, b) => {
+        const diff = compareChannelNamesNaturally(a.channel, b.channel);
+        return nameSortDescending ? -diff : diff;
+      })
     );
     setNameSortDescending((prev) => !prev);
   }, [nameSortDescending]);
@@ -253,7 +256,8 @@ export function EegMontageEditor({
         const typeA = draftChannelSettings[a.channel]?.type ?? 'eeg';
         const typeB = draftChannelSettings[b.channel]?.type ?? 'eeg';
         const typeOrderDiff = TYPE_ORDER.indexOf(typeA) - TYPE_ORDER.indexOf(typeB);
-        const diff = typeOrderDiff !== 0 ? typeOrderDiff : a.channel.localeCompare(b.channel);
+        const diff =
+          typeOrderDiff !== 0 ? typeOrderDiff : compareChannelNamesNaturally(a.channel, b.channel);
         return typeSortDescending ? -diff : diff;
       })
     );
@@ -305,13 +309,83 @@ export function EegMontageEditor({
   // The live channelSettings/montageChannels props only ever change via a prior Apply/OK (or
   // the seeding effects in useChannelSettings/useMontageChannels) — never by draft edits — so
   // comparing against them directly doubles as "has either draft diverged from what was last
-  // applied", no separate snapshot needed.
-  const isModified = useMemo(
-    () =>
-      JSON.stringify(draftChannelSettings) !== JSON.stringify(channelSettings) ||
-      JSON.stringify(draftMontageChannels) !== JSON.stringify(montageChannels),
-    [draftChannelSettings, channelSettings, draftMontageChannels, montageChannels]
+  // applied", no separate snapshot needed. Split into two so handleCreateSeegBipolar below can
+  // warn specifically about unsaved montage-row edits, without also firing on an unrelated
+  // channel-settings edit (e.g. a bad-channel checkbox) that Create SEEG Bipolar wouldn't touch.
+  const isChannelSettingsModified = useMemo(
+    () => JSON.stringify(draftChannelSettings) !== JSON.stringify(channelSettings),
+    [draftChannelSettings, channelSettings]
   );
+  const isMontageModified = useMemo(
+    () => JSON.stringify(draftMontageChannels) !== JSON.stringify(montageChannels),
+    [draftMontageChannels, montageChannels]
+  );
+  const isModified = isChannelSettingsModified || isMontageModified;
+
+  // Live preview of what "Create SEEG Bipolar" would build, recomputed as channelNames/
+  // draftChannelSettings change. Drives the button's disabled state (nothing to pair => no
+  // references at all) and is reused directly by handleCreateSeegBipolar below, so clicking
+  // doesn't need to recompute it.
+  const seegBipolarPreview = useMemo(
+    () => buildSeegBipolarReferences(channelNames, draftChannelSettings),
+    [channelNames, draftChannelSettings]
+  );
+
+  // Non-null while the "Keep monopolar electrodes?" prompt is open, holding the already-
+  // computed seegBipolarPreview so its Yes/No buttons can commit without recomputing.
+  const [pendingSeegBipolarBuild, setPendingSeegBipolarBuild] = useState(null);
+
+  // Turns one SEEG-bipolar build (references + monopolar, from buildSeegBipolarReferences)
+  // into the new montage draft — replacing it wholesale, same as Clear all. Only SEEG channels
+  // get rows; EEG/Other channels are left for the user to add separately (+ Add selected/Add by
+  // Type/Add ALL) — this button's job is purely the SEEG bipolar chain, nothing else. Takes
+  // `keepMonopolar` as a parameter (rather than reading state) so it can be called two ways:
+  // directly when there's nothing to ask about, or from the Yes/No prompt once answered.
+  const commitSeegBipolarMontage = useCallback(
+    (build, keepMonopolar) => {
+      // Named predicate instead of two chained .filter() calls, so the "which channels survive"
+      // logic reads as one decision instead of two separate passes over the array.
+      function keepChannel(name) {
+        const isSeeg = (draftChannelSettings[name]?.type ?? 'eeg') === 'seeg';
+        if (!isSeeg) return false; // this button only ever touches SEEG channels
+        return build.references.has(name) || keepMonopolar; // paired, or kept unpaired by choice
+      }
+
+      const rows = channelNames
+        .filter(keepChannel)
+        // build.references.get(name) is that channel's paired partner if it has one, else
+        // undefined — ?? null normalizes a kept monopolar row's reference to null.
+        .map((name) => makeMontageRow(name, { reference: build.references.get(name) ?? null }));
+
+      setDraftMontageChannels(rows); // replaces the whole draft — any existing EEG/Other/SEEG rows are gone
+      setSelectedMontageRows(new Set()); // old row ids are gone (fresh uuids), so drop stale selection
+      setPendingSeegBipolarBuild(null); // close the prompt, if it was open
+    },
+    [channelNames, draftChannelSettings, makeMontageRow]
+  );
+
+  // Entry point for the "Create SEEG Bipolar" button. Clears the montage and rebuilds it as a
+  // bipolar chain (contact N referenced to N+1 within its own electrode group — see
+  // buildSeegBipolarReferences). SEEG contacts with no next-in-group partner ("monopolar") are
+  // asked about once, for all of them together, instead of once per contact.
+  const handleCreateSeegBipolar = useCallback(() => {
+    const replaceConfirmMessage =
+      'This will replace the current montage rows with a new SEEG bipolar montage. Continue?';
+    // Bail out entirely if there are unsaved montage-row edits and the user doesn't confirm.
+    if (isMontageModified && !window.confirm(replaceConfirmMessage)) return;
+
+    // Something has no next-in-group partner — ask once, for all of them together, instead of
+    // committing yet. The Yes/No prompt (rendered near the bottom of this component) calls
+    // commitSeegBipolarMontage itself once the user answers.
+    if (seegBipolarPreview.monopolar.length > 0) {
+      setPendingSeegBipolarBuild(seegBipolarPreview);
+      return;
+    }
+
+    // Every SEEG contact found a partner (or there are none) — nothing to ask, commit directly.
+    // `true` for keepMonopolar is a no-op here since build.monopolar is empty.
+    commitSeegBipolarMontage(seegBipolarPreview, true);
+  }, [isMontageModified, seegBipolarPreview, commitSeegBipolarMontage]);
 
   // Same bad/missing checks the row list uses for its own styling (see isChannelBad etc. in
   // montageSelectionPane below) — reused here to warn before committing a montage that can't
@@ -769,6 +843,24 @@ export function EegMontageEditor({
           ))}
         </select>
       </div>
+      {/* Create SEEG Bipolar button — replaces the entire montage (see commitSeegBipolarMontage/
+          handleCreateSeegBipolar). Disabled when no SEEG group has a pairable contact. */}
+      <div className="flex flex-col gap-2 pt-6 border-t border-border">
+        <button
+          type="button"
+          className="button leading-tight"
+          data-testid="create-seeg-bipolar-button"
+          disabled={seegBipolarPreview.references.size === 0}
+          onClick={handleCreateSeegBipolar}
+          title={
+            seegBipolarPreview.references.size === 0
+              ? 'Requires at least two consecutively-numbered SEEG channels in the same SEEG electrode group (e.g. "B1" and "B2")'
+              : 'Create a SEEG bipolar montage (Channel: N ; Ref: N+1) for every electrode group'
+          }
+        >
+          Create SEEG Bipolar
+        </button>
+      </div>
     </div>
   );
   const montageSelectionPane = (
@@ -1221,6 +1313,49 @@ export function EegMontageEditor({
           Apply
         </button>
       </div>
+
+      {/* "Keep monopolar electrodes?" prompt — shown by handleCreateSeegBipolar when at least
+          one SEEG contact had no next-in-group partner to pair with. "No" (drop them) is the
+          recommended choice, so it's styled as the primary button and autofocused: since a
+          focused <button> activates on Enter, pressing Enter here picks "No" without the user
+          needing to click. Positioned absolute within this (already fixed-positioned) window
+          container, so it overlays just this editor rather than the whole viewport. */}
+      {pendingSeegBipolarBuild && (
+        <div
+          className="absolute inset-0 z-[60] flex items-center justify-center bg-black/40"
+          data-testid="keep-monopolar-prompt"
+        >
+          <div className="flex flex-col gap-3 p-4 max-w-xs rounded-lg border border-border bg-surface shadow-lg">
+            <div className="flex flex-col gap-1">
+              <p className="text-sm font-medium text-heading">Keep monopolar electrodes?</p>
+              <p className="text-xs text-header">
+                Keep contacts without adjacent channels as unreferenced ("monopolar") instead of
+                bipolar.
+              </p>
+              <p className="text-xs font-bold text-header">Not recommended.</p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                className="text-xs border border-border rounded-full px-3 py-1 bg-surface hover:bg-background"
+                data-testid="keep-monopolar-yes"
+                onClick={() => commitSeegBipolarMontage(pendingSeegBipolarBuild, true)}
+              >
+                Yes
+              </button>
+              <button
+                type="button"
+                autoFocus
+                className="button"
+                data-testid="keep-monopolar-no"
+                onClick={() => commitSeegBipolarMontage(pendingSeegBipolarBuild, false)}
+              >
+                No
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

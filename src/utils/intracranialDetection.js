@@ -21,6 +21,11 @@ const CONTACT_NAME_PATTERN = /^([a-zA-Z]+'?)(\d+)$/;
 // way, since both are the trailing digit(s) in a group+number channel name.
 export function parseElectrodeContactName(name) {
   const stripped = name.replace(/^(eeg|meg)\s+/i, '').replace(/-.*$/, '');
+  // .match() is not a plain true/false the way RegExp.test() would give.
+  // On a non-global regex returns null on no match, else an array:
+  // match[0] is the whole matched substring
+  // match[1]/match[2] are this pattern's two capture groups (letters, digits)
+  //
   const match = stripped.match(CONTACT_NAME_PATTERN);
   if (!match) return null;
   return {

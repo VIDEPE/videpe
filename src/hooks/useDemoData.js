@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
-import { loadBrainVisionEEG } from '../loaders/loadBrainVisionEEG';
+import { loadBrainVisionEEG } from '../loaders/loadEEGBrainVision';
 import { detectVolumeType } from '../utils/NiiViewer.utils';
 
 const DEMO_EEG = {

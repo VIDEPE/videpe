@@ -669,4 +669,118 @@ describe('ImagingControls', () => {
       ).toBeInTheDocument();
     });
   });
+
+  describe('double-click thumb to reset to default', () => {
+    // Two plain clicks land well within useDoubleClickToDefault's default 250ms window —
+    // fireEvent.click (unlike userEvent.click/dblClick) dispatches a bare 'click' MouseEvent
+    // with no pointerdown/pointerup, so it never reaches Radix's onPointerDown (which calls
+    // setPointerCapture — unimplemented in jsdom and not needed here, since our reset handler
+    // only listens for onClick).
+    const doubleClick = (thumb) => {
+      fireEvent.click(thumb);
+      fireEvent.click(thumb);
+    };
+
+    const makeIntracranialLayer = (overrides = {}) => ({
+      kind: 'connectome',
+      type: 'Intracranial',
+      subtype: 'Electrodes',
+      url: '__intracranial-electrodes__',
+      nodes: [{ name: 'A1', x: 0, y: 0, z: 0, colorValue: 1, sizeValue: 1 }],
+      edges: [{ first: 0, second: 1, colorValue: 1 }],
+      ...overrides,
+    });
+
+    it('resets opacity to 100% (1.0)', async () => {
+      const onSettingChange = vi.fn();
+      renderControls(
+        [makeVolume('MRI', '/mri.nii')],
+        [makeSettings({ opacity: 0.4 })],
+        onSettingChange
+      );
+      await userEvent.click(screen.getByRole('button', { name: /expand.*mri/i }));
+      doubleClick(screen.getByLabelText('MRI opacity slider'));
+      expect(onSettingChange).toHaveBeenCalledWith(0, 'opacity', 1);
+    });
+
+    it("resets a normal volume's min threshold to 0%", async () => {
+      const onSettingChange = vi.fn();
+      renderControls(
+        [makeVolume('MRI', '/mri.nii')],
+        [makeSettings({ cal_min: 0.5 })],
+        onSettingChange
+      );
+      await userEvent.click(screen.getByRole('button', { name: /expand.*mri/i }));
+      doubleClick(screen.getByLabelText('MRI Threshold minimum slider'));
+      expect(onSettingChange).toHaveBeenCalledWith(0, 'cal_min', 0);
+    });
+
+    it("resets the ESI layer's min threshold to 1% (0.01), not 0% — its shader needs a positive floor to render thresholding", async () => {
+      const onSettingChange = vi.fn();
+      renderControls(
+        [{ kind: 'connectome', type: 'Electrical Source Imaging', url: '__esi-source-power__' }],
+        [makeSettings({ cal_min: 0.5 })],
+        onSettingChange
+      );
+      await userEvent.click(
+        screen.getByRole('button', { name: /expand.*electrical source imaging/i })
+      );
+      doubleClick(screen.getByLabelText('Electrical Source Imaging Threshold minimum slider'));
+      expect(onSettingChange).toHaveBeenCalledWith(0, 'cal_min', 0.01);
+    });
+
+    it('resets max threshold to 100% (1.0)', async () => {
+      const onSettingChange = vi.fn();
+      renderControls(
+        [makeVolume('MRI', '/mri.nii')],
+        [makeSettings({ cal_max: 0.3 })],
+        onSettingChange
+      );
+      await userEvent.click(screen.getByRole('button', { name: /expand.*mri/i }));
+      doubleClick(screen.getByLabelText('MRI Threshold maximum slider'));
+      expect(onSettingChange).toHaveBeenCalledWith(0, 'cal_max', 1);
+    });
+
+    it('resets Mesh Xray to 100% (1.0)', async () => {
+      const onSettingChange = vi.fn();
+      renderControls([makeIntracranialLayer()], [makeSettings({ meshXRay: 0.3 })], onSettingChange);
+      await userEvent.click(
+        screen.getByRole('button', { name: /expand.*intracranial - electrodes/i })
+      );
+      doubleClick(screen.getByLabelText('Intracranial - Electrodes meshXRay slider'));
+      expect(onSettingChange).toHaveBeenCalledWith(0, 'meshXRay', 1);
+    });
+
+    it('resets Node Size to DEFAULT_NODE_SCALE (4)', async () => {
+      const onSettingChange = vi.fn();
+      renderControls([makeIntracranialLayer()], [makeSettings({ nodeScale: 8 })], onSettingChange);
+      await userEvent.click(
+        screen.getByRole('button', { name: /expand.*intracranial - electrodes/i })
+      );
+      doubleClick(screen.getByLabelText('Intracranial - Electrodes node size slider'));
+      expect(onSettingChange).toHaveBeenCalledWith(0, 'nodeScale', 4);
+    });
+
+    it('resets Edge Size to DEFAULT_EDGE_SCALE (0.5)', async () => {
+      const onSettingChange = vi.fn();
+      renderControls([makeIntracranialLayer()], [makeSettings({ edgeScale: 2 })], onSettingChange);
+      await userEvent.click(
+        screen.getByRole('button', { name: /expand.*intracranial - electrodes/i })
+      );
+      doubleClick(screen.getByLabelText('Intracranial - Electrodes edge size slider'));
+      expect(onSettingChange).toHaveBeenCalledWith(0, 'edgeScale', 0.5);
+    });
+
+    it('does not reset on a single click', async () => {
+      const onSettingChange = vi.fn();
+      renderControls(
+        [makeVolume('MRI', '/mri.nii')],
+        [makeSettings({ opacity: 0.4 })],
+        onSettingChange
+      );
+      await userEvent.click(screen.getByRole('button', { name: /expand.*mri/i }));
+      fireEvent.click(screen.getByLabelText('MRI opacity slider'));
+      expect(onSettingChange).not.toHaveBeenCalled();
+    });
+  });
 });

@@ -4,6 +4,8 @@ import {
   applyReferenceSeries,
   buildMontageDisplayRows,
   deriveMontageRowSamples,
+  compareChannelNamesNaturally,
+  buildSeegBipolarReferences,
 } from '@/utils/eegViewerUtils';
 
 // ---------------------------------------------------------------------------
@@ -328,5 +330,104 @@ describe('deriveMontageRowSamples', () => {
   it('falls back to the raw channel when no referenceSeries is given at all', () => {
     const row = { channelIndex: 0, referenceIndex: null, referenceMode: 'average' };
     expect(deriveMontageRowSamples(channels, row)).toEqual([1, 2, 3]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// compareChannelNamesNaturally
+// ---------------------------------------------------------------------------
+
+describe('compareChannelNamesNaturally', () => {
+  it('sorts contact numbers numerically, not lexicographically', () => {
+    const names = ['E100', 'E1', 'E99', 'E9'];
+    expect([...names].sort(compareChannelNamesNaturally)).toEqual(['E1', 'E9', 'E99', 'E100']);
+  });
+
+  it('groups by prefix before comparing numbers, so different electrodes never interleave', () => {
+    const names = ['B2', 'A10', 'B1', 'A2'];
+    expect([...names].sort(compareChannelNamesNaturally)).toEqual(['A2', 'A10', 'B1', 'B2']);
+  });
+
+  it('sorts a primed group ("B\'") separately from its unprimed counterpart ("B")', () => {
+    const names = ["B'2", 'B1', "B'1", 'B2'];
+    expect([...names].sort(compareChannelNamesNaturally)).toEqual(['B1', 'B2', "B'1", "B'2"]);
+  });
+
+  it('falls back to plain string comparison when either name is not contact-shaped', () => {
+    expect(compareChannelNamesNaturally('ECG', 'EOG')).toBeLessThan(0);
+    expect(compareChannelNamesNaturally('E1', 'ECG')).toBe('E1'.localeCompare('ECG'));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildSeegBipolarReferences
+// ---------------------------------------------------------------------------
+
+describe('buildSeegBipolarReferences', () => {
+  it('references each contact to the next-numbered contact in its own group', () => {
+    const channelNames = ['B1', 'B2', 'B3'];
+    const settings = { B1: { type: 'seeg' }, B2: { type: 'seeg' }, B3: { type: 'seeg' } };
+    const { references, monopolar } = buildSeegBipolarReferences(channelNames, settings);
+    expect(references.get('B1')).toBe('B2');
+    expect(references.get('B2')).toBe('B3');
+    expect(monopolar).toEqual(['B3']);
+  });
+
+  it('never skips a missing contact to find a next reference (no n+2 fallback)', () => {
+    // B2 is missing, so B1 has no exact B2 to pair with — it must not fall through to B3.
+    const channelNames = ['B1', 'B3'];
+    const settings = { B1: { type: 'seeg' }, B3: { type: 'seeg' } };
+    const { references, monopolar } = buildSeegBipolarReferences(channelNames, settings);
+    expect(references.size).toBe(0);
+    expect(monopolar).toEqual(['B1', 'B3']);
+  });
+
+  it('keeps electrode groups separate by prefix, so they never cross-pair', () => {
+    const channelNames = ['A1', 'A2', 'B1', 'B2'];
+    const settings = Object.fromEntries(channelNames.map((n) => [n, { type: 'seeg' }]));
+    const { references, monopolar } = buildSeegBipolarReferences(channelNames, settings);
+    expect(references.get('A1')).toBe('A2');
+    expect(references.get('B1')).toBe('B2');
+    expect(monopolar.sort()).toEqual(['A2', 'B2']);
+  });
+
+  it('never crosses a primed group ("B\'") with its unprimed counterpart ("B")', () => {
+    const channelNames = ['B1', "B'1"];
+    const settings = { B1: { type: 'seeg' }, "B'1": { type: 'seeg' } };
+    const { references, monopolar } = buildSeegBipolarReferences(channelNames, settings);
+    expect(references.size).toBe(0);
+    // Set comparison, not a sorted array — apostrophe (0x27) vs digit (0x31) ordering under
+    // plain string sort is an implementation detail this test shouldn't depend on.
+    expect(new Set(monopolar)).toEqual(new Set(['B1', "B'1"]));
+  });
+
+  it('leaves EEG and Other typed channels out of both references and monopolar', () => {
+    const channelNames = ['FP1', 'ECG1', 'B1', 'B2'];
+    const settings = {
+      FP1: { type: 'eeg' },
+      ECG1: { type: 'other' },
+      B1: { type: 'seeg' },
+      B2: { type: 'seeg' },
+    };
+    const { references, monopolar } = buildSeegBipolarReferences(channelNames, settings);
+    expect(references.has('FP1')).toBe(false);
+    expect(references.has('ECG1')).toBe(false);
+    expect(monopolar).not.toContain('FP1');
+    expect(monopolar).not.toContain('ECG1');
+  });
+
+  it('treats a channel with no settings entry as EEG, not SEEG (matches the rest of the editor)', () => {
+    const channelNames = ['B1', 'B2'];
+    const { references, monopolar } = buildSeegBipolarReferences(channelNames, {});
+    expect(references.size).toBe(0);
+    expect(monopolar).toEqual([]);
+  });
+
+  it('puts a non-contact-shaped SEEG channel name in monopolar (nothing to pair on)', () => {
+    const channelNames = ['GND']; // no trailing digit — parseElectrodeContactName can't parse it
+    const settings = { GND: { type: 'seeg' } };
+    const { references, monopolar } = buildSeegBipolarReferences(channelNames, settings);
+    expect(references.size).toBe(0);
+    expect(monopolar).toEqual(['GND']);
   });
 });

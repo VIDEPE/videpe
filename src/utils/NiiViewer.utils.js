@@ -144,6 +144,8 @@ export async function syncVolumesAndApplySettings(nv, layers, layerSettings) {
     } else {
       await nv.addVolumesFromUrl(newLayers);
     }
+    // nv now has its own copy of the data — the blob: URL is redundant, so free it now.
+    revokeLayerUrls(newLayers);
   }
 
   // nv.volumes now matches layers 1:1, so settings can be applied by index directly.
@@ -183,6 +185,8 @@ export async function syncMeshesAndApplySettings(nv, meshLayers, meshLayerSettin
     );
     // addMeshesFromUrl returns the created meshes in input order — record each by its layer url.
     newLayers.forEach((layer, i) => meshMap.set(layer.url, addedMeshes[i]));
+    // Same as syncVolumesAndApplySettings — nv has its own copy now, free the blob: URL.
+    revokeLayerUrls(newLayers);
   }
 
   // Apply visibility/opacity to every file mesh (0 opacity is how a hidden mesh is
@@ -274,9 +278,38 @@ export function makeSettingsMergeUpdater(layer, sentinelUrl, isEsiVolumeMode, cu
 // A DICOM series is many files (one per slice) representing a single volume, not one file per
 // layer like every other supported format, so dropped .dcm files are pulled out and converted
 // as a group instead of going through the same one-file-to-one-layer map as everything else.
-// isDicomExtension is NiiVue's own check (ext.toUpperCase() === 'DCM'), same convention as
-// isMeshExt above.
-const isDicomFile = (f) => isDicomExtension(f.name.split('.').pop() ?? '');
+// isDicomExtension is NiiVue's own check (ext.toUpperCase() === 'DCM'), which misses DICOM
+// files with no extension at all — common in PACS exports (e.g. "IM000001"). Those fall back
+// to a DICOM magic-bytes check instead; files with a real (non-.dcm) extension are trusted and
+// skip that fallback entirely, so the extra read only happens where it's actually needed.
+async function isDicomFile(file) {
+  // Extension check
+  const extension = file.name.split('.').pop() ?? '';
+  if (isDicomExtension(extension)) return true; // extension says it's a DICOM file
+
+  // split('.').pop() returns the whole filename unchanged when there's no '.' at all, so
+  // extension === file.name means "no extension". Anything else is a real (non-.dcm)
+  // extension, which we trust outright => not a DICOM file.
+  if (extension !== file.name) return false;
+
+  // If the file doesn't have an extension it could still be a DICOM file
+  // DICOM magic bytes check:
+  // DICOM files follow the "Part 10" medical image file format and have a fixed structure at the start of the file:
+  // Bytes 0–127 (Preamble): 128 bytes usually set to 0x00 (ignored for file identification).
+  // Bytes 128–131 (Magic Bytes): 4 bytes ASCII string
+  // 132+ (Data Set): File meta information and encoded medical dataset elements.
+  // byte offset:  0                                    128        132
+  //               ———————————————————————————————————— —————————— ———————————————————
+  //               │ 128-byte preamble (usually zeros) │  "DICM"  │  actual DICOM data...
+  //               ———————————————————————————————————— —————————— ———————————————————
+  const buf = await file.slice(128, 132).arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  const magicBytes = String.fromCharCode(...bytes); // 'DICM'
+  if (magicBytes === 'DICM') return true; // magicBytes indicate it is a DICOM file => return true
+
+  // all DICOM checks failed => not a DICOM file
+  return false;
+}
 
 // Runs dcm2niix (WASM, via @niivue/dicom-loader) on a group of .dcm files and turns each
 // resulting NIfTI into an image-volume layer, same shape as a regular file drop. dcm2niix
@@ -296,10 +329,11 @@ export async function filesToLayers(files) {
   // Convert a FileList (from input or drag-and-drop) to an array of layer objects with
   // { url, name, type, subtype } for image volumes, plus { kind: 'mesh' } for surface meshes.
   const fileArray = Array.from(files);
-  const dicomFiles = fileArray.filter(isDicomFile);
+  const dicomFlags = await Promise.all(fileArray.map(isDicomFile)); // real true/false values, resolved
 
+  const dicomFiles = fileArray.filter((f, i) => dicomFlags[i]);
   const otherLayers = fileArray
-    .filter((f) => !isDicomFile(f))
+    .filter((f, i) => !dicomFlags[i])
     .map((f) => {
       // NiiVue calls fetch(url) internally, so a blob: URL is needed — a plain filename would resolve as a relative HTTP request
       const url = URL.createObjectURL(f);
@@ -322,4 +356,13 @@ export async function filesToLayers(files) {
 
   const dicomLayers = dicomFiles.length > 0 ? await dicomFilesToLayers(dicomFiles) : [];
   return [...otherLayers, ...dicomLayers];
+}
+
+// Frees the blob: URLs backing dropped-file layers. Called right after nv loads a layer
+// (redundant by then) and defensively wherever a layer is discarded (failed load, deleted
+// card, unmount). Re-revoking is a harmless no-op; non-blob (sentinel/demo) URLs are skipped.
+export function revokeLayerUrls(layers) {
+  for (const layer of layers) {
+    if (layer.url?.startsWith('blob:')) URL.revokeObjectURL(layer.url);
+  }
 }

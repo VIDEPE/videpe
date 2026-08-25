@@ -1,5 +1,5 @@
-import { parseAnyWaveMontage } from './parseAnyWaveMontage';
-import { parseCartoolMontage } from './parseCartoolMontage';
+import { parseAnyWaveMontage } from './parseMontageAnywave';
+import { parseCartoolMontage } from './parseMontageCartool';
 
 /**
  * Reads a montage file — from a File (the montage editor's Load button, from its hidden

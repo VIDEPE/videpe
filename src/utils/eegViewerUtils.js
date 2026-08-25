@@ -1,4 +1,5 @@
 import { mean, median } from './arrayAndMatrixMathUtils';
+import { parseElectrodeContactName } from './intracranialDetection';
 
 // ─── EEG channel referencing ──────────────────────────────────────────────────────────
 //
@@ -132,4 +133,71 @@ export function deriveMontageRowSamples(channels, row, referenceSeries) {
   // else: substract the reference channel from the channel
   const referenceSamples = channels[row.referenceIndex];
   return channelSamples.map((v, i) => v - referenceSamples[i]);
+}
+
+// Compares two channel names for display ordering. Contact-shaped names ("E1", "E9", "b'7")
+// sort by their electrode group (case-insensitive prefix, apostrophe included) and then
+// numerically by contact number — so "E9" sorts before "E99" and "E100", where a plain string
+// compare would put "E100" and "E99" ahead of "E9". Falls back to plain localeCompare when
+// either name isn't contact-shaped (e.g. "ECG"), so non-electrode channels still sort somewhere
+// sensible instead of the comparator throwing or treating them as equal.
+export function compareChannelNamesNaturally(a, b) {
+  const parsedA = parseElectrodeContactName(a);
+  const parsedB = parseElectrodeContactName(b);
+  // one of them doesn't fit the SEEG electrode name pattern: do normal string compare
+  if (!parsedA || !parsedB) return a.localeCompare(b);
+  // else first compare groups and if the same group then compare numberInGroup
+  return parsedA.group !== parsedB.group
+    ? parsedA.group.localeCompare(parsedB.group)
+    : parsedA.numberInGroup - parsedB.numberInGroup;
+}
+
+// Builds one bipolar reference per SEEG channel — contact N takes contact N+1 of its own
+// electrode group (matching prefix, so e.g. "B" and "B'" never cross-pair) as its reference,
+// only when that exact next contact exists (a gap is never bridged — see the "never skips a
+// missing contact" test). A contact with no such next-in-group partner comes back in
+// `monopolar` instead of `references`, for the caller to decide whether to keep it
+// unreferenced or drop it. EEG/Other-typed channels, and SEEG channels whose name isn't
+// contact-shaped (parseElectrodeContactName returns null), are left out of both entirely —
+// the former were never eligible, the latter have nothing to pair on.
+export function buildSeegBipolarReferences(channelNames, channelSettings) {
+  function isSeeg(name) {
+    const type = channelSettings[name]?.type ?? 'eeg'; // fall back to 'eeg' when no type is set
+    return type === 'seeg'; // channel type equal to 'seeg'?
+  }
+
+  // Index every SEEG contact by group and number up front: group -> Map(numberInGroup ->
+  // channel name). channelNames isn't guaranteed to list contacts in numeric order, so a
+  // single forward pass couldn't reliably answer "does B2 exist?" while standing on B1 —
+  // this index lets the second pass below look that up in one step, in any channel order.
+  const groups = new Map();
+  for (const name of channelNames) {
+    if (!isSeeg(name)) continue; // EEG/Other channels never enter the index
+
+    const parsed = parseElectrodeContactName(name); // parse SEEG channel name, 'B1' in to group: 'B' and numberInGroup: '1'
+    if (!parsed) continue; // not SEEG shaped name (e.g. "GND") — nothing to index it under => skip
+    if (!groups.has(parsed.group)) groups.set(parsed.group, new Map()); // if new group is spotted, add a new inner map for the numberInGroup
+
+    const group = groups.get(parsed.group); // get inner map of the group
+    if (!group.has(parsed.numberInGroup)) group.set(parsed.numberInGroup, name); // if the group doesn't have this channel number add it, if not skip it => first name wins on a duplicate number
+  }
+
+  // Use the groups to find the adjecent channels (only the N+1 channel) within a group to set as ref
+  const references = new Map();
+  const monopolar = [];
+  for (const name of channelNames) {
+    if (!isSeeg(name)) continue; // EEG/Other channels: skip entirely, not even added to monopolar
+
+    const parsed = parseElectrodeContactName(name); // again parse the SEEG channel name into group and numberInGroup
+    if (!parsed) {
+      monopolar.push(name); // SEEG but not contact-shaped — nothing to pair it on
+      continue;
+    }
+    const nextName = groups.get(parsed.group)?.get(parsed.numberInGroup + 1); // exact N+1 in the same group, or undefined
+    if (nextName)
+      references.set(name, nextName); // paired: N references N+1
+    else monopolar.push(name); // no exact N+1 in this group — last contact, or a gap
+  }
+
+  return { references, monopolar };
 }

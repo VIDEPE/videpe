@@ -5,6 +5,7 @@ import {
   isImageVolumeLayer,
   syncVolumesAndApplySettings,
   syncMeshesAndApplySettings,
+  revokeLayerUrls,
   ELECTRODE_LAYER_URL,
   ESI_LAYER_URL,
 } from '@/utils/NiiViewer.utils';
@@ -60,10 +61,14 @@ export function useLayerLoader({
       const nv = nvRef.current;
       let needsRedraw = false;
       if (nv?.volumes.length) {
+        // Defensive backstop — normally already revoked right after load (see syncVolumesAndApplySettings).
+        revokeLayerUrls(nv.volumes);
         while (nv.volumes.length > 0) nv.removeVolumeByIndex(0);
         needsRedraw = true;
       }
       if (nv && fileMeshesRef.current.size > 0) {
+        // Same backstop for meshes — normally already revoked by syncMeshesAndApplySettings.
+        revokeLayerUrls(fileMeshesRef.current.values());
         fileMeshesRef.current.forEach((mesh) => nv.removeMesh(mesh));
         fileMeshesRef.current.clear();
         needsRedraw = true;
@@ -113,6 +118,10 @@ export function useLayerLoader({
       if (meshResult.status === 'rejected') meshLayers.forEach((l) => failedUrls.add(l.url));
 
       if (failedUrls.size > 0) {
+        // A rejected load never reaches syncVolumesAndApplySettings/syncMeshesAndApplySettings's
+        // own revoke, so these blobs are still live — free them here instead.
+        if (volumeResult.status === 'rejected') revokeLayerUrls(imageLayers);
+        if (meshResult.status === 'rejected') revokeLayerUrls(meshLayers);
         setOrderedLayers((prev) => prev.filter((layer) => !failedUrls.has(layer.url)));
         setLayerSettings((prev) => prev.filter((setting) => !failedUrls.has(setting.url)));
         // One toast per failed layer, named by file rather than by its abstract blob: url
