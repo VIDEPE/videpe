@@ -96,27 +96,32 @@ Hit **Load Demo** to instantly load a synthetic EEG recording, electrode positio
 
 ### Prerequisites
 
-VIDEPE uses [npm](https://www.npmjs.com/) to manage dependencies. npm is bundled with [Node.js](https://nodejs.org/en/download) — installing Node.js is all you need.
+VIDEPE is built using [npm](https://www.npmjs.com/) to manage dependencies, testing and running the development server. npm is bundled with [Node.js](https://nodejs.org/en/download) — installing Node.js is all you need (ensure npm is ticked during installation).
 
 ### Getting started
 
 ```bash
+# Install the dependencies to the local node_modules folder (only needed once)
 npm install
+# Start the development server
 npm run dev
 ```
 
-The app is served at `http://localhost:5173/videpe/`.
+After the development server is started the app is served at: [`http://localhost:5173/videpe/`](http://localhost:5173/videpe/).
 
 ### Running tests
 
 ```bash
-npm test          # watch mode
+npm test          # watch mode (re-runs affected tests after file changes)
 npm run test:run  # single run (used in CI)
 ```
 
-### Deployment
+## CI/CD
 
-The app deploys automatically to GitHub Pages on every push to `main`. Tests run on every pull request to ensure stability and functionality.
+Two GitHub Actions workflows handle testing and deployment:
+
+- [`test.yml`](.github/workflows/test.yml) — runs on every pull request targeting `develop` or `main`. Installs dependencies and runs the test suite; PRs targeting `main` additionally run a production build to catch build-only failures before release.
+- [`deploy.yml`](.github/workflows/deploy.yml) — runs on every push to `main`. Builds the app and publishes it to GitHub Pages.
 
 ## Links
 
