@@ -66,6 +66,7 @@ export function EegMontageEditor({
 }) {
   const { isDarkMode } = useTheme();
   const channelDividerColor = isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
+  const nyquist = fs / 2;
 
   // Draft channelSettings/montageChannels — this component remounts fresh every time it's
   // opened (EegViewer conditionally renders it), so seeding draft state from the live props
@@ -96,12 +97,16 @@ export function EegMontageEditor({
     setDraftMontageChannels((prev) => prev.map((row) => (row.id === id ? { ...row, color } : row)));
   }, []);
 
-  const setDraftMontageRowHighpass = useCallback((id, highPass) => {
-    setDraftMontageChannels((prev) => prev.map((row) => (row.id === id ? { ...row, highPass } : row)));
+  const setDraftMontageRowHighPass = useCallback((id, highPass) => {
+    setDraftMontageChannels((prev) =>
+      prev.map((row) => (row.id === id ? { ...row, highPass } : row))
+    );
   }, []);
 
-  const setDraftMontageRowLowpass = useCallback((id, lowPass) => {
-    setDraftMontageChannels((prev) => prev.map((row) => (row.id === id ? { ...row, lowPass } : row)));
+  const setDraftMontageRowLowPass = useCallback((id, lowPass) => {
+    setDraftMontageChannels((prev) =>
+      prev.map((row) => (row.id === id ? { ...row, lowPass } : row))
+    );
   }, []);
 
   const setDraftMontageRowNotch = useCallback((id, notch) => {
@@ -880,7 +885,7 @@ export function EegMontageEditor({
     </div>
   );
 
-   // ─── Montage rows + settings
+  // ─── Montage rows + settings
   const montageSelectionPane = (
     <div className="h-full flex bg-surface">
       {addRowControls}
@@ -1076,8 +1081,24 @@ export function EegMontageEditor({
                       value={row.highPass ?? ''}
                       disabled={isChannelMissing}
                       min={0}
-                      max={Math.floor(fs/2)}
-                      onChange={(e) => setDraftMontageRowHighpass(row.id, e.target.value ? Number(e.target.value) : null)}
+                      max={Number.isFinite(row.lowPass) ? Math.min(row.lowPass, nyquist) : nyquist} // High pass cannot be higher than low pass
+                      step={"any"}
+                      onChange={(e) =>
+                        setDraftMontageRowHighPass(
+                          row.id,
+                          e.target.value ? Number(e.target.value) : null
+                        )
+                      }
+                      onBlur={() => {
+                        if (!Number.isFinite(row.highPass)) return;
+                        if (row.highPass <= 0) {
+                          setDraftMontageRowHighPass(row.id, null); // 0 or negative → collapse to the real "off" state
+                          return;
+                        }
+                        const upperBound = Number.isFinite(row.lowPass) ? Math.min(nyquist, row.lowPass) : nyquist  // highpass must be lower than nyquist but als lower than row.lowPass
+                        const clamped = Math.min(row.highPass, upperBound);
+                        if (clamped !== row.highPass) setDraftMontageRowHighPass(row.id, clamped);
+                      }}
                       aria-label="High Pass filter frequency"
                       className="w-10 text-xs bg-surface"
                     />
@@ -1087,27 +1108,47 @@ export function EegMontageEditor({
                       type="number"
                       value={row.lowPass ?? ''}
                       disabled={isChannelMissing}
-                      min={0}
-                      max={Math.floor(fs/2)}
-                      onChange={(e) => setDraftMontageRowLowpass(row.id, e.target.value ? Number(e.target.value) : null)}
+                      min={Number.isFinite(row.highPass) ? row.highPass : 0} // lowPass can never be lower than high pass
+                      max={nyquist} 
+                      step={'any'}
+                      onChange={(e) =>
+                        setDraftMontageRowLowPass(
+                          row.id,
+                          e.target.value ? Number(e.target.value) : null
+                        )
+                      }
+                      onBlur={() => {
+                        if (!Number.isFinite(row.lowPass)) return;
+                        if (row.lowPass <= 0) {
+                          setDraftMontageRowLowPass(row.id, null); // 0 or negative → collapse to the real "off" state
+                          return;
+                        }
+                        const lowerBound = Number.isFinite(row.highPass) ? row.highPass : 0
+                        const clamped = Math.min(Math.max(lowerBound, row.lowPass), nyquist);
+                        if (clamped !== row.lowPass) setDraftMontageRowLowPass(row.id, clamped);
+                      }}
                       aria-label="Low Pass filter frequency"
                       className="w-10 text-xs bg-surface"
                     />
                     {/* Channel Notch */}
-                    <select 
+                    <select
                       data-testid={`montage-notch-${row.id}`}
                       value={row.notch ?? ''}
                       disabled={isChannelMissing}
-                      onChange={(e) => setDraftMontageRowNotch(row.id, e.target.value ? Number(e.target.value) : null)}
+                      onChange={(e) =>
+                        setDraftMontageRowNotch(
+                          row.id,
+                          e.target.value ? Number(e.target.value) : null
+                        )
+                      }
                       aria-label="Notch filter frequency"
                       className="w-13 text-xs bg-surface"
                     >
-                      <option value={null}>Off</option>
+                      <option value={0}>Off</option> {/* set row.notch=0 when off, this is how AnyWave also logs an inactive Notch */}
                       <option value={50}>50 Hz</option>
                       <option value={60}>60 Hz</option>
                     </select>
 
-                    
                     {/* Remove row */}
                     <button
                       type="button"
