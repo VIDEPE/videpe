@@ -19,6 +19,7 @@ import {
   ArrowUpWideNarrow,
   ArrowDownWideNarrow,
 } from 'lucide-react';
+import { e } from 'mathjs';
 
 // ─── EEG Montage settings ────────────────────────────────────────
 // Shared title styling — keeps panes titles visually consistent, with the same height (TrafficLightButtons are 16px tall).
@@ -61,6 +62,7 @@ export function EegMontageEditor({
   onApplyChannelSettings, // (Record<name, {type, bad}>) => void — commits the draft on Apply/OK
   montageChannels, // Array<{id, channel, reference, color}> — live state owned by EegViewer/useMontageChannels
   onApplyMontageChannels, // (Array<{id, channel, reference, color}>) => void — commits the draft on Apply/OK
+  fs, // sampling frequency of the loaded EEG recording
 }) {
   const { isDarkMode } = useTheme();
   const channelDividerColor = isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
@@ -92,6 +94,18 @@ export function EegMontageEditor({
 
   const setDraftMontageRowColor = useCallback((id, color) => {
     setDraftMontageChannels((prev) => prev.map((row) => (row.id === id ? { ...row, color } : row)));
+  }, []);
+
+  const setDraftMontageRowHighpass = useCallback((id, highPass) => {
+    setDraftMontageChannels((prev) => prev.map((row) => (row.id === id ? { ...row, highPass } : row)));
+  }, []);
+
+  const setDraftMontageRowLowpass = useCallback((id, lowPass) => {
+    setDraftMontageChannels((prev) => prev.map((row) => (row.id === id ? { ...row, lowPass } : row)));
+  }, []);
+
+  const setDraftMontageRowNotch = useCallback((id, notch) => {
+    setDraftMontageChannels((prev) => prev.map((row) => (row.id === id ? { ...row, notch } : row)));
   }, []);
 
   // Channels checked in the channel-selection pane, pending "+ Add selected" — purely
@@ -782,6 +796,8 @@ export function EegMontageEditor({
   // positioned on either side via the order classes applied where it's rendered — when
   // SplitPane's panes are swapped, this column flips to the opposite side so it stays on
   // the window's outer edge instead of jumping next to the divider.
+
+  // ─── Ad montage row controls
   const addRowControls = (
     <div
       className={cn(
@@ -863,6 +879,8 @@ export function EegMontageEditor({
       </div>
     </div>
   );
+
+   // ─── Montage rows + settings
   const montageSelectionPane = (
     <div className="h-full flex bg-surface">
       {addRowControls}
@@ -887,14 +905,23 @@ export function EegMontageEditor({
               <span className={CHANNEL_COL_CLASS} title="Montage Channel">
                 Channel
               </span>
-              <span className="w-17 shrink-0 text-center" title="Channel Type">
+              <span className="w-16.5 shrink-0 text-center" title="Channel Type">
                 Type
               </span>
-              <span className="w-23 shrink-0 text-center" title="Reference Channel">
+              <span className="w-24.5 shrink-0 text-center" title="Reference Channel">
                 Ref
               </span>
-              <span className="w-20 shrink-0" title="Montage Channel Color">
+              <span className="w-11 shrink-0" title="Montage Channel Color">
                 Color
+              </span>
+              <span className="w-10.5 shrink-0" title="Montage Channel Color">
+                High|→
+              </span>
+              <span className="w-12 shrink-0" title="Montage Channel Color">
+                ←|Low
+              </span>
+              <span className="w-19 shrink-0" title="Montage Channel Color">
+                Notch
               </span>
             </div>
             <div
@@ -1041,6 +1068,46 @@ export function EegMontageEditor({
                       )}
                       {colorOptions}
                     </select>
+
+                    {/* Channel HPF */}
+                    <input
+                      data-testid={`montage-highpass-${row.id}`}
+                      type="number"
+                      value={row.highPass ?? ''}
+                      disabled={isChannelMissing}
+                      min={0}
+                      max={Math.floor(fs/2)}
+                      onChange={(e) => setDraftMontageRowHighpass(row.id, e.target.value ? Number(e.target.value) : null)}
+                      aria-label="High Pass filter frequency"
+                      className="w-10 text-xs bg-surface"
+                    />
+                    {/* Channel LPF */}
+                    <input
+                      data-testid={`montage-lowpass-${row.id}`}
+                      type="number"
+                      value={row.lowPass ?? ''}
+                      disabled={isChannelMissing}
+                      min={0}
+                      max={Math.floor(fs/2)}
+                      onChange={(e) => setDraftMontageRowLowpass(row.id, e.target.value ? Number(e.target.value) : null)}
+                      aria-label="Low Pass filter frequency"
+                      className="w-10 text-xs bg-surface"
+                    />
+                    {/* Channel Notch */}
+                    <select 
+                      data-testid={`montage-notch-${row.id}`}
+                      value={row.notch ?? ''}
+                      disabled={isChannelMissing}
+                      onChange={(e) => setDraftMontageRowNotch(row.id, e.target.value ? Number(e.target.value) : null)}
+                      aria-label="Notch filter frequency"
+                      className="w-13 text-xs bg-surface"
+                    >
+                      <option value={null}>Off</option>
+                      <option value={50}>50 Hz</option>
+                      <option value={60}>60 Hz</option>
+                    </select>
+
+                    
                     {/* Remove row */}
                     <button
                       type="button"
