@@ -922,10 +922,10 @@ export function EegMontageEditor({
               <span className="w-10.5 shrink-0" title="Montage Channel Color">
                 High|→
               </span>
-              <span className="w-12 shrink-0" title="Montage Channel Color">
+              <span className="w-10 shrink-0" title="Montage Channel Color">
                 ←|Low
               </span>
-              <span className="w-19 shrink-0" title="Montage Channel Color">
+              <span className="w-18 shrink-0" title="Montage Channel Color">
                 Notch
               </span>
             </div>
@@ -1091,10 +1091,6 @@ export function EegMontageEditor({
                       }
                       onBlur={() => {
                         if (!Number.isFinite(row.highPass)) return;
-                        if (row.highPass <= 0) {
-                          setDraftMontageRowHighPass(row.id, null); // 0 or negative → collapse to the real "off" state
-                          return;
-                        }
                         const upperBound = Number.isFinite(row.lowPass) ? Math.min(nyquist, row.lowPass) : nyquist  // highpass must be lower than nyquist but als lower than row.lowPass
                         const clamped = Math.min(row.highPass, upperBound);
                         if (clamped !== row.highPass) setDraftMontageRowHighPass(row.id, clamped);
@@ -1119,10 +1115,6 @@ export function EegMontageEditor({
                       }
                       onBlur={() => {
                         if (!Number.isFinite(row.lowPass)) return;
-                        if (row.lowPass <= 0) {
-                          setDraftMontageRowLowPass(row.id, null); // 0 or negative → collapse to the real "off" state
-                          return;
-                        }
                         const lowerBound = Number.isFinite(row.highPass) ? row.highPass : 0
                         const clamped = Math.min(Math.max(lowerBound, row.lowPass), nyquist);
                         if (clamped !== row.lowPass) setDraftMontageRowLowPass(row.id, clamped);
@@ -1131,23 +1123,29 @@ export function EegMontageEditor({
                       className="w-10 text-xs bg-surface"
                     />
                     {/* Channel Notch */}
-                    <select
+                    <input
                       data-testid={`montage-notch-${row.id}`}
+                      type="number"
                       value={row.notch ?? ''}
                       disabled={isChannelMissing}
+                      min={0} // lowPass can never be lower than high pass
+                      max={nyquist} 
+                      step={'any'}
                       onChange={(e) =>
                         setDraftMontageRowNotch(
                           row.id,
                           e.target.value ? Number(e.target.value) : null
                         )
                       }
+                      onBlur={() => {
+                        if (!Number.isFinite(row.notch)) return;
+                        const lowerBound = 0
+                        const clamped = Math.min(Math.max(lowerBound, row.notch), nyquist);
+                        if (clamped !== row.notch) setDraftMontageRowNotch(row.id, clamped);
+                      }}
                       aria-label="Notch filter frequency"
-                      className="w-13 text-xs bg-surface"
-                    >
-                      <option value={0}>Off</option> {/* set row.notch=0 when off, this is how AnyWave also logs an inactive Notch */}
-                      <option value={50}>50 Hz</option>
-                      <option value={60}>60 Hz</option>
-                    </select>
+                      className="w-10 text-xs bg-surface"
+                    />
 
                     {/* Remove row */}
                     <button
