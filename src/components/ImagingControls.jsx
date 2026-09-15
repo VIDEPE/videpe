@@ -85,7 +85,19 @@ function SortableSettingsCard({
   onToggleExpand,
   onSettingChange,
   onDeleteLayer,
+  hasVoltageSnapshot,
+  availableMetrics,
 }) {
+
+  function electrodeDisplayModeOptions(hasVoltageSnapshot, availableMetrics) {
+    options = [
+                <option value="none">None</option>,
+                <option value="voltage" disabled={!layer.hasVoltageSnapshot}>Voltage</option>,
+              ]
+    options.push(availableMetrics.map((metric) => <option value={metric}>{metric}</option>))
+    return options
+  }
+
   // Only image volumes are reorderable — meshes and connectomes render as 3D objects with no
   // z-order relative to the 2D slices, so reordering them has no visual effect. Disable the
   // sortable for those (and swap the grab handle for a fixed indicator below) so the card
@@ -489,6 +501,26 @@ function SortableSettingsCard({
                     />
                   </Slider.Root>
                 </div>
+              </div>
+            )}
+
+            {/* ElectrodeDisplayMode — meaningful commectomes */}
+            {isConnectome && (
+              <div
+                className="flex items-center gap-3"
+                title="Choose what metric the electrode connectome node size+colour displays"
+              >
+                <span className="w-20 shrink-0 text-foreground select-none pointer-events-none">
+                  Node Metric
+                </span>
+                <select
+                  value={settings.electrodeDisplayMode}
+                  onChange={(e) => onSettingChange(index, 'electrodeDisplayMode', e.target.value)}
+                  className="flex-1 min-w-0 bg-surface border border-border rounded px-2 py-0.5 text-xs text-heading cursor-pointer"
+                  aria-label={`${label} electrodeDisplayMode`}
+                >
+                  electrodeDisplayModeOptions(hasVoltageSnapshot, availableMetrics)
+                </select>
               </div>
             )}
 
