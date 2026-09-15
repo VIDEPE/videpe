@@ -18,7 +18,9 @@ function classifyFiducial(label) {
 // Parse a .tsv file text into electrode positions and fiducials.
 //
 // Returns:
-//   electrodes  – [{ label, x, y, z }] in mm, fiducials excluded
+//   electrodes  – [{ label, x, y, z, metrics? }] in mm, fiducials excluded. `metrics` is only
+//                 present when the file has at least one extra numeric column beyond
+//                 name/label/x/y/z (e.g. `spike_count`), keyed by that column's header name.
 //   fiducials   – { LPA?, RPA?, Nz? } each { x, y, z } in mm
 //   hasFiducials – true only when all three of LPA, RPA, Nz were found
 export function parseElectrodePositionTsv(text) {
@@ -38,6 +40,13 @@ export function parseElectrodePositionTsv(text) {
   const yIndex = header.findIndex((element) => element === 'y');
   const zIndex = header.findIndex((element) => element === 'z');
 
+  // Any other named column (e.g. "spike_count") is a per-electrode metric that can drive the
+  // 3D connectome's node display — see ImagingControls' Electrode Display dropdown. Blank
+  // header cells are excluded since they have no name to key `metrics` by.
+  const metricIndices = header
+    .map((_, i) => i)
+    .filter((i) => ![nameIndex, xIndex, yIndex, zIndex].includes(i) && header[i]?.trim()); // exclude indices above and empty/undefind headers
+
   const rows = [];
   for (let i = 0; i < elecLines.length; i++) {
     const elec = elecLines[i].split('\t');
@@ -49,21 +58,30 @@ export function parseElectrodePositionTsv(text) {
 
     // Check if the label and all coordinates are found
     if (!label || isNaN(x) || isNaN(y) || isNaN(z)) continue;
-    rows.push({ label, x, y, z });
+
+    // Only numeric cells become metrics — a non-numeric or missing cell for a metric column
+    // is simply omitted for that row rather than rejecting the row (unlike x/y/z above).
+    const metrics = {};
+    for (const metricIndex of metricIndices) {
+      const value = parseFloat(elec[metricIndex]);
+      if (!isNaN(value)) metrics[header[metricIndex]] = value;
+    }
+
+    rows.push({ label, x, y, z, ...(Object.keys(metrics).length > 0 ? { metrics } : {}) });
   }
   if (rows.length === 0) return result;
 
   // No unit header in this format, so units are inferred from coordinate magnitude.
   const scale = inferMmScaleFromRange(rows.flatMap((r) => [r.x, r.y, r.z]));
 
-  for (const { label, x, y, z } of rows) {
+  for (const { label, x, y, z, metrics } of rows) {
     const scaled = { x: x * scale, y: y * scale, z: z * scale };
     // Check if the label is a fiducial point, if so, add to fiducials instead of electrodes
     const fidKey = classifyFiducial(label);
     if (fidKey) {
       result.fiducials[fidKey] = scaled;
     } else {
-      result.electrodes.push({ label, ...scaled });
+      result.electrodes.push({ label, ...scaled, ...(metrics ? { metrics } : {}) });
     }
   }
 
