@@ -4,6 +4,7 @@
 import convexHull from 'convex-hull';
 import { parseElectrodeContactName } from './intracranialDetection';
 import { ELECTRODE_LAYER_URL } from '@/utils/NiiViewer.utils';
+import { InfinityDependencies } from 'mathjs';
 
 // ─── Channel matching ───────────────────────────────────────────────────────
 // Maps raw EEG channel names onto parsed electrode template positions.
@@ -359,10 +360,12 @@ export function buildIntracranialConnectome(matched, voltages) {
     x: m.pos.x,
     y: m.pos.y,
     z: m.pos.z,
-    colorValue: voltages[i] ?? 0,
+    colorValue: voltages[i] ?? 0, 
     sizeValue: 1,
+    metrics: m.pos.metrics ?? {},
   }));
 
+  // group contacts by electrode group, e.g. "B": ["B1", "B2"], "B'": ["B'1", "B'2"]
   const groupMap = new Map(); // electrode group -> { numberInGroup, nodeIndex, voltage }[]
   matched.forEach((m, nodeIndex) => {
     const parsed = parseElectrodeContactName(m.name);
@@ -372,7 +375,7 @@ export function buildIntracranialConnectome(matched, voltages) {
       .get(parsed.group)
       .push({ numberInGroup: parsed.numberInGroup, nodeIndex, voltage: voltages[nodeIndex] ?? 0 });
   });
-
+  // connect the electrodes within a group with edges
   const edges = [];
   for (const contacts of groupMap.values()) {
     const sorted = contacts.slice().sort((a, b) => a.numberInGroup - b.numberInGroup); // shaft order, gaps just absent
@@ -406,6 +409,7 @@ export function buildSurfaceEegConnectome(matched, voltages) {
     z: m.pos.z,
     colorValue: voltages[i] ?? 0,
     sizeValue: 1,
+    metrics: m.pos.metrics ?? {},
   }));
 
   // Surface EEG doesn't need edges connecting the nodes
@@ -422,7 +426,20 @@ export function buildSurfaceEegConnectome(matched, voltages) {
  * of its own.
  *
  * @param {{ matched: object[], voltages: number[] }} args
- * @returns {object | null}
+ * @returns {{
+ *   url: string, name: string, type: string, subtype: string, kind: 'connectome',
+ *   nodes: { name, x, y, z, colorValue, sizeValue, metrics: object }[],
+ *   edges: { first: number, second: number, colorValue: number }[],
+ *   calMax: number,
+ *   availableMetrics: string[],
+ *   metricMax: Object<string, number>,
+ *   hasVoltageSnapshot: boolean,
+ * } | null} `nodes[i].colorValue`/`sizeValue` are voltage-coded by default — see
+ *   `applyElectrodeDisplayMode` for switching them to a `None` or metric-driven display.
+ *   `availableMetrics` is the sorted, de-duplicated union of metric names found across
+ *   `nodes[i].metrics`, `metricMax` the (absolute-value, symmetric, 1e-6-floored) max of
+ *   each of those metrics, and `hasVoltageSnapshot` whether `voltages` is non-empty — all
+ *   three exist to drive ImagingControls' Electrode Display dropdown.
  */
 export function buildElectrodeLayer({ matched, voltages }) {
   if (!matched?.length) return null; // nothing to render yet
@@ -458,7 +475,21 @@ export function buildElectrodeLayer({ matched, voltages }) {
         ? 'Intracranial EEG'
         : 'Surface EEG';
 
-  const calMax = Math.max(1e-6, ...voltages.map((v) => Math.abs(v))); // symmetric colour range; floor avoids div-by-zero downstream
+  // calculate a voltage based calMax that serves as default 
+  // (which applyElectrodeDisplayMode() overwrites in new copies when switching displaymode)
+  const calMax = Math.max(1e-6, ...voltages.map((v) => Math.abs(v))); // symmetric colour/size range; floor avoids div-by-zero downstream
+
+  // get unique array of strings of the available metrics
+  const availableMetrics = [...new Set(nodes.flatMap((node) => Object.keys(node.metrics)))].sort();
+
+  const metricMax = {}
+  // find abs max for each metric and store in metricMax
+  for (let iMet = 0; iMet < availableMetrics.length; iMet++) {
+    const metric = availableMetrics[iMet]
+    metricMax[metric] = Math.max(1e-6, ...nodes.map((node) => Math.abs(node.metrics[metric] ?? 0))); // math.abs for same reason as calMax => symmetric colour/size range. ?? 0 prevents NaN from sneaking in and making max value NaN
+  }
+  
+  const hasVoltageSnapshot = voltages.length > 0
 
   return {
     url: ELECTRODE_LAYER_URL,
@@ -469,5 +500,47 @@ export function buildElectrodeLayer({ matched, voltages }) {
     nodes,
     edges,
     calMax,
+    availableMetrics,
+    metricMax,
+    hasVoltageSnapshot,
   };
+}
+
+/**
+ * Recomputes `colorValue`/`sizeValue` on a connectome's nodes for the Electrode Display
+ * dropdown's selected mode, without mutating the input — always returns new node objects
+ * (or `nodes` itself, unchanged, for `'voltage'`) so the caller can freely re-derive any
+ * mode from the same untouched `electrodeLayer.nodes`, any number of times, in either
+ * direction. Mutating in place would permanently destroy the original voltage-coded
+ * values the first time a user switches away from Voltage mode.
+ *
+ * @param {{ name, x, y, z, colorValue, sizeValue, metrics: object }[]} nodes - from
+ *   buildElectrodeLayer/buildIntracranialConnectome/buildSurfaceEegConnectome, already
+ *   voltage-coded (colorValue = voltage, sizeValue = 1).
+ * @param {'voltage' | 'none' | string} electrodeDisplayMode - `'voltage'` passes `nodes` through unchanged
+ *   (already correct — see above); `'none'` resets to plain, uncoloured, fixed-size
+ *   positions; anything else is looked up as a metric name in each node's `metrics`.
+ * @param {Object<string, number>} metricMax - from buildElectrodeLayer, the max absolute
+ *   value of each metric — used to normalise a metric mode's `sizeValue` into 0-1, the
+ *   same range `sizeValue` uses everywhere else (see ImagingControls' Node Size slider).
+ * @returns {object[]} `nodes` with `colorValue`/`sizeValue` set for the given mode. A node
+ *   missing the selected metric gets `colorValue: 0, sizeValue: 0`, not an error.
+ */
+export function applyElectrodeDisplayMode(nodes, electrodeDisplayMode, metricMax) {
+  if (electrodeDisplayMode==='Voltage') {
+    // already voltage-coded, return nodes unchanged
+    return nodes; 
+  }
+  if (electrodeDisplayMode==='None'){
+    // if in None mode, then fix the colorvalue and sizeValue
+    return nodes.map((node) => ({ ...node, colorValue: 0, sizeValue: 1 }));
+  }
+
+  // Other modes set a metricMax dependent size and colour
+  const maxOfMetric = metricMax[electrodeDisplayMode] ?? 0;
+  return nodes.map((node) => {
+    const value = node.metrics[electrodeDisplayMode] ?? 0;
+    return {...node, colorValue: value, sizeValue: maxOfMetric > 0 ? Math.abs(value)/maxOfMetric : 0}
+  });
+
 }
