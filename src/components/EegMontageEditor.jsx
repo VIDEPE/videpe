@@ -68,6 +68,25 @@ export function EegMontageEditor({
   const channelDividerColor = isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
   const nyquist = fs / 2;
 
+  // Builds a fresh montage row for `name` — shared by the three "add row(s)" actions below
+  // plus Load. No `type` field: a row's type is always looked up live from
+  // draftChannelSettings[row.channel] at render time, so it stays in sync with later edits.
+  // `overrides` lets Load seed reference/color from a parsed file; every other caller omits
+  // it (or, via .map(makeMontageRow), passes the ignored numeric index), so the `??`
+  // fallbacks apply unchanged.
+  const makeMontageRow = useCallback(
+    (name, overrides = {}) => ({
+      id: crypto.randomUUID(),
+      channel: name,
+      reference: overrides.reference ?? null,
+      color: overrides.color ?? null,
+      highPass: overrides.highPass ?? null,
+      lowPass: overrides.lowPass ?? null,
+      notch: overrides.notch ?? null,
+    }),
+    []
+  );
+
   // Draft channelSettings/montageChannels — this component remounts fresh every time it's
   // opened (EegViewer conditionally renders it), so seeding draft state from the live props
   // here naturally re-snapshots on every open with no extra reset effect needed. Row edits
@@ -131,21 +150,7 @@ export function EegMontageEditor({
     if (e.target === e.currentTarget) setSelectedChannels(new Set());
   }, []);
 
-  // Builds a fresh montage row for `name` — shared by the three "add row(s)" actions below
-  // plus Load. No `type` field: a row's type is always looked up live from
-  // draftChannelSettings[row.channel] at render time, so it stays in sync with later edits.
-  // `overrides` lets Load seed reference/color from a parsed file; every other caller omits
-  // it (or, via .map(makeMontageRow), passes the ignored numeric index), so the `??`
-  // fallbacks apply unchanged.
-  const makeMontageRow = useCallback(
-    (name, overrides = {}) => ({
-      id: crypto.randomUUID(),
-      channel: name,
-      reference: overrides.reference ?? null,
-      color: overrides.color ?? null,
-    }),
-    []
-  );
+
 
   // Adds one new montage row per currently-selected channel, then clears the selection so
   // the next pick starts fresh. Rows aren't deduped against existing ones — a channel can
@@ -295,7 +300,7 @@ export function EegMontageEditor({
         const { rows, channelTypes } = await parseMontageFile(file);
         setDraftMontageChannels(
           rows.map((row) =>
-            makeMontageRow(row.channel, { reference: row.reference, color: row.color })
+            makeMontageRow(row.channel, { reference: row.reference, color: row.color, highPass: row.highPass, lowPass: row.lowPass, notch: row.notch})
           )
         );
         // AnyWave files carry a per-channel type alongside each row; patch those into the
@@ -1082,7 +1087,7 @@ export function EegMontageEditor({
                       disabled={isChannelMissing}
                       min={0}
                       max={Number.isFinite(row.lowPass) ? Math.min(row.lowPass, nyquist) : nyquist} // High pass cannot be higher than low pass
-                      step={"any"}
+                      step={'any'}
                       onChange={(e) =>
                         setDraftMontageRowHighPass(
                           row.id,
@@ -1091,7 +1096,9 @@ export function EegMontageEditor({
                       }
                       onBlur={() => {
                         if (!Number.isFinite(row.highPass)) return;
-                        const upperBound = Number.isFinite(row.lowPass) ? Math.min(nyquist, row.lowPass) : nyquist  // highpass must be lower than nyquist but als lower than row.lowPass
+                        const upperBound = Number.isFinite(row.lowPass)
+                          ? Math.min(nyquist, row.lowPass)
+                          : nyquist; // highpass must be lower than nyquist but als lower than row.lowPass
                         const clamped = Math.min(row.highPass, upperBound);
                         if (clamped !== row.highPass) setDraftMontageRowHighPass(row.id, clamped);
                       }}
@@ -1105,7 +1112,7 @@ export function EegMontageEditor({
                       value={row.lowPass ?? ''}
                       disabled={isChannelMissing}
                       min={Number.isFinite(row.highPass) ? row.highPass : 0} // lowPass can never be lower than high pass
-                      max={nyquist} 
+                      max={nyquist}
                       step={'any'}
                       onChange={(e) =>
                         setDraftMontageRowLowPass(
@@ -1115,7 +1122,7 @@ export function EegMontageEditor({
                       }
                       onBlur={() => {
                         if (!Number.isFinite(row.lowPass)) return;
-                        const lowerBound = Number.isFinite(row.highPass) ? row.highPass : 0
+                        const lowerBound = Number.isFinite(row.highPass) ? row.highPass : 0;
                         const clamped = Math.min(Math.max(lowerBound, row.lowPass), nyquist);
                         if (clamped !== row.lowPass) setDraftMontageRowLowPass(row.id, clamped);
                       }}
@@ -1129,7 +1136,7 @@ export function EegMontageEditor({
                       value={row.notch ?? ''}
                       disabled={isChannelMissing}
                       min={0} // lowPass can never be lower than high pass
-                      max={nyquist} 
+                      max={nyquist}
                       step={'any'}
                       onChange={(e) =>
                         setDraftMontageRowNotch(
@@ -1139,7 +1146,7 @@ export function EegMontageEditor({
                       }
                       onBlur={() => {
                         if (!Number.isFinite(row.notch)) return;
-                        const lowerBound = 0
+                        const lowerBound = 0;
                         const clamped = Math.min(Math.max(lowerBound, row.notch), nyquist);
                         if (clamped !== row.notch) setDraftMontageRowNotch(row.id, clamped);
                       }}
