@@ -46,8 +46,10 @@ export function useElectrodeConnectome({
 }) {
   // ─── Refs ───────────────────────────────────────────────────────────────────
   const electrodeMeshRef = useRef(null); // mesh currently in the scene, if any
+  const colorbarOnlyMeshRef = useRef(null); // colorbar-only mesh currently in the scene, if any (see below)
   const lastElectrodeLayerRef = useRef(null); // last layer built from — guards redundant rebuilds
   const lastElectrodeDisplayModeRef = useRef(null); // same, for the Electrode Display mode
+  const lastElectrodeShowColorbarRef = useRef(null); // same, for this connectome's own showColorbar setting — NOT the nv.opts.isColorbar master switch, which is a scene-wide OR across every layer (volumes included), recomputed below
   // The specific electrodeLayer dismissed via handleDeleteLayer. Not a boolean: electrodeLayer
   // keeps recomputing from live EEG data, so a plain flag could never be un-set — storing the
   // object lets the sync effect tell "still that stale layer" from "genuinely new data" by
@@ -94,13 +96,21 @@ export function useElectrodeConnectome({
 
     // — Teardown: nothing left to show (positions/EEG cleared) —
     if (!electrodeLayer) {
+      let removedSomething = false;
       if (electrodeMeshRef.current) {
         nv.removeMesh(electrodeMeshRef.current);
         electrodeMeshRef.current = null;
         lastElectrodeLayerRef.current = null; // so a future re-add isn't mistaken for "unchanged"
         lastElectrodeDisplayModeRef.current = null;
-        nv.updateGLVolume();
+        removedSomething = true;
       }
+      if (colorbarOnlyMeshRef.current) {
+        nv.removeMesh(colorbarOnlyMeshRef.current);
+        colorbarOnlyMeshRef.current = null;
+        lastElectrodeShowColorbarRef.current = null;
+        removedSomething = true;
+      }
+      if (removedSomething) nv.updateGLVolume();
       return;
     }
 
@@ -119,20 +129,23 @@ export function useElectrodeConnectome({
         getCurrentMeshXRay(orderedLayers, layerSettings)
       )[0];
     const electrodeDisplayMode = settings.electrodeDisplayMode;
+    const showColorbar = settings.showColorbar;
 
     // — Skip if nothing changed —
-    // Same layer, same display mode, and the mesh we built is still really in nv.meshes — that
-    // last check matters because StrictMode's mount→unmount→remount silently wipes the mesh
-    // even though electrodeLayer/displayMode look unchanged.
+    // Same layer, same display mode, same colorbar toggle, and the mesh we built is still
+    // really in nv.meshes — that last check matters because StrictMode's mount→unmount→remount
+    // silently wipes the mesh even though electrodeLayer/displayMode look unchanged.
     if (
       electrodeLayer === lastElectrodeLayerRef.current &&
       electrodeDisplayMode === lastElectrodeDisplayModeRef.current &&
+      showColorbar === lastElectrodeShowColorbarRef.current &&
       nv.meshes.includes(electrodeMeshRef.current)
     ) {
       return;
     }
     lastElectrodeLayerRef.current = electrodeLayer;
     lastElectrodeDisplayModeRef.current = electrodeDisplayMode;
+    lastElectrodeShowColorbarRef.current = showColorbar;
 
     if (electrodeMeshRef.current) nv.removeMesh(electrodeMeshRef.current); // drop the stale mesh first
 
@@ -179,6 +192,35 @@ export function useElectrodeConnectome({
     nv.addMesh(mesh);
     nv.setMeshShader(mesh.id, 'Harmonic');
     electrodeMeshRef.current = mesh;
+
+    // — Rebuild the colorbar-only mesh alongside the real one —
+    // NiiVue can't draw colorbars from nodes directly, only from a mesh's `edges`/`layers` data,
+    // A mesh with an `edges` array (even if empty) gets a colorbar entry, ranged by edgeMin/edgeMax.
+    // This can be exploited to show a colorbar for a connectome, adding an all-empty connectome mesh
+    // This empty mesh will show the colorbar for the node metric mirroring the real mesh's node color range.
+    if (colorbarOnlyMeshRef.current) nv.removeMesh(colorbarOnlyMeshRef.current);
+    colorbarOnlyMeshRef.current = null;
+    if (showColorbar && electrodeDisplayMode !== 'none') {
+      const colorbarOnlyMesh = nv.loadConnectomeAsMesh({
+        name: `${electrodeLayer.name} colorbar`,
+        nodeMinColor: 0,
+        nodeMaxColor: 1, // unused — this mesh has no nodes to color
+        edgeColormap: EEG_NODE_POS_KEY,
+        edgeColormapNegative: EEG_NODE_NEG_KEY, // lets NiiVue draw a negative bar [-edgeMax, -edgeMin]
+        edgeMin: 0,
+        edgeMax: nodeMaxColor, // mirrors the real mesh's node color range above
+        showLegend: false,
+        colorbarVisible: true,
+        nodes: [{ name: '', x: 0, y: 0, z: 0, colorValue: 0, sizeValue: 1e-6 }], // add super tiny node to supress niivue-error Catastrophic failure generatePosNormClr()
+        edges: [],
+      });
+      nv.addMesh(colorbarOnlyMesh);
+      colorbarOnlyMeshRef.current = colorbarOnlyMesh;
+    }
+    // isColorbar is the scene-wide master switch NiiVue checks before drawing any colorbar at
+    // all — it has to reflect every layer's own showColorbar, not just this connectome's,
+    // since a volume elsewhere in the scene may also have its own colorbar toggled on.
+    nv.opts.isColorbar = layerSettings.some((layerSetting) => layerSetting.showColorbar);
     nv.updateGLVolume();
   }, [electrodeLayer, orderedLayers, layerSettings, nvRef]);
 
