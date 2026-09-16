@@ -7,6 +7,7 @@ import {
   detectVolumeType,
   filesToLayers,
   ESI_LAYER_URL,
+  ELECTRODE_LAYER_URL,
 } from '@/utils/NiiViewer.utils';
 import {
   NiiViewer,
@@ -806,6 +807,15 @@ describe('NiiViewer', () => {
       const result = getInitialLayerSettings([{ type: 'PET' }, { type: 'SPECT' }], 1);
       expect(result[0].opacity).toBe(0.6);
       expect(result[1].opacity).toBe(0.6);
+    });
+
+    it('defaults electrodeDisplayMode to "none" for the Electrodes layer only', () => {
+      const result = getInitialLayerSettings([
+        { type: 'MRI' },
+        { url: ELECTRODE_LAYER_URL, type: 'Electrodes' },
+      ]);
+      expect(result[0].electrodeDisplayMode).toBeUndefined(); // not the Electrodes layer
+      expect(result[1].electrodeDisplayMode).toBe('none');
     });
   });
 
@@ -2176,6 +2186,100 @@ describe('NiiViewer', () => {
 
       expect(screen.getByRole('button', { name: /expand.*scan/i })).toBeInTheDocument();
       expect(screen.getByText('Electrodes')).toBeInTheDocument();
+    });
+  });
+
+  describe('electrode display mode', () => {
+    it('defaults a fresh connectome to None mode — the mesh gets colorValue 0/sizeValue 1 despite voltage-coded input nodes', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const layer = makeIntracranialLayer({
+        hasVoltageSnapshot: false, // keeps the auto-select-to-Voltage effect from firing
+        nodes: [{ name: 'B1', x: 0, y: 0, z: 0, colorValue: 5, sizeValue: 1, metrics: {} }],
+      });
+      render(<NiiViewer nvRef={nvRef} layers={[]} electrodeLayer={layer} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      const nv = nvRef.current;
+      const call = nv.loadConnectomeAsMesh.mock.calls.at(-1)[0];
+      expect(call.nodes[0]).toMatchObject({ colorValue: 0, sizeValue: 1 });
+    });
+
+    it('rebuilds with metric-mapped nodes and that metric’s own max as nodeMaxColor when the dropdown changes', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const layer = makeIntracranialLayer({
+        hasVoltageSnapshot: false,
+        nodes: [
+          {
+            name: 'B1',
+            x: 0,
+            y: 0,
+            z: 0,
+            colorValue: 5,
+            sizeValue: 1,
+            metrics: { spike_count: 10 },
+          },
+        ],
+        metricMax: { spike_count: 10 },
+        availableMetrics: ['spike_count'],
+      });
+      render(<NiiViewer nvRef={nvRef} layers={[]} electrodeLayer={layer} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      const nv = nvRef.current;
+      await userEvent.click(
+        screen.getByRole('button', { name: /expand.*electrodes - intracranial eeg/i })
+      );
+      nv.loadConnectomeAsMesh.mockClear();
+
+      await userEvent.selectOptions(screen.getByLabelText(/electrodeDisplayMode/i), 'spike_count');
+
+      expect(nv.loadConnectomeAsMesh).toHaveBeenCalled();
+      const call = nv.loadConnectomeAsMesh.mock.calls.at(-1)[0];
+      expect(call.nodes[0]).toMatchObject({ colorValue: 10, sizeValue: 1 }); // 10 / metricMax.spike_count (10)
+      expect(call.nodeMaxColor).toBe(10);
+    });
+
+    it('uses calMax (not a metric max) for nodeMaxColor once Voltage mode is selected', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const layer = makeIntracranialLayer({
+        hasVoltageSnapshot: true,
+        calMax: 42,
+        metricMax: { spike_count: 10 },
+        availableMetrics: ['spike_count'],
+      });
+      render(<NiiViewer nvRef={nvRef} layers={[]} electrodeLayer={layer} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      // hasVoltageSnapshot is already true on mount, so ImagingControls' auto-select effect
+      // switches the dropdown to Voltage without any interaction needed.
+      const nv = nvRef.current;
+      const call = nv.loadConnectomeAsMesh.mock.calls.at(-1)[0];
+      expect(call.nodeMaxColor).toBe(42);
+    });
+
+    it('does not rebuild the mesh when an unrelated setting (nodeScale) changes', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const layer = makeIntracranialLayer({ hasVoltageSnapshot: false });
+      render(<NiiViewer nvRef={nvRef} layers={[]} electrodeLayer={layer} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      const nv = nvRef.current;
+      await userEvent.click(
+        screen.getByRole('button', { name: /expand.*electrodes - intracranial eeg/i })
+      );
+      nv.loadConnectomeAsMesh.mockClear();
+      nv.removeMesh.mockClear();
+
+      const nodeSlider = screen.getByLabelText(/node size slider/i);
+      nodeSlider.focus();
+      fireEvent.keyDown(nodeSlider, { key: 'ArrowRight' });
+
+      expect(nv.loadConnectomeAsMesh).not.toHaveBeenCalled();
+      expect(nv.removeMesh).not.toHaveBeenCalled();
     });
   });
 

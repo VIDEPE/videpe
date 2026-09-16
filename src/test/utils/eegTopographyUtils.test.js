@@ -494,7 +494,9 @@ describe('buildElectrodeMarkers', () => {
 import {
   buildElectrodeMatrix,
   buildIntracranialConnectome,
+  buildSurfaceEegConnectome,
   buildElectrodeLayer,
+  applyElectrodeDisplayMode,
   splitChannelsByType,
   chunkContactsIntoLines,
   chunkArrayIntoLines,
@@ -698,6 +700,55 @@ describe('buildIntracranialConnectome', () => {
     const { edges } = buildIntracranialConnectome(matched, [10, -4]);
     expect(edges[0].colorValue).toBe(1);
   });
+
+  it('carries metrics through from the matched position entry onto the node', () => {
+    const matched = [
+      {
+        channelIdx: 0,
+        name: 'B1',
+        pos: { label: 'B1', x: 0, y: 0, z: 0, metrics: { spike_count: 12 } },
+      },
+      { channelIdx: 1, name: 'B2', pos: { label: 'B2', x: 1, y: 1, z: 1 } }, // no metrics column
+    ];
+    const { nodes } = buildIntracranialConnectome(matched, [0, 0]);
+    expect(nodes[0].metrics).toEqual({ spike_count: 12 });
+    expect(nodes[1].metrics).toEqual({}); // defaults to an empty object, not undefined
+  });
+});
+
+describe('buildSurfaceEegConnectome', () => {
+  const matchedFor = (names) =>
+    names.map((name, channelIdx) => ({
+      channelIdx,
+      name,
+      pos: { label: `c${channelIdx}`, x: channelIdx, y: channelIdx, z: channelIdx },
+    }));
+
+  it('returns one node per matched contact, carrying position and voltage', () => {
+    const matched = matchedFor(['Fp1', 'Fp2']);
+    const { nodes } = buildSurfaceEegConnectome(matched, [5, -3]);
+    expect(nodes).toHaveLength(2);
+    expect(nodes[0]).toMatchObject({ name: 'Fp1', x: 0, y: 0, z: 0, colorValue: 5, sizeValue: 1 });
+    expect(nodes[1]).toMatchObject({ name: 'Fp2', x: 1, y: 1, z: 1, colorValue: -3, sizeValue: 1 });
+  });
+
+  it('never produces edges', () => {
+    const matched = matchedFor(['Fp1', 'Fp2']);
+    const { edges } = buildSurfaceEegConnectome(matched, [0, 0]);
+    expect(edges).toEqual([]);
+  });
+
+  it('carries metrics through from the matched position entry onto the node', () => {
+    const matched = [
+      {
+        channelIdx: 0,
+        name: 'Fp1',
+        pos: { label: 'Fp1', x: 0, y: 0, z: 0, metrics: { spike_count: 7 } },
+      },
+    ];
+    const { nodes } = buildSurfaceEegConnectome(matched, [0]);
+    expect(nodes[0].metrics).toEqual({ spike_count: 7 });
+  });
 });
 
 describe('buildElectrodeLayer', () => {
@@ -758,5 +809,125 @@ describe('buildElectrodeLayer', () => {
   it('sets calMax to the maximum absolute voltage across the full matched set', () => {
     const volume = buildElectrodeLayer({ matched: seegMatched, voltages: [10, -25] });
     expect(volume.calMax).toBe(25);
+  });
+
+  it('collects the sorted union of metric names across seeg and eeg nodes into availableMetrics', () => {
+    const matched = [
+      {
+        channelIdx: 0,
+        name: 'B1',
+        pos: { label: 'B1', x: 0, y: 0, z: 0, metrics: { spike_count: 5, hfo_rate: 1 } },
+        type: 'seeg',
+      },
+      {
+        channelIdx: 1,
+        name: 'Fp1',
+        pos: { label: 'Fp1', x: 1, y: 1, z: 1, metrics: { spike_count: 3 } },
+        type: 'eeg',
+      },
+    ];
+    const volume = buildElectrodeLayer({ matched, voltages: [10, -4] });
+    expect(volume.availableMetrics).toEqual(['hfo_rate', 'spike_count']); // sorted, de-duplicated
+  });
+
+  it('returns an empty availableMetrics/metricMax when no electrode carries any metric', () => {
+    const volume = buildElectrodeLayer({ matched: seegMatched, voltages: [10, -4] });
+    expect(volume.availableMetrics).toEqual([]);
+    expect(volume.metricMax).toEqual({});
+  });
+
+  it('computes metricMax as the absolute-value maximum across nodes, treating a missing value as 0', () => {
+    const matched = [
+      {
+        channelIdx: 0,
+        name: 'B1',
+        pos: { label: 'B1', x: 0, y: 0, z: 0, metrics: { spike_count: -8 } },
+        type: 'seeg',
+      },
+      {
+        channelIdx: 1,
+        name: 'B2',
+        pos: { label: 'B2', x: 1, y: 1, z: 1, metrics: {} },
+        type: 'seeg',
+      }, // no spike_count for this contact
+    ];
+    const volume = buildElectrodeLayer({ matched, voltages: [0, 0] });
+    expect(volume.metricMax).toEqual({ spike_count: 8 }); // abs(-8), not dragged down by the missing 0
+  });
+
+  it('floors metricMax at 1e-6 to avoid division by zero downstream, same as calMax', () => {
+    const matched = [
+      {
+        channelIdx: 0,
+        name: 'B1',
+        pos: { label: 'B1', x: 0, y: 0, z: 0, metrics: { spike_count: 0 } },
+        type: 'seeg',
+      },
+    ];
+    const volume = buildElectrodeLayer({ matched, voltages: [0] });
+    expect(volume.metricMax.spike_count).toBe(1e-6);
+  });
+
+  it('sets hasVoltageSnapshot true when voltages is non-empty, false when empty', () => {
+    expect(
+      buildElectrodeLayer({ matched: seegMatched, voltages: [10, -4] }).hasVoltageSnapshot
+    ).toBe(true);
+    expect(buildElectrodeLayer({ matched: seegMatched, voltages: [] }).hasVoltageSnapshot).toBe(
+      false
+    );
+  });
+});
+
+describe('applyElectrodeDisplayMode', () => {
+  const nodes = [
+    {
+      name: 'B1',
+      x: 0,
+      y: 0,
+      z: 0,
+      colorValue: 5,
+      sizeValue: 1,
+      metrics: { spike_count: 8, hfo_rate: 2 },
+    },
+    { name: 'B2', x: 1, y: 1, z: 1, colorValue: -3, sizeValue: 1, metrics: { spike_count: 4 } }, // no hfo_rate
+  ];
+  const metricMax = { spike_count: 8, hfo_rate: 2 };
+
+  it('returns the exact same nodes array for "voltage" mode — already voltage-coded, no rebuild needed', () => {
+    const result = applyElectrodeDisplayMode(nodes, 'voltage', metricMax);
+    expect(result).toBe(nodes);
+  });
+
+  it('resets colorValue to 0 and sizeValue to 1 for "none" mode', () => {
+    const result = applyElectrodeDisplayMode(nodes, 'none', metricMax);
+    expect(result[0]).toMatchObject({ colorValue: 0, sizeValue: 1 });
+    expect(result[1]).toMatchObject({ colorValue: 0, sizeValue: 1 });
+  });
+
+  it('does not mutate the input nodes', () => {
+    applyElectrodeDisplayMode(nodes, 'none', metricMax);
+    applyElectrodeDisplayMode(nodes, 'spike_count', metricMax);
+    expect(nodes[0]).toMatchObject({ colorValue: 5, sizeValue: 1 }); // still voltage-coded
+  });
+
+  it('preserves position and name fields alongside the recomputed colorValue/sizeValue', () => {
+    const result = applyElectrodeDisplayMode(nodes, 'none', metricMax);
+    expect(result[0]).toMatchObject({ name: 'B1', x: 0, y: 0, z: 0 });
+  });
+
+  it('sets colorValue to the raw metric value and sizeValue normalised 0-1 by metricMax for a metric mode', () => {
+    const result = applyElectrodeDisplayMode(nodes, 'spike_count', metricMax);
+    expect(result[0]).toMatchObject({ colorValue: 8, sizeValue: 1 }); // 8/8
+    expect(result[1]).toMatchObject({ colorValue: 4, sizeValue: 0.5 }); // 4/8
+  });
+
+  it('defaults a node missing the selected metric to colorValue 0, sizeValue 0, not an error', () => {
+    const result = applyElectrodeDisplayMode(nodes, 'hfo_rate', metricMax);
+    expect(result[1]).toMatchObject({ colorValue: 0, sizeValue: 0 }); // B2 has no hfo_rate
+  });
+
+  it('degrades gracefully for a mode name matching no known metric, instead of throwing', () => {
+    const result = applyElectrodeDisplayMode(nodes, 'unknown_mode', metricMax);
+    expect(result[0]).toMatchObject({ colorValue: 0, sizeValue: 0 });
   });
 });
