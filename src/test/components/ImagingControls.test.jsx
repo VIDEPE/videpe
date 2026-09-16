@@ -912,4 +912,107 @@ describe('ImagingControls', () => {
       });
     });
   });
+
+  describe('Electrode connectome colorbar toggle', () => {
+    const makeElectrodeLayer = (overrides = {}) => ({
+      kind: 'connectome',
+      type: 'Electrodes',
+      subtype: 'Intracranial EEG',
+      url: '__electrodes__',
+      hasVoltageSnapshot: false,
+      availableMetrics: [],
+      ...overrides,
+    });
+
+    // setup does two things: renders one Electrodes layer and expands it.
+    const setup = async (layer, settings, onSettingChange = vi.fn()) => {
+      renderControls([layer], [settings], onSettingChange);
+      await userEvent.click(
+        screen.getByRole('button', { name: /expand.*electrodes - intracranial eeg/i })
+      );
+      return { onSettingChange };
+    };
+
+    it('renders a Colorbar toggle for the electrode connectome layer', async () => {
+      await setup(
+        makeElectrodeLayer({ hasVoltageSnapshot: true }),
+        makeSettings({ electrodeDisplayMode: 'voltage' })
+      );
+      expect(screen.getByRole('switch', { name: /colorbar/i })).toBeInTheDocument();
+    });
+
+    it('disables the toggle when electrodeDisplayMode is None', async () => {
+      await setup(makeElectrodeLayer(), makeSettings({ electrodeDisplayMode: 'none' }));
+      expect(screen.getByRole('switch', { name: /colorbar/i })).toBeDisabled();
+    });
+
+    it('enables the toggle once a metric is selected', async () => {
+      await setup(
+        makeElectrodeLayer({ hasVoltageSnapshot: true }),
+        makeSettings({ electrodeDisplayMode: 'voltage' })
+      );
+      expect(screen.getByRole('switch', { name: /colorbar/i })).not.toBeDisabled();
+    });
+
+    it('calls onSettingChange with showColorbar when toggled on', async () => {
+      const { onSettingChange } = await setup(
+        makeElectrodeLayer({ hasVoltageSnapshot: true }),
+        makeSettings({ electrodeDisplayMode: 'voltage', showColorbar: false })
+      );
+      await userEvent.click(screen.getByRole('switch', { name: /colorbar/i }));
+      expect(onSettingChange).toHaveBeenCalledWith(0, 'showColorbar', true);
+    });
+
+    it('does nothing when clicked while disabled', async () => {
+      const { onSettingChange } = await setup(
+        makeElectrodeLayer(),
+        makeSettings({ electrodeDisplayMode: 'none' })
+      );
+      await userEvent.click(screen.getByRole('switch', { name: /colorbar/i }));
+      expect(onSettingChange).not.toHaveBeenCalled();
+    });
+
+    describe('auto-resetting showColorbar off when electrodeDisplayMode is None', () => {
+      it('resets on mount if the mode is already None but showColorbar was left on', async () => {
+        const onSettingChange = vi.fn();
+        await setup(
+          makeElectrodeLayer(),
+          makeSettings({ electrodeDisplayMode: 'none', showColorbar: true }),
+          onSettingChange
+        );
+        expect(onSettingChange).toHaveBeenCalledWith(0, 'showColorbar', false);
+      });
+
+      it('resets when the mode transitions to None while showColorbar was on', () => {
+        const onSettingChange = vi.fn();
+        const { rerender } = renderControls(
+          [makeElectrodeLayer()],
+          [makeSettings({ electrodeDisplayMode: 'voltage', showColorbar: true })],
+          onSettingChange
+        );
+        expect(onSettingChange).not.toHaveBeenCalled();
+
+        rerender(
+          <ImagingControls
+            layers={[makeElectrodeLayer()]}
+            layerSettings={[makeSettings({ electrodeDisplayMode: 'none', showColorbar: true })]}
+            onSettingChange={onSettingChange}
+            onDeleteLayer={vi.fn()}
+          />
+        );
+
+        expect(onSettingChange).toHaveBeenCalledWith(0, 'showColorbar', false);
+      });
+
+      it('does not fire when the mode is None and showColorbar is already off', async () => {
+        const onSettingChange = vi.fn();
+        await setup(
+          makeElectrodeLayer(),
+          makeSettings({ electrodeDisplayMode: 'none', showColorbar: false }),
+          onSettingChange
+        );
+        expect(onSettingChange).not.toHaveBeenCalled();
+      });
+    });
+  });
 });

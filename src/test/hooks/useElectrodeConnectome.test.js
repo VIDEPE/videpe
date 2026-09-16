@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useElectrodeConnectome } from '@/hooks/useElectrodeConnectome';
 import { ELECTRODE_LAYER_URL } from '@/utils/NiiViewer.utils';
+import { EEG_NODE_POS_KEY, EEG_NODE_NEG_KEY } from '@/utils/eegColormaps';
 
 // This hook is otherwise only exercised indirectly through NiiViewer.test.jsx's
 // 'connectome layer (electrodes)' describe block (same reasoning as useEsiLayer.test.js) —
@@ -66,6 +67,16 @@ function setDisplayMode(result, mode) {
   act(() => {
     result.current.setLayerSettings((prev) =>
       prev.map((s) => (s.url === ELECTRODE_LAYER_URL ? { ...s, electrodeDisplayMode: mode } : s))
+    );
+  });
+}
+
+// Changes the Electrodes layer's showColorbar the same way ImagingControls's Colorbar
+// ToggleSwitch does.
+function setShowColorbar(result, value) {
+  act(() => {
+    result.current.setLayerSettings((prev) =>
+      prev.map((s) => (s.url === ELECTRODE_LAYER_URL ? { ...s, showColorbar: value } : s))
     );
   });
 }
@@ -186,6 +197,105 @@ describe('useElectrodeConnectome', () => {
       });
 
       expect(nv.loadConnectomeAsMesh).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('colorbar-only mesh', () => {
+    // showColorbar defaults to false and electrodeDisplayMode defaults to 'none' (see
+    // getInitialLayerSettings), so the very first render already covers "neither is on".
+
+    it('does not build a colorbar mesh while showColorbar is off', () => {
+      const electrodeLayer = makeElectrodeLayer();
+      const { result } = renderHook((props) => useHarness(props), {
+        initialProps: { electrodeLayer, nvRef },
+      });
+      setDisplayMode(result, 'voltage');
+
+      expect(nv.meshes).toHaveLength(1); // only the real electrode mesh
+    });
+
+    it('does not build a colorbar mesh when electrodeDisplayMode is None, even with showColorbar on', () => {
+      const electrodeLayer = makeElectrodeLayer();
+      const { result } = renderHook((props) => useHarness(props), {
+        initialProps: { electrodeLayer, nvRef },
+      });
+      setShowColorbar(result, true); // mode is still the default 'none'
+
+      expect(nv.meshes).toHaveLength(1);
+    });
+
+    it('builds a second, colorbar-only mesh once showColorbar is on and a metric is selected', () => {
+      const electrodeLayer = makeElectrodeLayer();
+      const { result } = renderHook((props) => useHarness(props), {
+        initialProps: { electrodeLayer, nvRef },
+      });
+      setDisplayMode(result, 'voltage');
+      setShowColorbar(result, true);
+
+      expect(nv.meshes).toHaveLength(2); // the real mesh + the colorbar-only mesh
+      const call = nv.loadConnectomeAsMesh.mock.calls.at(-1)[0];
+      expect(call.nodes).toHaveLength(1); // a single throwaway node, just to avoid NiiVue's own "empty mesh" error log
+      expect(call.edges).toEqual([]);
+      expect(call.colorbarVisible).toBe(true);
+      expect(call.edgeColormap).toBe(EEG_NODE_POS_KEY);
+      expect(call.edgeColormapNegative).toBe(EEG_NODE_NEG_KEY);
+      expect(call.edgeMin).toBe(0);
+      expect(call.edgeMax).toBe(electrodeLayer.calMax); // mirrors nodeMaxColor for 'voltage' mode
+    });
+
+    it('mirrors edgeMax to the selected metric’s own max, not calMax, for a non-voltage metric', () => {
+      const electrodeLayer = makeElectrodeLayer();
+      const { result } = renderHook((props) => useHarness(props), {
+        initialProps: { electrodeLayer, nvRef },
+      });
+      setDisplayMode(result, 'spike_count');
+      setShowColorbar(result, true);
+
+      const call = nv.loadConnectomeAsMesh.mock.calls.at(-1)[0];
+      expect(call.edgeMax).toBe(electrodeLayer.metricMax.spike_count);
+    });
+
+    it('removes the colorbar-only mesh when showColorbar is toggled back off', () => {
+      const electrodeLayer = makeElectrodeLayer();
+      const { result } = renderHook((props) => useHarness(props), {
+        initialProps: { electrodeLayer, nvRef },
+      });
+      setDisplayMode(result, 'voltage');
+      setShowColorbar(result, true);
+      expect(nv.meshes).toHaveLength(2);
+
+      setShowColorbar(result, false);
+
+      expect(nv.meshes).toHaveLength(1); // only the real electrode mesh remains
+    });
+
+    it('also tears down the colorbar-only mesh when electrodeLayer becomes null', () => {
+      const electrodeLayer = makeElectrodeLayer();
+      const { result, rerender } = renderHook((props) => useHarness(props), {
+        initialProps: { electrodeLayer, nvRef },
+      });
+      setDisplayMode(result, 'voltage');
+      setShowColorbar(result, true);
+      expect(nv.meshes).toHaveLength(2);
+
+      rerender({ electrodeLayer: null, nvRef });
+
+      expect(nv.meshes).toHaveLength(0);
+    });
+
+    it("reflects this layer's own showColorbar setting onto the nv.opts.isColorbar master switch", () => {
+      const electrodeLayer = makeElectrodeLayer();
+      const { result } = renderHook((props) => useHarness(props), {
+        initialProps: { electrodeLayer, nvRef },
+      });
+      setDisplayMode(result, 'voltage');
+      expect(nv.opts.isColorbar).toBe(false);
+
+      setShowColorbar(result, true);
+      expect(nv.opts.isColorbar).toBe(true);
+
+      setShowColorbar(result, false);
+      expect(nv.opts.isColorbar).toBe(false);
     });
   });
 
