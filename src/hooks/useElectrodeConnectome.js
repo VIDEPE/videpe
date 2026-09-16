@@ -145,6 +145,8 @@ export function useElectrodeConnectome({
       electrodeDisplayMode,
       electrodeLayer.metricMax
     );
+    // nodeMaxColor sets the max value that clamps the node color map
+    // use calMax (already voltage dependant) for voltages and metricMax for other metrics
     const nodeMaxColor =
       electrodeDisplayMode === 'voltage'
         ? electrodeLayer.calMax

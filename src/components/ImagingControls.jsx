@@ -85,19 +85,7 @@ function SortableSettingsCard({
   onToggleExpand,
   onSettingChange,
   onDeleteLayer,
-  hasVoltageSnapshot,
-  availableMetrics,
 }) {
-
-  function electrodeDisplayModeOptions(hasVoltageSnapshot, availableMetrics) {
-    options = [
-                <option value="none">None</option>,
-                <option value="voltage" disabled={!layer.hasVoltageSnapshot}>Voltage</option>,
-              ]
-    options.push(availableMetrics.map((metric) => <option value={metric}>{metric}</option>))
-    return options
-  }
-
   // Only image volumes are reorderable — meshes and connectomes render as 3D objects with no
   // z-order relative to the 2D slices, so reordering them has no visual effect. Disable the
   // sortable for those (and swap the grab handle for a fixed indicator below) so the card
@@ -125,6 +113,10 @@ function SortableSettingsCard({
   const isImageVolume = isImageVolumeLayer(layer);
   // ESI layers have their own toggle for ESI Volume / ESI Connectome
   const isEsiLayer = layer.url === ESI_LAYER_URL;
+
+  if (isConnectome) {
+    
+  }
 
   // Local string state — allows typing a partial value (e.g. empty string) without breaking the numeric opacity
   const [opacityStr, setOpacityStr] = useState(() => String(Math.round(settings.opacity * 100)));
@@ -519,7 +511,15 @@ function SortableSettingsCard({
                   className="flex-1 min-w-0 bg-surface border border-border rounded px-2 py-0.5 text-xs text-heading cursor-pointer"
                   aria-label={`${label} electrodeDisplayMode`}
                 >
-                  electrodeDisplayModeOptions(hasVoltageSnapshot, availableMetrics)
+                  <option value="none">None</option>
+                  <option value="voltage" disabled={!layer.hasVoltageSnapshot}>
+                    Voltage
+                  </option>
+                  {(layer.availableMetrics ?? []).map((metric) => (
+                    <option key={metric} value={metric}>
+                      {metric}
+                    </option>
+                  ))}
                 </select>
               </div>
             )}
