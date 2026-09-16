@@ -78,7 +78,7 @@ export const getInitialLayerSettings = (
     // shader quirk, so they default to showing everything (0) with no thresholding.
     cal_min: layer.url === ESI_LAYER_URL ? 0.01 : 0,
     cal_max: 1,
-    ...(layer.url === ELECTRODE_LAYER_URL ? { electrodeDisplayMode: 'voltage' } : {}), // Electrodes layer's display-mode dropdown
+    ...(layer.url === ELECTRODE_LAYER_URL ? { electrodeDisplayMode: 'none' } : {}), // Electrodes layer's display-mode dropdown
   }));
 
 // Finds the meshXRay value already active in the scene, from any existing mesh/connectome

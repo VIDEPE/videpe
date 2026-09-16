@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef} from 'react';
 import * as Slider from '@radix-ui/react-slider';
 import { Eye, EyeOff, ChevronDown, ChevronUp, GripVertical, Lock } from 'lucide-react';
 import { DragDropProvider } from '@dnd-kit/react';
@@ -114,9 +114,15 @@ function SortableSettingsCard({
   // ESI layers have their own toggle for ESI Volume / ESI Connectome
   const isEsiLayer = layer.url === ESI_LAYER_URL;
 
-  if (isConnectome) {
-    
-  }
+  // Auto switch to Node metric: 'Voltage' the first time a snapshot is available
+  // later manual choices of node metric survive any snapshot taken after that
+  const hasAutoSelectedVoltageMetric = useRef(false);
+  useEffect(() => {
+    if (!hasAutoSelectedVoltageMetric.current && layer.hasVoltageSnapshot) {
+      hasAutoSelectedVoltageMetric.current = true;
+      onSettingChange(index, 'electrodeDisplayMode', 'voltage');
+    }
+  }, [layer.hasVoltageSnapshot, index])
 
   // Local string state — allows typing a partial value (e.g. empty string) without breaking the numeric opacity
   const [opacityStr, setOpacityStr] = useState(() => String(Math.round(settings.opacity * 100)));
