@@ -118,7 +118,7 @@ export function useElectrodeConnectome({
         undefined,
         getCurrentMeshXRay(orderedLayers, layerSettings)
       )[0];
-    const electrodeDisplayMode = settings.electrodeDisplayMode ?? 'voltage';
+    const electrodeDisplayMode = settings.electrodeDisplayMode;
 
     // — Skip if nothing changed —
     // Same layer, same display mode, and the mesh we built is still really in nv.meshes — that

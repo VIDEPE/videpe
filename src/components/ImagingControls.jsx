@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef} from 'react';
+import { useState, useEffect, useRef } from 'react';
 import * as Slider from '@radix-ui/react-slider';
 import { Eye, EyeOff, ChevronDown, ChevronUp, GripVertical, Lock } from 'lucide-react';
 import { DragDropProvider } from '@dnd-kit/react';
@@ -122,7 +122,7 @@ function SortableSettingsCard({
       hasAutoSelectedVoltageMetric.current = true;
       onSettingChange(index, 'electrodeDisplayMode', 'voltage');
     }
-  }, [layer.hasVoltageSnapshot, index])
+  }, [layer.hasVoltageSnapshot, index]);
 
   // Local string state — allows typing a partial value (e.g. empty string) without breaking the numeric opacity
   const [opacityStr, setOpacityStr] = useState(() => String(Math.round(settings.opacity * 100)));
