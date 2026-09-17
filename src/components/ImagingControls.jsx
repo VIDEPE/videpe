@@ -61,6 +61,7 @@ const COLORMAP_OPTIONS = [
   { value: 'mako', label: 'Mako' },
   { value: 'rocket', label: 'Rocket' },
   { value: 'turbo', label: 'Turbo' },
+  { value: 'random', label: 'Random (i.e. for Atlas)' },
 ];
 
 const ToggleSwitch = ({ checked, disabled, onChange, 'aria-label': ariaLabel, title }) => (

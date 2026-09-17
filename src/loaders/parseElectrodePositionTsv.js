@@ -61,7 +61,7 @@ export function parseElectrodePositionTsv(text) {
 
     // Only numeric cells become metrics (non-numeric or missing cell for a metric column
     // is simply omitted for that row rather than rejecting the row (unlike x/y/z)).
-    // This means that "missing" nodes can appear in the electrode connectome that 
+    // This means that "missing" nodes can appear in the electrode connectome that
     // node (i.e. electrode) has no value. The other electrodes will still be displayed.
     // This is an intentional design decision to make sure a single missing value doesn't skip the whole metric
     const metrics = {};

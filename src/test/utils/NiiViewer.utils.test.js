@@ -17,6 +17,9 @@ import {
   makeLayerMergeUpdater,
   makeSettingsMergeUpdater,
   isAnyColorbarActive,
+  makeRandomColormap,
+  applyColormap,
+  MAX_RANDOM_COLORMAP_LABELS,
   ESI_LAYER_URL,
   ELECTRODE_LAYER_URL,
 } from '@/utils/NiiViewer.utils';
@@ -108,6 +111,93 @@ describe('getCalBounds', () => {
   it('defaults to 0/1 for a regular volume when nvVolume is missing', () => {
     const layer = { url: 'blob:mri' };
     expect(getCalBounds(layer, undefined)).toEqual({ boundMin: 0, boundMax: 1 });
+  });
+
+  it('reads global_min/global_max off the NVImage when the colormap is random', () => {
+    const layer = { url: 'blob:atlas' };
+    const nvVolume = { robust_min: 10, robust_max: 200, global_min: 0, global_max: 115 };
+    expect(getCalBounds(layer, nvVolume, 'random')).toEqual({ boundMin: 0, boundMax: 115 });
+  });
+
+  it('defaults to 0/1 for a random colormap when nvVolume is missing', () => {
+    const layer = { url: 'blob:atlas' };
+    expect(getCalBounds(layer, undefined, 'random')).toEqual({ boundMin: 0, boundMax: 1 });
+  });
+
+  it('still uses the ESI layer bounds even if its colormap happens to be random', () => {
+    const layer = { url: ESI_LAYER_URL, boundMin: 2, boundMax: 20 };
+    const nvVolume = { global_min: 0, global_max: 999 };
+    expect(getCalBounds(layer, nvVolume, 'random')).toEqual({ boundMin: 2, boundMax: 20 });
+  });
+});
+
+describe('makeRandomColormap', () => {
+  it('returns 256 R/G/B/I entries with I as the identity 0-255 sequence', () => {
+    const cmap = makeRandomColormap(0, 5);
+    expect(cmap.R).toHaveLength(MAX_RANDOM_COLORMAP_LABELS);
+    expect(cmap.G).toHaveLength(MAX_RANDOM_COLORMAP_LABELS);
+    expect(cmap.B).toHaveLength(MAX_RANDOM_COLORMAP_LABELS);
+    expect(cmap.I).toEqual(Array.from({ length: 256 }, (_, i) => i));
+  });
+
+  it('keeps every color channel within the 0-255 byte range', () => {
+    const cmap = makeRandomColormap(0, 5);
+    for (const channel of [cmap.R, cmap.G, cmap.B]) {
+      for (const value of channel) {
+        expect(value).toBeGreaterThanOrEqual(0);
+        expect(value).toBeLessThanOrEqual(255);
+      }
+    }
+  });
+
+  it('gives every LUT slot belonging to the same label an identical color', () => {
+    // minIndex=0, maxIndex=1 => slots 0-127 round to label 0, slots 128-255 round to label 1
+    // (Math.round(lutSlot / 255) crosses from 0 to 1 at lutSlot 128).
+    const cmap = makeRandomColormap(0, 1);
+    const colorAt = (i) => [cmap.R[i], cmap.G[i], cmap.B[i]];
+    expect(colorAt(0)).toEqual(colorAt(127));
+    expect(colorAt(128)).toEqual(colorAt(255));
+  });
+
+  it('gives different labels different colors', () => {
+    const randomSpy = vi.spyOn(Math, 'random');
+    randomSpy.mockReturnValueOnce(0).mockReturnValueOnce(0.5); // distinct hues for label 0 and label 1
+    const cmap = makeRandomColormap(0, 1);
+    randomSpy.mockRestore();
+    expect([cmap.R[0], cmap.G[0], cmap.B[0]]).not.toEqual([cmap.R[255], cmap.G[255], cmap.B[255]]);
+  });
+});
+
+describe('applyColormap', () => {
+  it('registers a per-volume named colormap and selects it when the colormap is random', () => {
+    const nv = { addColormap: vi.fn(), setColormap: vi.fn() };
+    const nvVolume = { id: 'vol-1', global_min: 0, global_max: 5 };
+
+    applyColormap(nv, nvVolume, 'random');
+
+    expect(nv.addColormap).toHaveBeenCalledTimes(1);
+    const [key, cmap] = nv.addColormap.mock.calls[0];
+    expect(key).toBe('random-vol-1');
+    expect(cmap.R).toHaveLength(MAX_RANDOM_COLORMAP_LABELS);
+    expect(nv.setColormap).toHaveBeenCalledWith('vol-1', key);
+  });
+
+  it('gives each volume its own colormap key', () => {
+    const nv = { addColormap: vi.fn(), setColormap: vi.fn() };
+    applyColormap(nv, { id: 'vol-1', global_min: 0, global_max: 5 }, 'random');
+    applyColormap(nv, { id: 'vol-2', global_min: 0, global_max: 5 }, 'random');
+    expect(nv.addColormap.mock.calls[0][0]).toBe('random-vol-1');
+    expect(nv.addColormap.mock.calls[1][0]).toBe('random-vol-2');
+  });
+
+  it('passes a real colormap name straight through without registering anything', () => {
+    const nv = { addColormap: vi.fn(), setColormap: vi.fn() };
+    const nvVolume = { id: 'vol-1' };
+
+    applyColormap(nv, nvVolume, 'viridis');
+
+    expect(nv.addColormap).not.toHaveBeenCalled();
+    expect(nv.setColormap).toHaveBeenCalledWith('vol-1', 'viridis');
   });
 });
 

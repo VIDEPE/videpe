@@ -29,6 +29,7 @@ import {
   isAnyColorbarActive,
   ESI_LAYER_URL,
   ELECTRODE_LAYER_URL,
+  applyColormap,
 } from '../utils/NiiViewer.utils';
 import { ImagingControls } from './ImagingControls';
 import { FileDropZone } from '../components/FileDropZone';
@@ -80,11 +81,12 @@ function applyVolumeSettingChange({
       opacityRafRef.current = requestAnimationFrame(() => nv.setOpacity(nvIndex, value));
     }
   } else if (key === 'colormap') {
-    nv.setColormap(nvVolume.id, value);
+    applyColormap(nv, nvVolume, value);
+
     // setColormap's internal updateGLVolume() re-triggers NiiVue's own cal_min/cal_max
     // auto-scan, which would otherwise silently overwrite the user's chosen threshold right
     // after it's set (same requirement as syncVolumesAndApplySettings's initial-load path).
-    const { boundMin, boundMax } = getCalBounds(layer, nvVolume);
+    const { boundMin, boundMax } = getCalBounds(layer, nvVolume, settings.colormap);
     nvVolume.cal_min = fractionToCalValue(settings.cal_min, boundMin, boundMax);
     nvVolume.cal_max = fractionToCalValue(settings.cal_max, boundMin, boundMax);
     nv.updateGLVolume();
@@ -105,7 +107,7 @@ function applyVolumeSettingChange({
       thresholdRafRef.current = requestAnimationFrame(() => {
         // value alone (a 0-1 fraction) isn't a real cal_min/cal_max — it has to be resolved
         // against this volume's own data range first (see getCalBounds above).
-        const { boundMin, boundMax } = getCalBounds(layer, nvVolume);
+        const { boundMin, boundMax } = getCalBounds(layer, nvVolume, settings.colormap);
         nvVolume.cal_min = fractionToCalValue(settings.cal_min, boundMin, boundMax);
         nvVolume.cal_max = fractionToCalValue(settings.cal_max, boundMin, boundMax);
         nv.updateGLVolume();
