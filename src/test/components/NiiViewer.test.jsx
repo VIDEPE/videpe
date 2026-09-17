@@ -318,6 +318,32 @@ describe('syncVolumesAndApplySettings', () => {
     expect(nv.opts.isColorbar).toBe(false);
   });
 
+  it('sets colorbarVisible to false on a hidden volume even if showColorbar is true', async () => {
+    const volumes = [makeVolume('/mri.nii', 'id-mri')];
+    await syncVolumesAndApplySettings(nv, volumes, [
+      makeLayerSetting({ showColorbar: true, visible: false }),
+    ]);
+    expect(nv.volumes[0].colorbarVisible).toBe(false);
+  });
+
+  it('sets isColorbar to false when the only layer with showColorbar is hidden', async () => {
+    const volumes = [makeVolume('/mri.nii', 'id-mri')];
+    await syncVolumesAndApplySettings(nv, volumes, [
+      makeLayerSetting({ showColorbar: true, visible: false }),
+    ]);
+    expect(nv.opts.isColorbar).toBe(false);
+  });
+
+  it('sets isColorbar to true when a hidden layer has showColorbar but a visible one also does', async () => {
+    const volumes = [makeVolume('/mri.nii', 'id-mri'), makeVolume('/pet.nii', 'id-pet')];
+    const settings = [
+      makeLayerSetting({ showColorbar: true, visible: false }),
+      makeLayerSetting({ showColorbar: true, visible: true }),
+    ];
+    await syncVolumesAndApplySettings(nv, volumes, settings);
+    expect(nv.opts.isColorbar).toBe(true);
+  });
+
   it('calls updateGLVolume after applying all settings', async () => {
     const volumes = [makeVolume('/mri.nii', 'id-mri')];
     await syncVolumesAndApplySettings(nv, volumes, [makeLayerSetting()]);
@@ -1189,6 +1215,46 @@ describe('NiiViewer', () => {
       await userEvent.click(screen.getByRole('switch', { name: /mri.*colorbar/i }));
       expect(nv.volumes[0].colorbarVisible).toBe(true);
       expect(nv.updateGLVolume).toHaveBeenCalledOnce();
+    });
+
+    describe('hiding a volume also hides its own colorbar', () => {
+      // Regression coverage: NiiVue's own colorbar drawing only ever checks colorbarVisible,
+      // never opacity/visibility — so without this, a hidden volume's colorbar would keep
+      // drawing. Mirrors the same fix applied to the electrode connectome's colorbar-only mesh
+      // in useElectrodeConnectome.js.
+      const turnOnColorbarThenHide = async () => {
+        const nv = await setup();
+        await userEvent.click(screen.getByRole('button', { name: /expand.*mri/i }));
+        await userEvent.click(screen.getByRole('switch', { name: /mri.*colorbar/i }));
+        expect(nv.volumes[0].colorbarVisible).toBe(true);
+
+        await userEvent.click(screen.getByRole('button', { name: /hide.*mri/i }));
+        return nv;
+      };
+
+      it('sets colorbarVisible to false while hidden, without touching the showColorbar setting itself', async () => {
+        const nv = await turnOnColorbarThenHide();
+        expect(nv.volumes[0].colorbarVisible).toBe(false);
+        // The toggle's own state survives — it's still checked, just suppressed while hidden.
+        expect(screen.getByRole('switch', { name: /mri.*colorbar/i })).toHaveAttribute(
+          'aria-checked',
+          'true'
+        );
+      });
+
+      it('sets isColorbar to false once the only colorbar-wanting volume is hidden', async () => {
+        const nv = await turnOnColorbarThenHide();
+        expect(nv.opts.isColorbar).toBe(false);
+      });
+
+      it('brings the colorbar back automatically when shown again, without re-toggling showColorbar', async () => {
+        const nv = await turnOnColorbarThenHide();
+
+        await userEvent.click(screen.getByRole('button', { name: /show.*mri/i }));
+
+        expect(nv.volumes[0].colorbarVisible).toBe(true);
+        expect(nv.opts.isColorbar).toBe(true);
+      });
     });
 
     describe('opacity/threshold — throttled through requestAnimationFrame', () => {

@@ -4,6 +4,7 @@ import {
   getCurrentMeshXRay,
   makeLayerMergeUpdater,
   makeSettingsMergeUpdater,
+  isAnyColorbarActive,
   ELECTRODE_LAYER_URL,
 } from '@/utils/NiiViewer.utils';
 import { applyElectrodeDisplayMode } from '@/utils/eegTopographyUtils';
@@ -50,6 +51,7 @@ export function useElectrodeConnectome({
   const lastElectrodeLayerRef = useRef(null); // last layer built from — guards redundant rebuilds
   const lastElectrodeDisplayModeRef = useRef(null); // same, for the Electrode Display mode
   const lastElectrodeShowColorbarRef = useRef(null); // same, for this connectome's own showColorbar setting — NOT the nv.opts.isColorbar master switch, which is a scene-wide OR across every layer (volumes included), recomputed below
+  const lastElectrodeVisibleRef = useRef(null); // same, for this connectome's own visible setting — hiding the layer must also hide its colorbar-only mesh
   // The specific electrodeLayer dismissed via handleDeleteLayer. Not a boolean: electrodeLayer
   // keeps recomputing from live EEG data, so a plain flag could never be un-set — storing the
   // object lets the sync effect tell "still that stale layer" from "genuinely new data" by
@@ -108,6 +110,7 @@ export function useElectrodeConnectome({
         nv.removeMesh(colorbarOnlyMeshRef.current);
         colorbarOnlyMeshRef.current = null;
         lastElectrodeShowColorbarRef.current = null;
+        lastElectrodeVisibleRef.current = null;
         removedSomething = true;
       }
       if (removedSomething) nv.updateGLVolume();
@@ -130,15 +133,18 @@ export function useElectrodeConnectome({
       )[0];
     const electrodeDisplayMode = settings.electrodeDisplayMode;
     const showColorbar = settings.showColorbar;
+    const visible = settings.visible;
 
     // — Skip if nothing changed —
-    // Same layer, same display mode, same colorbar toggle, and the mesh we built is still
-    // really in nv.meshes — that last check matters because StrictMode's mount→unmount→remount
-    // silently wipes the mesh even though electrodeLayer/displayMode look unchanged.
+    // Same layer, same display mode, same colorbar toggle, same visibility, and the mesh we
+    // built is still really in nv.meshes — that last check matters because StrictMode's
+    // mount→unmount→remount silently wipes the mesh even though electrodeLayer/displayMode
+    // look unchanged.
     if (
       electrodeLayer === lastElectrodeLayerRef.current &&
       electrodeDisplayMode === lastElectrodeDisplayModeRef.current &&
       showColorbar === lastElectrodeShowColorbarRef.current &&
+      visible === lastElectrodeVisibleRef.current &&
       nv.meshes.includes(electrodeMeshRef.current)
     ) {
       return;
@@ -146,6 +152,7 @@ export function useElectrodeConnectome({
     lastElectrodeLayerRef.current = electrodeLayer;
     lastElectrodeDisplayModeRef.current = electrodeDisplayMode;
     lastElectrodeShowColorbarRef.current = showColorbar;
+    lastElectrodeVisibleRef.current = visible;
 
     if (electrodeMeshRef.current) nv.removeMesh(electrodeMeshRef.current); // drop the stale mesh first
 
@@ -200,7 +207,9 @@ export function useElectrodeConnectome({
     // This empty mesh will show the colorbar for the node metric mirroring the real mesh's node color range.
     if (colorbarOnlyMeshRef.current) nv.removeMesh(colorbarOnlyMeshRef.current);
     colorbarOnlyMeshRef.current = null;
-    if (showColorbar && electrodeDisplayMode !== 'none') {
+    // visible: hiding the layer must also hide its colorbar, without touching showColorbar
+    // itself — the mesh just isn't (re)built while hidden, and reappears on its own once shown.
+    if (showColorbar && electrodeDisplayMode !== 'none' && visible) {
       const colorbarOnlyMesh = nv.loadConnectomeAsMesh({
         name: `${electrodeLayer.name} colorbar`,
         nodeMinColor: 0,
@@ -218,9 +227,10 @@ export function useElectrodeConnectome({
       colorbarOnlyMeshRef.current = colorbarOnlyMesh;
     }
     // isColorbar is the scene-wide master switch NiiVue checks before drawing any colorbar at
-    // all — it has to reflect every layer's own showColorbar, not just this connectome's,
-    // since a volume elsewhere in the scene may also have its own colorbar toggled on.
-    nv.opts.isColorbar = layerSettings.some((layerSetting) => layerSetting.showColorbar);
+    // all — it has to reflect every layer's own showColorbar (and visible — see
+    // isAnyColorbarActive), not just this connectome's, since a volume elsewhere in the scene
+    // may also have its own colorbar toggled on.
+    nv.opts.isColorbar = isAnyColorbarActive(layerSettings);
     nv.updateGLVolume();
   }, [electrodeLayer, orderedLayers, layerSettings, nvRef]);
 

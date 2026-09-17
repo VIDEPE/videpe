@@ -16,9 +16,38 @@ import {
   fractionToCalValue,
   makeLayerMergeUpdater,
   makeSettingsMergeUpdater,
+  isAnyColorbarActive,
   ESI_LAYER_URL,
   ELECTRODE_LAYER_URL,
 } from '@/utils/NiiViewer.utils';
+
+describe('isAnyColorbarActive', () => {
+  const setting = (overrides = {}) => ({ showColorbar: false, visible: true, ...overrides });
+
+  it('is false when no layer wants a colorbar', () => {
+    expect(isAnyColorbarActive([setting(), setting()])).toBe(false);
+  });
+
+  it('is true when a visible layer wants a colorbar', () => {
+    expect(isAnyColorbarActive([setting(), setting({ showColorbar: true })])).toBe(true);
+  });
+
+  it('is false when the only layer wanting a colorbar is hidden', () => {
+    expect(isAnyColorbarActive([setting({ showColorbar: true, visible: false })])).toBe(false);
+  });
+
+  it('is true when a hidden layer wants a colorbar but a visible layer also does', () => {
+    const layers = [
+      setting({ showColorbar: true, visible: false }),
+      setting({ showColorbar: true, visible: true }),
+    ];
+    expect(isAnyColorbarActive(layers)).toBe(true);
+  });
+
+  it('is false for an empty layer list', () => {
+    expect(isAnyColorbarActive([])).toBe(false);
+  });
+});
 
 describe('isImageVolumeLayer', () => {
   it('is true for a plain image volume (no kind, or kind other than connectome/mesh)', () => {

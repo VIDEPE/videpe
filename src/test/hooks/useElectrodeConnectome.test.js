@@ -81,6 +81,16 @@ function setShowColorbar(result, value) {
   });
 }
 
+// Changes the Electrodes layer's visible flag the same way ImagingControls's eye-icon
+// button (hide/show layer) does.
+function setVisible(result, value) {
+  act(() => {
+    result.current.setLayerSettings((prev) =>
+      prev.map((s) => (s.url === ELECTRODE_LAYER_URL ? { ...s, visible: value } : s))
+    );
+  });
+}
+
 describe('useElectrodeConnectome', () => {
   let nv;
   let nvRef;
@@ -267,6 +277,40 @@ describe('useElectrodeConnectome', () => {
       setShowColorbar(result, false);
 
       expect(nv.meshes).toHaveLength(1); // only the real electrode mesh remains
+    });
+
+    it('also removes the colorbar-only mesh when the layer itself is hidden (visible: false)', () => {
+      const electrodeLayer = makeElectrodeLayer();
+      const { result } = renderHook((props) => useHarness(props), {
+        initialProps: { electrodeLayer, nvRef },
+      });
+      setDisplayMode(result, 'voltage');
+      setShowColorbar(result, true);
+      expect(nv.meshes).toHaveLength(2); // the real mesh + the colorbar-only mesh
+
+      setVisible(result, false);
+
+      // Hiding the layer shouldn't leave its colorbar behind — the real (now-hidden) mesh can
+      // stay in the scene at opacity 0, but the colorbar-only mesh has nothing left to legend.
+      expect(nv.meshes).toHaveLength(1);
+      // The master switch must follow suit too — see isAnyColorbarActive in NiiViewer.utils.js.
+      expect(nv.opts.isColorbar).toBe(false);
+    });
+
+    it('brings the colorbar back on its own when the layer is shown again, without re-toggling showColorbar', () => {
+      const electrodeLayer = makeElectrodeLayer();
+      const { result } = renderHook((props) => useHarness(props), {
+        initialProps: { electrodeLayer, nvRef },
+      });
+      setDisplayMode(result, 'voltage');
+      setShowColorbar(result, true);
+      setVisible(result, false);
+      expect(nv.meshes).toHaveLength(1); // colorbar gone while hidden, per the test above
+
+      setVisible(result, true); // showColorbar itself is never touched in this test
+
+      expect(nv.meshes).toHaveLength(2); // the colorbar-only mesh reappears on its own
+      expect(nv.opts.isColorbar).toBe(true);
     });
 
     it('also tears down the colorbar-only mesh when electrodeLayer becomes null', () => {
