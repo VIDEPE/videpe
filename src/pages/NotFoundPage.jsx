@@ -17,7 +17,7 @@ export const NotFoundPage = () => {
           <h2 className="text-3xl md:text-5xl font-bold">
             Page Not <span className="text-primary">Found</span>
           </h2>
-          <p className="text-muted-foreground text-lg max-w-md mx-auto">
+          <p className="text-foreground text-lg max-w-md mx-auto">
             Oops! It looks like you've wandered into uncharted territory. The page you're looking
             for doesn't exist.
           </p>
