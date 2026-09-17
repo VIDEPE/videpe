@@ -140,7 +140,7 @@ describe('useElectrodeConnectome', () => {
   });
 
   describe('electrode display mode', () => {
-    it("passes voltage-coded nodes and calMax through unchanged for 'voltage' mode", () => {
+    it("keeps colorValue and sizes nodes by magnitude relative to the snapshot's max |voltage| for 'voltage' mode", () => {
       const electrodeLayer = makeElectrodeLayer();
       const { result } = renderHook((props) => useHarness(props), {
         initialProps: { electrodeLayer, nvRef },
@@ -148,7 +148,8 @@ describe('useElectrodeConnectome', () => {
       setDisplayMode(result, 'voltage');
 
       const call = nv.loadConnectomeAsMesh.mock.calls.at(-1)[0];
-      expect(call.nodes).toBe(electrodeLayer.nodes); // same reference — no remapping needed
+      expect(call.nodes[0]).toMatchObject({ colorValue: 1, sizeValue: 1 }); // |1|/1
+      expect(call.nodes[1]).toMatchObject({ colorValue: -1, sizeValue: 1 }); // |-1|/1
       expect(call.nodeMaxColor).toBe(electrodeLayer.calMax);
     });
 

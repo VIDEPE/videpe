@@ -893,9 +893,30 @@ describe('applyElectrodeDisplayMode', () => {
   ];
   const metricMax = { spike_count: 8, hfo_rate: 2 };
 
-  it('returns the exact same nodes array for "voltage" mode — already voltage-coded, no rebuild needed', () => {
+  it('keeps colorValue as the original voltage and sizes it relative to the snapshot\'s max |voltage| for "voltage" mode', () => {
     const result = applyElectrodeDisplayMode(nodes, 'voltage', metricMax);
-    expect(result).toBe(nodes);
+    expect(result[0]).toMatchObject({ colorValue: 5, sizeValue: 1 }); // |5|/5
+    expect(result[1]).toMatchObject({ colorValue: -3, sizeValue: 0.6 }); // |-3|/5
+  });
+
+  it('normalises voltage sizeValue by magnitude, so the most negative node still gets the largest size', () => {
+    const negativeHeavy = [
+      { name: 'A', x: 0, y: 0, z: 0, colorValue: -10, sizeValue: 1, metrics: {} },
+      { name: 'B', x: 0, y: 0, z: 0, colorValue: 5, sizeValue: 1, metrics: {} },
+    ];
+    const result = applyElectrodeDisplayMode(negativeHeavy, 'voltage', metricMax);
+    expect(result[0]).toMatchObject({ colorValue: -10, sizeValue: 1 }); // |-10|/10
+    expect(result[1]).toMatchObject({ colorValue: 5, sizeValue: 0.5 }); // |5|/10
+  });
+
+  it('sets sizeValue to 0 for all nodes in "voltage" mode when every voltage is 0, instead of dividing by 0', () => {
+    const allZero = [{ name: 'A', x: 0, y: 0, z: 0, colorValue: 0, sizeValue: 1, metrics: {} }];
+    const result = applyElectrodeDisplayMode(allZero, 'voltage', metricMax);
+    expect(result[0]).toMatchObject({ colorValue: 0, sizeValue: 0 });
+  });
+
+  it('handles an empty nodes array for "voltage" mode without throwing', () => {
+    expect(applyElectrodeDisplayMode([], 'voltage', metricMax)).toEqual([]);
   });
 
   it('resets colorValue to 0 and sizeValue to 1 for "none" mode', () => {
@@ -907,6 +928,7 @@ describe('applyElectrodeDisplayMode', () => {
   it('does not mutate the input nodes', () => {
     applyElectrodeDisplayMode(nodes, 'none', metricMax);
     applyElectrodeDisplayMode(nodes, 'spike_count', metricMax);
+    applyElectrodeDisplayMode(nodes, 'voltage', metricMax);
     expect(nodes[0]).toMatchObject({ colorValue: 5, sizeValue: 1 }); // still voltage-coded
   });
 
