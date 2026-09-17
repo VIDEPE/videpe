@@ -26,8 +26,10 @@ import {
   syncVolumesAndApplySettings,
   syncMeshesAndApplySettings,
   revokeLayerUrls,
+  isAnyColorbarActive,
   ESI_LAYER_URL,
   ELECTRODE_LAYER_URL,
+  applyColormap,
 } from '../utils/NiiViewer.utils';
 import { ImagingControls } from './ImagingControls';
 import { FileDropZone } from '../components/FileDropZone';
@@ -65,6 +67,13 @@ function applyVolumeSettingChange({
 
   if (key === 'visible') {
     nv.setOpacity(nvIndex, value ? settings.opacity : 0);
+    // A hidden volume must not keep drawing its colorbar either — NiiVue only checks
+    // colorbarVisible, never opacity, when deciding what to draw. Don't touch
+    // settings.showColorbar itself (the persisted preference) — just mirror visibility onto
+    // colorbarVisible, so the colorbar reappears on its own once the volume is shown again.
+    nvVolume.colorbarVisible = value && settings.showColorbar;
+    nv.opts.isColorbar = isAnyColorbarActive(nextLayerSettings);
+    nv.updateGLVolume();
   } else if (key === 'opacity') {
     // Throttle to one GL redraw per frame — cancels any pending rAF so only the latest drag value redraws
     if (settings.visible) {
@@ -72,11 +81,12 @@ function applyVolumeSettingChange({
       opacityRafRef.current = requestAnimationFrame(() => nv.setOpacity(nvIndex, value));
     }
   } else if (key === 'colormap') {
-    nv.setColormap(nvVolume.id, value);
+    applyColormap(nv, nvVolume, value);
+
     // setColormap's internal updateGLVolume() re-triggers NiiVue's own cal_min/cal_max
     // auto-scan, which would otherwise silently overwrite the user's chosen threshold right
     // after it's set (same requirement as syncVolumesAndApplySettings's initial-load path).
-    const { boundMin, boundMax } = getCalBounds(layer, nvVolume);
+    const { boundMin, boundMax } = getCalBounds(layer, nvVolume, settings.colormap);
     nvVolume.cal_min = fractionToCalValue(settings.cal_min, boundMin, boundMax);
     nvVolume.cal_max = fractionToCalValue(settings.cal_max, boundMin, boundMax);
     nv.updateGLVolume();
@@ -84,8 +94,11 @@ function applyVolumeSettingChange({
     nvVolume.colormapInvert = value;
     nv.updateGLVolume();
   } else if (key === 'showColorbar') {
-    nvVolume.colorbarVisible = value;
-    nv.opts.isColorbar = nextLayerSettings.some((layerSetting) => layerSetting.showColorbar);
+    // Same principle as the 'visible' branch above, the other direction: toggling the
+    // preference on while the volume happens to be hidden shouldn't draw anything until it's
+    // shown again.
+    nvVolume.colorbarVisible = value && settings.visible;
+    nv.opts.isColorbar = isAnyColorbarActive(nextLayerSettings);
     nv.updateGLVolume();
   } else if (key === 'cal_min' || key === 'cal_max' || key === 'cal_range') {
     // Throttle to one GL redraw per frame — cancels any pending rAF so only the latest drag value redraws
@@ -94,7 +107,7 @@ function applyVolumeSettingChange({
       thresholdRafRef.current = requestAnimationFrame(() => {
         // value alone (a 0-1 fraction) isn't a real cal_min/cal_max — it has to be resolved
         // against this volume's own data range first (see getCalBounds above).
-        const { boundMin, boundMax } = getCalBounds(layer, nvVolume);
+        const { boundMin, boundMax } = getCalBounds(layer, nvVolume, settings.colormap);
         nvVolume.cal_min = fractionToCalValue(settings.cal_min, boundMin, boundMax);
         nvVolume.cal_max = fractionToCalValue(settings.cal_max, boundMin, boundMax);
         nv.updateGLVolume();

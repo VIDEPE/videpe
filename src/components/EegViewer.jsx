@@ -175,7 +175,7 @@ export const EegViewer = ({
   channelNames,
   onViewReady,
   onTopoNvReady,
-  customElectrodes = [], // [{label,x,y,z}] — owned by PatientView, loaded from a user-supplied .elc/.tsv file
+  customElectrodes = [], // [{label,x,y,z, metrics?}] — owned by PatientView, loaded from a user-supplied .elc/.tsv file
   customElecPosFileName = null,
   inverseSolutionFileName = null, // filename (no extension) of the loaded inverse-solution file — owned by PatientView, passed down
   esiChannelMatchCount, // how many of the inverse solution's own channels have a same-named match in this recording — owned by PatientView, passed down

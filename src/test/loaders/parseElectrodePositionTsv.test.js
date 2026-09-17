@@ -83,4 +83,74 @@ Fp1\t-0.029\t0.084\t0.003
       hasFiducials: false,
     });
   });
+
+  describe('metrics (extra columns)', () => {
+    it('captures a single extra numeric column as a per-electrode metrics object keyed by its header name', () => {
+      const text = `name\tx\ty\tz\tspike_count
+Fp1\t-29.0\t84.0\t-7.0\t12
+Fp2\t29.0\t84.0\t-7.0\t5
+`;
+      const { electrodes } = parseElectrodePositionTsv(text);
+      expect(electrodes[0].metrics).toEqual({ spike_count: 12 });
+      expect(electrodes[1].metrics).toEqual({ spike_count: 5 });
+    });
+
+    it('captures multiple extra metric columns', () => {
+      const text = `name\tx\ty\tz\tspike_count\tspike_awake
+Fp1\t-29.0\t84.0\t-7.0\t12\t0.5
+`;
+      const { electrodes } = parseElectrodePositionTsv(text);
+      expect(electrodes[0].metrics).toEqual({ spike_count: 12, spike_awake: 0.5 });
+    });
+
+    it('captures a metric column correctly regardless of header order', () => {
+      const text = `spike_count\tz\tname\ty\tx
+12\t-7.0\tFp1\t84.0\t-29.0
+`;
+      const { electrodes } = parseElectrodePositionTsv(text);
+      expect(electrodes[0]).toMatchObject({
+        label: 'Fp1',
+        x: -29.0,
+        y: 84.0,
+        z: -7.0,
+        metrics: { spike_count: 12 },
+      });
+    });
+
+    it('omits a non-numeric metric cell from that row instead of rejecting the row', () => {
+      const text = `name\tx\ty\tz\tspike_count
+Fp1\t-29.0\t84.0\t-7.0\tn/a
+`;
+      const { electrodes } = parseElectrodePositionTsv(text);
+      expect(electrodes).toHaveLength(1); // the row still survives — only x/y/z are required
+      expect(electrodes[0].metrics).toBeUndefined();
+    });
+
+    it('does not attach a metrics key when the file has no extra columns beyond name/x/y/z', () => {
+      const text = `name\tx\ty\tz
+Fp1\t-29.0\t84.0\t-7.0
+`;
+      const { electrodes } = parseElectrodePositionTsv(text);
+      // toEqual is a strict shape check — an unexpected `metrics` key would fail this.
+      expect(electrodes[0]).toEqual({ label: 'Fp1', x: -29.0, y: 84.0, z: -7.0 });
+    });
+
+    it('ignores a metric column with a blank header name', () => {
+      const text = `name\tx\ty\tz\t
+Fp1\t-29.0\t84.0\t-7.0\t99
+`;
+      const { electrodes } = parseElectrodePositionTsv(text);
+      expect(electrodes[0].metrics).toBeUndefined();
+    });
+
+    it('carries metrics through onto a fiducial-adjacent file without attaching them to fiducials', () => {
+      const text = `name\tx\ty\tz\tspike_count
+LPA\t-86.0\t-20.0\t-48.0\t99
+Fp1\t-29.0\t84.0\t-7.0\t12
+`;
+      const { electrodes, fiducials } = parseElectrodePositionTsv(text);
+      expect(electrodes[0]).toMatchObject({ label: 'Fp1', metrics: { spike_count: 12 } });
+      expect(fiducials.LPA).toEqual({ x: -86.0, y: -20.0, z: -48.0 }); // no metrics on fiducials
+    });
+  });
 });

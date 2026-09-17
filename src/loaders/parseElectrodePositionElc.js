@@ -57,7 +57,7 @@ export function parseElectrodePositionElc(text) {
     if (isNaN(x) || isNaN(y) || isNaN(z)) continue;
     rows.push({ label, x, y, z });
   }
-  if (rows.length === 0) return result;
+  if (rows.length === 0) return { result };
 
   // If unit is declared and recognized, use that; otherwise infer from coordinate magnitude.
   const scale =

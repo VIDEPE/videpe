@@ -78,6 +78,7 @@ export const getInitialLayerSettings = (
     // shader quirk, so they default to showing everything (0) with no thresholding.
     cal_min: layer.url === ESI_LAYER_URL ? 0.01 : 0,
     cal_max: 1,
+    ...(layer.url === ELECTRODE_LAYER_URL ? { electrodeDisplayMode: 'none' } : {}), // Electrodes layer's display-mode dropdown
   }));
 
 // Finds the meshXRay value already active in the scene, from any existing mesh/connectome
@@ -116,21 +117,113 @@ export const detectVolumeType = (filename) => {
 
 // NiiVue cal_min/cal_max values depend on the specific volume/source-power data values, so a
 // percentile 0-1 slider value would be meaningless applied directly. getCalBounds() resolves a layer's
-// actual bounds so a fraction can be converted to a real value:
-//  - ESI layers: boundMin/boundMax come straight off the layer (see
-//    convertSourcePowersToConnectome/convertSourcePowersToVolume) — power is always
-//    non-negative and boundMax is the observed ceiling for the current click.
-//  - Regular volumes: bounds come from NiiVue's own robust_min/robust_max (percentile-
-//    clipped range) on the loaded NVImage — global_min/global_max would let one outlier
-//    voxel blow out the whole scale.
-export function getCalBounds(layer, nvVolume) {
-  if (layer.url === ESI_LAYER_URL) return { boundMin: layer.boundMin, boundMax: layer.boundMax };
+// actual bounds so a fraction can be converted to a real value
+export function getCalBounds(layer, nvVolume, colormapValue) {
+  // for ESI layers use the predetermined bounds calculated for that layer
+  if (layer.url === ESI_LAYER_URL) {
+    return { boundMin: layer.boundMin, boundMax: layer.boundMax };
+  }
+  // if colormap is random, use the global_min/max to set the cal_min/max to ensure each index gets a random number
+  if (colormapValue === 'randomised') {
+    return { boundMin: nvVolume?.global_min ?? 0, boundMax: nvVolume?.global_max ?? 1 };
+  }
+  // for all the other colormaps it is better to use the robost_min/max to avoid blown out values
   return { boundMin: nvVolume?.robust_min ?? 0, boundMax: nvVolume?.robust_max ?? 1 };
+}
+
+// Source - https://stackoverflow.com/a/9493060
+// Posted by Mohsen, modified by community. See post 'Timeline' for change history
+// Retrieved 2026-09-17, License - CC BY-SA 4.0
+/**
+ * Converts an HSL color value to RGB. Conversion formula
+ * adapted from https://en.wikipedia.org/wiki/HSL_color_space.
+ * Assumes h, s, and l are contained in the set [0, 1] and
+ * returns r, g, and b in the set [0, 255].
+ *
+ * @param   {number}  h       The hue
+ * @param   {number}  s       The saturation
+ * @param   {number}  l       The lightness
+ * @return  {Array}           The RGB representation
+ */
+function hslToRgb(h, s, l) {
+  let r, g, b;
+
+  if (s === 0) {
+    r = g = b = l; // achromatic
+  } else {
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    const p = 2 * l - q;
+    r = hueToRgb(p, q, h + 1 / 3);
+    g = hueToRgb(p, q, h);
+    b = hueToRgb(p, q, h - 1 / 3);
+  }
+
+  return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
+}
+
+function hueToRgb(p, q, t) {
+  if (t < 0) t += 1;
+  if (t > 1) t -= 1;
+  if (t < 1 / 6) return p + (q - p) * 6 * t;
+  if (t < 1 / 2) return q;
+  if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+  return p;
+}
+
+// Volumes always render through a fixed 256-entry LUT texture, so a random per-label colormap
+// is capped at 256 distinct labels. Each of the 256 slots gets the color of whichever label
+// value would normalize to that slot (inverting NiiVue's own value->slot formula), so a label
+// gets a consistent color instead of a gradient bleeding into its neighbors.
+export const MAX_RANDOM_COLORMAP_LABELS = 256;
+
+export function makeRandomColormap(minIndex, maxIndex) {
+  const nLabels = maxIndex - minIndex + 1;
+  // assign as many colours as there are indices
+  const labelColors = Array.from({ length: nLabels }, () => hslToRgb(Math.random(), 1, 0.5));
+
+  const R = [];
+  const G = [];
+  const B = [];
+  const I = [];
+  // divide the range [minIndex, maxIndex] into 256 spots and assign for each spot the color value that is closest
+  for (let lutSlot = 0; lutSlot < MAX_RANDOM_COLORMAP_LABELS; lutSlot++) {
+    // work out which raw label value this LUT texel should show
+    const labelValue = Math.round(minIndex + (lutSlot / 255) * (maxIndex - minIndex));
+    // convert that raw label value back into a 0-based index into labelColors
+    const labelColorIndex = labelValue - minIndex;
+    const [red, green, blue] = labelColors[labelColorIndex];
+    R.push(red);
+    G.push(green);
+    B.push(blue);
+    I.push(lutSlot);
+  }
+  return { R, G, B, I };
+}
+
+// 'random' is registered as a one-off named colormap per volume (nv.setColormap only resolves
+// by name); everything else goes straight through as a real NiiVue colormap name.
+export function applyColormap(nv, nvVolume, colormapValue) {
+  if (colormapValue === 'randomised') {
+    const colormapKey = `randomised-${nvVolume.id}`;
+    nv.addColormap(colormapKey, makeRandomColormap(nvVolume.global_min, nvVolume.global_max));
+    nv.setColormap(nvVolume.id, colormapKey);
+  } else {
+    nv.setColormap(nvVolume.id, colormapValue);
+  }
 }
 
 // Converts a 0-1 Threshold-slider fraction into a real cal_min/cal_max value within [boundMin, boundMax].
 export function fractionToCalValue(fraction, boundMin, boundMax) {
   return boundMin + fraction * (boundMax - boundMin);
+}
+
+// NiiVue's own colorbar-drawing logic only ever checks a volume/mesh's colorbarVisible flag,
+// never its opacity or visibility. This caused the bug that a hidden layer still showed
+// the colorbar if it was toggled. isAnyColorBarActive is a scene wide master switch that checks
+// if both the showColorBar toggle and the visibility toggle are active at the same time for any layer.
+// If not, the NiiVue global show colorbar setting is deactivated
+export function isAnyColorbarActive(layerSettings) {
+  return layerSettings.some((layerSetting) => layerSetting.showColorbar && layerSetting.visible);
 }
 
 // Loads only new image volumes into nv (existing ones stay) and applies all settings.
@@ -151,10 +244,12 @@ export async function syncVolumesAndApplySettings(nv, layers, layerSettings) {
   // nv.volumes now matches layers 1:1, so settings can be applied by index directly.
   layerSettings.forEach((layerSetting, index) => {
     const nvVolume = nv.volumes[index];
-    nv.setColormap(nvVolume.id, layerSetting.colormap);
+    applyColormap(nv, nvVolume, layerSetting.colormap);
     nv.setOpacity(index, layerSetting.visible ? layerSetting.opacity : 0);
     if (layerSetting.invert) nvVolume.colormapInvert = true;
-    nvVolume.colorbarVisible = layerSetting.showColorbar;
+    // A hidden layer must not keep drawing its colorbar even if showColorbar is on — see
+    // isAnyColorbarActive above.
+    nvVolume.colorbarVisible = layerSetting.showColorbar && layerSetting.visible;
     // Applied after setColormap, same requirement as the ESI volume build effect below:
     // setColormap's internal updateGLVolume() re-triggers NiiVue's own cal_min/cal_max
     // auto-scan, which would otherwise silently overwrite these right after they're set.
@@ -162,7 +257,7 @@ export async function syncVolumesAndApplySettings(nv, layers, layerSettings) {
     nvVolume.cal_min = fractionToCalValue(layerSetting.cal_min, boundMin, boundMax);
     nvVolume.cal_max = fractionToCalValue(layerSetting.cal_max, boundMin, boundMax);
   });
-  nv.opts.isColorbar = layerSettings.some((layerSetting) => layerSetting.showColorbar);
+  nv.opts.isColorbar = isAnyColorbarActive(layerSettings);
   // GL redraw to apply settings
   nv.updateGLVolume();
 }
