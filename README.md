@@ -1,6 +1,6 @@
 # VIDEPE
 
-![Version](https://img.shields.io/badge/version-0.16.0-blue)
+![Version](https://img.shields.io/badge/version-0.17.0-blue)
 
 **V**isualization & **I**ntegration of **D**ata for **E**pilepsy **P**resurgical **E**valuation
 
@@ -44,6 +44,7 @@ High-performance multichannel viewer built on [uPlot](https://github.com/leeoniy
 
 - **Intracranial (SEEG) support** — SEEG channels are auto-detected from channel naming
   - Custom channel type setting as EEG/SEEG will toggle VIDEPE options accordingly and changes rendering style of the 3D electrodes configuration in the neuroimaging viewer
+  - Colour/size the 3D electrode connectome nodes by any custom metric read from extra `.tsv` columns, not just voltage
 - **Electrical Source Imaging** — Uploading an Inverse Solution file, unlocks the ability to 3D visualise the power of the surface EEG recording.
   - (currently only Fieldtrip `*_inversefilters.mat` supported)
   - renders per-source power at the selected EEG time point as either a 3D connectome or a volumetric heatmap

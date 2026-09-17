@@ -783,4 +783,236 @@ describe('ImagingControls', () => {
       expect(onSettingChange).not.toHaveBeenCalled();
     });
   });
+
+  describe('Electrode Display dropdown', () => {
+    const makeElectrodeLayer = (overrides = {}) => ({
+      kind: 'connectome',
+      type: 'Electrodes',
+      subtype: 'Intracranial EEG',
+      url: '__electrodes__',
+      hasVoltageSnapshot: false,
+      availableMetrics: [],
+      ...overrides,
+    });
+
+    // setup does two things: renders one Electrodes layer and expands it.
+    const setup = async (layer, settings, onSettingChange = vi.fn()) => {
+      renderControls([layer], [settings], onSettingChange);
+      await userEvent.click(
+        screen.getByRole('button', { name: /expand.*electrodes - intracranial eeg/i })
+      );
+      return { onSettingChange };
+    };
+
+    it('renders None and a disabled Voltage option when there is no snapshot yet', async () => {
+      await setup(makeElectrodeLayer(), makeSettings({ electrodeDisplayMode: 'none' }));
+      expect(screen.getByRole('option', { name: 'None' })).toBeInTheDocument();
+      expect(screen.getByRole('option', { name: 'Voltage' })).toBeDisabled();
+    });
+
+    it('enables the Voltage option once hasVoltageSnapshot is true', async () => {
+      await setup(
+        makeElectrodeLayer({ hasVoltageSnapshot: true }),
+        makeSettings({ electrodeDisplayMode: 'voltage' })
+      );
+      expect(screen.getByRole('option', { name: 'Voltage' })).not.toBeDisabled();
+    });
+
+    it('renders one option per available metric', async () => {
+      await setup(
+        makeElectrodeLayer({ availableMetrics: ['spike_count', 'hfo_rate'] }),
+        makeSettings({ electrodeDisplayMode: 'none' })
+      );
+      expect(screen.getByRole('option', { name: 'spike_count' })).toBeInTheDocument();
+      expect(screen.getByRole('option', { name: 'hfo_rate' })).toBeInTheDocument();
+    });
+
+    it('reflects the current electrodeDisplayMode setting', async () => {
+      await setup(
+        makeElectrodeLayer({ hasVoltageSnapshot: true }),
+        makeSettings({ electrodeDisplayMode: 'voltage' })
+      );
+      expect(screen.getByLabelText(/electrodeDisplayMode/i)).toHaveValue('voltage');
+    });
+
+    it('selecting a metric option calls onSettingChange with electrodeDisplayMode', async () => {
+      const { onSettingChange } = await setup(
+        makeElectrodeLayer({ availableMetrics: ['spike_count'] }),
+        makeSettings({ electrodeDisplayMode: 'none' })
+      );
+      await userEvent.selectOptions(screen.getByLabelText(/electrodeDisplayMode/i), 'spike_count');
+      expect(onSettingChange).toHaveBeenCalledWith(0, 'electrodeDisplayMode', 'spike_count');
+    });
+
+    it('does not render for a non-connectome layer', async () => {
+      renderControls([makeVolume('MRI', '/mri.nii')], [makeSettings()]);
+      await userEvent.click(screen.getByRole('button', { name: /expand.*mri/i }));
+      expect(screen.queryByLabelText(/electrodeDisplayMode/i)).not.toBeInTheDocument();
+    });
+
+    describe('auto-selecting Voltage the first time a snapshot arrives', () => {
+      it('calls onSettingChange with voltage once hasVoltageSnapshot flips from false to true', () => {
+        const onSettingChange = vi.fn();
+        const { rerender } = renderControls(
+          [makeElectrodeLayer({ hasVoltageSnapshot: false })],
+          [makeSettings({ electrodeDisplayMode: 'none' })],
+          onSettingChange
+        );
+        expect(onSettingChange).not.toHaveBeenCalled();
+
+        rerender(
+          <ImagingControls
+            layers={[makeElectrodeLayer({ hasVoltageSnapshot: true })]}
+            layerSettings={[makeSettings({ electrodeDisplayMode: 'none' })]}
+            onSettingChange={onSettingChange}
+            onDeleteLayer={vi.fn()}
+          />
+        );
+
+        expect(onSettingChange).toHaveBeenCalledTimes(1);
+        expect(onSettingChange).toHaveBeenCalledWith(0, 'electrodeDisplayMode', 'voltage');
+      });
+
+      it('does not fire when a layer already has a snapshot on its very first render', () => {
+        const onSettingChange = vi.fn();
+        renderControls(
+          [makeElectrodeLayer({ hasVoltageSnapshot: true })],
+          [makeSettings({ electrodeDisplayMode: 'voltage' })],
+          onSettingChange
+        );
+        // Only asserts the auto-select fired once for the initial mount, not that it never
+        // fires at all — see the "flips true" test above for that transition.
+        expect(onSettingChange).toHaveBeenCalledTimes(1);
+      });
+
+      it('does not re-fire on a later snapshot once the user has picked a different mode', () => {
+        const onSettingChange = vi.fn();
+        const { rerender } = renderControls(
+          [makeElectrodeLayer({ hasVoltageSnapshot: true })],
+          [makeSettings({ electrodeDisplayMode: 'none' })],
+          onSettingChange
+        );
+        expect(onSettingChange).toHaveBeenCalledTimes(1); // the initial auto-select
+        onSettingChange.mockClear();
+
+        // Simulate the user having since picked a metric, then a fresh voltage snapshot
+        // arriving (a new electrodeLayer object, still hasVoltageSnapshot: true).
+        rerender(
+          <ImagingControls
+            layers={[
+              makeElectrodeLayer({ hasVoltageSnapshot: true, availableMetrics: ['spike_count'] }),
+            ]}
+            layerSettings={[makeSettings({ electrodeDisplayMode: 'spike_count' })]}
+            onSettingChange={onSettingChange}
+            onDeleteLayer={vi.fn()}
+          />
+        );
+
+        expect(onSettingChange).not.toHaveBeenCalled();
+      });
+    });
+  });
+
+  describe('Electrode connectome colorbar toggle', () => {
+    const makeElectrodeLayer = (overrides = {}) => ({
+      kind: 'connectome',
+      type: 'Electrodes',
+      subtype: 'Intracranial EEG',
+      url: '__electrodes__',
+      hasVoltageSnapshot: false,
+      availableMetrics: [],
+      ...overrides,
+    });
+
+    // setup does two things: renders one Electrodes layer and expands it.
+    const setup = async (layer, settings, onSettingChange = vi.fn()) => {
+      renderControls([layer], [settings], onSettingChange);
+      await userEvent.click(
+        screen.getByRole('button', { name: /expand.*electrodes - intracranial eeg/i })
+      );
+      return { onSettingChange };
+    };
+
+    it('renders a Colorbar toggle for the electrode connectome layer', async () => {
+      await setup(
+        makeElectrodeLayer({ hasVoltageSnapshot: true }),
+        makeSettings({ electrodeDisplayMode: 'voltage' })
+      );
+      expect(screen.getByRole('switch', { name: /colorbar/i })).toBeInTheDocument();
+    });
+
+    it('disables the toggle when electrodeDisplayMode is None', async () => {
+      await setup(makeElectrodeLayer(), makeSettings({ electrodeDisplayMode: 'none' }));
+      expect(screen.getByRole('switch', { name: /colorbar/i })).toBeDisabled();
+    });
+
+    it('enables the toggle once a metric is selected', async () => {
+      await setup(
+        makeElectrodeLayer({ hasVoltageSnapshot: true }),
+        makeSettings({ electrodeDisplayMode: 'voltage' })
+      );
+      expect(screen.getByRole('switch', { name: /colorbar/i })).not.toBeDisabled();
+    });
+
+    it('calls onSettingChange with showColorbar when toggled on', async () => {
+      const { onSettingChange } = await setup(
+        makeElectrodeLayer({ hasVoltageSnapshot: true }),
+        makeSettings({ electrodeDisplayMode: 'voltage', showColorbar: false })
+      );
+      await userEvent.click(screen.getByRole('switch', { name: /colorbar/i }));
+      expect(onSettingChange).toHaveBeenCalledWith(0, 'showColorbar', true);
+    });
+
+    it('does nothing when clicked while disabled', async () => {
+      const { onSettingChange } = await setup(
+        makeElectrodeLayer(),
+        makeSettings({ electrodeDisplayMode: 'none' })
+      );
+      await userEvent.click(screen.getByRole('switch', { name: /colorbar/i }));
+      expect(onSettingChange).not.toHaveBeenCalled();
+    });
+
+    describe('auto-resetting showColorbar off when electrodeDisplayMode is None', () => {
+      it('resets on mount if the mode is already None but showColorbar was left on', async () => {
+        const onSettingChange = vi.fn();
+        await setup(
+          makeElectrodeLayer(),
+          makeSettings({ electrodeDisplayMode: 'none', showColorbar: true }),
+          onSettingChange
+        );
+        expect(onSettingChange).toHaveBeenCalledWith(0, 'showColorbar', false);
+      });
+
+      it('resets when the mode transitions to None while showColorbar was on', () => {
+        const onSettingChange = vi.fn();
+        const { rerender } = renderControls(
+          [makeElectrodeLayer()],
+          [makeSettings({ electrodeDisplayMode: 'voltage', showColorbar: true })],
+          onSettingChange
+        );
+        expect(onSettingChange).not.toHaveBeenCalled();
+
+        rerender(
+          <ImagingControls
+            layers={[makeElectrodeLayer()]}
+            layerSettings={[makeSettings({ electrodeDisplayMode: 'none', showColorbar: true })]}
+            onSettingChange={onSettingChange}
+            onDeleteLayer={vi.fn()}
+          />
+        );
+
+        expect(onSettingChange).toHaveBeenCalledWith(0, 'showColorbar', false);
+      });
+
+      it('does not fire when the mode is None and showColorbar is already off', async () => {
+        const onSettingChange = vi.fn();
+        await setup(
+          makeElectrodeLayer(),
+          makeSettings({ electrodeDisplayMode: 'none', showColorbar: false }),
+          onSettingChange
+        );
+        expect(onSettingChange).not.toHaveBeenCalled();
+      });
+    });
+  });
 });
