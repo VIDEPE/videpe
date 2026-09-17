@@ -546,7 +546,11 @@ function SortableSettingsCard({
                   aria-label={`${label} electrodeDisplayMode`}
                 >
                   <option value="none">None</option>
-                  <option value="voltage" disabled={!layer.hasVoltageSnapshot}>
+                  <option
+                    value="voltage"
+                    disabled={!layer.hasVoltageSnapshot}
+                    className={!layer.hasVoltageSnapshot ? 'text-foreground/50' : ''}
+                  >
                     Voltage
                   </option>
                   {(layer.availableMetrics ?? []).map((metric) => (
