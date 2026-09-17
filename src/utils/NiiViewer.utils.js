@@ -78,6 +78,7 @@ export const getInitialLayerSettings = (
     // shader quirk, so they default to showing everything (0) with no thresholding.
     cal_min: layer.url === ESI_LAYER_URL ? 0.01 : 0,
     cal_max: 1,
+    ...(layer.url === ELECTRODE_LAYER_URL ? { electrodeDisplayMode: 'none' } : {}), // Electrodes layer's display-mode dropdown
   }));
 
 // Finds the meshXRay value already active in the scene, from any existing mesh/connectome
@@ -133,6 +134,15 @@ export function fractionToCalValue(fraction, boundMin, boundMax) {
   return boundMin + fraction * (boundMax - boundMin);
 }
 
+// NiiVue's own colorbar-drawing logic only ever checks a volume/mesh's colorbarVisible flag,
+// never its opacity or visibility. This caused the bug that a hidden layer still showed 
+// the colorbar if it was toggled. isAnyColorBarActive is a scene wide master switch that checks
+// if both the showColorBar toggle and the visibility toggle are active at the same time for any layer.
+// If not, the NiiVue global show colorbar setting is deactivated
+export function isAnyColorbarActive(layerSettings) {
+  return layerSettings.some((layerSetting) => layerSetting.showColorbar && layerSetting.visible);
+}
+
 // Loads only new image volumes into nv (existing ones stay) and applies all settings.
 // Connectome/mesh layers are excluded — they're tracked separately by the build effects.
 export async function syncVolumesAndApplySettings(nv, layers, layerSettings) {
@@ -154,7 +164,9 @@ export async function syncVolumesAndApplySettings(nv, layers, layerSettings) {
     nv.setColormap(nvVolume.id, layerSetting.colormap);
     nv.setOpacity(index, layerSetting.visible ? layerSetting.opacity : 0);
     if (layerSetting.invert) nvVolume.colormapInvert = true;
-    nvVolume.colorbarVisible = layerSetting.showColorbar;
+    // A hidden layer must not keep drawing its colorbar even if showColorbar is on — see
+    // isAnyColorbarActive above.
+    nvVolume.colorbarVisible = layerSetting.showColorbar && layerSetting.visible;
     // Applied after setColormap, same requirement as the ESI volume build effect below:
     // setColormap's internal updateGLVolume() re-triggers NiiVue's own cal_min/cal_max
     // auto-scan, which would otherwise silently overwrite these right after they're set.
@@ -162,7 +174,7 @@ export async function syncVolumesAndApplySettings(nv, layers, layerSettings) {
     nvVolume.cal_min = fractionToCalValue(layerSetting.cal_min, boundMin, boundMax);
     nvVolume.cal_max = fractionToCalValue(layerSetting.cal_max, boundMin, boundMax);
   });
-  nv.opts.isColorbar = layerSettings.some((layerSetting) => layerSetting.showColorbar);
+  nv.opts.isColorbar = isAnyColorbarActive(layerSettings);
   // GL redraw to apply settings
   nv.updateGLVolume();
 }

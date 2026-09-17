@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import * as Slider from '@radix-ui/react-slider';
 import { Eye, EyeOff, ChevronDown, ChevronUp, GripVertical, Lock } from 'lucide-react';
 import { DragDropProvider } from '@dnd-kit/react';
@@ -6,11 +6,13 @@ import { useSortable } from '@dnd-kit/react/sortable';
 import { X } from 'lucide-react';
 import {
   ESI_LAYER_URL,
+  ELECTRODE_LAYER_URL,
   isImageVolumeLayer,
   DEFAULT_NODE_SCALE,
   DEFAULT_EDGE_SCALE,
 } from '@/utils/NiiViewer.utils';
 import { useDoubleClickToDefault } from '@/hooks/useSingleAndDoubleClick';
+import { cn } from '@/utils/utils';
 
 // Bounds for the connectome Node/Edge size sliders. Node radius = node.sizeValue (0-1, data-
 // driven — see convertSourcePowersToConnectome) × nodeScale, so nodeScale is a plain multiplier,
@@ -61,18 +63,27 @@ const COLORMAP_OPTIONS = [
   { value: 'turbo', label: 'Turbo' },
 ];
 
-const ToggleSwitch = ({ checked, onChange, 'aria-label': ariaLabel, title }) => (
+const ToggleSwitch = ({ checked, disabled, onChange, 'aria-label': ariaLabel, title }) => (
   <button
     type="button"
     role="switch"
+    disabled={disabled}
     aria-checked={checked}
     aria-label={ariaLabel}
-    title={title}
+    title={disabled ? 'Disabled when no node metric is selected' : title}
     onClick={() => onChange(!checked)}
-    className={`relative h-5 w-9 rounded-full transition-colors cursor-pointer ${checked ? 'bg-primary' : 'bg-border'}`}
+    className={cn(
+      `relative h-5 w-9 rounded-full transition-colors`,
+      `${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`,
+      `${checked ? 'bg-primary' : 'bg-border'}`
+    )}
   >
     <span
-      className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-background transition-transform ${checked ? 'translate-x-4' : 'translate-x-0'}`}
+      className={cn(
+        'absolute top-0.5 left-0.5 h-4 w-4 rounded-full transition-transform',
+        disabled ? 'bg-surface' : 'bg-background',
+        checked ? 'translate-x-4' : 'translate-x-0'
+      )}
     />
   </button>
 );
@@ -113,6 +124,21 @@ function SortableSettingsCard({
   const isImageVolume = isImageVolumeLayer(layer);
   // ESI layers have their own toggle for ESI Volume / ESI Connectome
   const isEsiLayer = layer.url === ESI_LAYER_URL;
+  // Narrower than isConnectome: the colorbar-only-mesh legend (see useElectrodeConnectome) is
+  // only wired up for the electrode layer specifically — an ESI layer in Connectome mode is
+  // also isConnectome but has no such wiring, so its own Colorbar toggle would render but do
+  // nothing.
+  const isElectrodeConnectome = layer.url === ELECTRODE_LAYER_URL;
+
+  // Auto switch to Node metric: 'Voltage' the first time a snapshot is available
+  // later manual choices of node metric survive any snapshot taken after that
+  const hasAutoSelectedVoltageMetric = useRef(false);
+  useEffect(() => {
+    if (!hasAutoSelectedVoltageMetric.current && layer.hasVoltageSnapshot) {
+      hasAutoSelectedVoltageMetric.current = true;
+      onSettingChange(index, 'electrodeDisplayMode', 'voltage');
+    }
+  }, [layer.hasVoltageSnapshot, index]);
 
   // Local string state — allows typing a partial value (e.g. empty string) without breaking the numeric opacity
   const [opacityStr, setOpacityStr] = useState(() => String(Math.round(settings.opacity * 100)));
@@ -184,6 +210,16 @@ function SortableSettingsCard({
   // fully-below-threshold electrode connectome can have zero nodes.
   const hasNodes = isConnectome && layer.nodes?.length > 0;
   const hasEdges = isConnectome && layer.edges?.length > 0;
+
+  // Colorbar is meaningless with no metric selected — same reasoning as hasNodes/hasEdges
+  // above disabling the size sliders. Shared by the toggle's `disabled` prop and the
+  // auto-reset effect below, so the two can't drift out of sync with each other.
+  const isElectrodeColorbarDisabled = settings.electrodeDisplayMode === 'none';
+  useEffect(() => {
+    if (isElectrodeColorbarDisabled && settings.showColorbar) {
+      onSettingChange(index, 'showColorbar', false);
+    }
+  }, [isElectrodeColorbarDisabled]);
 
   // Local string state — allows typing a partial value (e.g. empty string) without breaking
   // the numeric threshold. cal_min/cal_max are 0-1 fractions of this layer's own data range
@@ -492,6 +528,34 @@ function SortableSettingsCard({
               </div>
             )}
 
+            {/* ElectrodeDisplayMode — meaningful commectomes */}
+            {isConnectome && (
+              <div
+                className="flex items-center gap-3"
+                title="Choose what metric the electrode connectome node size+colour displays"
+              >
+                <span className="w-20 shrink-0 text-foreground select-none pointer-events-none">
+                  Node Metric
+                </span>
+                <select
+                  value={settings.electrodeDisplayMode}
+                  onChange={(e) => onSettingChange(index, 'electrodeDisplayMode', e.target.value)}
+                  className="flex-1 min-w-0 bg-surface border border-border rounded px-2 py-0.5 text-xs text-heading cursor-pointer"
+                  aria-label={`${label} electrodeDisplayMode`}
+                >
+                  <option value="none">None</option>
+                  <option value="voltage" disabled={!layer.hasVoltageSnapshot}>
+                    Voltage
+                  </option>
+                  {(layer.availableMetrics ?? []).map((metric) => (
+                    <option key={metric} value={metric}>
+                      {metric}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             {/* Threshold — meaningful for image volumes and the ESI layer (in either mode,
                 since it colors its mesh from these same fractions), but not for the
                 intracranial electrode connectome or file-loaded meshes, which have no
@@ -599,9 +663,9 @@ function SortableSettingsCard({
                   />
                 </div>
               )}
-              {/* Invert / Show colorbar — also not applicable to connectome or mesh layers */}
-              {isImageVolume && (
-                <>
+              <>
+                {/* Invert colorbar — only applicable to image layers */}
+                {isImageVolume && (
                   <div
                     className="w-1/2 flex items-center gap-2.5"
                     title="Flip the colormap direction, reversing which color represents high vs. low intensity"
@@ -614,23 +678,26 @@ function SortableSettingsCard({
                       title="Flip the colormap direction, reversing which color represents high vs. low intensity"
                     />
                   </div>
-
+                )}
+                {/* Show colorbar — applicable to volume and electrode connectome layers (the latter through custom loophole). */}
+                {(isImageVolume || isElectrodeConnectome) && (
                   <div
                     className="w-1/2 flex items-center gap-2.5"
                     title="Show or hide the color scale legend for this layer"
                   >
-                    <span className="text-foreground select-none pointer-events-none">
+                    <span className={`text-foreground select-none pointer-events-none`}>
                       Colorbar
                     </span>
                     <ToggleSwitch
                       checked={settings.showColorbar}
+                      disabled={isElectrodeColorbarDisabled}
                       onChange={(value) => onSettingChange(index, 'showColorbar', value)}
                       aria-label={`Show ${label} colorbar`}
                       title="Show or hide the color scale legend for this layer"
                     />
                   </div>
-                </>
-              )}
+                )}
+              </>
               {/* Delete layer button */}
               <div className="flex items-center gap-2.5 ml-auto">
                 {/* ml-auto pushes the close button to the right edge */}

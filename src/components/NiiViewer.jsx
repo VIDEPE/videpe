@@ -26,6 +26,7 @@ import {
   syncVolumesAndApplySettings,
   syncMeshesAndApplySettings,
   revokeLayerUrls,
+  isAnyColorbarActive,
   ESI_LAYER_URL,
   ELECTRODE_LAYER_URL,
 } from '../utils/NiiViewer.utils';
@@ -65,6 +66,13 @@ function applyVolumeSettingChange({
 
   if (key === 'visible') {
     nv.setOpacity(nvIndex, value ? settings.opacity : 0);
+    // A hidden volume must not keep drawing its colorbar either — NiiVue only checks
+    // colorbarVisible, never opacity, when deciding what to draw. Don't touch
+    // settings.showColorbar itself (the persisted preference) — just mirror visibility onto
+    // colorbarVisible, so the colorbar reappears on its own once the volume is shown again.
+    nvVolume.colorbarVisible = value && settings.showColorbar;
+    nv.opts.isColorbar = isAnyColorbarActive(nextLayerSettings);
+    nv.updateGLVolume();
   } else if (key === 'opacity') {
     // Throttle to one GL redraw per frame — cancels any pending rAF so only the latest drag value redraws
     if (settings.visible) {
@@ -84,8 +92,11 @@ function applyVolumeSettingChange({
     nvVolume.colormapInvert = value;
     nv.updateGLVolume();
   } else if (key === 'showColorbar') {
-    nvVolume.colorbarVisible = value;
-    nv.opts.isColorbar = nextLayerSettings.some((layerSetting) => layerSetting.showColorbar);
+    // Same principle as the 'visible' branch above, the other direction: toggling the
+    // preference on while the volume happens to be hidden shouldn't draw anything until it's
+    // shown again.
+    nvVolume.colorbarVisible = value && settings.visible;
+    nv.opts.isColorbar = isAnyColorbarActive(nextLayerSettings);
     nv.updateGLVolume();
   } else if (key === 'cal_min' || key === 'cal_max' || key === 'cal_range') {
     // Throttle to one GL redraw per frame — cancels any pending rAF so only the latest drag value redraws
