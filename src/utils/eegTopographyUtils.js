@@ -508,20 +508,21 @@ export function buildElectrodeLayer({ matched, voltages }) {
 /**
  * Recomputes `colorValue`/`sizeValue` on a connectome's nodes for the Electrode Display
  * dropdown's selected mode, without mutating the input — always returns new node objects
- * (or `nodes` itself, unchanged, for `'voltage'`) so the caller can freely re-derive any
- * mode from the same untouched `electrodeLayer.nodes`, any number of times, in either
- * direction. Mutating in place would permanently destroy the original voltage-coded
- * values the first time a user switches away from Voltage mode.
+ * so the caller can freely re-derive any mode from the same untouched
+ * `electrodeLayer.nodes`, any number of times, in either direction. Mutating in place
+ * would permanently destroy the original voltage-coded values the first time a user
+ * switches away from Voltage mode.
  *
  * @param {{ name, x, y, z, colorValue, sizeValue, metrics: object }[]} nodes - from
  *   buildElectrodeLayer/buildIntracranialConnectome/buildSurfaceEegConnectome, already
  *   voltage-coded (colorValue = voltage, sizeValue = 1).
  * @param {'voltage' | 'none' | string} electrodeDisplayMode - the dropdown's selected
  *   `<option value>` (lowercase machine value, not its capitalized display label —
- *   see ImagingControls' Electrode Display dropdown). `'voltage'` passes `nodes` through
- *   unchanged (already correct — see above); `'none'` resets to plain, uncoloured,
- *   fixed-size positions; anything else is looked up as a metric name in each node's
- *   `metrics`.
+ *   see ImagingControls' Electrode Display dropdown). `'voltage'` keeps each node's
+ *   existing colorValue and sizes it against the current snapshot's own max absolute
+ *   voltage (voltages can swing negative, so this normalises by magnitude, not raw
+ *   value); `'none'` resets to plain, uncoloured, fixed-size positions; anything else is
+ *   looked up as a metric name in each node's `metrics`.
  * @param {Object<string, number>} metricMax - from buildElectrodeLayer, the max absolute
  *   value of each metric — used to normalise a metric mode's `sizeValue` into 0-1, the
  *   same range `sizeValue` uses everywhere else (see ImagingControls' Node Size slider).
@@ -529,23 +530,30 @@ export function buildElectrodeLayer({ matched, voltages }) {
  *   missing the selected metric gets `colorValue: 0, sizeValue: 0`, not an error.
  */
 export function applyElectrodeDisplayMode(nodes, electrodeDisplayMode, metricMax) {
-  if (electrodeDisplayMode === 'voltage') {
-    // already voltage-coded, return nodes unchanged
-    return nodes;
-  }
-  if (electrodeDisplayMode === 'none') {
-    // if in none mode, then fix the colorvalue and sizeValue
-    return nodes.map((node) => ({ ...node, colorValue: 0, sizeValue: 1 }));
-  }
-
-  // Other modes set a metricMax dependent size and colour
+  // metric Max is used to scale node size below
   const maxOfMetric = metricMax[electrodeDisplayMode] ?? 0;
+  // voltage max, like metric max, scales node size in voltage mode
+  const voltageMax = Math.max(...nodes.map((node) => Math.abs(node.colorValue)), 0);
+
   return nodes.map((node) => {
-    const value = node.metrics[electrodeDisplayMode] ?? 0;
-    return {
-      ...node,
-      colorValue: value,
-      sizeValue: maxOfMetric > 0 ? Math.abs(value) / maxOfMetric : 0,
-    };
+    let colorValue = node.colorValue;
+    let sizeValue;
+
+    // 'none'-mode: node are fixed size and uncoloured
+    if (electrodeDisplayMode === 'none') {
+      colorValue = 0;
+      sizeValue = 1;
+    }
+    // voltage mode: colorValue already voltage-coded (see default above), size relative to voltageMax, falback to 0
+    else if (electrodeDisplayMode === 'voltage') {
+      sizeValue = voltageMax > 0 ? Math.abs(colorValue) / voltageMax : 0;
+    }
+    // metric modes: colour and size relative to that metric's precomputed max
+    else {
+      colorValue = node.metrics[electrodeDisplayMode] ?? 0;
+      sizeValue = maxOfMetric > 0 ? Math.abs(colorValue) / maxOfMetric : 0;
+    }
+
+    return { ...node, colorValue, sizeValue };
   });
 }
