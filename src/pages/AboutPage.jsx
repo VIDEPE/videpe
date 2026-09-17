@@ -412,6 +412,10 @@ export const AboutPage = () => {
                     Supports custom electrode positions via <code>.elc</code> or <code>.tsv</code>{' '}
                     files
                   </li>
+                  <li>
+                    Colour/size the 3D electrode connectome nodes by any custom metric read from
+                    extra <code>.tsv</code> columns, not just voltage
+                  </li>
                 </ul>
               </div>
             </div>
