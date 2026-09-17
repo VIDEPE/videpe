@@ -61,7 +61,8 @@ const COLORMAP_OPTIONS = [
   { value: 'mako', label: 'Mako' },
   { value: 'rocket', label: 'Rocket' },
   { value: 'turbo', label: 'Turbo' },
-  { value: 'random', label: 'Random (i.e. for Atlas)' },
+  { value: 'random', label: 'Random (NiiVue preset)' },
+  { value: 'randomised', label: 'Random (reshuffled each time)' },
 ];
 
 const ToggleSwitch = ({ checked, disabled, onChange, 'aria-label': ariaLabel, title }) => (

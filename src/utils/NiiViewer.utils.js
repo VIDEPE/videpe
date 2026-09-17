@@ -124,7 +124,7 @@ export function getCalBounds(layer, nvVolume, colormapValue) {
     return { boundMin: layer.boundMin, boundMax: layer.boundMax };
   }
   // if colormap is random, use the global_min/max to set the cal_min/max to ensure each index gets a random number
-  if (colormapValue === 'random') {
+  if (colormapValue === 'randomised') {
     return { boundMin: nvVolume?.global_min ?? 0, boundMax: nvVolume?.global_max ?? 1 };
   }
   // for all the other colormaps it is better to use the robost_min/max to avoid blown out values
@@ -178,15 +178,20 @@ export const MAX_RANDOM_COLORMAP_LABELS = 256;
 
 export function makeRandomColormap(minIndex, maxIndex) {
   const nLabels = maxIndex - minIndex + 1;
+  // assign as many colours as there are indices
   const labelColors = Array.from({ length: nLabels }, () => hslToRgb(Math.random(), 1, 0.5));
 
   const R = [];
   const G = [];
   const B = [];
   const I = [];
+  // divide the range [minIndex, maxIndex] into 256 spots and assign for each spot the color value that is closest
   for (let lutSlot = 0; lutSlot < MAX_RANDOM_COLORMAP_LABELS; lutSlot++) {
+    // work out which raw label value this LUT texel should show
     const labelValue = Math.round(minIndex + (lutSlot / 255) * (maxIndex - minIndex));
-    const [red, green, blue] = labelColors[labelValue - minIndex];
+    // convert that raw label value back into a 0-based index into labelColors
+    const labelColorIndex = labelValue - minIndex;
+    const [red, green, blue] = labelColors[labelColorIndex];
     R.push(red);
     G.push(green);
     B.push(blue);
@@ -198,8 +203,8 @@ export function makeRandomColormap(minIndex, maxIndex) {
 // 'random' is registered as a one-off named colormap per volume (nv.setColormap only resolves
 // by name); everything else goes straight through as a real NiiVue colormap name.
 export function applyColormap(nv, nvVolume, colormapValue) {
-  if (colormapValue === 'random') {
-    const colormapKey = `random-${nvVolume.id}`;
+  if (colormapValue === 'randomised') {
+    const colormapKey = `randomised-${nvVolume.id}`;
     nv.addColormap(colormapKey, makeRandomColormap(nvVolume.global_min, nvVolume.global_max));
     nv.setColormap(nvVolume.id, colormapKey);
   } else {

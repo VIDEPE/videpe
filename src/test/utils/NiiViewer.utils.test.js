@@ -116,18 +116,18 @@ describe('getCalBounds', () => {
   it('reads global_min/global_max off the NVImage when the colormap is random', () => {
     const layer = { url: 'blob:atlas' };
     const nvVolume = { robust_min: 10, robust_max: 200, global_min: 0, global_max: 115 };
-    expect(getCalBounds(layer, nvVolume, 'random')).toEqual({ boundMin: 0, boundMax: 115 });
+    expect(getCalBounds(layer, nvVolume, 'randomised')).toEqual({ boundMin: 0, boundMax: 115 });
   });
 
   it('defaults to 0/1 for a random colormap when nvVolume is missing', () => {
     const layer = { url: 'blob:atlas' };
-    expect(getCalBounds(layer, undefined, 'random')).toEqual({ boundMin: 0, boundMax: 1 });
+    expect(getCalBounds(layer, undefined, 'randomised')).toEqual({ boundMin: 0, boundMax: 1 });
   });
 
   it('still uses the ESI layer bounds even if its colormap happens to be random', () => {
     const layer = { url: ESI_LAYER_URL, boundMin: 2, boundMax: 20 };
     const nvVolume = { global_min: 0, global_max: 999 };
-    expect(getCalBounds(layer, nvVolume, 'random')).toEqual({ boundMin: 2, boundMax: 20 });
+    expect(getCalBounds(layer, nvVolume, 'randomised')).toEqual({ boundMin: 2, boundMax: 20 });
   });
 });
 
@@ -173,21 +173,21 @@ describe('applyColormap', () => {
     const nv = { addColormap: vi.fn(), setColormap: vi.fn() };
     const nvVolume = { id: 'vol-1', global_min: 0, global_max: 5 };
 
-    applyColormap(nv, nvVolume, 'random');
+    applyColormap(nv, nvVolume, 'randomised');
 
     expect(nv.addColormap).toHaveBeenCalledTimes(1);
     const [key, cmap] = nv.addColormap.mock.calls[0];
-    expect(key).toBe('random-vol-1');
+    expect(key).toBe('randomised-vol-1');
     expect(cmap.R).toHaveLength(MAX_RANDOM_COLORMAP_LABELS);
     expect(nv.setColormap).toHaveBeenCalledWith('vol-1', key);
   });
 
   it('gives each volume its own colormap key', () => {
     const nv = { addColormap: vi.fn(), setColormap: vi.fn() };
-    applyColormap(nv, { id: 'vol-1', global_min: 0, global_max: 5 }, 'random');
-    applyColormap(nv, { id: 'vol-2', global_min: 0, global_max: 5 }, 'random');
-    expect(nv.addColormap.mock.calls[0][0]).toBe('random-vol-1');
-    expect(nv.addColormap.mock.calls[1][0]).toBe('random-vol-2');
+    applyColormap(nv, { id: 'vol-1', global_min: 0, global_max: 5 }, 'randomised');
+    applyColormap(nv, { id: 'vol-2', global_min: 0, global_max: 5 }, 'randomised');
+    expect(nv.addColormap.mock.calls[0][0]).toBe('randomised-vol-1');
+    expect(nv.addColormap.mock.calls[1][0]).toBe('randomised-vol-2');
   });
 
   it('passes a real colormap name straight through without registering anything', () => {
