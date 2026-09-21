@@ -1239,15 +1239,7 @@ describe('EegMontageEditor', () => {
 
       const committed = onApplyMontageChannels.mock.calls[0][0];
       expect(committed).toEqual([
-        {
-          id: expect.any(String),
-          channel: 'FP1',
-          reference: 'FP2',
-          color: null,
-          highPass: null,
-          lowPass: null,
-          notch: null,
-        },
+        { id: expect.any(String), channel: 'FP1', reference: 'FP2', color: null },
       ]);
     });
 

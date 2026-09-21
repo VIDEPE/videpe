@@ -59,31 +59,13 @@ describe('useMontageTemplates', () => {
     expect(result.current[0]).toEqual({
       name: 'AnyWave Template',
       path: 'montage_files/anywave.mtg',
-      rows: [
-        {
-          channel: 'FP1',
-          reference: null,
-          color: 'darkblue',
-          highPass: null,
-          lowPass: null,
-          notch: null,
-        },
-      ],
+      rows: [{ channel: 'FP1', reference: null, color: 'darkblue' }],
       channelTypes: { FP1: 'eeg' },
     });
     expect(result.current[1]).toEqual({
       name: 'Cartool Template',
       path: 'montage_files/cartool.mtg',
-      rows: [
-        {
-          channel: 'FP1',
-          reference: 'F3',
-          color: null,
-          highPass: null,
-          lowPass: null,
-          notch: null,
-        },
-      ],
+      rows: [{ channel: 'FP1', reference: 'F3', color: null }],
       channelTypes: {},
     });
   });

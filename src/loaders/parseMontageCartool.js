@@ -4,8 +4,7 @@
 // interchangeably).
 //
 // Returns:
-//   rows          – [{ channel, reference, color: null, highPass: null, lowPass: null,
-//                    notch: null }], always bipolar (reference set)
+//   rows          – [{ channel, reference, color: null }], always bipolar (reference set)
 //   channelTypes  – {} always
 //
 // Throws when the text isn't at least a name line followed by one or more valid
@@ -36,7 +35,7 @@ export function parseCartoolMontage(text) {
     }
 
     const [channel, reference] = chanRefPair;
-    return { channel, reference, color: null, highPass: null, lowPass: null, notch: null };
+    return { channel, reference, color: null };
   });
 
   return { rows, channelTypes: {} };

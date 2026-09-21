@@ -4,16 +4,7 @@ import { parseAnyWaveMontage } from '@/loaders/parseMontageAnywave';
 
 describe('toAnyWaveMontage', () => {
   it('serializes rows + channel types into AnyWave XML', () => {
-    const rows = [
-      {
-        channel: 'FP2',
-        reference: null,
-        color: 'darkblue',
-        highPass: null,
-        lowPass: null,
-        notch: null,
-      },
-    ];
+    const rows = [{ channel: 'FP2', reference: null, color: 'darkblue' }];
     const channelSettings = { FP2: { type: 'eeg', bad: false } };
     const xml = toAnyWaveMontage(rows, channelSettings);
     expect(xml).toContain('<Channel name="FP2">');
@@ -24,8 +15,8 @@ describe('toAnyWaveMontage', () => {
 
   it('maps seeg/other channel types to SEEG/Other', () => {
     const rows = [
-      { channel: 'A1', reference: null, color: null, highPass: null, lowPass: null, notch: null },
-      { channel: 'B1', reference: null, color: null, highPass: null, lowPass: null, notch: null },
+      { channel: 'A1', reference: null, color: null },
+      { channel: 'B1', reference: null, color: null },
     ];
     const channelSettings = {
       A1: { type: 'seeg', bad: false },
@@ -46,15 +37,8 @@ describe('toAnyWaveMontage', () => {
 
   it('round-trips through parseAnyWaveMontage', () => {
     const rows = [
-      {
-        channel: 'FP2',
-        reference: null,
-        color: 'darkblue',
-        highPass: null,
-        lowPass: null,
-        notch: null,
-      },
-      { channel: 'F3', reference: 'Fz', color: null, highPass: null, lowPass: null, notch: null },
+      { channel: 'FP2', reference: null, color: 'darkblue' },
+      { channel: 'F3', reference: 'Fz', color: null },
     ];
     const channelSettings = {
       FP2: { type: 'eeg', bad: false },

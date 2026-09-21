@@ -17,14 +17,7 @@ describe('parseAnyWaveMontage', () => {
   it('parses the real AnyWave sample file', () => {
     const { rows, channelTypes } = parseAnyWaveMontage(ANYWAVE_FIXTURE);
     expect(rows).toHaveLength(25);
-    expect(rows[0]).toEqual({
-      channel: 'FP2',
-      reference: null,
-      color: 'darkblue',
-      highPass: null,
-      lowPass: null,
-      notch: null,
-    });
+    expect(rows[0]).toEqual({ channel: 'FP2', reference: null, color: 'darkblue' });
     expect(rows.every((r) => r.reference === null)).toBe(true);
     expect(rows.every((r) => channelTypes[r.channel] === 'eeg')).toBe(true);
   });
@@ -55,14 +48,7 @@ describe('parseAnyWaveMontage', () => {
 	</Channel>
 </Montage>`;
     const { rows } = parseAnyWaveMontage(xml);
-    expect(rows[0]).toEqual({
-      channel: 'F3',
-      reference: 'Fz',
-      color: 'red',
-      highPass: null,
-      lowPass: null,
-      notch: null,
-    });
+    expect(rows[0]).toEqual({ channel: 'F3', reference: 'Fz', color: 'red' });
   });
 
   it.each([

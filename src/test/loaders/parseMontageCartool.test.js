@@ -15,14 +15,7 @@ describe('parseCartoolMontage', () => {
     const { rows, channelTypes } = parseCartoolMontage(CARTOOL_FIXTURE);
     expect(rows).toHaveLength(18);
     expect(channelTypes).toEqual({});
-    expect(rows[0]).toEqual({
-      channel: 'FP2',
-      reference: 'F8',
-      color: null,
-      highPass: null,
-      lowPass: null,
-      notch: null,
-    });
+    expect(rows[0]).toEqual({ channel: 'FP2', reference: 'F8', color: null });
     expect(rows.every((r) => r.reference !== null)).toBe(true);
   });
 
@@ -32,9 +25,6 @@ describe('parseCartoolMontage', () => {
       channel: 'C3',
       reference: 'P3',
       color: null,
-      highPass: null,
-      lowPass: null,
-      notch: null,
     });
   });
 

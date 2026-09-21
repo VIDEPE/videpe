@@ -1510,24 +1510,19 @@ describe('EegViewer — loading toast', () => {
 // EEG1 = [1-4, 2-5, 3-6, 4-7] = [-3,-3,-3,-3].
 
 describe('EegViewer — montage', () => {
-  // Referencing used to be a global dropdown in the toolbar; it now lives entirely in the
-  // montage editor (per-row), so only the button that opens that editor should remain here.
-  it('renders a Montage button and no separate reference dropdown', async () => {
+  it('renders a Montage button, with no global reference dropdown (referencing now lives in the montage editor / is unconditional for topography)', async () => {
     await renderViewer();
     expect(screen.getByRole('button', { name: 'Montage' })).toBeInTheDocument();
     expect(screen.queryByLabelText(/montage/i)).not.toBeInTheDocument();
   });
 
-  it("shows each channel's raw, unreferenced samples when no montage rows are configured", async () => {
+  it('does not re-reference the channel plot data (the waveform re-references per row via the montage editor; topography/connectome/ESI always use the common-average reference instead)', async () => {
     const { default: UplotReactMock } = await import('uplot-react');
     await renderViewer();
 
-    // mock.calls mixes every channel's uPlot instance plus the fixed x-axis strip (data has
-    // no [1] there). Per-row calls always have 2-element data, in channelNames order, so
-    // every 3rd one starting at index 0 is EEG1's — take the last for the settled render.
-    const perRowCalls = UplotReactMock.mock.calls.filter((c) => c[0].data.length === 2);
-    const eeg1Calls = perRowCalls.filter((_, i) => i % channelNames.length === 0);
-    const eeg1Data = Array.from(eeg1Calls.at(-1)[0].data[1]);
+    // EEG1 raw values for the visible window are [1,2,3] — unchanged, since with no montage
+    // rows configured every row falls back to its raw channel (referenceMode: null).
+    const eeg1Data = Array.from(UplotReactMock.mock.calls[0][0].data[1]);
     expect(eeg1Data).toEqual([1, 2, 3]);
   });
 });
