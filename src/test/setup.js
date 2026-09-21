@@ -19,9 +19,3 @@ Object.defineProperty(window, 'matchMedia', {
     removeEventListener: vi.fn(),
   })),
 });
-
-// jsdom's URL.createObjectURL/revokeObjectURL crash on a real Blob/File — stub them out.
-// Tests never fetch the resulting URL, so a fake string is enough.
-let objectUrlCounter = 0;
-global.URL.createObjectURL = vi.fn(() => `blob:mock-${objectUrlCounter++}`);
-global.URL.revokeObjectURL = vi.fn();

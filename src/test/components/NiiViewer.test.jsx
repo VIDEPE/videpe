@@ -1592,7 +1592,7 @@ describe('NiiViewer', () => {
       nvRef.current.loadVolumes.mockRejectedValueOnce(new Error('Image type not supported'));
 
       const input = document.querySelector('input[type="file"]');
-      await userEvent.upload(input, new File(['data'], 'notes.nii'));
+      await userEvent.upload(input, new File(['data'], 'notes.txt'));
 
       await waitFor(() =>
         expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/failed to load/i))
@@ -1615,7 +1615,7 @@ describe('NiiViewer', () => {
       nvRef.current.addVolumesFromUrl.mockRejectedValueOnce(new Error('Image type not supported'));
 
       const input = document.querySelector('input[type="file"]');
-      await userEvent.upload(input, new File(['data'], 'notes.nii'));
+      await userEvent.upload(input, new File(['data'], 'notes.txt'));
 
       await waitFor(() =>
         expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/failed to load/i))
