@@ -6,6 +6,7 @@ import {
   deriveMontageRowSamples,
   compareChannelNamesNaturally,
   buildSeegBipolarReferences,
+  getRowCrosshairPosition,
 } from '@/utils/eegViewerUtils';
 
 // ---------------------------------------------------------------------------
@@ -330,6 +331,42 @@ describe('deriveMontageRowSamples', () => {
   it('falls back to the raw channel when no referenceSeries is given at all', () => {
     const row = { channelIndex: 0, referenceIndex: null, referenceMode: 'average' };
     expect(deriveMontageRowSamples(channels, row)).toEqual([1, 2, 3]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getRowCrosshairPosition
+// ---------------------------------------------------------------------------
+
+describe('getRowCrosshairPosition', () => {
+  const matched = [
+    { channelIdx: 0, name: 'EEG1', pos: { x: 0, y: 0, z: 0 } },
+    { channelIdx: 1, name: 'EEG2', pos: { x: 10, y: 20, z: 30 } },
+  ];
+
+  it("returns the channel's own position for a row with no reference", () => {
+    const row = { channelIndex: 0, referenceIndex: null, referenceMode: null };
+    expect(getRowCrosshairPosition(row, matched)).toEqual({ x: 0, y: 0, z: 0 });
+  });
+
+  it("returns the channel's own position for an average/median-referenced row", () => {
+    const row = { channelIndex: 1, referenceIndex: null, referenceMode: 'average' };
+    expect(getRowCrosshairPosition(row, matched)).toEqual({ x: 10, y: 20, z: 30 });
+  });
+
+  it('returns the midpoint of the channel and its reference for a bipolar row', () => {
+    const row = { channelIndex: 0, referenceIndex: 1, referenceMode: null };
+    expect(getRowCrosshairPosition(row, matched)).toEqual({ x: 5, y: 10, z: 15 });
+  });
+
+  it("falls back to the channel's own position when the reference channel has no matched position", () => {
+    const row = { channelIndex: 0, referenceIndex: 99, referenceMode: null };
+    expect(getRowCrosshairPosition(row, matched)).toEqual({ x: 0, y: 0, z: 0 });
+  });
+
+  it('returns null when the channel itself has no matched position', () => {
+    const row = { channelIndex: 99, referenceIndex: null, referenceMode: null };
+    expect(getRowCrosshairPosition(row, matched)).toBeNull();
   });
 });
 

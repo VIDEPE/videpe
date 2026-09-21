@@ -2763,3 +2763,79 @@ describe('EegViewer — stack/unstack toggle', () => {
     expect(series[3].stroke()).not.toBe('rgba(0, 0, 0, 0.8)'); // EEG3 — still faded
   });
 });
+
+describe('EegViewer — clicking a channel label moves the NiiVue cursor', () => {
+  // MOCK_TSV (see top of file) matches EEG1 (-29, 84, -7) and EEG2 (29, 84, -7); EEG3 has
+  // no match. With no montage set, buildMontageDisplayRows falls back to one row per
+  // channel, so each row's own channel position is what a click should resolve to.
+  const renderWithClickHandler = async (onChannelPositionClick) => {
+    const provider = makeProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        onChannelPositionClick={onChannelPositionClick}
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+  };
+
+  it('calls onChannelPositionClick with the matched channel position on click', async () => {
+    const onChannelPositionClick = vi.fn();
+    await renderWithClickHandler(onChannelPositionClick);
+
+    await userEvent.click(screen.getByText('EEG1'));
+
+    expect(onChannelPositionClick).toHaveBeenCalledOnce();
+    // getRowCrosshairPosition's no-reference branch returns the matched electrode's `pos`
+    // as-is (which also carries `label`, unlike the bipolar branch's plain {x,y,z}) — only
+    // the coordinates matter to the NiiVue crosshair effect that consumes this.
+    expect(onChannelPositionClick).toHaveBeenCalledWith({
+      pos: expect.objectContaining({ x: -29, y: 84, z: -7 }),
+      clickId: 1,
+    });
+  });
+
+  it('does not call onChannelPositionClick for a channel with no matched position', async () => {
+    const onChannelPositionClick = vi.fn();
+    await renderWithClickHandler(onChannelPositionClick);
+
+    const label = screen.getByText('EEG3'); // not in MOCK_TSV
+    expect(label).toHaveClass('cursor-not-allowed');
+    await userEvent.click(label);
+
+    expect(onChannelPositionClick).not.toHaveBeenCalled();
+  });
+
+  it('shows a pointer cursor and an actionable tooltip for a channel with a matched position', async () => {
+    const onChannelPositionClick = vi.fn();
+    await renderWithClickHandler(onChannelPositionClick);
+
+    const label = screen.getByText('EEG1');
+    expect(label).toHaveClass('cursor-pointer');
+    expect(label).toHaveAttribute(
+      'title',
+      "EEG1 — click to move the 3D cursor to this electrode's position"
+    );
+  });
+
+  it('increments clickId on every click, even for the same channel', async () => {
+    const onChannelPositionClick = vi.fn();
+    await renderWithClickHandler(onChannelPositionClick);
+
+    await userEvent.click(screen.getByText('EEG1'));
+    await userEvent.click(screen.getByText('EEG1'));
+
+    expect(onChannelPositionClick).toHaveBeenNthCalledWith(1, {
+      pos: expect.objectContaining({ x: -29, y: 84, z: -7 }),
+      clickId: 1,
+    });
+    expect(onChannelPositionClick).toHaveBeenNthCalledWith(2, {
+      pos: expect.objectContaining({ x: -29, y: 84, z: -7 }),
+      clickId: 2,
+    });
+  });
+});

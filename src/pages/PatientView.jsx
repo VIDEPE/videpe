@@ -57,6 +57,8 @@ export const PatientView = () => {
   const [electrodeRenderEnabled, setElectrodeRenderEnabled] = useState(false); // boolean to enable/disable the 3D rendering of the electrodes
   const [esiEnabled, setEsiEnabled] = useState(false); // boolean to enable/disable showing the Electrical Source Imaging layer — same gating pattern as electrodeRenderEnabled
 
+  const [clickedEegChannelPos, setClickedEegChannelPos] = useState({ pos: null, clickId: null });
+
   const {
     inverseSolutionFileName,
     esiChannelMatchCount,
@@ -311,6 +313,7 @@ export const PatientView = () => {
               onElectrodeRenderChange={setElectrodeRenderEnabled}
               esiEnabled={esiEnabled}
               onEsiEnabledChange={setEsiEnabled}
+              onChannelPositionClick={setClickedEegChannelPos}
             />
           ) : (
             <div className="h-full p-2">
@@ -351,6 +354,7 @@ export const PatientView = () => {
               onNiiNvReady={() => setNiiNvReady(true)}
               onElectrodeLayerDismissed={() => setElectrodeRenderEnabled(false)}
               onLoadError={handleLoadError}
+              clickedEegChannelPos={clickedEegChannelPos}
             />
           ) : (
             <div className="h-full p-2">
