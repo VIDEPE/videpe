@@ -150,8 +150,6 @@ export function EegMontageEditor({
     if (e.target === e.currentTarget) setSelectedChannels(new Set());
   }, []);
 
-
-
   // Adds one new montage row per currently-selected channel, then clears the selection so
   // the next pick starts fresh. Rows aren't deduped against existing ones — a channel can
   // end up with several rows (e.g. two different bipolar derivations).
@@ -300,7 +298,13 @@ export function EegMontageEditor({
         const { rows, channelTypes } = await parseMontageFile(file);
         setDraftMontageChannels(
           rows.map((row) =>
-            makeMontageRow(row.channel, { reference: row.reference, color: row.color, highPass: row.highPass, lowPass: row.lowPass, notch: row.notch})
+            makeMontageRow(row.channel, {
+              reference: row.reference,
+              color: row.color,
+              highPass: row.highPass,
+              lowPass: row.lowPass,
+              notch: row.notch,
+            })
           )
         );
         // AnyWave files carry a per-channel type alongside each row; patch those into the

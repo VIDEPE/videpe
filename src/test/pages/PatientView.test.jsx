@@ -1512,6 +1512,11 @@ describe('PatientView — cross-panel 3D rotation sync', () => {
     await act(async () => {
       await getEegOnFiles()([makeFile('sub01.vhdr'), makeFile('sub01.eeg')]);
     });
+    // The mocked NiiViewer/EegViewer panels mount asynchronously after the file-drop
+    // handlers above resolve — wait for both before reading off their trigger buttons,
+    // rather than assuming the two `act` calls alone leave the DOM already settled.
+    await waitFor(() => expect(screen.getByTestId('nii-viewer')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId('eeg-viewer')).toBeInTheDocument());
 
     const [nvNii, nvTopo] = Niivue.mock.results.map((r) => r.value);
     return { nvNii, nvTopo };

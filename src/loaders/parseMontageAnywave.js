@@ -39,9 +39,14 @@ export function parseAnyWaveMontage(text) {
     const colorText = (channel.querySelector('color')?.textContent ?? '').trim(); // example: <color>black</color>
 
     // filters follow a slightly different format: <filters lowPass="-1" highPass="-1" notch="0"/>
-    const lowPassText = channel.querySelector('filters')?.getAttribute('lowPass') ?? '';
-    const highPassText = channel.querySelector('filters')?.getAttribute('highPass') ?? '';
-    const notchText = channel.querySelector('filters')?.getAttribute('notch') ?? '';
+    // No <filters> element at all, and a <filters> element missing one of these attributes,
+    // are two different "missing" values in the DOM (undefined vs null) that Number() treats
+    // inconsistently (Number(undefined) is NaN, but Number(null) is 0) — so both are routed
+    // to null explicitly here, before Number() ever runs on either.
+    const filtersEl = channel.querySelector('filters');
+    const lowPassAttr = filtersEl?.getAttribute('lowPass');
+    const highPassAttr = filtersEl?.getAttribute('highPass');
+    const notchAttr = filtersEl?.getAttribute('notch');
     // AnyWave always renders on a black canvas, so its files use the literal 'black' or
     // 'white' to mean "no color explicitly chosen" — not an intentional color pick. This
     // app's "Default" (color: null) is theme-adaptive, so fold both of AnyWave's
@@ -49,11 +54,10 @@ export function parseAnyWaveMontage(text) {
     // dark mode / light mode respectively).
     const isAnyWaveDefaultColor = ['black', 'white'].includes(colorText.toLowerCase());
     const color = colorText && !isAnyWaveDefaultColor ? colorText : null;
-    // Anywave uses -1 for inactive lowPass/highPass and 0 for inactive notch
-    // map all of these to zero though, as a 0 Hz notch filter is nonsensical.
-    const lowPassNum = Number(lowPassText);
-    const highPassNum = Number(highPassText);
-    const notchNum = Number(notchText);
+    // Anywave uses -1 for inactive lowPass/highPass and 0 for inactive notch.
+    const lowPassNum = lowPassAttr != null ? Number(lowPassAttr) : null;
+    const highPassNum = highPassAttr != null ? Number(highPassAttr) : null;
+    const notchNum = notchAttr != null ? Number(notchAttr) : null;
     const lowPass = !Number.isFinite(lowPassNum) || lowPassNum < 0 ? null : lowPassNum;
     const highPass = !Number.isFinite(highPassNum) || highPassNum < 0 ? null : highPassNum;
     const notch = !Number.isFinite(notchNum) || notchNum <= 0 ? null : notchNum; // note <=0 as anywave saves empty notch as 0, instead of -1
