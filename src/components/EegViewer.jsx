@@ -27,6 +27,7 @@ import {
   buildMontageDisplayRows,
   deriveMontageRowSamples,
   computeReferenceSeries,
+  getRowCrosshairPosition,
 } from '@/utils/eegViewerUtils';
 import { useEegBuffer } from '@/loaders/eegBuffer';
 import { useContainerResize } from '@/hooks/useContainerResize';
@@ -192,6 +193,7 @@ export const EegViewer = ({
   onElectrodeRenderChange, // handle for electrodeRender changes
   esiEnabled, // boolean — owned by PatientView => whether the Electrical Source Imaging layer is shown
   onEsiEnabledChange, // handle for esiEnabled changes
+  onChannelPositionClick, // handle for clicking the channel label to move the NiiVue cursor to that electrode's location
 }) => {
   const { isDarkMode } = useTheme();
   const syncKey = 'eeg-sync'; // shared across all channels to link their interactions
@@ -569,6 +571,11 @@ export const EegViewer = ({
     }
   }, [plotWidth, onViewReady]);
 
+  // eegLabelClickId is the count how many times a eeg channel label has been clicked
+  // this is used as unique ID to ensure clicking the same channelPos again still triggers
+  // moving the cursor despite the state not having changed (=> still the same pos)
+  const clickEegLabelIdRef = useRef(0);
+
   // Timeline scrubber drag (pan/resize the visible window)
   const { scrubberRef, isDragging, startDrag } = useScrubberDrag({
     tMax,
@@ -668,73 +675,89 @@ export const EegViewer = ({
           }}
         />
       )}
-      {displayRows.map((row, rowIndex) => (
-        // Channel divider below each row
-        <div
-          key={row.id}
-          style={{
-            height: plotHeight,
-            overflow: 'visible',
-            borderBottom: `1px solid ${isDarkMode ? ROW_DIVIDER_COLOR_DARK : ROW_DIVIDER_COLOR_LIGHT}`,
-          }}
-          className="relative"
-        >
-          {/* Row name label */}
-          <span
-            className="absolute left-0 top-1/2 -translate-y-1/2 text-xs text-center select-none z-10 px-0.5 truncate"
-            style={{ width: Y_AXIS_WIDTH }}
-            title={row.name}
-          >
-            {row.name}
-          </span>
-          {/* Zero-line at y=0, aligned with the plot area (not drawn by uPlot to avoid grid issues) */}
+      {displayRows.map((row, rowIndex) => {
+        // Resolved once per row so the label's cursor/tooltip/click handler all agree on
+        // whether this channel actually has a position to jump the 3D cursor to.
+        const crosshairPos = getRowCrosshairPosition(row, matched);
+        return (
+          // Channel divider below each row
           <div
-            className="absolute pointer-events-none"
+            key={row.id}
             style={{
-              top: '50%',
-              left: Y_AXIS_WIDTH,
-              right: PLOT_RIGHT_PAD,
-              height: 1,
-              backgroundColor: isDarkMode ? ZERO_LINE_COLOR_DARK : ZERO_LINE_COLOR_LIGHT,
+              height: plotHeight,
+              overflow: 'visible',
+              borderBottom: `1px solid ${isDarkMode ? ROW_DIVIDER_COLOR_DARK : ROW_DIVIDER_COLOR_LIGHT}`,
             }}
-          />
-          {/* Canvas wrapper — absolutely positioned to center the taller canvas in the lane */}
-          <div
-            style={{
-              position: 'absolute',
-              top: -((plotHeight * (OVERDRAW - 1)) / 2),
-              left: 0,
-            }}
+            className="relative"
           >
-            <UplotReact
-              options={buildChannelOptions({
-                isDarkMode,
-                syncKey,
-                width: plotWidth,
-                height: plotHeight * OVERDRAW,
-                windowSize,
-                startTime,
-                yScale,
-                color: row.color,
-                stacked: false,
-              })}
-              data={displayedData[rowIndex]}
-              onCreate={(u) => {
-                {
-                  /* click listener that converts the click's x-position into a timestamp => sets topoTimepoint */
-                }
-                u.over.addEventListener('click', () => {
-                  const t = u.posToVal(u.cursor.left, 'x');
-                  if (!isNaN(t)) {
-                    setTopoTimepoint(t);
-                  }
-                });
+            {/* Channel/Montage Row name label */}
+            <span
+              className={`absolute left-0 top-1/2 -translate-y-1/2 text-xs text-center select-none z-10 px-0.5 truncate ${crosshairPos ? 'cursor-pointer' : 'cursor-not-allowed'}`}
+              style={{ width: Y_AXIS_WIDTH }}
+              title={
+                crosshairPos
+                  ? `${row.name} — click to move the 3D cursor to this electrode's position`
+                  : `${row.name} — click to move the 3D cursor to this electrode's position (unavailable: load an electrode positions file first)`
+              }
+              onClick={() =>
+                crosshairPos &&
+                onChannelPositionClick({
+                  pos: crosshairPos,
+                  clickId: ++clickEegLabelIdRef.current,
+                })
+              }
+            >
+              {row.name}
+            </span>
+            {/* Zero-line at y=0, aligned with the plot area (not drawn by uPlot to avoid grid issues) */}
+            <div
+              className="absolute pointer-events-none"
+              style={{
+                top: '50%',
+                left: Y_AXIS_WIDTH,
+                right: PLOT_RIGHT_PAD,
+                height: 1,
+                backgroundColor: isDarkMode ? ZERO_LINE_COLOR_DARK : ZERO_LINE_COLOR_LIGHT,
               }}
-              onDelete={() => {}}
             />
+            {/* Canvas wrapper — absolutely positioned to center the taller canvas in the lane */}
+            <div
+              style={{
+                position: 'absolute',
+                top: -((plotHeight * (OVERDRAW - 1)) / 2),
+                left: 0,
+              }}
+            >
+              <UplotReact
+                options={buildChannelOptions({
+                  isDarkMode,
+                  syncKey,
+                  width: plotWidth,
+                  height: plotHeight * OVERDRAW,
+                  windowSize,
+                  startTime,
+                  yScale,
+                  color: row.color,
+                  stacked: false,
+                })}
+                data={displayedData[rowIndex]}
+                onCreate={(u) => {
+                  {
+                    /* click listener that converts the click's x-position into a timestamp => sets topoTimepoint */
+                  }
+                  u.over.addEventListener('click', () => {
+                    const t = u.posToVal(u.cursor.left, 'x');
+                    if (!isNaN(t)) {
+                      setTopoTimepoint(t);
+                    }
+                  });
+                }}
+                onDelete={() => {}}
+              />
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 

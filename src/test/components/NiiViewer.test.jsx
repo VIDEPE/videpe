@@ -1592,7 +1592,7 @@ describe('NiiViewer', () => {
       nvRef.current.loadVolumes.mockRejectedValueOnce(new Error('Image type not supported'));
 
       const input = document.querySelector('input[type="file"]');
-      await userEvent.upload(input, new File(['data'], 'notes.txt'));
+      await userEvent.upload(input, new File(['data'], 'notes.nii'));
 
       await waitFor(() =>
         expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/failed to load/i))
@@ -1615,7 +1615,7 @@ describe('NiiViewer', () => {
       nvRef.current.addVolumesFromUrl.mockRejectedValueOnce(new Error('Image type not supported'));
 
       const input = document.querySelector('input[type="file"]');
-      await userEvent.upload(input, new File(['data'], 'notes.txt'));
+      await userEvent.upload(input, new File(['data'], 'notes.nii'));
 
       await waitFor(() =>
         expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/failed to load/i))
@@ -2726,6 +2726,77 @@ describe('NiiViewer', () => {
       // card starts out expanded (not collapsed), so an 'expand...' name query would wrongly
       // pass even if the card came back, since the button it matches would read 'Collapse...'.
       expect(screen.queryByText('Layer 1')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('clickedEegChannelPos', () => {
+    it('moves the crosshair to the clicked position and redraws', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const { rerender } = render(<NiiViewer nvRef={nvRef} layers={[]} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      const nv = nvRef.current;
+      rerender(
+        <NiiViewer
+          nvRef={nvRef}
+          layers={[]}
+          clickedEegChannelPos={{ pos: { x: 1, y: 2, z: 3 }, clickId: 1 }}
+        />
+      );
+
+      // mm2frac is mocked as identity (see the Niivue mock above), so crosshairPos lands
+      // as the plain [x, y, z] passed in.
+      expect(nv.scene.crosshairPos).toEqual([1, 2, 3]);
+      expect(nv.updateGLVolume).toHaveBeenCalled();
+    });
+
+    it('moves the crosshair again on a repeat click of the same position, via clickId', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const { rerender } = render(
+        <NiiViewer
+          nvRef={nvRef}
+          layers={[]}
+          clickedEegChannelPos={{ pos: { x: 1, y: 2, z: 3 }, clickId: 1 }}
+        />
+      );
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      const nv = nvRef.current;
+      nv.scene.crosshairPos = [9, 9, 9]; // simulate the user dragging the cursor elsewhere
+      nv.updateGLVolume.mockClear();
+
+      // Same pos, different clickId — this is the whole reason clickId exists (see
+      // EegViewer.jsx's clickEegLabelIdRef comment): without it, an unchanged `pos` value
+      // wouldn't necessarily re-trigger this effect.
+      rerender(
+        <NiiViewer
+          nvRef={nvRef}
+          layers={[]}
+          clickedEegChannelPos={{ pos: { x: 1, y: 2, z: 3 }, clickId: 2 }}
+        />
+      );
+
+      expect(nv.scene.crosshairPos).toEqual([1, 2, 3]);
+      expect(nv.updateGLVolume).toHaveBeenCalled();
+    });
+
+    it('does nothing when pos is null (e.g. the clicked channel has no matched position)', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const { rerender } = render(<NiiViewer nvRef={nvRef} layers={[]} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      const nv = nvRef.current;
+      nv.updateGLVolume.mockClear();
+
+      rerender(
+        <NiiViewer nvRef={nvRef} layers={[]} clickedEegChannelPos={{ pos: null, clickId: 1 }} />
+      );
+
+      expect(nv.scene.crosshairPos).toBeNull();
+      expect(nv.updateGLVolume).not.toHaveBeenCalled();
     });
   });
 });

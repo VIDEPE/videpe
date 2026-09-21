@@ -1510,19 +1510,24 @@ describe('EegViewer — loading toast', () => {
 // EEG1 = [1-4, 2-5, 3-6, 4-7] = [-3,-3,-3,-3].
 
 describe('EegViewer — montage', () => {
-  it('renders a Montage button, with no global reference dropdown (referencing now lives in the montage editor / is unconditional for topography)', async () => {
+  // Referencing used to be a global dropdown in the toolbar; it now lives entirely in the
+  // montage editor (per-row), so only the button that opens that editor should remain here.
+  it('renders a Montage button and no separate reference dropdown', async () => {
     await renderViewer();
     expect(screen.getByRole('button', { name: 'Montage' })).toBeInTheDocument();
     expect(screen.queryByLabelText(/montage/i)).not.toBeInTheDocument();
   });
 
-  it('does not re-reference the channel plot data (the waveform re-references per row via the montage editor; topography/connectome/ESI always use the common-average reference instead)', async () => {
+  it("shows each channel's raw, unreferenced samples when no montage rows are configured", async () => {
     const { default: UplotReactMock } = await import('uplot-react');
     await renderViewer();
 
-    // EEG1 raw values for the visible window are [1,2,3] — unchanged, since with no montage
-    // rows configured every row falls back to its raw channel (referenceMode: null).
-    const eeg1Data = Array.from(UplotReactMock.mock.calls[0][0].data[1]);
+    // mock.calls mixes every channel's uPlot instance plus the fixed x-axis strip (data has
+    // no [1] there). Per-row calls always have 2-element data, in channelNames order, so
+    // every 3rd one starting at index 0 is EEG1's — take the last for the settled render.
+    const perRowCalls = UplotReactMock.mock.calls.filter((c) => c[0].data.length === 2);
+    const eeg1Calls = perRowCalls.filter((_, i) => i % channelNames.length === 0);
+    const eeg1Data = Array.from(eeg1Calls.at(-1)[0].data[1]);
     expect(eeg1Data).toEqual([1, 2, 3]);
   });
 });
@@ -2756,5 +2761,81 @@ describe('EegViewer — stack/unstack toggle', () => {
     expect(series[1].stroke()).not.toBe('rgba(0, 0, 0, 0.8)'); // EEG1 — still faded
     expect(series[2].stroke()).toBe('rgba(0, 0, 0, 0.8)'); // EEG2 — focused, full opacity
     expect(series[3].stroke()).not.toBe('rgba(0, 0, 0, 0.8)'); // EEG3 — still faded
+  });
+});
+
+describe('EegViewer — clicking a channel label moves the NiiVue cursor', () => {
+  // MOCK_TSV (see top of file) matches EEG1 (-29, 84, -7) and EEG2 (29, 84, -7); EEG3 has
+  // no match. With no montage set, buildMontageDisplayRows falls back to one row per
+  // channel, so each row's own channel position is what a click should resolve to.
+  const renderWithClickHandler = async (onChannelPositionClick) => {
+    const provider = makeProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        onChannelPositionClick={onChannelPositionClick}
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+  };
+
+  it('calls onChannelPositionClick with the matched channel position on click', async () => {
+    const onChannelPositionClick = vi.fn();
+    await renderWithClickHandler(onChannelPositionClick);
+
+    await userEvent.click(screen.getByText('EEG1'));
+
+    expect(onChannelPositionClick).toHaveBeenCalledOnce();
+    // getRowCrosshairPosition's no-reference branch returns the matched electrode's `pos`
+    // as-is (which also carries `label`, unlike the bipolar branch's plain {x,y,z}) — only
+    // the coordinates matter to the NiiVue crosshair effect that consumes this.
+    expect(onChannelPositionClick).toHaveBeenCalledWith({
+      pos: expect.objectContaining({ x: -29, y: 84, z: -7 }),
+      clickId: 1,
+    });
+  });
+
+  it('does not call onChannelPositionClick for a channel with no matched position', async () => {
+    const onChannelPositionClick = vi.fn();
+    await renderWithClickHandler(onChannelPositionClick);
+
+    const label = screen.getByText('EEG3'); // not in MOCK_TSV
+    expect(label).toHaveClass('cursor-not-allowed');
+    await userEvent.click(label);
+
+    expect(onChannelPositionClick).not.toHaveBeenCalled();
+  });
+
+  it('shows a pointer cursor and an actionable tooltip for a channel with a matched position', async () => {
+    const onChannelPositionClick = vi.fn();
+    await renderWithClickHandler(onChannelPositionClick);
+
+    const label = screen.getByText('EEG1');
+    expect(label).toHaveClass('cursor-pointer');
+    expect(label).toHaveAttribute(
+      'title',
+      "EEG1 — click to move the 3D cursor to this electrode's position"
+    );
+  });
+
+  it('increments clickId on every click, even for the same channel', async () => {
+    const onChannelPositionClick = vi.fn();
+    await renderWithClickHandler(onChannelPositionClick);
+
+    await userEvent.click(screen.getByText('EEG1'));
+    await userEvent.click(screen.getByText('EEG1'));
+
+    expect(onChannelPositionClick).toHaveBeenNthCalledWith(1, {
+      pos: expect.objectContaining({ x: -29, y: 84, z: -7 }),
+      clickId: 1,
+    });
+    expect(onChannelPositionClick).toHaveBeenNthCalledWith(2, {
+      pos: expect.objectContaining({ x: -29, y: 84, z: -7 }),
+      clickId: 2,
+    });
   });
 });
