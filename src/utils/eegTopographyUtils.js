@@ -558,4 +558,3 @@ export function applyElectrodeDisplayMode(nodes, electrodeDisplayMode, metricMax
     return { ...node, colorValue, sizeValue };
   });
 }
-ean
