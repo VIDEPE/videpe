@@ -231,6 +231,7 @@ export const NiiViewer = ({
   isFullscreen = false,
   onElectrodeLayerDismissed,
   onLoadError,
+  clickedEegChannelPos, // {pos: {x,y,z}, clickId} The location of the clicked Eeg Channel the niiviewer cursor should move to
 }) => {
   // ─── State ─────────────────────────────────────────────────────────────────
   const [layerSettings, setLayerSettings] = useState(() => getInitialLayerSettings(layers));
@@ -724,6 +725,17 @@ export const NiiViewer = ({
     setOrderedLayers(order.map((i) => orderedLayers[i]));
     setLayerSettings((prev) => order.map((i) => prev[i]));
   }, [orderedLayers]);
+
+  // ─── Effects: Nii Vue interactions ─────────────────────────────────────────────────
+
+  // move the main niivue canvas cursor to the position that is packed inside clickedEegChannelPos
+  useEffect(() => {
+    const nv = nvRef.current;
+    const pos = clickedEegChannelPos?.pos;
+    if (!nv || !pos) return; // if nv or pos is null / undefined
+    nv.scene.crosshairPos = nv.mm2frac([pos.x, pos.y, pos.z]);
+    nv.updateGLVolume();
+  }, [clickedEegChannelPos, nvRef]);
 
   // ─── Render ─────────────────────────────────────────────────────────────────
 

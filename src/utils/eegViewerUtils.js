@@ -25,11 +25,18 @@ import { parseElectrodeContactName } from './intracranialDetection';
 // Neither side knows about the other's output — montage rows never feed topography/
 // connectome/ESI, which always uses the common-average reference (never user-selectable).
 
-// The shared reference series everything below subtracts from channels set to
-// 'average'/'median' — one series per mode, computed once from `nonBadChannels` (the
-// caller has already excluded bad channels, since a bad channel's own noise/artifacts
-// shouldn't skew what everything else is referenced against). Both are null when there
-// are no channels to reference against (e.g. every channel is currently marked bad).
+/**
+ * Computes the shared reference series everything below subtracts from channels set to
+ * 'average'/'median' — one series per mode, computed once from `nonBadChannels` (the
+ * caller has already excluded bad channels, since a bad channel's own noise/artifacts
+ * shouldn't skew what everything else is referenced against).
+ *
+ * @param {number[][]} nonBadChannels - one array of samples per non-bad channel; all
+ *   channels must have the same length.
+ * @returns {{ average: number[]|null, median: number[]|null }} one value per sample,
+ *   averaged/medianed across channels; both null when there are no channels to reference
+ *   against (e.g. every channel is currently marked bad).
+ */
 export function computeReferenceSeries(nonBadChannels) {
   if (nonBadChannels.length === 0) return { average: null, median: null };
 
@@ -46,11 +53,17 @@ export function computeReferenceSeries(nonBadChannels) {
   return { average: averageSeries, median: medianSeries };
 }
 
-// Subtracts an already-computed reference series (see computeReferenceSeries above)
-// from every channel — the "apply to ALL channels" half of the diagram above, used by
-// applyMontage to re-reference the whole buffer for topography/connectome/ESI. `series`
-// is null when there was nothing to reference against (see computeReferenceSeries),
-// in which case channels are returned unchanged rather than subtracting nothing meaningful.
+/**
+ * Subtracts an already-computed reference series (see computeReferenceSeries above)
+ * from every channel — the "apply to ALL channels" half of the diagram above, used by
+ * applyMontage to re-reference the whole buffer for topography/connectome/ESI.
+ *
+ * @param {number[][]} channels - one array of samples per channel.
+ * @param {number[]|null} series - the reference series to subtract (`average` or `median`
+ *   from computeReferenceSeries), or null when there was nothing to reference against, in
+ *   which case `channels` is returned unchanged rather than subtracting nothing meaningful.
+ * @returns {number[][]} `channels`, each re-referenced against `series`.
+ */
 export function applyReferenceSeries(channels, series) {
   if (!series) return channels;
   return channels.map((chan) => chan.map((value, iSamp) => value - series[iSamp]));
@@ -61,10 +74,26 @@ export function applyReferenceSeries(channels, series) {
 const REFERENCE_LABELS = { average: 'Avg', median: 'Med' };
 const SPECIAL_REFERENCES = Object.keys(REFERENCE_LABELS);
 
-// Builds the rows to render in the EEG channel-plot area, resolving channel/reference
-// indices for deriveMontageRowSamples. Drops rows that are bad, or (only reachable via a
-// loaded montage file) name a channel not in channelNames — indexOf would return -1 there,
-// which deriveMontageRowSamples would crash on.
+/**
+ * Builds the rows to render in the EEG channel-plot area, resolving channel/reference
+ * indices for deriveMontageRowSamples. Drops rows that are bad, or (only reachable via a
+ * loaded montage file) name a channel not in channelNames — indexOf would return -1 there,
+ * which deriveMontageRowSamples would crash on.
+ *
+ * @param {string[]} channelNames - the recording's channel names.
+ * @param {Object.<string, {bad?: boolean}>} channelSettings - per-channel settings, keyed
+ *   by channel name; only `bad` is read here.
+ * @param {{id, channel: string, reference: string|null, color: string|null}[]} montageChannels -
+ *   the configured montage rows, or `[]` to fall back to one row per non-bad channel.
+ * @returns {{
+ *   id: string,
+ *   name: string,
+ *   channelIndex: number,
+ *   referenceIndex: number|null,
+ *   referenceMode: 'average'|'median'|null,
+ *   color: string|null
+ * }[]}
+ */
 export function buildMontageDisplayRows(channelNames, channelSettings, montageChannels) {
   // No montage set => return all non-bad channel names
   if (montageChannels.length === 0) {
@@ -113,11 +142,20 @@ export function buildMontageDisplayRows(channelNames, channelSettings, montageCh
   );
 }
 
-// Derives one display row's raw sample series from the raw (un-montaged) channel buffer —
-// the channel's own samples minus its reference's, or the channel as-is when the row has no
-// reference. `referenceSeries` ({ average, median } from computeReferenceSeries) resolves
-// rows whose reference is 'average'/'median'; a channel-name reference instead looks the
-// other channel up directly via `referenceIndex`.
+/**
+ * Derives one display row's raw sample series from the raw (un-montaged) channel buffer —
+ * the channel's own samples minus its reference's, or the channel as-is when the row has no
+ * reference.
+ *
+ * @param {number[][]} channels - one array of samples per channel.
+ * @param {{channelIndex: number, referenceIndex: number|null, referenceMode: string|null}} row -
+ *   one row from buildMontageDisplayRows.
+ * @param {{average: number[]|null, median: number[]|null}} [referenceSeries] - from
+ *   computeReferenceSeries; resolves rows whose reference is 'average'/'median'. A
+ *   channel-name reference instead looks the other channel up directly via `referenceIndex`.
+ * @returns {number[]} the row's re-referenced samples, or the raw channel samples when
+ *   there's no reference to apply (or no series available for the row's referenceMode).
+ */
 export function deriveMontageRowSamples(channels, row, referenceSeries) {
   const channelSamples = channels[row.channelIndex];
   // if no reference channel and no reference mode is selected: return the channelSamples as they are
@@ -135,12 +173,18 @@ export function deriveMontageRowSamples(channels, row, referenceSeries) {
   return channelSamples.map((v, i) => v - referenceSamples[i]);
 }
 
-// Compares two channel names for display ordering. Contact-shaped names ("E1", "E9", "b'7")
-// sort by their electrode group (case-insensitive prefix, apostrophe included) and then
-// numerically by contact number — so "E9" sorts before "E99" and "E100", where a plain string
-// compare would put "E100" and "E99" ahead of "E9". Falls back to plain localeCompare when
-// either name isn't contact-shaped (e.g. "ECG"), so non-electrode channels still sort somewhere
-// sensible instead of the comparator throwing or treating them as equal.
+/**
+ * Compares two channel names for display ordering. Contact-shaped names ("E1", "E9", "b'7")
+ * sort by their electrode group (case-insensitive prefix, apostrophe included) and then
+ * numerically by contact number — so "E9" sorts before "E99" and "E100", where a plain string
+ * compare would put "E100" and "E99" ahead of "E9". Falls back to plain localeCompare when
+ * either name isn't contact-shaped (e.g. "ECG"), so non-electrode channels still sort somewhere
+ * sensible instead of the comparator throwing or treating them as equal.
+ *
+ * @param {string} a
+ * @param {string} b
+ * @returns {number} negative/zero/positive, suitable for Array.prototype.sort.
+ */
 export function compareChannelNamesNaturally(a, b) {
   const parsedA = parseElectrodeContactName(a);
   const parsedB = parseElectrodeContactName(b);
@@ -152,14 +196,23 @@ export function compareChannelNamesNaturally(a, b) {
     : parsedA.numberInGroup - parsedB.numberInGroup;
 }
 
-// Builds one bipolar reference per SEEG channel — contact N takes contact N+1 of its own
-// electrode group (matching prefix, so e.g. "B" and "B'" never cross-pair) as its reference,
-// only when that exact next contact exists (a gap is never bridged — see the "never skips a
-// missing contact" test). A contact with no such next-in-group partner comes back in
-// `monopolar` instead of `references`, for the caller to decide whether to keep it
-// unreferenced or drop it. EEG/Other-typed channels, and SEEG channels whose name isn't
-// contact-shaped (parseElectrodeContactName returns null), are left out of both entirely —
-// the former were never eligible, the latter have nothing to pair on.
+/**
+ * Builds one bipolar reference per SEEG channel — contact N takes contact N+1 of its own
+ * electrode group (matching prefix, so e.g. "B" and "B'" never cross-pair) as its reference,
+ * only when that exact next contact exists (a gap is never bridged — see the "never skips a
+ * missing contact" test). A contact with no such next-in-group partner comes back in
+ * `monopolar` instead of `references`, for the caller to decide whether to keep it
+ * unreferenced or drop it. EEG/Other-typed channels, and SEEG channels whose name isn't
+ * contact-shaped (parseElectrodeContactName returns null), are left out of both entirely —
+ * the former were never eligible, the latter have nothing to pair on.
+ *
+ * @param {string[]} channelNames - the recording's channel names.
+ * @param {Object.<string, {type?: string}>} channelSettings - per-channel settings, keyed
+ *   by channel name; a missing entry is treated as 'eeg' (never SEEG).
+ * @returns {{ references: Map<string, string>, monopolar: string[] }} `references` maps
+ *   each paired SEEG contact name to its N+1 reference; `monopolar` lists SEEG contacts
+ *   with no such partner.
+ */
 export function buildSeegBipolarReferences(channelNames, channelSettings) {
   function isSeeg(name) {
     const type = channelSettings[name]?.type ?? 'eeg'; // fall back to 'eeg' when no type is set
@@ -200,4 +253,40 @@ export function buildSeegBipolarReferences(channelNames, channelSettings) {
   }
 
   return { references, monopolar };
+}
+
+/**
+ * Resolves the 3D position a display row's channel-name label should move the NiiVue
+ * crosshair to when clicked. A plain (unreferenced, or average/median-referenced) row
+ * jumps to its own channel's electrode position; a bipolar row (referenced to another
+ * real channel) jumps to the midpoint between the two electrodes instead.
+ *
+ * @param {{channelIndex: number, referenceIndex: number|null}} row - one row from
+ *   buildMontageDisplayRows.
+ * @param {{channelIdx: number, name: string, pos: {x:number,y:number,z:number}}[]} matched -
+ *   from matchChannelsToPositions.
+ * @returns {{x:number,y:number,z:number}|null} the position to move the crosshair to, or
+ *   null when the row's own channel has no matched electrode position (a reference
+ *   channel with no matched position just falls back to the primary channel's own
+ *   position, rather than returning null).
+ */
+export function getRowCrosshairPosition(row, matched) {
+  const channel = matched.find((channel) => channel.channelIdx === row.channelIndex);
+  const reference = matched.find((channel) => channel.channelIdx === row.referenceIndex);
+
+  if (channel === undefined) return null; // if channel is empty, return null
+  const channelPos = channel.pos;
+
+  if (reference === undefined) {
+    // if reference is empty, then return the channel position
+    return channelPos;
+  }
+
+  const referencePos = reference.pos;
+  return {
+    // if both channel and reference are in matched, then return the midpoint between the two electrodes
+    x: (channelPos.x + referencePos.x) / 2,
+    y: (channelPos.y + referencePos.y) / 2,
+    z: (channelPos.z + referencePos.z) / 2,
+  };
 }
