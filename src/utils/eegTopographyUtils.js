@@ -530,22 +530,30 @@ export function buildElectrodeLayer({ matched, voltages }) {
  *   missing the selected metric gets `colorValue: 0, sizeValue: 0`, not an error.
  */
 export function applyElectrodeDisplayMode(nodes, electrodeDisplayMode, metricMax = {}) {
-  // metric Max is used to scale node size below
-  const maxOfMetric = metricMax[electrodeDisplayMode] ?? 0;
+  // metric Max is used to scale node size below — only touched in metric modes, since
+  // metricMax isn't guaranteed to have an entry (or even exist) otherwise.
+  let maxOfMetric = 0;
+  if (electrodeDisplayMode !== 'none' && electrodeDisplayMode !== 'voltage') {
+    maxOfMetric = metricMax[electrodeDisplayMode] ?? 0;
+  }
   // voltage max, like metric max, scales node size in voltage mode
-  const voltageMax = Math.max(...nodes.map((node) => Math.abs(node.colorValue)), 0);
+  let voltageMax = 0;
+  if (electrodeDisplayMode === 'voltage') {
+    voltageMax = Math.max(...nodes.map((node) => Math.abs(node.colorValue)), 0);
+  }
 
   return nodes.map((node) => {
-    let colorValue = node.colorValue;
+    let colorValue;
     let sizeValue;
 
-    // 'none'-mode: node are fixed size and uncoloured
+    // 'none'-mode: node are fixed size and uncoloured (colorValue =0)
     if (electrodeDisplayMode === 'none') {
       colorValue = 0;
       sizeValue = 1;
     }
     // voltage mode: colorValue already voltage-coded (see default above), size relative to voltageMax, falback to 0
     else if (electrodeDisplayMode === 'voltage') {
+      colorValue = node.colorValue;
       sizeValue = voltageMax > 0 ? Math.abs(colorValue) / voltageMax : 0;
     }
     // metric modes: colour and size relative to that metric's precomputed max
