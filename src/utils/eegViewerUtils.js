@@ -101,7 +101,7 @@ export function buildMontageDisplayRows(channelNames, channelSettings, montageCh
       .map((name, index) => ({
         id: name, // unique id of this channel
         name: name, // name to display the display row with in uPlot
-        channelIndex: index,  // channel index
+        channelIndex: index, // channel index
         referenceIndex: null, // channel index of the reference (if reference not n/a, average or median)
         referenceMode: null, // if reference is average / median, this field will indicate so
         color: null, // without montage the channels don't have a colour set

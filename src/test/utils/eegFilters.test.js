@@ -5,7 +5,7 @@ import {
   getLowPassCoeff,
   getBandStopCoeff,
   buildFilterSections,
-  applyRowFilter,
+  applyFilterSections,
   getTukeyWindow,
 } from '@/utils/eegFilters';
 
@@ -17,7 +17,7 @@ const time = Array.from({ length: n }, (_, i) => i / fs);
 const sine = (freq) => time.map((t) => Math.sin(2 * Math.PI * freq * t));
 
 // RMS-based amplitude estimate over the middle half of the signal, so edge transients (fili's
-// filtfilt has no padding of its own — see applyRowFilter's docstring) don't skew the reading.
+// filtfilt has no padding of its own — see applyFilterSections's docstring) don't skew the reading.
 const middleAmplitude = (samples) => {
   const mid = samples.slice(Math.floor(n * 0.25), Math.floor(n * 0.75));
   return Math.sqrt(mid.reduce((sum, v) => sum + v * v, 0) / mid.length) * Math.SQRT2;
@@ -95,64 +95,64 @@ describe('buildFilterSections', () => {
   });
 });
 
-// ─── applyRowFilter ──────────────────────────────────────────────────────────────────
+// ─── applyFilterSections ──────────────────────────────────────────────────────────────────
 
-describe('applyRowFilter', () => {
+describe('applyFilterSections', () => {
   it('returns the input unchanged (same reference, no copy) when no filter is set', () => {
     const samples = sine(10);
-    expect(applyRowFilter(samples, [])).toBe(samples);
+    expect(applyFilterSections(samples, [])).toBe(samples);
   });
 
   it('strongly attenuates a tone well below a lowpass cutoff... below the cutoff, above the tone', () => {
     const samples = sine(30);
     const sections = buildFilterSections(fs, null, 5, null); // cutoff well below the 30Hz tone
-    expect(middleAmplitude(applyRowFilter(samples, sections))).toBeLessThan(0.01);
+    expect(middleAmplitude(applyFilterSections(samples, sections))).toBeLessThan(0.01);
   });
 
   it('passes a tone well below a lowpass cutoff close to unchanged', () => {
     const samples = sine(30);
     const sections = buildFilterSections(fs, null, 100, null); // cutoff well above the 30Hz tone
-    expect(middleAmplitude(applyRowFilter(samples, sections))).toBeGreaterThan(0.95);
+    expect(middleAmplitude(applyFilterSections(samples, sections))).toBeGreaterThan(0.95);
   });
 
   it('strongly attenuates a tone well below a highpass cutoff', () => {
     const samples = sine(30);
     const sections = buildFilterSections(fs, 60, null, null); // cutoff well above the 30Hz tone
-    expect(middleAmplitude(applyRowFilter(samples, sections))).toBeLessThan(0.01);
+    expect(middleAmplitude(applyFilterSections(samples, sections))).toBeLessThan(0.01);
   });
 
   it('passes a tone well above a highpass cutoff close to unchanged', () => {
     const samples = sine(30);
     const sections = buildFilterSections(fs, 2, null, null); // cutoff well below the 30Hz tone
-    expect(middleAmplitude(applyRowFilter(samples, sections))).toBeGreaterThan(0.95);
+    expect(middleAmplitude(applyFilterSections(samples, sections))).toBeGreaterThan(0.95);
   });
 
   it('strongly attenuates a tone at the notch frequency', () => {
     const samples = sine(50);
     const sections = buildFilterSections(fs, null, null, 50);
-    expect(middleAmplitude(applyRowFilter(samples, sections))).toBeLessThan(0.01);
+    expect(middleAmplitude(applyFilterSections(samples, sections))).toBeLessThan(0.01);
   });
 
   it('passes a tone well away from the notch frequency close to unchanged', () => {
     const samples = sine(50);
     const sections = buildFilterSections(fs, null, null, 80);
-    expect(middleAmplitude(applyRowFilter(samples, sections))).toBeGreaterThan(0.95);
+    expect(middleAmplitude(applyFilterSections(samples, sections))).toBeGreaterThan(0.95);
   });
 
   it('throws when the window is shorter than the signal', () => {
     const samples = sine(10);
     const sections = buildFilterSections(fs, null, 40, null);
-    expect(() => applyRowFilter(samples, sections, new Array(samples.length - 1).fill(1))).toThrow(
-      /window must be at least as long as samples/
-    );
+    expect(() =>
+      applyFilterSections(samples, sections, new Array(samples.length - 1).fill(1))
+    ).toThrow(/window must be at least as long as samples/);
   });
 
   it('returns a signal the same length as the input, with or without a window', () => {
     const samples = sine(10);
     const sections = buildFilterSections(fs, null, 40, null);
     const window = getTukeyWindow(samples.length + 200, 0.1);
-    expect(applyRowFilter(samples, sections)).toHaveLength(samples.length);
-    expect(applyRowFilter(samples, sections, window)).toHaveLength(samples.length);
+    expect(applyFilterSections(samples, sections)).toHaveLength(samples.length);
+    expect(applyFilterSections(samples, sections, window)).toHaveLength(samples.length);
   });
 });
 

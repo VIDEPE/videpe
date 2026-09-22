@@ -138,10 +138,9 @@ export function getTukeyWindow(M, alpha = 0.5) {
 }
 
 /**
- * Applies a montage row's filter cascade to its full signal via fili's built-in
- * forward-backward `IirFilter.filtfilt` (zero-phase, but with no edge padding of its own —
- * see below). A no-op fast path returns `samples` unchanged when `sections` is empty (no
- * filter set for this row).
+ * Applies a biquad cascade to a full signal via fili's built-in forward-backward
+ * `IirFilter.filtfilt` (zero-phase, but with no edge padding of its own — see below). A no-op
+ * fast path returns `samples` unchanged when `sections` is empty (nothing to filter).
  *
  * If `window` is given (a precomputed Tukey/Hann taper, e.g. flat 1s across the middle with
  * cosine-tapered edges), `samples` is zero-padded out to `window.length` — split as evenly as
@@ -150,17 +149,17 @@ export function getTukeyWindow(M, alpha = 0.5) {
  * the signal's real starting value otherwise excites its own filter ringing) without the extra
  * bookkeeping of mirror/reflect padding. `window` must be at least as long as `samples`.
  *
- * @param {Float32Array|number[]} samples - One row's full buffered signal.
+ * @param {Float32Array|number[]} samples - The full signal to filter.
  * @param {Array<{ z: number[], a: number[], b: number[], a0: number, k: number }>} sections - Cascade sections, e.g. from buildFilterSections.
  * @param {number[]} [window] - Optional taper window, at least as long as `samples`; skips padding/windowing entirely when omitted.
  * @returns {number[]} Filtered signal, same length as `samples`.
  */
-export function applyRowFilter(samples, sections, window) {
+export function applyFilterSections(samples, sections, window) {
   // empty sections check => return unfiltered signal
   if (sections.length === 0) return samples;
 
   if (window && window.length < samples.length) {
-    throw new Error('applyRowFilter: window must be at least as long as samples');
+    throw new Error('applyFilterSections: window must be at least as long as samples');
   }
 
   let padLengthBefore = 0;
@@ -185,8 +184,6 @@ export function applyRowFilter(samples, sections, window) {
   // slice away padding
   return filtered.slice(padLengthBefore, padLengthBefore + samples.length);
 }
-
-
 
 // /**
 //  * Runs `samples` forward through a cascade of biquad sections, one section at a time (each
