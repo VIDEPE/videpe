@@ -140,7 +140,7 @@ export function buildMontageDisplayRows(channelNames, channelSettings, montageCh
             row.reference && !isSpecialReference ? channelNames.indexOf(row.reference) : null,
           referenceMode: isSpecialReference ? row.reference : null,
           color: row.color,
-          highPass: row.highpass ?? null, // highPass frequency to filters buffered signal (null when not set)
+          highPass: row.highPass ?? null, // highPass frequency to filters buffered signal (null when not set)
           lowPass: row.lowPass ?? null, // lowPass frequency to filters buffered signal (null when not set)
           notch: row.notch ?? null, // bandstop frequency to filters buffered signal (null when not set)
         };

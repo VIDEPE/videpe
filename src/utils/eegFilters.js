@@ -155,34 +155,33 @@ export function getTukeyWindow(M, alpha = 0.5) {
  * @returns {number[]} Filtered signal, same length as `samples`.
  */
 export function applyFilterSections(samples, sections, window) {
-  // empty sections check => return unfiltered signal
-  if (sections.length === 0) return samples;
+    // empty sections check => return unfiltered signal
+    if (sections.length === 0) return samples;
 
-  if (window && window.length < samples.length) {
-    throw new Error('applyFilterSections: window must be at least as long as samples');
-  }
+    if (window && window.length < samples.length) {
+        throw new Error('applyFilterSections: window must be at least as long as samples');
+    }
 
-  let padLengthBefore = 0;
-  let padLengthAfter = 0;
+    // zero-padding — pad samples out to the window's length, split as evenly as possible
+    let padLengthBefore = 0;
+    let padLengthAfter = 0; // default no padding when no window is set
+    if (window) {
+        padLengthBefore = Math.ceil((window.length - samples.length) / 2);
+        padLengthAfter = Math.floor((window.length - samples.length) / 2);
+    }
+    const padded = new Array(padLengthBefore)
+        .fill(0)
+        .concat(Array.from(samples))
+        .concat(new Array(padLengthAfter).fill(0));
 
-  // zero-padding — pad samples out to the window's length, split as evenly as possible
-  if (window) {
-    padLengthBefore = Math.ceil((window.length - samples.length) / 2);
-    padLengthAfter = Math.floor((window.length - samples.length) / 2);
-  }
-  const padded = new Array(padLengthBefore)
-    .fill(0)
-    .concat(Array.from(samples))
-    .concat(new Array(padLengthAfter).fill(0));
+    // apply Tukey/Hann window, if given
+    const window_padded = window ? padded.map((value, index) => value * window[index]) : padded;
 
-  // apply Tukey/Hann window, if given
-  const window_padded = window ? padded.map((value, index) => value * window[index]) : padded;
+    const iirFilter = new Fili.IirFilter(sections); // fresh instance — don't reuse (delay state z isn't reset between filtfilt calls)
+    const filtered = iirFilter.filtfilt(window_padded); // apply forward-backward filter to padded signal
 
-  const iirFilter = new Fili.IirFilter(sections); // fresh instance — don't reuse (delay state z isn't reset between filtfilt calls)
-  const filtered = iirFilter.filtfilt(window_padded); // apply forward-backward filter to padded signal
-
-  // slice away padding
-  return filtered.slice(padLengthBefore, padLengthBefore + samples.length);
+    // slice away padding
+    return filtered.slice(padLengthBefore, padLengthBefore + samples.length);
 }
 
 // /**

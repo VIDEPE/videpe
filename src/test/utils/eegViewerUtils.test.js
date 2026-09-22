@@ -274,6 +274,22 @@ describe('buildMontageDisplayRows', () => {
     expect(rows[0].color).toBe('red');
   });
 
+  it('carries the row highPass/lowPass/notch settings through', () => {
+    const montageChannels = [
+      {
+        id: 'row-1',
+        channel: 'EEG1',
+        reference: null,
+        color: null,
+        highPass: 19,
+        lowPass: 20,
+        notch: 50,
+      },
+    ];
+    const rows = buildMontageDisplayRows(channelNames, noneBad, montageChannels);
+    expect(rows[0]).toMatchObject({ highPass: 19, lowPass: 20, notch: 50 });
+  });
+
   it('drops a montage row whose channel is not present in this recording (e.g. an imported montage file naming an unknown channel) instead of producing a -1 index', () => {
     const montageChannels = [
       { id: 'row-1', channel: 'NOT_A_REAL_CHANNEL', reference: null, color: null },
