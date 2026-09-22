@@ -144,6 +144,9 @@ describe('buildMontageDisplayRows', () => {
         referenceIndex: null,
         referenceMode: null,
         color: null,
+        highPass: null,
+        lowPass: null,
+        notch: null,
       },
       {
         id: 'EEG2',
@@ -152,6 +155,9 @@ describe('buildMontageDisplayRows', () => {
         referenceIndex: null,
         referenceMode: null,
         color: null,
+        highPass: null,
+        lowPass: null,
+        notch: null,
       },
       {
         id: 'EEG3',
@@ -160,6 +166,9 @@ describe('buildMontageDisplayRows', () => {
         referenceIndex: null,
         referenceMode: null,
         color: null,
+        highPass: null,
+        lowPass: null,
+        notch: null,
       },
     ]);
   });

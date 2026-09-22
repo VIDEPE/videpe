@@ -108,6 +108,35 @@ export function buildFilterSections(fs, highPass, lowPass, notch) {
   return sections;
 }
 
+export function getTukeyWindow(M, alpha = 0.5) {
+  // guards
+  if (M <= 0) {
+    throw new Error(`M must be bigger than 0, not ${M}`);
+  }
+  if (alpha <= 0) {
+    return new Array(M).fill(1);
+  }
+  if (alpha >= 1) {
+    throw new Error(`alpha must be within the range: 0 <= alpha <=1, not ${alpha}`);
+  }
+
+  // Taken from: scipy.signal.windows.tukey
+  // https://github.com/scipy/scipy/blob/v1.18.0/scipy/signal/windows/_windows.py#L879-L964
+  const indexArray = [...Array(M).keys()];
+  const width = Math.floor((alpha * (M - 1)) / 2.0);
+  const n1 = indexArray.slice(0, width + 1);
+  const n2 = indexArray.slice(width + 1, M - width - 1);
+  const n3 = indexArray.slice(M - width - 1);
+
+  const w1 = n1.map((n) => 0.5 * (1 + Math.cos(Math.PI * (-1 + (2.0 * n) / alpha / (M - 1)))));
+  const w2 = new Array(n2.length).fill(1);
+  const w3 = n3.map(
+    (n) => 0.5 * (1 + Math.cos(Math.PI * (-2.0 / alpha + 1 + (2.0 * n) / alpha / (M - 1))))
+  );
+
+  return w1.concat(w2).concat(w3);
+}
+
 /**
  * Applies a montage row's filter cascade to its full signal via fili's built-in
  * forward-backward `IirFilter.filtfilt` (zero-phase, but with no edge padding of its own —
@@ -157,34 +186,7 @@ export function applyRowFilter(samples, sections, window) {
   return filtered.slice(padLengthBefore, padLengthBefore + samples.length);
 }
 
-export function getTukeyWindow(M, alpha = 0.5) {
-  // guards
-  if (M <= 0) {
-    throw new Error(`M must be bigger than 0, not ${M}`);
-  }
-  if (alpha <= 0) {
-    return new Array(M).fill(1);
-  }
-  if (alpha >= 1) {
-    throw new Error(`alpha must be within the range: 0 <= alpha <=1, not ${alpha}`);
-  }
 
-  // Taken from: scipy.signal.windows.tukey
-  // https://github.com/scipy/scipy/blob/v1.18.0/scipy/signal/windows/_windows.py#L879-L964
-  const indexArray = [...Array(M).keys()];
-  const width = Math.floor((alpha * (M - 1)) / 2.0);
-  const n1 = indexArray.slice(0, width + 1);
-  const n2 = indexArray.slice(width + 1, M - width - 1);
-  const n3 = indexArray.slice(M - width - 1);
-
-  const w1 = n1.map((n) => 0.5 * (1 + Math.cos(Math.PI * (-1 + (2.0 * n) / alpha / (M - 1)))));
-  const w2 = new Array(n2.length).fill(1);
-  const w3 = n3.map(
-    (n) => 0.5 * (1 + Math.cos(Math.PI * (-2.0 / alpha + 1 + (2.0 * n) / alpha / (M - 1))))
-  );
-
-  return w1.concat(w2).concat(w3);
-}
 
 // /**
 //  * Runs `samples` forward through a cascade of biquad sections, one section at a time (each
