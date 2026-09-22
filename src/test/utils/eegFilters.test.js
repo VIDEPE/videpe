@@ -6,6 +6,7 @@ import {
   getBandStopCoeff,
   buildFilterSections,
   applyFilterSections,
+  applyMontageRowFilter,
   getTukeyWindow,
 } from '@/utils/eegFilters';
 
@@ -153,6 +154,58 @@ describe('applyFilterSections', () => {
     const window = getTukeyWindow(samples.length + 200, 0.1);
     expect(applyFilterSections(samples, sections)).toHaveLength(samples.length);
     expect(applyFilterSections(samples, sections, window)).toHaveLength(samples.length);
+  });
+});
+
+// ─── applyMontageRowFilter ────────────────────────────────────────────────────────────
+
+describe('applyMontageRowFilter', () => {
+  it('returns the input unchanged when the row has no filter set', () => {
+    const samples = sine(10);
+    const row = { highPass: null, lowPass: null, notch: null };
+    expect(applyMontageRowFilter(samples, row, fs)).toBe(samples);
+  });
+
+  it("filters using the row's highPass/lowPass/notch settings", () => {
+    const samples = sine(30);
+    const row = { highPass: null, lowPass: 5, notch: null }; // cutoff well below the 30Hz tone
+    expect(middleAmplitude(applyMontageRowFilter(samples, row, fs))).toBeLessThan(0.01);
+  });
+
+  it('works without an explicit window (builds a default internally)', () => {
+    const samples = sine(30);
+    const row = { highPass: null, lowPass: 40, notch: null };
+    expect(applyMontageRowFilter(samples, row, fs)).toHaveLength(samples.length);
+  });
+
+  it('an explicit window overrides the default and matches calling applyFilterSections directly', () => {
+    const samples = sine(10);
+    const row = { highPass: null, lowPass: 40, notch: null };
+    const window = getTukeyWindow(samples.length + 200, 0.1);
+    const sections = buildFilterSections(fs, row.highPass, row.lowPass, row.notch);
+    expect(applyMontageRowFilter(samples, row, fs, window)).toEqual(
+      applyFilterSections(samples, sections, window)
+    );
+  });
+
+  it('the default window meaningfully reduces edge error compared to no padding at all', () => {
+    // A low, well-separated-from-the-tone cutoff has a long settling time — exactly the case
+    // where fili's own filtfilt (no padding of its own) leaves a cold-start artifact if nothing
+    // pads the signal first. Comparing filtered output against the known-clean input at the very
+    // edges (where fili's un-padded corruption concentrates) isolates that artifact.
+    const samples = time.map((t) => Math.cos(2 * Math.PI * 30 * t));
+    const row = { highPass: 0.5, lowPass: null, notch: null };
+    const sections = buildFilterSections(fs, row.highPass, row.lowPass, row.notch);
+
+    const unpadded = applyFilterSections(samples, sections);
+    const autoPadded = applyMontageRowFilter(samples, row, fs);
+
+    const edgeError = (out, indices) =>
+      indices.reduce((sum, i) => sum + Math.abs(out[i] - samples[i]), 0) / indices.length;
+    const endIndices = [n - 5, n - 4, n - 3, n - 2, n - 1];
+
+    expect(edgeError(unpadded, endIndices)).toBeGreaterThan(0.02);
+    expect(edgeError(autoPadded, endIndices)).toBeLessThan(0.01);
   });
 });
 

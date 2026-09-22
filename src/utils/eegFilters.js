@@ -155,83 +155,56 @@ export function getTukeyWindow(M, alpha = 0.5) {
  * @returns {number[]} Filtered signal, same length as `samples`.
  */
 export function applyFilterSections(samples, sections, window) {
-    // empty sections check => return unfiltered signal
-    if (sections.length === 0) return samples;
+  // empty sections check => return unfiltered signal
+  if (sections.length === 0) return samples;
 
-    if (window && window.length < samples.length) {
-        throw new Error('applyFilterSections: window must be at least as long as samples');
-    }
+  if (window && window.length < samples.length) {
+    throw new Error('applyFilterSections: window must be at least as long as samples');
+  }
 
-    // zero-padding — pad samples out to the window's length, split as evenly as possible
-    let padLengthBefore = 0;
-    let padLengthAfter = 0; // default no padding when no window is set
-    if (window) {
-        padLengthBefore = Math.ceil((window.length - samples.length) / 2);
-        padLengthAfter = Math.floor((window.length - samples.length) / 2);
-    }
-    const padded = new Array(padLengthBefore)
-        .fill(0)
-        .concat(Array.from(samples))
-        .concat(new Array(padLengthAfter).fill(0));
+  // zero-padding — pad samples out to the window's length, split as evenly as possible
+  let padLengthBefore = 0;
+  let padLengthAfter = 0; // default no padding when no window is set
+  if (window) {
+    padLengthBefore = Math.ceil((window.length - samples.length) / 2);
+    padLengthAfter = Math.floor((window.length - samples.length) / 2);
+  }
+  const padded = new Array(padLengthBefore)
+    .fill(0)
+    .concat(Array.from(samples))
+    .concat(new Array(padLengthAfter).fill(0));
 
-    // apply Tukey/Hann window, if given
-    const window_padded = window ? padded.map((value, index) => value * window[index]) : padded;
+  // apply Tukey/Hann window, if given
+  const window_padded = window ? padded.map((value, index) => value * window[index]) : padded;
 
-    const iirFilter = new Fili.IirFilter(sections); // fresh instance — don't reuse (delay state z isn't reset between filtfilt calls)
-    const filtered = iirFilter.filtfilt(window_padded); // apply forward-backward filter to padded signal
+  const iirFilter = new Fili.IirFilter(sections); // fresh instance — don't reuse (delay state z isn't reset between filtfilt calls)
+  const filtered = iirFilter.filtfilt(window_padded); // apply forward-backward filter to padded signal
 
-    // slice away padding
-    return filtered.slice(padLengthBefore, padLengthBefore + samples.length);
+  // slice away padding
+  return filtered.slice(padLengthBefore, padLengthBefore + samples.length);
 }
 
-// /**
-//  * Runs `samples` forward through a cascade of biquad sections, one section at a time (each
-//  * section's output feeds the next section's input). Hand-written — never calls fili's own
-//  * per-sample step API — since this runs across potentially 100+ montage rows and needs to
-//  * be a tight, allocation-light loop.
-//  *
-//  * @param {Array<{ z: number[], a: number[], b: number[], a0: number, k: number }>} sections - Cascade sections, e.g. from buildFilterSections.
-//  * @param {Float32Array|number[]} samples - Input signal.
-//  * @returns {Float32Array} Filtered signal, same length as `samples`.
-//  */
-// export function applyBiquadCascade(sections, samples) {
-//   // TODO: Direct Form II Transposed per section (standard difference equation — see Wikipedia
-//   // "Digital biquad filter" § Direct Form 2, or scipy.signal.lfilter's docstring for the same
-//   // recursion). State w1/w2 reset to 0 at the start of each section's pass over the *previous*
-//   // section's output:
-//   //   for each sample x[n]:
-//   //     y[n] = b0*x[n] + w1
-//   //     w1   = b1*x[n] - a1*y[n] + w2
-//   //     w2   = b2*x[n] - a2*y[n]
-//   //
-//   // Coefficient mapping, verified against fili's own runtime filter code (node_modules/fili/
-//   // dist/fili.min.js, iirFilter.js module — NOT documented in fili's README):
-//   //   a1 = section.a[0], a2 = section.a[1]   (fili already divides these by a0 at design
-//   //                                            time — do NOT divide by section.a0 again here)
-//   //   b0 = section.k * section.b[0]
-//   //   b1 = section.k * section.b[1]          (fold in the k gain factor up front — valid
-//   //   b2 = section.k * section.b[2]           because scaling the input, the output, or b by
-//   //                                            a constant k are provably identical for an LTI
-//   //                                            system, and fili applies k by scaling the input)
-// }
-
-// /**
-//  * Zero-phase filtering via forward-backward application (filtfilt): mirror-pads both ends of
-//  * `samples`, runs `applyBiquadCascade` forward, reverses, runs forward again, reverses again,
-//  * then trims the padding back off. Running the same cascade twice (once each direction)
-//  * cancels the phase distortion a single causal IIR pass would introduce.
-//  *
-//  * @param {Array<{ z: number[], a: number[], b: number[], a0: number, k: number }>} sections - Cascade sections.
-//  * @param {Float32Array|number[]} samples - Input signal.
-//  * @returns {Float32Array} Zero-phase filtered signal, same length as `samples`.
-//  */
-// export function filtfilt(sections, samples) {
-//   // TODO:
-//   // 1. Pick a pad length long enough for the cascade's startup transient to settle within the
-//   //    padding rather than the real signal (e.g. a small multiple of the total section count).
-//   // 2. Mirror-pad `samples` at both ends (reflect around the edge samples).
-//   // 3. forward  = applyBiquadCascade(sections, padded)
-//   // 4. backward = applyBiquadCascade(sections, forward.slice().reverse())
-//   // 5. result   = backward.reverse()
-//   // 6. Trim the padding back off both ends and return.
-// }
+/**
+ * Resolves one montage row's highPass/lowPass/notch settings into a filter cascade, then
+ * applies it to the row's full signal — the row-aware, safe-by-default entry point on top of
+ * the pure buildFilterSections/applyFilterSections primitives.
+ *
+ * Unlike applyFilterSections, omitting `window` here does NOT mean "no padding": a default
+ * Tukey window (1 second of padding split before/after, alpha=0.1) is built automatically
+ * whenever this row actually has a filter set, so callers get edge-transient protection
+ * without having to think about it. Pass an explicit `window` instead when you already have
+ * one built — e.g. to share a single window across many rows with the same buffered length,
+ * rather than rebuilding an identical one per row.
+ *
+ * @param {Float32Array|number[]} samples - One row's full buffered signal.
+ * @param {{highPass: number|null, lowPass: number|null, notch: number|null}} row - A montage row.
+ * @param {number} fs - Sampling frequency in Hz.
+ * @param {number[]} [window] - Optional taper window, at least as long as `samples`; a default is built when omitted.
+ * @returns {number[]} Filtered signal, same length as `samples`.
+ */
+export function applyMontageRowFilter(samples, row, fs, window) {
+  const sections = buildFilterSections(fs, row.highPass, row.lowPass, row.notch);
+  if (sections.length === 0) return samples; // nothing to filter — skip building a default window too
+  const resolvedWindow = window ?? getTukeyWindow(samples.length + fs, 0.1);
+  return applyFilterSections(samples, sections, resolvedWindow);
+}

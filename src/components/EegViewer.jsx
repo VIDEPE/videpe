@@ -45,7 +45,7 @@ import { EegTopoViewer } from '@/components/EegTopoViewer';
 import { FileDropZone } from '@/components/FileDropZone';
 import { StatusLed } from '@/components/StatusLed';
 import { EegMontageEditor } from './EegMontageEditor';
-import { getTukeyWindow, buildFilterSections, applyFilterSections } from '../utils/eegFilters';
+import { getTukeyWindow, applyMontageRowFilter } from '../utils/eegFilters';
 
 const EEG_LOADING_TOAST_ID = 'eeg-buffer-loading'; // fixed id so the loading/success toasts update in place rather than stacking
 const Y_AXIS_WIDTH = 80; // px for the y-axis area (channel name + tick space) — must match x-axis strip left padding
@@ -543,8 +543,7 @@ export const EegViewer = ({
 
     return displayRows.map((row) => {
       const raw = deriveMontageRowSamples(channels, row, referenceSeries);
-      const sections = buildFilterSections(provider.fs, row.highPass, row.lowPass, row.notch);
-      return applyFilterSections(raw, sections, window);
+      return applyMontageRowFilter(raw, row, provider.fs, window);
     });
   }, [channels, timestamps, provider.fs, displayRows, referenceSeries]);
 
