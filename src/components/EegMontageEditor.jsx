@@ -723,7 +723,7 @@ export function EegMontageEditor({
               {/* Column headers — sticky inside the row scroll container, so the scrollbar
                   shrinks both by the same amount and they can't drift out of alignment. */}
               <div
-                className="sticky top-0 z-10 flex items-end gap-2 px-1 py-1 text-xs font-medium text-header border-b border-border bg-background"
+                className="sticky top-0 z-10 flex items-end gap-2 px-1 py-1 text-xs font-medium text-header border-b-2 border-border bg-background"
                 onClick={handleChannelPaneBackgroundClick}
               >
                 <span className={cn(CHANNEL_NAME_COL_CLASS, 'cursor-default')}>Channel</span>
@@ -1000,7 +1000,7 @@ export function EegMontageEditor({
               {/* Column headers — sticky inside the row scroll container, so the scrollbar
                   shrinks both by the same amount and they can't drift out of alignment. */}
               <div
-                className="sticky top-0 z-10 flex items-end gap-2 pl-3 pr-1 py-1 text-xs font-medium text-header border-b border-border bg-background"
+                className="sticky top-0 z-10 flex items-end gap-2 pl-3 pr-1 py-1 text-xs font-medium text-header border-b-2 border-border bg-background"
                 onClick={handleMontagePaneBackgroundClick}
               >
                 {/* <span> has no real `disabled` attribute — it's guarded here instead by
