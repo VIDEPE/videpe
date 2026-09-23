@@ -45,6 +45,7 @@ import { EegTopoViewer } from '@/components/EegTopoViewer';
 import { FileDropZone } from '@/components/FileDropZone';
 import { StatusLed } from '@/components/StatusLed';
 import { EegMontageEditor } from './EegMontageEditor';
+import { getTukeyWindow, applyMontageRowFilter } from '../utils/eegFilters';
 
 const EEG_LOADING_TOAST_ID = 'eeg-buffer-loading'; // fixed id so the loading/success toasts update in place rather than stacking
 const Y_AXIS_WIDTH = 80; // px for the y-axis area (channel name + tick space) — must match x-axis strip left padding
@@ -533,24 +534,30 @@ export const EegViewer = ({
     return () => toast.dismiss(EEG_LOADING_TOAST_ID);
   }, []);
 
-  // Downsample each display row's (possibly channel-minus-reference) series for the
-  // visible window
-  const displayedData = useMemo(() => {
-    // If we don't have valid dimensions or data yet, return empty arrays for each row to avoid rendering broken plots
-    const empty = displayRows.map(() => [[], []]);
-    if (plotWidth === 0 || !timestamps || timestamps.length === 0 || !channels) return empty;
+  // Stage 1: derive (== subtract ref) + filter each buffered signal
+  // - only re-runs on data/montage/filter-setting changes, not on pan/zoom/resize.
+  const filteredRowSamples = useMemo(() => {
+    if (!channels) return null;
+    // create Tukey window once => shared across row, which have the same buffered length
+    const window = getTukeyWindow(timestamps.length + provider.fs, 0.1);
 
+    return displayRows.map((row) => {
+      const raw = deriveMontageRowSamples(channels, row, referenceSeries);
+      return applyMontageRowFilter(raw, row, provider.fs, window);
+    });
+  }, [channels, timestamps, provider.fs, displayRows, referenceSeries]);
+
+  // Stage 2: downsample the already-filtered signal for the current viewport — reruns on
+  // pan/zoom/resize, but never re-filters.
+  const displayedData = useMemo(() => {
+    // Guards: If we don't have valid dimensions or data yet, return empty arrays for each row to avoid rendering broken plots
+    if (plotWidth === 0 || !timestamps || timestamps.length === 0 || !filteredRowSamples)
+      return displayRows.map(() => [[], []]);
     const endTime = startTime + windowSize;
-    return displayRows.map((row) =>
-      minMaxDownsample(
-        timestamps,
-        deriveMontageRowSamples(channels, row, referenceSeries),
-        startTime,
-        endTime,
-        plotWidth
-      )
+    return filteredRowSamples.map((samples) =>
+      minMaxDownsample(timestamps, samples, startTime, endTime, plotWidth)
     );
-  }, [timestamps, channels, referenceSeries, displayRows, startTime, windowSize, plotWidth]);
+  }, [timestamps, filteredRowSamples, displayRows, startTime, windowSize, plotWidth]);
 
   // Stacking only makes sense with more than one channel — if bad-channel/montage edits drop
   // displayedData to ≤1 row while stacked, fall back to unstacked instead of leaving the view
@@ -1479,6 +1486,7 @@ export const EegViewer = ({
           onApplyChannelSettings={applyChannelSettings}
           montageChannels={montageChannels}
           onApplyMontageChannels={applyMontageChannels}
+          fs={provider.fs}
         />
       )}
     </>

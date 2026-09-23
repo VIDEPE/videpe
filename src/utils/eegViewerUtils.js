@@ -99,12 +99,15 @@ export function buildMontageDisplayRows(channelNames, channelSettings, montageCh
   if (montageChannels.length === 0) {
     return channelNames
       .map((name, index) => ({
-        id: name,
-        name: name,
-        channelIndex: index,
+        id: name, // unique id of this channel
+        name: name, // name to display the display row with in uPlot
+        channelIndex: index, // channel index
         referenceIndex: null, // channel index of the reference (if reference not n/a, average or median)
         referenceMode: null, // if reference is average / median, this field will indicate so
-        color: null,
+        color: null, // without montage the channels don't have a colour set
+        highPass: null, // no highPass filter set without montage (null indicates off)
+        lowPass: null, // no lowPass filter set without montage (null indicates off)
+        notch: null, // no bandstop filter set without montage (null indicates off)
       }))
       .filter(({ name }) => !channelSettings[name]?.bad);
   }
@@ -137,6 +140,9 @@ export function buildMontageDisplayRows(channelNames, channelSettings, montageCh
             row.reference && !isSpecialReference ? channelNames.indexOf(row.reference) : null,
           referenceMode: isSpecialReference ? row.reference : null,
           color: row.color,
+          highPass: row.highPass ?? null, // highPass frequency to filters buffered signal (null when not set)
+          lowPass: row.lowPass ?? null, // lowPass frequency to filters buffered signal (null when not set)
+          notch: row.notch ?? null, // bandstop frequency to filters buffered signal (null when not set)
         };
       })
   );

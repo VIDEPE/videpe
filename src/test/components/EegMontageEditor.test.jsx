@@ -45,6 +45,7 @@ const defaultProps = {
   montageChannels: MONTAGE_CHANNELS,
   onApplyMontageChannels: vi.fn(),
   onClose: vi.fn(),
+  fs: 256, // used to compute nyquist for highPass/lowPass/notch clamping
 };
 
 describe('EegMontageEditor', () => {
@@ -539,6 +540,68 @@ describe('EegMontageEditor', () => {
       CHANNEL_NAMES.forEach((name) =>
         expect(screen.getByTestId(`reference-${name}`)).toHaveValue('average')
       );
+    });
+  });
+
+  describe('Set all Filters', () => {
+    it('disables the bulk filter inputs and apply button when there are no montage rows', () => {
+      render(<EegMontageEditor {...defaultProps} montageChannels={[]} />);
+      expect(screen.getByTestId('bulk-filters-apply-button')).toBeDisabled();
+      expect(screen.getByTestId('bulk-highpass-input')).toBeDisabled();
+      expect(screen.getByTestId('bulk-lowpass-input')).toBeDisabled();
+      expect(screen.getByTestId('bulk-notch-input')).toBeDisabled();
+    });
+
+    it('defaults the bulk filter inputs to blank', () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      expect(screen.getByTestId('bulk-highpass-input')).toHaveValue(null);
+      expect(screen.getByTestId('bulk-lowpass-input')).toHaveValue(null);
+      expect(screen.getByTestId('bulk-notch-input')).toHaveValue(null);
+    });
+
+    it("sets every montage row's highPass/lowPass/notch when applied", async () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      await userEvent.type(screen.getByTestId('bulk-highpass-input'), '1');
+      await userEvent.type(screen.getByTestId('bulk-lowpass-input'), '40');
+      await userEvent.type(screen.getByTestId('bulk-notch-input'), '50');
+      await userEvent.click(screen.getByTestId('bulk-filters-apply-button'));
+
+      // MONTAGE_CHANNELS seeds id === channel, so these testids double as an id check.
+      CHANNEL_NAMES.forEach((name) => {
+        expect(screen.getByTestId(`montage-highpass-${name}`)).toHaveValue(1);
+        expect(screen.getByTestId(`montage-lowpass-${name}`)).toHaveValue(40);
+        expect(screen.getByTestId(`montage-notch-${name}`)).toHaveValue(50);
+      });
+    });
+
+    it('clears every row back to off when applied with blank fields after a prior bulk set', async () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      await userEvent.type(screen.getByTestId('bulk-highpass-input'), '1');
+      await userEvent.click(screen.getByTestId('bulk-filters-apply-button'));
+
+      await userEvent.clear(screen.getByTestId('bulk-highpass-input'));
+      await userEvent.click(screen.getByTestId('bulk-filters-apply-button'));
+
+      CHANNEL_NAMES.forEach((name) =>
+        expect(screen.getByTestId(`montage-highpass-${name}`)).toHaveValue(null)
+      );
+    });
+
+    it("leaves each row's color and reference untouched", async () => {
+      const montageChannels = CHANNEL_NAMES.map((name) => ({
+        id: name,
+        channel: name,
+        reference: 'average',
+        color: 'red',
+      }));
+      render(<EegMontageEditor {...defaultProps} montageChannels={montageChannels} />);
+      await userEvent.type(screen.getByTestId('bulk-notch-input'), '50');
+      await userEvent.click(screen.getByTestId('bulk-filters-apply-button'));
+
+      CHANNEL_NAMES.forEach((name) => {
+        expect(screen.getByTestId(`reference-${name}`)).toHaveValue('average');
+        expect(screen.getByTestId(`color-${name}`)).toHaveValue('red');
+      });
     });
   });
 
@@ -1239,7 +1302,15 @@ describe('EegMontageEditor', () => {
 
       const committed = onApplyMontageChannels.mock.calls[0][0];
       expect(committed).toEqual([
-        { id: expect.any(String), channel: 'FP1', reference: 'FP2', color: null },
+        {
+          id: expect.any(String),
+          channel: 'FP1',
+          reference: 'FP2',
+          color: null,
+          highPass: null,
+          lowPass: null,
+          notch: null,
+        },
       ]);
     });
 

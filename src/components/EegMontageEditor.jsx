@@ -19,6 +19,7 @@ import {
   ArrowUpWideNarrow,
   ArrowDownWideNarrow,
 } from 'lucide-react';
+import { e } from 'mathjs';
 
 // ─── EEG Montage settings ────────────────────────────────────────
 // Shared title styling — keeps panes titles visually consistent, with the same height (TrafficLightButtons are 16px tall).
@@ -61,9 +62,30 @@ export function EegMontageEditor({
   onApplyChannelSettings, // (Record<name, {type, bad}>) => void — commits the draft on Apply/OK
   montageChannels, // Array<{id, channel, reference, color}> — live state owned by EegViewer/useMontageChannels
   onApplyMontageChannels, // (Array<{id, channel, reference, color}>) => void — commits the draft on Apply/OK
+  fs, // sampling frequency of the loaded EEG recording
 }) {
   const { isDarkMode } = useTheme();
   const channelDividerColor = isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
+  const nyquist = fs / 2;
+
+  // Builds a fresh montage row for `name` — shared by the three "add row(s)" actions below
+  // plus Load. No `type` field: a row's type is always looked up live from
+  // draftChannelSettings[row.channel] at render time, so it stays in sync with later edits.
+  // `overrides` lets Load seed reference/color from a parsed file; every other caller omits
+  // it (or, via .map(makeMontageRow), passes the ignored numeric index), so the `??`
+  // fallbacks apply unchanged.
+  const makeMontageRow = useCallback(
+    (name, overrides = {}) => ({
+      id: crypto.randomUUID(),
+      channel: name,
+      reference: overrides.reference ?? null,
+      color: overrides.color ?? null,
+      highPass: overrides.highPass ?? null,
+      lowPass: overrides.lowPass ?? null,
+      notch: overrides.notch ?? null,
+    }),
+    []
+  );
 
   // Draft channelSettings/montageChannels — this component remounts fresh every time it's
   // opened (EegViewer conditionally renders it), so seeding draft state from the live props
@@ -94,6 +116,22 @@ export function EegMontageEditor({
     setDraftMontageChannels((prev) => prev.map((row) => (row.id === id ? { ...row, color } : row)));
   }, []);
 
+  const setDraftMontageRowHighPass = useCallback((id, highPass) => {
+    setDraftMontageChannels((prev) =>
+      prev.map((row) => (row.id === id ? { ...row, highPass } : row))
+    );
+  }, []);
+
+  const setDraftMontageRowLowPass = useCallback((id, lowPass) => {
+    setDraftMontageChannels((prev) =>
+      prev.map((row) => (row.id === id ? { ...row, lowPass } : row))
+    );
+  }, []);
+
+  const setDraftMontageRowNotch = useCallback((id, notch) => {
+    setDraftMontageChannels((prev) => prev.map((row) => (row.id === id ? { ...row, notch } : row)));
+  }, []);
+
   // Channels checked in the channel-selection pane, pending "+ Add selected" — purely
   // ephemeral editor UI state, not part of either draft and never committed on Apply/OK.
   const [selectedChannels, setSelectedChannels] = useState(() => new Set());
@@ -111,22 +149,6 @@ export function EegMontageEditor({
   const handleChannelPaneBackgroundClick = useCallback((e) => {
     if (e.target === e.currentTarget) setSelectedChannels(new Set());
   }, []);
-
-  // Builds a fresh montage row for `name` — shared by the three "add row(s)" actions below
-  // plus Load. No `type` field: a row's type is always looked up live from
-  // draftChannelSettings[row.channel] at render time, so it stays in sync with later edits.
-  // `overrides` lets Load seed reference/color from a parsed file; every other caller omits
-  // it (or, via .map(makeMontageRow), passes the ignored numeric index), so the `??`
-  // fallbacks apply unchanged.
-  const makeMontageRow = useCallback(
-    (name, overrides = {}) => ({
-      id: crypto.randomUUID(),
-      channel: name,
-      reference: overrides.reference ?? null,
-      color: overrides.color ?? null,
-    }),
-    []
-  );
 
   // Adds one new montage row per currently-selected channel, then clears the selection so
   // the next pick starts fresh. Rows aren't deduped against existing ones — a channel can
@@ -276,7 +298,13 @@ export function EegMontageEditor({
         const { rows, channelTypes } = await parseMontageFile(file);
         setDraftMontageChannels(
           rows.map((row) =>
-            makeMontageRow(row.channel, { reference: row.reference, color: row.color })
+            makeMontageRow(row.channel, {
+              reference: row.reference,
+              color: row.color,
+              highPass: row.highPass,
+              lowPass: row.lowPass,
+              notch: row.notch,
+            })
           )
         );
         // AnyWave files carry a per-channel type alongside each row; patch those into the
@@ -468,6 +496,24 @@ export function EegMontageEditor({
   const [bulkColor, setBulkColor] = useState('');
   const handleSetAllColor = () => {
     draftMontageChannels.forEach((row) => setDraftMontageRowColor(row.id, bulkColor || null));
+  };
+
+  // Bulk "Set all filters" control — a blank field clears that setting (off) for every row,
+  // matching bulkColor's always-overwrite behavior above. Each typed value is clamped to
+  // [0, nyquist], mirroring the per-row inputs' own bounds.
+  const [bulkHighPass, setBulkHighPass] = useState('');
+  const [bulkLowPass, setBulkLowPass] = useState('');
+  const [bulkNotch, setBulkNotch] = useState('');
+  const handleSetAllFilters = () => {
+    const clamp = (value) => (value === '' ? null : Math.min(nyquist, Math.max(0, Number(value))));
+    const highPass = clamp(bulkHighPass);
+    const lowPass = clamp(bulkLowPass);
+    const notch = clamp(bulkNotch);
+    draftMontageChannels.forEach((row) => {
+      setDraftMontageRowHighPass(row.id, highPass);
+      setDraftMontageRowLowPass(row.id, lowPass);
+      setDraftMontageRowNotch(row.id, notch);
+    });
   };
 
   // ─── Refs ───────────────────────────────────────────────────────────────────
@@ -782,6 +828,8 @@ export function EegMontageEditor({
   // positioned on either side via the order classes applied where it's rendered — when
   // SplitPane's panes are swapped, this column flips to the opposite side so it stays on
   // the window's outer edge instead of jumping next to the divider.
+
+  // ─── Ad montage row controls
   const addRowControls = (
     <div
       className={cn(
@@ -863,6 +911,8 @@ export function EegMontageEditor({
       </div>
     </div>
   );
+
+  // ─── Montage rows + settings
   const montageSelectionPane = (
     <div className="h-full flex bg-surface">
       {addRowControls}
@@ -887,14 +937,23 @@ export function EegMontageEditor({
               <span className={CHANNEL_COL_CLASS} title="Montage Channel">
                 Channel
               </span>
-              <span className="w-17 shrink-0 text-center" title="Channel Type">
+              <span className="w-16.5 shrink-0 text-center" title="Channel Type">
                 Type
               </span>
-              <span className="w-23 shrink-0 text-center" title="Reference Channel">
+              <span className="w-24.5 shrink-0 text-center" title="Reference Channel">
                 Ref
               </span>
-              <span className="w-20 shrink-0" title="Montage Channel Color">
+              <span className="w-11 shrink-0" title="Montage Channel Color">
                 Color
+              </span>
+              <span className="w-10.5 shrink-0" title="Montage Channel Color">
+                High|→
+              </span>
+              <span className="w-10 shrink-0" title="Montage Channel Color">
+                ←|Low
+              </span>
+              <span className="w-18 shrink-0" title="Montage Channel Color">
+                Notch
               </span>
             </div>
             <div
@@ -1041,6 +1100,82 @@ export function EegMontageEditor({
                       )}
                       {colorOptions}
                     </select>
+
+                    {/* Channel HPF */}
+                    <input
+                      data-testid={`montage-highpass-${row.id}`}
+                      type="number"
+                      value={row.highPass ?? ''}
+                      disabled={isChannelMissing}
+                      min={0}
+                      max={Number.isFinite(row.lowPass) ? Math.min(row.lowPass, nyquist) : nyquist} // High pass cannot be higher than low pass
+                      step={'any'}
+                      onChange={(e) =>
+                        setDraftMontageRowHighPass(
+                          row.id,
+                          e.target.value ? Number(e.target.value) : null
+                        )
+                      }
+                      onBlur={() => {
+                        if (!Number.isFinite(row.highPass)) return;
+                        const upperBound = Number.isFinite(row.lowPass)
+                          ? Math.min(nyquist, row.lowPass)
+                          : nyquist; // highpass must be lower than nyquist but als lower than row.lowPass
+                        const clamped = Math.min(row.highPass, upperBound);
+                        if (clamped !== row.highPass) setDraftMontageRowHighPass(row.id, clamped);
+                      }}
+                      aria-label="High Pass filter frequency"
+                      className="w-10 text-xs bg-surface"
+                    />
+                    {/* Channel LPF */}
+                    <input
+                      data-testid={`montage-lowpass-${row.id}`}
+                      type="number"
+                      value={row.lowPass ?? ''}
+                      disabled={isChannelMissing}
+                      min={Number.isFinite(row.highPass) ? row.highPass : 0} // lowPass can never be lower than high pass
+                      max={nyquist}
+                      step={'any'}
+                      onChange={(e) =>
+                        setDraftMontageRowLowPass(
+                          row.id,
+                          e.target.value ? Number(e.target.value) : null
+                        )
+                      }
+                      onBlur={() => {
+                        if (!Number.isFinite(row.lowPass)) return;
+                        const lowerBound = Number.isFinite(row.highPass) ? row.highPass : 0;
+                        const clamped = Math.min(Math.max(lowerBound, row.lowPass), nyquist);
+                        if (clamped !== row.lowPass) setDraftMontageRowLowPass(row.id, clamped);
+                      }}
+                      aria-label="Low Pass filter frequency"
+                      className="w-10 text-xs bg-surface"
+                    />
+                    {/* Channel Notch */}
+                    <input
+                      data-testid={`montage-notch-${row.id}`}
+                      type="number"
+                      value={row.notch ?? ''}
+                      disabled={isChannelMissing}
+                      min={0} // lowPass can never be lower than high pass
+                      max={nyquist}
+                      step={'any'}
+                      onChange={(e) =>
+                        setDraftMontageRowNotch(
+                          row.id,
+                          e.target.value ? Number(e.target.value) : null
+                        )
+                      }
+                      onBlur={() => {
+                        if (!Number.isFinite(row.notch)) return;
+                        const lowerBound = 0;
+                        const clamped = Math.min(Math.max(lowerBound, row.notch), nyquist);
+                        if (clamped !== row.notch) setDraftMontageRowNotch(row.id, clamped);
+                      }}
+                      aria-label="Notch filter frequency"
+                      className="w-10 text-xs bg-surface"
+                    />
+
                     {/* Remove row */}
                     <button
                       type="button"
@@ -1070,19 +1205,6 @@ export function EegMontageEditor({
           <div className="overflow-x-auto">
             <div className="flex flex-col gap-4 pb-2 w-max min-w-full">
               <div className="flex items-start gap-4">
-                {/* Clear group */}
-                <div className="flex flex-col gap-2 shrink-0">
-                  <button
-                    type="button"
-                    className="button whitespace-nowrap"
-                    data-testid="clear-all-button"
-                    disabled={draftMontageChannels.length === 0}
-                    onClick={handleClearAllMontageRows}
-                    title="Remove all montage rows"
-                  >
-                    Clear all
-                  </button>
-                </div>
                 {/* Sort group — the arrow shows the direction the next click will sort in. */}
                 <div className="flex flex-col gap-2 shrink-0">
                   <button
@@ -1155,6 +1277,63 @@ export function EegMontageEditor({
                   </select>
                 </div>
 
+                {/* Set all Filters group — a blank field leaves that setting off for every row;
+                    see handleSetAllFilters. */}
+                <div className="flex flex-col gap-2 shrink-0">
+                  <button
+                    className="button whitespace-nowrap"
+                    data-testid="bulk-filters-apply-button"
+                    disabled={draftMontageChannels.length === 0}
+                    onClick={handleSetAllFilters}
+                  >
+                    Set all as
+                  </button>
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      title="High Pass"
+                      placeholder="HP"
+                      aria-label="Set all rows' High Pass filter frequency"
+                      className="w-10 text-xs border border-border rounded bg-surface"
+                      data-testid="bulk-highpass-input"
+                      disabled={draftMontageChannels.length === 0}
+                      min={0}
+                      max={nyquist}
+                      step="any"
+                      value={bulkHighPass}
+                      onChange={(e) => setBulkHighPass(e.target.value)}
+                    />
+                    <input
+                      type="number"
+                      title="Low Pass"
+                      placeholder="LP"
+                      aria-label="Set all rows' Low Pass filter frequency"
+                      className="w-10 text-xs border border-border rounded bg-surface"
+                      data-testid="bulk-lowpass-input"
+                      disabled={draftMontageChannels.length === 0}
+                      min={0}
+                      max={nyquist}
+                      step="any"
+                      value={bulkLowPass}
+                      onChange={(e) => setBulkLowPass(e.target.value)}
+                    />
+                    <input
+                      type="number"
+                      title="Notch"
+                      placeholder="N"
+                      aria-label="Set all rows' Notch filter frequency"
+                      className="w-10 text-xs border border-border rounded bg-surface"
+                      data-testid="bulk-notch-input"
+                      disabled={draftMontageChannels.length === 0}
+                      min={0}
+                      max={nyquist}
+                      step="any"
+                      value={bulkNotch}
+                      onChange={(e) => setBulkNotch(e.target.value)}
+                    />
+                  </div>
+                </div>
+
                 {/* Move group — acts on whichever row(s) are selected (click a row's channel
                     name above to select it); disabled with none selected since there's nothing
                     to move. overflow-hidden + p-1 clips the buttons' :hover scale so it can't
@@ -1196,6 +1375,18 @@ export function EegMontageEditor({
                   extension, so format detection happens by content-sniffing in
                   parseMontageFile, not via the file input's accept filter. */}
               <div className="flex items-center gap-2 shrink-0">
+                {/* Clear group */}
+                <button
+                  type="button"
+                  className="button whitespace-nowrap"
+                  data-testid="clear-all-button"
+                  disabled={draftMontageChannels.length === 0}
+                  onClick={handleClearAllMontageRows}
+                  title="Remove all montage rows"
+                >
+                  Clear all
+                </button>
+
                 <button
                   type="button"
                   className="button whitespace-nowrap"
