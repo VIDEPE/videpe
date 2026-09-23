@@ -24,9 +24,11 @@ import { e } from 'mathjs';
 
 // ─── Window sizing constants ────────────────────────────────────────────────
 // Default/minimum window size in px — default matches the previous fixed w-96 h-80 (24rem x 20rem)
-const DEFAULT_WINDOW_SIZE = { width: 1100, height: 620 };
+const START_WINDOW_POS = { x: 40, y: 50 };
+const DEFAULT_WINDOW_SIZE = { width: 975, height: 600 };
 const MIN_WINDOW_WIDTH = 600;
 const MIN_WINDOW_HEIGHT = 450;
+const DEFAULT_SPLIT_PERCENT = 27;
 const RESIZE_DIRECTIONS = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
 
 // ─── EEG Montage settings ────────────────────────────────────────
@@ -48,13 +50,14 @@ const PRESET_COLORS = ['red', 'blue', 'green', 'yellow', 'cyan', 'magenta'];
 const PANEL_TITLE_CLASS = 'h-5 flex items-center text-xs font-medium leading-none text-header';
 // Shared Channel column sizing for both row lists' header and rows — flex-1 so it fills
 // leftover width, min-w so it stops shrinking there and the other columns scroll instead.
-const CHANNEL_COL_CLASS = 'flex-1 min-w-8';
+const CHANNEL_NAME_COL_CLASS = 'flex-1 min-w-8';
 // Shared column-width classes for every other column that carries a bulk "set all as"
 // control inline in its header (see channelSelectionPane/montageSelectionPane below) — the
 // header cell and each row's own control both use the exact same class, so the two can
 // never drift out of alignment the way independently-picked widths did before.
-const TYPE_COL_CLASS = 'w-16 shrink-0';
-const BAD_COL_CLASS = 'w-11 shrink-0';
+const CHANNEL_POS_COL_CLASS = 'w-8 pl-2 pr-1 shrink-0 text-center';
+const CHANNEL_TYPE_COL_CLASS = 'w-16 shrink-0';
+const CHANNEL_BAD_COL_CLASS = 'w-9 shrink-0';
 // Montage pane's read-only Type column (channel type, looked up live — not bulk-editable
 // like TYPE_COL_CLASS above, which is the channel-selection pane's editable Type column).
 const MONTAGE_TYPE_COL_CLASS = 'w-11 shrink-0';
@@ -544,7 +547,7 @@ export function EegMontageEditor({
   // ─── State ──────────────────────────────────────────────────────────────────
   const [isMaximized, setIsMaximized] = useState(false);
   const [maximizedPanel, setMaximizedPanel] = useState(null); // null | 'left' | 'right'
-  const [position, setPosition] = useState({ x: 100, y: 70 });
+  const [position, setPosition] = useState({ x: START_WINDOW_POS.x, y: START_WINDOW_POS.y });
   const [size, setSize] = useState(DEFAULT_WINDOW_SIZE);
   // Whether SplitPane's two panes are currently swapped — used to flip the montage pane's
   // own internal add-row-controls/row-list layout so the controls stay on the outer edge.
@@ -723,14 +726,20 @@ export function EegMontageEditor({
                 className="sticky top-0 z-10 flex items-end gap-2 px-1 py-1 text-xs font-medium text-header border-b border-border bg-background"
                 onClick={handleChannelPaneBackgroundClick}
               >
-                <span className={cn(CHANNEL_COL_CLASS, 'cursor-default')}>Channel</span>
-                <span className="w-13 shrink-0 text-center cursor-default" title="Electrode Position Match">
+                <span className={cn(CHANNEL_NAME_COL_CLASS, 'cursor-default')}>Channel</span>
+                <span
+                  className={cn(CHANNEL_POS_COL_CLASS, 'cursor-default')}
+                  title="Electrode Position Match"
+                >
                   Pos
                 </span>
                 {/* Channel Type — bulk "set all as" lives inline: pick a type, click the
                   checkmark to apply it to every channel (see handleSetAllType). */}
-                <div className={cn(TYPE_COL_CLASS, 'flex flex-col gap-0.5')} title="Channel Type">
-                  <span className='cursor-default'>Type</span>
+                <div
+                  className={cn(CHANNEL_TYPE_COL_CLASS, 'flex flex-col gap-0.5')}
+                  title="Channel Type"
+                >
+                  <span className="cursor-default">Type</span>
                   <div className="flex items-center gap-1">
                     <select
                       className="flex-1 min-w-0 text-xs border border-border rounded bg-surface"
@@ -760,10 +769,10 @@ export function EegMontageEditor({
                   handleFlipBadChannels), independent of the "set all as" pattern above since
                   there's no value to pick — it's a pure toggle. */}
                 <div
-                  className={cn(BAD_COL_CLASS, 'flex flex-col items-center gap-0.5')}
+                  className={cn(CHANNEL_BAD_COL_CLASS, 'flex flex-col items-center gap-0.5')}
                   title="Bad channel"
                 >
-                  <span className='cursor-default'>Bad</span>
+                  <span className="cursor-default">Bad</span>
                   <input
                     type="checkbox"
                     className="accent-alert"
@@ -802,7 +811,7 @@ export function EegMontageEditor({
                         montage settings pane. */}
                     <span
                       className={cn(
-                        CHANNEL_COL_CLASS,
+                        CHANNEL_NAME_COL_CLASS,
                         'truncate text-sm cursor-pointer select-none',
                         settings.bad && 'text-alert'
                       )}
@@ -813,7 +822,7 @@ export function EegMontageEditor({
                       {name}
                     </span>
                     {/* Electrode Position Match */}
-                    <div className="w-4 shrink-0 flex justify-center">
+                    <div className={CHANNEL_POS_COL_CLASS}>
                       <input
                         type="checkbox"
                         className="text-xs rounded accent-border opacity-60 cursor-help"
@@ -827,7 +836,7 @@ export function EegMontageEditor({
                         above, so the two columns stay aligned. */}
                     <select
                       className={cn(
-                        TYPE_COL_CLASS,
+                        CHANNEL_TYPE_COL_CLASS,
                         'text-xs border border-border rounded bg-surface'
                       )}
                       data-testid={`channel-type-${name}`}
@@ -842,7 +851,7 @@ export function EegMontageEditor({
                     </select>
                     {/* Bad Channel — same BAD_COL_CLASS width as the bulk header checkbox
                         above, so the two columns stay aligned. */}
-                    <div className={cn(BAD_COL_CLASS, 'flex justify-center')}>
+                    <div className={cn(CHANNEL_BAD_COL_CLASS, 'flex justify-center')}>
                       <input
                         type="checkbox"
                         className="accent-alert"
@@ -905,6 +914,16 @@ export function EegMontageEditor({
         >
           Add ALL
         </button>
+        <button
+          type="button"
+          className="button"
+          data-testid="clear-all-button"
+          onClick={handleClearAllMontageRows}
+          disabled={draftMontageChannels.length === 0}
+          title={draftMontageChannels.length === 0 ? "No montage rows to clear" : "Remove all montage rows"}
+        >
+          Clear ALL
+        </button>
       </div>
       {/* Add bye type button + select */}
       <div className="flex flex-col gap-2 pt-6 border-t border-border">
@@ -917,7 +936,6 @@ export function EegMontageEditor({
         >
           Add by Type
         </button>
-
         <select
           className="text-xs border border-border rounded bg-surface"
           data-testid="add-by-type-select"
@@ -981,10 +999,13 @@ export function EegMontageEditor({
                 className="sticky top-0 z-10 flex items-end gap-2 pl-3 pr-1 py-1 text-xs font-medium text-header border-b border-border bg-background"
                 onClick={handleMontagePaneBackgroundClick}
               >
-                <span className={cn(CHANNEL_COL_CLASS, 'cursor-pointer')} title="Montage Channel">
+                <span className={cn(CHANNEL_NAME_COL_CLASS, 'cursor-pointer')} title="Montage Channel">
                   Channel
                 </span>
-                <span className={cn(MONTAGE_TYPE_COL_CLASS, 'text-center cursor-pointer')} title="Channel Type">
+                <span
+                  className={cn(MONTAGE_TYPE_COL_CLASS, 'text-center cursor-pointer')}
+                  title="Channel Type"
+                >
                   Type
                 </span>
                 {/* Reference — bulk "set all as" lives inline: pick a reference, click the
@@ -1148,14 +1169,12 @@ export function EegMontageEditor({
                 {/* Clear column header — replaces the old standalone "Clear all" footer
                   button; aligned with each row's own Remove (×) button below via
                   CLEAR_COL_CLASS. */}
-                <div
-                  className={cn(CLEAR_COL_CLASS, 'flex flex-col items-center gap-0.5')}
-                >
+                <div className={cn(CLEAR_COL_CLASS, 'flex flex-col items-center gap-0.5')}>
                   <button
                     type="button"
                     className="shrink-0 w-4 h-4 flex items-center justify-center disabled:opacity-40 text-header hover:text-alert cursor-pointer"
-                    data-testid="clear-all-button"
-                    title="Remove all montage rows"
+                    data-testid="clear-all-header-button"
+                    title={draftMontageChannels.length === 0 ? "No montage rows to clear" : "Remove all montage rows"}
                     disabled={draftMontageChannels.length === 0}
                     onClick={handleClearAllMontageRows}
                   >
@@ -1222,7 +1241,7 @@ export function EegMontageEditor({
                     {/* Channel name */}
                     <span
                       className={cn(
-                        CHANNEL_COL_CLASS,
+                        CHANNEL_NAME_COL_CLASS,
                         'truncate text-sm',
                         isChannelBad && 'text-alert',
                         isChannelMissing && 'text-red-500'
@@ -1577,7 +1596,7 @@ export function EegMontageEditor({
         onSwapChange={setIsPanesSwapped}
         left={channelSelectionPane}
         right={montageSelectionPane}
-        defaultSplitPercent={30}
+        defaultSplitPercent={DEFAULT_SPLIT_PERCENT}
       />
 
       {/* Footer — Apply/OK commit the draft to EegViewer's live channelSettings; Cancel (and
