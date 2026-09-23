@@ -25,7 +25,7 @@ import { e } from 'mathjs';
 // ─── Window sizing constants ────────────────────────────────────────────────
 // Default/minimum window size in px — default matches the previous fixed w-96 h-80 (24rem x 20rem)
 const START_WINDOW_POS = { x: 40, y: 50 };
-const DEFAULT_WINDOW_SIZE = { width: 975, height: 600 };
+const DEFAULT_WINDOW_SIZE = { width: 1000, height: 600 };
 const MIN_WINDOW_WIDTH = 600;
 const MIN_WINDOW_HEIGHT = 450;
 const DEFAULT_SPLIT_PERCENT = 27;
@@ -60,7 +60,7 @@ const CHANNEL_TYPE_COL_CLASS = 'w-16 shrink-0';
 const CHANNEL_BAD_COL_CLASS = 'w-9 shrink-0';
 // Montage pane's read-only Type column (channel type, looked up live — not bulk-editable
 // like TYPE_COL_CLASS above, which is the channel-selection pane's editable Type column).
-const MONTAGE_TYPE_COL_CLASS = 'w-11 shrink-0';
+const MONTAGE_TYPE_COL_CLASS = 'w-13 shrink-0';
 const REF_COL_CLASS = 'w-18 shrink-0';
 const COLOR_COL_CLASS = 'w-20 shrink-0';
 const FILTER_COL_CLASS = 'w-14 shrink-0';
@@ -920,7 +920,11 @@ export function EegMontageEditor({
           data-testid="clear-all-button"
           onClick={handleClearAllMontageRows}
           disabled={draftMontageChannels.length === 0}
-          title={draftMontageChannels.length === 0 ? "No montage rows to clear" : "Remove all montage rows"}
+          title={
+            draftMontageChannels.length === 0
+              ? 'No montage rows to clear'
+              : 'Remove all montage rows'
+          }
         >
           Clear ALL
         </button>
@@ -999,19 +1003,45 @@ export function EegMontageEditor({
                 className="sticky top-0 z-10 flex items-end gap-2 pl-3 pr-1 py-1 text-xs font-medium text-header border-b border-border bg-background"
                 onClick={handleMontagePaneBackgroundClick}
               >
-                <span className={cn(CHANNEL_NAME_COL_CLASS, 'cursor-pointer')} title="Montage Channel">
-                  Channel
+                {/* <span> has no real `disabled` attribute — it's guarded here instead by
+                    only wiring onClick/cursor-pointer when there's something to sort. */}
+                <span
+                  className={cn(
+                    CHANNEL_NAME_COL_CLASS,
+                    'flex items-center gap-1',
+                    draftMontageChannels.length === 0 ? 'opacity-40' : 'cursor-pointer'
+                  )}
+                  title={`Montage Channel - Click to sort rows by channel name (${nameSortDescending ? 'descending' : 'ascending'})`}
+                  data-testid="sort-by-name-button"
+                  onClick={draftMontageChannels.length === 0 ? undefined : handleSortByName} // spans can't be disabled to we need to disable the onclick instead
+                >
+                  Channel {nameSortDescending ? <ArrowDownAZ size={15} /> : <ArrowUpAZ size={15} />}
                 </span>
                 <span
-                  className={cn(MONTAGE_TYPE_COL_CLASS, 'text-center cursor-pointer')}
-                  title="Channel Type"
+                  className={cn(
+                    MONTAGE_TYPE_COL_CLASS,
+                    'flex items-center justify-center gap-1',
+                    draftMontageChannels.length === 0 ? 'opacity-40' : 'cursor-pointer'
+                  )}
+                  title={`Channel Type - Click to sort rows by channel type (${typeSortDescending ? 'descending' : 'ascending'})`}
+                  data-testid="sort-by-type-button"
+                  onClick={draftMontageChannels.length === 0 ? undefined : handleSortByType} // spans can't be disabled to we need to disable the onclick instead
                 >
                   Type
+                  {typeSortDescending ? (
+                    <ArrowDownWideNarrow size={15} />
+                  ) : (
+                    <ArrowUpWideNarrow size={15} />
+                  )}
                 </span>
                 {/* Reference — bulk "set all as" lives inline: pick a reference, click the
                   checkmark to apply it to every montage row (see handleSetAllReference). */}
                 <div
-                  className={cn(REF_COL_CLASS, 'flex flex-col gap-0.5')}
+                  className={cn(
+                    REF_COL_CLASS,
+                    'flex flex-col gap-0.5',
+                    draftMontageChannels.length === 0 && 'opacity-40'
+                  )}
                   title="Reference Channel"
                 >
                   <span className="text-center">Ref</span>
@@ -1039,7 +1069,11 @@ export function EegMontageEditor({
                 </div>
                 {/* Color — same inline bulk-apply pattern as Reference (see handleSetAllColor). */}
                 <div
-                  className={cn(COLOR_COL_CLASS, 'flex flex-col gap-0.5')}
+                  className={cn(
+                    COLOR_COL_CLASS,
+                    'flex flex-col gap-0.5',
+                    draftMontageChannels.length === 0 && 'opacity-40'
+                  )}
                   title="Montage Channel Color"
                 >
                   <span className="cursor-default">Color</span>
@@ -1072,7 +1106,11 @@ export function EegMontageEditor({
                   bulkColor's always-overwrite behavior above. */}
                 {/* High Pass filter header with set all controls */}
                 <div
-                  className={cn(FILTER_COL_CLASS, 'flex flex-col gap-0.5')}
+                  className={cn(
+                    FILTER_COL_CLASS,
+                    'flex flex-col gap-0.5',
+                    draftMontageChannels.length === 0 && 'opacity-40'
+                  )}
                   title="High Pass filter frequency"
                 >
                   <span className="text-center cursor-default">High</span>
@@ -1104,7 +1142,11 @@ export function EegMontageEditor({
                 </div>
                 {/* Low Pass filter header with set all controls */}
                 <div
-                  className={cn(FILTER_COL_CLASS, 'flex flex-col gap-0.5')}
+                  className={cn(
+                    FILTER_COL_CLASS,
+                    'flex flex-col gap-0.5',
+                    draftMontageChannels.length === 0 && 'opacity-40'
+                  )}
                   title="Low Pass filter frequency"
                 >
                   <span className="text-center cursor-default">Low</span>
@@ -1136,7 +1178,11 @@ export function EegMontageEditor({
                 </div>
                 {/* Notch filter header with set all controls */}
                 <div
-                  className={cn(FILTER_COL_CLASS, 'flex flex-col gap-0.5')}
+                  className={cn(
+                    FILTER_COL_CLASS,
+                    'flex flex-col gap-0.5',
+                    draftMontageChannels.length === 0 && 'opacity-40'
+                  )}
                   title="Notch filter frequency"
                 >
                   <span className="text-center cursor-default">Notch</span>
@@ -1174,7 +1220,11 @@ export function EegMontageEditor({
                     type="button"
                     className="shrink-0 w-4 h-4 flex items-center justify-center disabled:opacity-40 text-header hover:text-alert cursor-pointer"
                     data-testid="clear-all-header-button"
-                    title={draftMontageChannels.length === 0 ? "No montage rows to clear" : "Remove all montage rows"}
+                    title={
+                      draftMontageChannels.length === 0
+                        ? 'No montage rows to clear'
+                        : 'Remove all montage rows'
+                    }
                     disabled={draftMontageChannels.length === 0}
                     onClick={handleClearAllMontageRows}
                   >
@@ -1422,118 +1472,83 @@ export function EegMontageEditor({
             </div>
           </div>
         </div>
-        {/* Montage Settings — a row of three column groups (Clear/Sort/Move), each stacking
-            its own buttons; the Move group is pushed to the right edge (ml-auto) since it
-            acts on row selection rather than the list as a whole, like Clear/Sort do. A
-            second row below holds Load/Save side by side. */}
+        {/* Montage Settings — Load/Save on the left, Move Up/Down pinned to the right edge
+            (ml-auto) since they act on row selection rather than the list as a whole, like
+            Load/Save do. */}
         <div
           className="shrink-0 flex flex-col p-2 border-t border-border bg-surface"
           onClick={handleMontagePaneBackgroundClick}
         >
-          {/* Scrolls horizontally as one unit when the pane is too narrow, so a single
-              scrollbar sits below Load/Save instead of one wedged between the two rows. */}
+          {/* Scrolls horizontally as one unit when the pane is too narrow. */}
           <div className="overflow-x-auto">
-            <div className="flex flex-col gap-4 pb-2 w-max min-w-full">
-              <div className="flex items-start gap-4">
-                {/* Sort group — the arrow shows the direction the next click will sort in. */}
-                <div className="flex flex-col gap-2 shrink-0">
-                  <button
-                    type="button"
-                    className="button flex items-center gap-1 whitespace-nowrap"
-                    data-testid="sort-by-name-button"
-                    disabled={draftMontageChannels.length === 0}
-                    onClick={handleSortByName}
-                    title={`Sort rows by channel name (${nameSortDescending ? 'descending' : 'ascending'})`}
-                  >
-                    Sort by Name
-                    {nameSortDescending ? <ArrowDownAZ size={15} /> : <ArrowUpAZ size={15} />}
-                  </button>
-                  <button
-                    type="button"
-                    className="button flex items-center gap-1 whitespace-nowrap"
-                    data-testid="sort-by-type-button"
-                    disabled={draftMontageChannels.length === 0}
-                    onClick={handleSortByType}
-                    title={`Sort rows by channel type (${typeSortDescending ? 'descending' : 'ascending'})`}
-                  >
-                    Sort by Type
-                    {typeSortDescending ? (
-                      <ArrowDownWideNarrow size={15} />
-                    ) : (
-                      <ArrowUpWideNarrow size={15} />
-                    )}
-                  </button>
-                </div>
-                {/* Move group — acts on whichever row(s) are selected (click a row's channel
-                    name above to select it); disabled with none selected since there's nothing
-                    to move. overflow-hidden + p-1 clips the buttons' :hover scale so it can't
-                    escape into the scrollable toolbar's width and flicker the scrollbar. */}
-                <div className="flex flex-col gap-2 shrink-0 ml-auto overflow-hidden p-1">
-                  <button
-                    type="button"
-                    className="button button-icon"
-                    data-testid="move-up-button"
-                    disabled={selectedMontageRows.size === 0}
-                    onClick={handleMoveSelectedUp}
-                    title={
-                      selectedMontageRows.size === 0
-                        ? 'Select montage row(s) first'
-                        : 'Move selected row(s) up'
-                    }
-                  >
-                    <MoveUp size={20} />
-                  </button>
-                  <button
-                    type="button"
-                    className="button button-icon"
-                    data-testid="move-down-button"
-                    disabled={selectedMontageRows.size === 0}
-                    onClick={handleMoveSelectedDown}
-                    title={
-                      selectedMontageRows.size === 0
-                        ? 'Select montage row(s) first'
-                        : 'Move selected row(s) down'
-                    }
-                  >
-                    <MoveDown size={20} />
-                  </button>
-                </div>
-              </div>
-              {/* File row — Load replaces all draft rows wholesale (grouped conceptually with
-                  Clear, both whole-list-replacing); Save always exports AnyWave format
+            <div className="flex items-center gap-2 pb-2 w-max min-w-full">
+              {/* File group — Load replaces all draft rows wholesale (grouped conceptually
+                  with Clear, both whole-list-replacing); Save always exports AnyWave format
                   regardless of the montage's origin. Both .mtg formats share the same file
                   extension, so format detection happens by content-sniffing in
                   parseMontageFile, not via the file input's accept filter. */}
-              <div className="flex items-center gap-2 shrink-0">
-                {/* Load montage button */}
+              {/* Load montage button */}
+              <button
+                type="button"
+                className="button whitespace-nowrap"
+                data-testid="load-montage-button"
+                onClick={() => fileInputRef.current?.click()}
+                title="Load a montage from an AnyWave or Cartool .mtg file (replaces all current rows)"
+              >
+                Load
+              </button>
+              {/* Save montage button */}
+              <button
+                type="button"
+                className="button whitespace-nowrap"
+                data-testid="save-montage-button"
+                disabled={draftMontageChannels.length === 0}
+                onClick={handleSaveMontage}
+                title="Save the current montage as an AnyWave .mtg file"
+              >
+                Save
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".mtg"
+                hidden
+                data-testid="montage-file-input"
+                onChange={handleLoadMontageFile}
+              />
+              {/* Move group — acts on whichever row(s) are selected (click a row's channel
+                  name above to select it); disabled with none selected since there's nothing
+                  to move. overflow-hidden + p-1 clips the buttons' :hover scale so it can't
+                  escape into the scrollable toolbar's width and flicker the scrollbar. */}
+              <div className="flex items-center gap-2 shrink-0 ml-auto overflow-hidden p-1">
                 <button
                   type="button"
-                  className="button whitespace-nowrap"
-                  data-testid="load-montage-button"
-                  onClick={() => fileInputRef.current?.click()}
-                  title="Load a montage from an AnyWave or Cartool .mtg file (replaces all current rows)"
+                  className="button button-icon"
+                  data-testid="move-up-button"
+                  disabled={selectedMontageRows.size === 0}
+                  onClick={handleMoveSelectedUp}
+                  title={
+                    selectedMontageRows.size === 0
+                      ? 'Select montage row(s) first'
+                      : 'Move selected row(s) up'
+                  }
                 >
-                  Load
+                  <MoveUp size={20} />
                 </button>
-                {/* Save montage button */}
                 <button
                   type="button"
-                  className="button whitespace-nowrap"
-                  data-testid="save-montage-button"
-                  disabled={draftMontageChannels.length === 0}
-                  onClick={handleSaveMontage}
-                  title="Save the current montage as an AnyWave .mtg file"
+                  className="button button-icon"
+                  data-testid="move-down-button"
+                  disabled={selectedMontageRows.size === 0}
+                  onClick={handleMoveSelectedDown}
+                  title={
+                    selectedMontageRows.size === 0
+                      ? 'Select montage row(s) first'
+                      : 'Move selected row(s) down'
+                  }
                 >
-                  Save
+                  <MoveDown size={20} />
                 </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".mtg"
-                  hidden
-                  data-testid="montage-file-input"
-                  onChange={handleLoadMontageFile}
-                />
               </div>
             </div>
           </div>

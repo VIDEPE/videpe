@@ -1399,6 +1399,22 @@ describe('EegMontageEditor', () => {
       expect(onApplyMontageChannels).toHaveBeenCalledWith([]);
     });
 
+    it('disables the Clear column header button when there are no montage rows', () => {
+      render(<EegMontageEditor {...defaultProps} montageChannels={[]} />);
+      expect(screen.getByTestId('clear-all-header-button')).toBeDisabled();
+    });
+
+    it('the Clear column header button removes every montage row, same as "Clear all"', async () => {
+      const onApplyMontageChannels = vi.fn();
+      render(
+        <EegMontageEditor {...defaultProps} onApplyMontageChannels={onApplyMontageChannels} />
+      );
+      await userEvent.click(screen.getByTestId('clear-all-header-button'));
+      await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+      expect(onApplyMontageChannels).toHaveBeenCalledWith([]);
+    });
+
     it("clicking a row's remove button removes only that row", async () => {
       const onApplyMontageChannels = vi.fn();
       render(
