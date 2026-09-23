@@ -45,6 +45,7 @@ const defaultProps = {
   montageChannels: MONTAGE_CHANNELS,
   onApplyMontageChannels: vi.fn(),
   onClose: vi.fn(),
+  fs: 256, // used to compute nyquist for highPass/lowPass/notch clamping
 };
 
 describe('EegMontageEditor', () => {

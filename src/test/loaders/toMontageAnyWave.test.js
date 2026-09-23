@@ -66,6 +66,38 @@ describe('toAnyWaveMontage', () => {
     expect(parsed.channelTypes).toEqual({ FP2: 'eeg', F3: 'seeg' });
   });
 
+  it('always writes a <filters> element, using AnyWave off-sentinels when unset', () => {
+    const rows = [
+      { channel: 'FP2', reference: null, color: null, highPass: null, lowPass: null, notch: null },
+    ];
+    const channelSettings = { FP2: { type: 'eeg', bad: false } };
+    const xml = toAnyWaveMontage(rows, channelSettings);
+    expect(xml).toContain('<filters highPass="-1" lowPass="-1" notch="0"/>');
+  });
+
+  it('writes the real values in the <filters> element when set', () => {
+    const rows = [
+      { channel: 'FP2', reference: null, color: null, highPass: 1, lowPass: 40, notch: 50 },
+    ];
+    const channelSettings = { FP2: { type: 'eeg', bad: false } };
+    const xml = toAnyWaveMontage(rows, channelSettings);
+    expect(xml).toContain('<filters highPass="1" lowPass="40" notch="50"/>');
+  });
+
+  it('round-trips non-null highPass/lowPass/notch values through parseAnyWaveMontage', () => {
+    const rows = [
+      { channel: 'FP2', reference: null, color: null, highPass: 1, lowPass: 40, notch: 50 },
+      { channel: 'F3', reference: 'Fz', color: null, highPass: null, lowPass: null, notch: null },
+    ];
+    const channelSettings = {
+      FP2: { type: 'eeg', bad: false },
+      F3: { type: 'seeg', bad: false },
+    };
+    const xml = toAnyWaveMontage(rows, channelSettings);
+    const parsed = parseAnyWaveMontage(xml);
+    expect(parsed.rows).toEqual(rows);
+  });
+
   it('escapes XML-special characters in a channel name', () => {
     const rows = [{ channel: 'A&B', reference: null, color: null }];
     const channelSettings = { 'A&B': { type: 'eeg', bad: false } };
