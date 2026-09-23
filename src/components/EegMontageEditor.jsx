@@ -1009,7 +1009,7 @@ export function EegMontageEditor({
                   className={cn(
                     CHANNEL_NAME_COL_CLASS,
                     'flex items-center gap-1',
-                    draftMontageChannels.length === 0 ? 'opacity-40' : 'cursor-pointer'
+                    draftMontageChannels.length === 0 ? 'opacity-40 cursor-default' : 'cursor-pointer'
                   )}
                   title={`Montage Channel - Click to sort rows by channel name (${nameSortDescending ? 'descending' : 'ascending'})`}
                   data-testid="sort-by-name-button"
@@ -1021,7 +1021,7 @@ export function EegMontageEditor({
                   className={cn(
                     MONTAGE_TYPE_COL_CLASS,
                     'flex items-center justify-center gap-1',
-                    draftMontageChannels.length === 0 ? 'opacity-40' : 'cursor-pointer'
+                    draftMontageChannels.length === 0 ? 'opacity-40 cursor-default' : 'cursor-pointer'
                   )}
                   title={`Channel Type - Click to sort rows by channel type (${typeSortDescending ? 'descending' : 'ascending'})`}
                   data-testid="sort-by-type-button"
@@ -1044,7 +1044,7 @@ export function EegMontageEditor({
                   )}
                   title="Reference Channel"
                 >
-                  <span className="text-center">Ref</span>
+                  <span className="text-center cursor-default">Ref</span>
                   <div className="flex items-center gap-1">
                     <select
                       className="flex-1 min-w-0 text-xs border border-border rounded bg-surface"
@@ -1113,7 +1113,7 @@ export function EegMontageEditor({
                   )}
                   title="High Pass filter frequency"
                 >
-                  <span className="text-center cursor-default">High</span>
+                  <span className="text-center cursor-default">High Pass</span>
                   <div className="flex items-center gap-1">
                     <input
                       type="number"
@@ -1149,7 +1149,7 @@ export function EegMontageEditor({
                   )}
                   title="Low Pass filter frequency"
                 >
-                  <span className="text-center cursor-default">Low</span>
+                  <span className="text-center cursor-default">Low Pass</span>
                   <div className="flex items-center gap-1">
                     <input
                       type="number"
@@ -1481,7 +1481,7 @@ export function EegMontageEditor({
         >
           {/* Scrolls horizontally as one unit when the pane is too narrow. */}
           <div className="overflow-x-auto">
-            <div className="flex items-center gap-2 pb-2 w-max min-w-full">
+            <div className="flex items-center gap-2 py-2 w-max min-w-full">
               {/* File group — Load replaces all draft rows wholesale (grouped conceptually
                   with Clear, both whole-list-replacing); Save always exports AnyWave format
                   regardless of the montage's origin. Both .mtg formats share the same file
