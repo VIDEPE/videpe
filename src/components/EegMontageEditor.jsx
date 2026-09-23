@@ -498,6 +498,24 @@ export function EegMontageEditor({
     draftMontageChannels.forEach((row) => setDraftMontageRowColor(row.id, bulkColor || null));
   };
 
+  // Bulk "Set all filters" control — a blank field clears that setting (off) for every row,
+  // matching bulkColor's always-overwrite behavior above. Each typed value is clamped to
+  // [0, nyquist], mirroring the per-row inputs' own bounds.
+  const [bulkHighPass, setBulkHighPass] = useState('');
+  const [bulkLowPass, setBulkLowPass] = useState('');
+  const [bulkNotch, setBulkNotch] = useState('');
+  const handleSetAllFilters = () => {
+    const clamp = (value) => (value === '' ? null : Math.min(nyquist, Math.max(0, Number(value))));
+    const highPass = clamp(bulkHighPass);
+    const lowPass = clamp(bulkLowPass);
+    const notch = clamp(bulkNotch);
+    draftMontageChannels.forEach((row) => {
+      setDraftMontageRowHighPass(row.id, highPass);
+      setDraftMontageRowLowPass(row.id, lowPass);
+      setDraftMontageRowNotch(row.id, notch);
+    });
+  };
+
   // ─── Refs ───────────────────────────────────────────────────────────────────
   const fileInputRef = useRef(null);
   const dragOffset = useRef(null);
@@ -1187,19 +1205,6 @@ export function EegMontageEditor({
           <div className="overflow-x-auto">
             <div className="flex flex-col gap-4 pb-2 w-max min-w-full">
               <div className="flex items-start gap-4">
-                {/* Clear group */}
-                <div className="flex flex-col gap-2 shrink-0">
-                  <button
-                    type="button"
-                    className="button whitespace-nowrap"
-                    data-testid="clear-all-button"
-                    disabled={draftMontageChannels.length === 0}
-                    onClick={handleClearAllMontageRows}
-                    title="Remove all montage rows"
-                  >
-                    Clear all
-                  </button>
-                </div>
                 {/* Sort group — the arrow shows the direction the next click will sort in. */}
                 <div className="flex flex-col gap-2 shrink-0">
                   <button
@@ -1272,6 +1277,63 @@ export function EegMontageEditor({
                   </select>
                 </div>
 
+                {/* Set all Filters group — a blank field leaves that setting off for every row;
+                    see handleSetAllFilters. */}
+                <div className="flex flex-col gap-2 shrink-0">
+                  <button
+                    className="button whitespace-nowrap"
+                    data-testid="bulk-filters-apply-button"
+                    disabled={draftMontageChannels.length === 0}
+                    onClick={handleSetAllFilters}
+                  >
+                    Set all as
+                  </button>
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      title="High Pass"
+                      placeholder="HP"
+                      aria-label="Set all rows' High Pass filter frequency"
+                      className="w-10 text-xs border border-border rounded bg-surface"
+                      data-testid="bulk-highpass-input"
+                      disabled={draftMontageChannels.length === 0}
+                      min={0}
+                      max={nyquist}
+                      step="any"
+                      value={bulkHighPass}
+                      onChange={(e) => setBulkHighPass(e.target.value)}
+                    />
+                    <input
+                      type="number"
+                      title="Low Pass"
+                      placeholder="LP"
+                      aria-label="Set all rows' Low Pass filter frequency"
+                      className="w-10 text-xs border border-border rounded bg-surface"
+                      data-testid="bulk-lowpass-input"
+                      disabled={draftMontageChannels.length === 0}
+                      min={0}
+                      max={nyquist}
+                      step="any"
+                      value={bulkLowPass}
+                      onChange={(e) => setBulkLowPass(e.target.value)}
+                    />
+                    <input
+                      type="number"
+                      title="Notch"
+                      placeholder="N"
+                      aria-label="Set all rows' Notch filter frequency"
+                      className="w-10 text-xs border border-border rounded bg-surface"
+                      data-testid="bulk-notch-input"
+                      disabled={draftMontageChannels.length === 0}
+                      min={0}
+                      max={nyquist}
+                      step="any"
+                      value={bulkNotch}
+                      onChange={(e) => setBulkNotch(e.target.value)}
+                    />
+                  </div>
+                </div>
+
                 {/* Move group — acts on whichever row(s) are selected (click a row's channel
                     name above to select it); disabled with none selected since there's nothing
                     to move. overflow-hidden + p-1 clips the buttons' :hover scale so it can't
@@ -1313,6 +1375,18 @@ export function EegMontageEditor({
                   extension, so format detection happens by content-sniffing in
                   parseMontageFile, not via the file input's accept filter. */}
               <div className="flex items-center gap-2 shrink-0">
+                {/* Clear group */}
+                <button
+                  type="button"
+                  className="button whitespace-nowrap"
+                  data-testid="clear-all-button"
+                  disabled={draftMontageChannels.length === 0}
+                  onClick={handleClearAllMontageRows}
+                  title="Remove all montage rows"
+                >
+                  Clear all
+                </button>
+
                 <button
                   type="button"
                   className="button whitespace-nowrap"
