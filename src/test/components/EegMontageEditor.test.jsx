@@ -322,47 +322,50 @@ describe('EegMontageEditor', () => {
     });
   });
 
-  describe('Set all Bad / Set all Good', () => {
+  describe('Bad column header checkbox', () => {
     const ALL_BAD_SETTINGS = {
       FP1: { type: 'eeg', bad: true },
       FP2: { type: 'eeg', bad: true },
       FP3: { type: 'seeg', bad: true },
     };
 
-    it('shows "Set all Bad" when not every channel is already bad', () => {
+    it('is unchecked when not every channel is already bad', () => {
       render(<EegMontageEditor {...defaultProps} />);
-      expect(screen.getByRole('button', { name: 'Set all Bad' })).toBeTruthy();
+      expect(screen.getByTestId('bulk-bad-checkbox')).not.toBeChecked();
     });
 
-    it('shows "Set all Good" when every channel is already bad', () => {
+    it('is checked when every channel is already bad', () => {
       render(<EegMontageEditor {...defaultProps} channelSettings={ALL_BAD_SETTINGS} />);
-      expect(screen.getByRole('button', { name: 'Set all Good' })).toBeTruthy();
+      expect(screen.getByTestId('bulk-bad-checkbox')).toBeChecked();
     });
 
-    it('marks every channel bad when clicked while not all are bad', async () => {
+    it('marks every channel bad when checked while not all are bad', async () => {
       render(<EegMontageEditor {...defaultProps} />);
-      await userEvent.click(screen.getByRole('button', { name: 'Set all Bad' }));
+      await userEvent.click(screen.getByTestId('bulk-bad-checkbox'));
 
       CHANNEL_NAMES.forEach((name) =>
         expect(screen.getByTestId(`channel-bad-${name}`)).toBeChecked()
       );
-      expect(screen.getByRole('button', { name: 'Set all Good' })).toBeTruthy();
+      expect(screen.getByTestId('bulk-bad-checkbox')).toBeChecked();
     });
 
-    it('marks every channel good when clicked while all are bad', async () => {
+    it('marks every channel good when unchecked while all are bad', async () => {
       render(<EegMontageEditor {...defaultProps} channelSettings={ALL_BAD_SETTINGS} />);
-      await userEvent.click(screen.getByRole('button', { name: 'Set all Good' }));
+      await userEvent.click(screen.getByTestId('bulk-bad-checkbox'));
 
       CHANNEL_NAMES.forEach((name) =>
         expect(screen.getByTestId(`channel-bad-${name}`)).not.toBeChecked()
       );
-      expect(screen.getByRole('button', { name: 'Set all Bad' })).toBeTruthy();
+      expect(screen.getByTestId('bulk-bad-checkbox')).not.toBeChecked();
     });
 
-    it('updates the label when a channel is unchecked by hand, not just via the button', async () => {
-      render(<EegMontageEditor {...defaultProps} channelSettings={ALL_BAD_SETTINGS} />);
+    it('auto-checks itself when a channel is checked by hand, not just via the checkbox itself', async () => {
+      const ALL_BAD_BUT_ONE = { ...ALL_BAD_SETTINGS, FP1: { type: 'eeg', bad: false } };
+      render(<EegMontageEditor {...defaultProps} channelSettings={ALL_BAD_BUT_ONE} />);
+      expect(screen.getByTestId('bulk-bad-checkbox')).not.toBeChecked();
+
       await userEvent.click(screen.getByTestId('channel-bad-FP1'));
-      expect(screen.getByRole('button', { name: 'Set all Bad' })).toBeTruthy();
+      expect(screen.getByTestId('bulk-bad-checkbox')).toBeChecked();
     });
   });
 
@@ -543,10 +546,12 @@ describe('EegMontageEditor', () => {
     });
   });
 
-  describe('Set all Filters', () => {
-    it('disables the bulk filter inputs and apply button when there are no montage rows', () => {
+  describe('Set all Filters (inline per-column headers)', () => {
+    it('disables the bulk filter inputs and apply buttons when there are no montage rows', () => {
       render(<EegMontageEditor {...defaultProps} montageChannels={[]} />);
-      expect(screen.getByTestId('bulk-filters-apply-button')).toBeDisabled();
+      expect(screen.getByTestId('bulk-highpass-apply-button')).toBeDisabled();
+      expect(screen.getByTestId('bulk-lowpass-apply-button')).toBeDisabled();
+      expect(screen.getByTestId('bulk-notch-apply-button')).toBeDisabled();
       expect(screen.getByTestId('bulk-highpass-input')).toBeDisabled();
       expect(screen.getByTestId('bulk-lowpass-input')).toBeDisabled();
       expect(screen.getByTestId('bulk-notch-input')).toBeDisabled();
@@ -559,28 +564,55 @@ describe('EegMontageEditor', () => {
       expect(screen.getByTestId('bulk-notch-input')).toHaveValue(null);
     });
 
-    it("sets every montage row's highPass/lowPass/notch when applied", async () => {
+    it("sets every montage row's highPass when its own column is applied", async () => {
       render(<EegMontageEditor {...defaultProps} />);
       await userEvent.type(screen.getByTestId('bulk-highpass-input'), '1');
-      await userEvent.type(screen.getByTestId('bulk-lowpass-input'), '40');
-      await userEvent.type(screen.getByTestId('bulk-notch-input'), '50');
-      await userEvent.click(screen.getByTestId('bulk-filters-apply-button'));
+      await userEvent.click(screen.getByTestId('bulk-highpass-apply-button'));
 
       // MONTAGE_CHANNELS seeds id === channel, so these testids double as an id check.
+      CHANNEL_NAMES.forEach((name) =>
+        expect(screen.getByTestId(`montage-highpass-${name}`)).toHaveValue(1)
+      );
+    });
+
+    it("sets every montage row's lowPass when its own column is applied", async () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      await userEvent.type(screen.getByTestId('bulk-lowpass-input'), '40');
+      await userEvent.click(screen.getByTestId('bulk-lowpass-apply-button'));
+
+      CHANNEL_NAMES.forEach((name) =>
+        expect(screen.getByTestId(`montage-lowpass-${name}`)).toHaveValue(40)
+      );
+    });
+
+    it("sets every montage row's notch when its own column is applied", async () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      await userEvent.type(screen.getByTestId('bulk-notch-input'), '50');
+      await userEvent.click(screen.getByTestId('bulk-notch-apply-button'));
+
+      CHANNEL_NAMES.forEach((name) =>
+        expect(screen.getByTestId(`montage-notch-${name}`)).toHaveValue(50)
+      );
+    });
+
+    it("applying one column's checkmark leaves the other two filter columns untouched", async () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      await userEvent.type(screen.getByTestId('bulk-highpass-input'), '1');
+      await userEvent.click(screen.getByTestId('bulk-highpass-apply-button'));
+
       CHANNEL_NAMES.forEach((name) => {
-        expect(screen.getByTestId(`montage-highpass-${name}`)).toHaveValue(1);
-        expect(screen.getByTestId(`montage-lowpass-${name}`)).toHaveValue(40);
-        expect(screen.getByTestId(`montage-notch-${name}`)).toHaveValue(50);
+        expect(screen.getByTestId(`montage-lowpass-${name}`)).toHaveValue(null);
+        expect(screen.getByTestId(`montage-notch-${name}`)).toHaveValue(null);
       });
     });
 
-    it('clears every row back to off when applied with blank fields after a prior bulk set', async () => {
+    it('clears every row back to off when applied with a blank field after a prior bulk set', async () => {
       render(<EegMontageEditor {...defaultProps} />);
       await userEvent.type(screen.getByTestId('bulk-highpass-input'), '1');
-      await userEvent.click(screen.getByTestId('bulk-filters-apply-button'));
+      await userEvent.click(screen.getByTestId('bulk-highpass-apply-button'));
 
       await userEvent.clear(screen.getByTestId('bulk-highpass-input'));
-      await userEvent.click(screen.getByTestId('bulk-filters-apply-button'));
+      await userEvent.click(screen.getByTestId('bulk-highpass-apply-button'));
 
       CHANNEL_NAMES.forEach((name) =>
         expect(screen.getByTestId(`montage-highpass-${name}`)).toHaveValue(null)
@@ -596,7 +628,7 @@ describe('EegMontageEditor', () => {
       }));
       render(<EegMontageEditor {...defaultProps} montageChannels={montageChannels} />);
       await userEvent.type(screen.getByTestId('bulk-notch-input'), '50');
-      await userEvent.click(screen.getByTestId('bulk-filters-apply-button'));
+      await userEvent.click(screen.getByTestId('bulk-notch-apply-button'));
 
       CHANNEL_NAMES.forEach((name) => {
         expect(screen.getByTestId(`reference-${name}`)).toHaveValue('average');
@@ -1362,6 +1394,22 @@ describe('EegMontageEditor', () => {
         <EegMontageEditor {...defaultProps} onApplyMontageChannels={onApplyMontageChannels} />
       );
       await userEvent.click(screen.getByTestId('clear-all-button'));
+      await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+      expect(onApplyMontageChannels).toHaveBeenCalledWith([]);
+    });
+
+    it('disables the Clear column header button when there are no montage rows', () => {
+      render(<EegMontageEditor {...defaultProps} montageChannels={[]} />);
+      expect(screen.getByTestId('clear-all-header-button')).toBeDisabled();
+    });
+
+    it('the Clear column header button removes every montage row, same as "Clear all"', async () => {
+      const onApplyMontageChannels = vi.fn();
+      render(
+        <EegMontageEditor {...defaultProps} onApplyMontageChannels={onApplyMontageChannels} />
+      );
+      await userEvent.click(screen.getByTestId('clear-all-header-button'));
       await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
 
       expect(onApplyMontageChannels).toHaveBeenCalledWith([]);
