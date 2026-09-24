@@ -1,8 +1,15 @@
+import { yieldToMain } from '@/utils/yieldToMain';
+
 // BrainVision EEG files come in two parts: a text header (.vhdr) and a binary data file (.eeg).
 // The .eeg file is raw, uncompressed, multiplexed IEEE_FLOAT_32 data (4 bytes per channel
 // per sample-time), so an arbitrary time range maps directly to an arbitrary byte range —
 // this lets loadBrainVisionEEG avoid reading the whole file for multi-hour recordings.
 const BYTES_PER_SAMPLE = 4; // sizeof(IEEE_FLOAT_32); existing assumption, BinaryFormat is not parsed
+
+// DEMUX_CHUNK_SAMPLES sets how many time points demux (per synchronous burst) before pausing briefly
+// so the browser can redraw and respond to clicks. Without theses pauses, a large file/large buffer reload
+// would run as one uninterrupted block and freeze the app until all channels are demuxed.
+const DEMUX_CHUNK_SAMPLES = 10000;
 
 async function readText(source) {
   if (source instanceof File) return source.text();
@@ -50,20 +57,42 @@ function parseVhdr(text) {
 // Demultiplexes a range of MULTIPLEXED float32 samples: [s0_ch0, s0_ch1, ..., s0_chN, s1_ch0, ...]
 // `sampleOffset` is the absolute sample index of float32[0], used to compute absolute timestamps
 // so the returned timestamps[0] is the chunk's real start time (not 0).
-function demuxFloat32(float32, nChannels, nSamples, sampleOffset, fs) {
+//
+// Runs in DEMUX_CHUNK_SAMPLES-sized bursts, yielding to the browser between them (see
+// yieldToMain) so demuxing a large buffered chunk doesn't block the main thread in one shot.
+async function demuxFloat32(float32, nChannels, nSamples, sampleOffset, fs) {
   const timestamps = new Float32Array(nSamples);
   // Compute absolute timestamps for each sample in the chunk based on the sample offset and sampling frequency.
   for (let t = 0; t < nSamples; t++) timestamps[t] = (sampleOffset + t) / fs;
 
   // Allocate separate arrays for each channel.
   const channels = Array.from({ length: nChannels }, () => new Float32Array(nSamples));
+  // TEMP timing log — remove once DEMUX_CHUNK_SAMPLES is tuned
+  const demuxStart = performance.now();
+  const burstTimes = [];
   // Inner loop over channels keeps sequential reads on float32 (cache-friendly)
-  for (let t = 0; t < nSamples; t++) {
-    const offset = t * nChannels;
-    for (let ch = 0; ch < nChannels; ch++) {
-      channels[ch][t] = float32[offset + ch];
+  for (let chunkStart = 0; chunkStart < nSamples; chunkStart += DEMUX_CHUNK_SAMPLES) {
+    const burstStart = performance.now();
+    const chunkEnd = Math.min(chunkStart + DEMUX_CHUNK_SAMPLES, nSamples);
+    for (let t = chunkStart; t < chunkEnd; t++) {
+      const offset = t * nChannels;
+      for (let ch = 0; ch < nChannels; ch++) {
+        channels[ch][t] = float32[offset + ch];
+      }
     }
+    burstTimes.push(performance.now() - burstStart);
+    if (chunkEnd < nSamples) await yieldToMain();
   }
+
+  // TEMP timing log — remove once DEMUX_CHUNK_SAMPLES is tuned
+  const workMs = burstTimes.reduce((sum, ms) => sum + ms, 0);
+  const totalMs = performance.now() - demuxStart;
+  console.log(
+    `[demux] ${nChannels} channels × ${nSamples} time points in ${burstTimes.length} bursts | ` +
+      `per burst: min ${Math.min(...burstTimes).toFixed(1)}ms, max ${Math.max(...burstTimes).toFixed(1)}ms, ` +
+      `avg ${(workMs / burstTimes.length).toFixed(1)}ms | ` +
+      `work ${workMs.toFixed(0)}ms + pauses ${(totalMs - workMs).toFixed(0)}ms = total ${totalMs.toFixed(0)}ms`
+  );
 
   return { timestamps, channels };
 }

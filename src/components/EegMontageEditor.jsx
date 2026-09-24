@@ -1009,7 +1009,9 @@ export function EegMontageEditor({
                   className={cn(
                     CHANNEL_NAME_COL_CLASS,
                     'flex items-center gap-1',
-                    draftMontageChannels.length === 0 ? 'opacity-40 cursor-default' : 'cursor-pointer'
+                    draftMontageChannels.length === 0
+                      ? 'opacity-40 cursor-default'
+                      : 'cursor-pointer'
                   )}
                   title={`Montage Channel - Click to sort rows by channel name (${nameSortDescending ? 'descending' : 'ascending'})`}
                   data-testid="sort-by-name-button"
@@ -1021,7 +1023,9 @@ export function EegMontageEditor({
                   className={cn(
                     MONTAGE_TYPE_COL_CLASS,
                     'flex items-center justify-center gap-1',
-                    draftMontageChannels.length === 0 ? 'opacity-40 cursor-default' : 'cursor-pointer'
+                    draftMontageChannels.length === 0
+                      ? 'opacity-40 cursor-default'
+                      : 'cursor-pointer'
                   )}
                   title={`Channel Type - Click to sort rows by channel type (${typeSortDescending ? 'descending' : 'ascending'})`}
                   data-testid="sort-by-type-button"
