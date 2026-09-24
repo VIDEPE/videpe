@@ -1,6 +1,6 @@
 # VIDEPE
 
-![Version](https://img.shields.io/badge/version-0.17.2-blue)
+![Version](https://img.shields.io/badge/version-0.18.0-blue)
 
 **V**isualization & **I**ntegration of **D**ata for **E**pilepsy **P**resurgical **E**valuation
 
@@ -22,20 +22,20 @@ High-performance multichannel viewer built on [uPlot](https://github.com/leeoniy
 
 - Accepts BrainVision format EEG recordings
 - Stack/unstack EEG — overlay all visible channels on a single plot to spot cross-channel patterns
+- Click a channel label to move the neuroimaging crosshair to its electrode — bipolar rows jump to the midpoint between their two electrodes
 - **Controls:**
   - Adjustable range (µV scale), window size, and time step
   - Interactive timeline scrubber for fast navigation across the full recording
   - Keyboard navigation — arrow keys for range/panning, Page Up/Down and Space for window jumps, Home/End to jump to the start/end
   - Configurable number of simultaneously visible channels.
-- **Performance:**
-  - Min-max downsampling keeps rendering fast at any zoom level
-  - Sliding-window buffer — only a portion of the recording is kept in memory at once, so hour-long, high-channel-count recordings stay fast without exhausting browser memory
+- **Built for big recordings** — only part of the file is kept in memory, and drawing and filtering run in the background, so hour-long, high-channel-count recordings stay smooth
 
 - **Montage Editor** — a dedicated window for channel selection, re-referencing and building custom EEG montages.
   - Re-reference on the fly or select preset montage (e.g. double banana)
   - Select and flag channels (bad-channel, per-channel type)
   - Build referenced or bipolar montage rows with custom per-row colors, reorder and sort them, and the waveform view switches to showing exactly those rows.
-  - Import montage files in AnyWave (XML) or Cartool (plain-text) format — auto-detected from file content — and export back out as AnyWave XML.
+  - Per-row frequency filtering — high-pass, low-pass and mains notch (zero-phase Butterworth), set per row or for all rows at once from the column headers.
+  - Import montage files in AnyWave (XML) or Cartool (plain-text) format — auto-detected from file content — and export back out as AnyWave XML (filter settings included).
 
 - EEG topography — a resizable panel showing a 3D voltage map at the selected time point using [NiiVue](https://niivue.com/) mesh rendering
   - Load custom positions via `.elc` or `.tsv` file (Uses fsaverage_1005 (FreeSurfer) electrode positions by default)
@@ -45,9 +45,10 @@ High-performance multichannel viewer built on [uPlot](https://github.com/leeoniy
 - **Intracranial (SEEG) support** — SEEG channels are auto-detected from channel naming
   - Custom channel type setting as EEG/SEEG will toggle VIDEPE options accordingly and changes rendering style of the 3D electrodes configuration in the neuroimaging viewer
   - Colour/size the 3D electrode connectome nodes by any custom metric read from extra `.tsv` columns, not just voltage
-- **Electrical Source Imaging** — Uploading an Inverse Solution file, unlocks the ability to 3D visualise the power of the surface EEG recording.
-  - (currently only Fieldtrip `*_inversefilters.mat` supported)
-  - renders per-source power at the selected EEG time point as either a 3D connectome or a volumetric heatmap
+- **Electrical Source Imaging** — load an inverse solution (currently only FieldTrip `*_inversefilters.mat`), enable ESI, and click the EEG plot to see the source power at that time point.
+  - Rendered as either a 3D volumetric heatmap or a connectome
+  - The crosshair jumps to the source with the highest power on every click
+  - Every channel in the inverse solution must be in the recording and typed EEG; bad channels are left out, and the common-average reference is always used, whatever montage the waveform shows
 
 ### **Neuroimaging viewer**
 
