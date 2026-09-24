@@ -73,10 +73,7 @@ async function demuxFloat32(float32, nChannels, nSamples, sampleOffset, fs, sign
 
   // Allocate separate arrays for each channel.
   const channels = Array.from({ length: nChannels }, () => new Float32Array(nSamples));
-  // TEMP timing log — remove once the buffer-reload freeze is diagnosed
-  const demuxStart = performance.now();
-  const burstTimes = [];
-  let burstStart = performance.now();
+  let burstStart = performance.now(); // when the current burst started, for the time budget
   // Inner loop over channels keeps sequential reads on float32 (cache-friendly)
   for (let t = 0; t < nSamples; t++) {
     const offset = t * nChannels;
@@ -88,23 +85,11 @@ async function demuxFloat32(float32, nChannels, nSamples, sampleOffset, fs, sign
     // pause if this burst has used up its time budget
     const isClockCheck = (t + 1) % DEMUX_CLOCK_CHECK_INTERVAL === 0 && t + 1 < nSamples;
     if (isClockCheck && performance.now() - burstStart >= DEMUX_FRAME_BUDGET_MS) {
-      burstTimes.push(performance.now() - burstStart);
       await yieldToMain(); // pause the function and let the browser handle whatever is waiting, then continue
       signal?.throwIfAborted(); // a newer request may have replaced this one during the pause
       burstStart = performance.now();
     }
   }
-  burstTimes.push(performance.now() - burstStart); // the final burst
-
-  // TEMP timing log — remove once the buffer-reload freeze is diagnosed
-  const workMs = burstTimes.reduce((sum, ms) => sum + ms, 0);
-  const totalMs = performance.now() - demuxStart;
-  console.log(
-    `[demux] ${nChannels} channels × ${nSamples} time points in ${burstTimes.length} bursts | ` +
-      `per burst: min ${Math.min(...burstTimes).toFixed(1)}ms, max ${Math.max(...burstTimes).toFixed(1)}ms, ` +
-      `avg ${(workMs / burstTimes.length).toFixed(1)}ms | ` +
-      `work ${workMs.toFixed(0)}ms + pauses ${(totalMs - workMs).toFixed(0)}ms = total ${totalMs.toFixed(0)}ms`
-  );
 
   return { timestamps, channels };
 }

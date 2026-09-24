@@ -381,15 +381,7 @@ export const EegViewer = ({
     const nonBadChannels = channels.filter(
       (_, index) => !channelSettings[channelNames[index]]?.bad
     );
-    // TEMP timing log — remove once the buffer-reload freeze is diagnosed
-    const refStart = performance.now();
-    const series = computeReferenceSeries(nonBadChannels, { needsAverage, needsMedian });
-    console.log(
-      `[reference] average ${needsAverage ? 'on' : 'off'}, median ${needsMedian ? 'on' : 'off'} over ` +
-        `${nonBadChannels.length} channels × ${channels[0]?.length ?? 0} time points: ` +
-        `${(performance.now() - refStart).toFixed(0)}ms (one block, no pauses)`
-    );
-    return series;
+    return computeReferenceSeries(nonBadChannels, { needsAverage, needsMedian });
   }, [channels, channelSettings, channelNames, needsAverage, needsMedian]);
 
   // Bad channels are hidden from topography/connectome/ESI entirely, not just excluded from

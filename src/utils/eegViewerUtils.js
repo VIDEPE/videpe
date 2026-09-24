@@ -334,40 +334,22 @@ export async function filterMontageRows(
   );
   const window = hasAnyFilter ? getTukeyWindow(channels[0].length + fs, 0.1) : undefined;
 
-  // TEMP timing log — remove once the buffer-reload freeze is diagnosed
-  const passStart = performance.now();
-  let workMs = 0;
-  let pauseCount = 0;
-  let filteredRowCount = 0;
-
   const samplesByRowId = new Map();
-  let burstStart = performance.now();
+  let burstStart = performance.now(); // when the current burst started, for the time budget
   for (let iRow = 0; iRow < displayRows.length; iRow++) {
     const row = displayRows[iRow];
     const raw = deriveMontageRowSamples(channels, row, referenceSeries);
-    const filtered = applyMontageRowFilter(raw, row, fs, window);
-    samplesByRowId.set(row.id, filtered);
-    if (filtered !== raw) filteredRowCount++;
+    samplesByRowId.set(row.id, applyMontageRowFilter(raw, row, fs, window));
 
     // worked long enough without a break: pause, then stop here if a newer pass replaced this one
     // (no pause after the last row — there's nothing left to do, so just finish)
     const isLastRow = iRow === displayRows.length - 1;
     if (!isLastRow && performance.now() - burstStart >= frameBudgetMs) {
-      workMs += performance.now() - burstStart;
       await yieldToMain();
-      pauseCount++;
       signal?.throwIfAborted();
       burstStart = performance.now();
     }
   }
-  workMs += performance.now() - burstStart;
-
-  // TEMP timing log — remove once the buffer-reload freeze is diagnosed
-  const totalMs = performance.now() - passStart;
-  console.log(
-    `[filter] ${displayRows.length} rows (${filteredRowCount} with a filter) × ${channels[0].length} time points | ` +
-      `work ${workMs.toFixed(0)}ms + ${pauseCount} pauses ${(totalMs - workMs).toFixed(0)}ms = total ${totalMs.toFixed(0)}ms`
-  );
 
   return samplesByRowId;
 }
