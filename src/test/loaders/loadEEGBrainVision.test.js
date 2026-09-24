@@ -1,5 +1,10 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { loadBrainVisionEEG } from '@/loaders/loadEEGBrainVision';
+import { yieldToMain } from '@/utils/yieldToMain';
+
+// The demux pauses between bursts via yieldToMain — replaced with an instant pause so tests
+// can count pauses and run code (e.g. cancel) exactly during one.
+vi.mock('@/utils/yieldToMain', () => ({ yieldToMain: vi.fn(() => Promise.resolve()) }));
 
 // Minimal two-channel header at 200 Hz (SamplingInterval=5000 µs)
 const VHDR = `; Created by test
@@ -150,8 +155,7 @@ describe('loadBrainVisionEEG — getChunk (File sources)', () => {
 });
 
 describe('loadBrainVisionEEG — getChunk (large chunks and cancelling)', () => {
-  // 2 channels × 25,000 time points: more than one demux burst, so the pauses in between
-  // (and aborting during them) are exercised. ch0 = 0, 1, 2, ...; ch1 = the negative of ch0.
+  // 2 channels × 25,000 time points; ch0 = 0, 1, 2, ...; ch1 = the negative of ch0.
   const N_LARGE = 25000;
   const setupLarge = () => {
     const values = [];
@@ -161,16 +165,55 @@ describe('loadBrainVisionEEG — getChunk (large chunks and cancelling)', () => 
     return { headerFile, dataFile };
   };
 
-  it('demuxes a chunk spanning several bursts correctly', async () => {
+  // Fake clock for the demux's time budget: every read advances it by `msPerRead`, so a test
+  // decides whether the budget runs out (pause) or never does (no pause), independent of how
+  // fast the test machine really is.
+  const useFakeClock = (msPerRead) => {
+    let now = 0;
+    vi.spyOn(performance, 'now').mockImplementation(() => (now += msPerRead));
+  };
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    yieldToMain.mockClear();
+  });
+
+  it('demuxes correctly when it pauses many times along the way', async () => {
+    useFakeClock(10); // every clock check is past the time budget → pause as often as possible
     const { headerFile, dataFile } = setupLarge();
     const provider = await loadBrainVisionEEG(headerFile, dataFile);
     const { channels } = await provider.getChunk(0, provider.tMax);
+    expect(yieldToMain.mock.calls.length).toBeGreaterThan(2);
     expect(channels[0]).toHaveLength(N_LARGE);
-    // spot-check both ends and values around the burst boundaries
-    for (const t of [0, 9999, 10000, 10001, 19999, 20000, N_LARGE - 1]) {
+    // spot-check both ends and values scattered across the burst boundaries
+    for (const t of [0, 999, 1000, 1001, 9999, 10000, 12345, N_LARGE - 1]) {
       expect(channels[0][t]).toBe(t);
       expect(channels[1][t]).toBe(-t);
     }
+  });
+
+  it('does not pause when the whole chunk fits within the time budget', async () => {
+    useFakeClock(0); // the clock never advances → the time budget never runs out
+    const { headerFile, dataFile } = setupLarge();
+    const provider = await loadBrainVisionEEG(headerFile, dataFile);
+    await provider.getChunk(0, provider.tMax);
+    expect(yieldToMain).not.toHaveBeenCalled();
+  });
+
+  it('stops demuxing when aborted during a pause', async () => {
+    useFakeClock(10);
+    const { headerFile, dataFile } = setupLarge();
+    const provider = await loadBrainVisionEEG(headerFile, dataFile);
+    const controller = new AbortController();
+    // cancel during the first pause, like a newer reload replacing this one
+    yieldToMain.mockImplementationOnce(() => {
+      controller.abort();
+      return Promise.resolve();
+    });
+    await expect(provider.getChunk(0, provider.tMax, controller.signal)).rejects.toMatchObject({
+      name: 'AbortError',
+    });
+    expect(yieldToMain).toHaveBeenCalledTimes(1); // stopped right there, no further bursts
   });
 
   it('rejects with an AbortError when the signal is already aborted', async () => {

@@ -6,10 +6,14 @@ import { yieldToMain } from '@/utils/yieldToMain';
 // this lets loadBrainVisionEEG avoid reading the whole file for multi-hour recordings.
 const BYTES_PER_SAMPLE = 4; // sizeof(IEEE_FLOAT_32); existing assumption, BinaryFormat is not parsed
 
-// DEMUX_CHUNK_SAMPLES sets how many time points demux (per synchronous burst) before pausing briefly
-// so the browser can redraw and respond to clicks. Without theses pauses, a large file/large buffer reload
+// The demux pauses briefly once it has worked DEMUX_FRAME_BUDGET_MS without a break, so the
+// browser can redraw and respond to clicks. Without these pauses, a large file/large buffer reload
 // would run as one uninterrupted block and freeze the app until all channels are demuxed.
-const DEMUX_CHUNK_SAMPLES = 10000;
+// A time budget (rather than a fixed number of time points) adapts to the channel count and
+// machine speed: 8ms keeps each block comfortably under one frame (~16ms).
+const DEMUX_FRAME_BUDGET_MS = 8;
+// Time points between clock checks — checking after every single one would waste time
+const DEMUX_CLOCK_CHECK_INTERVAL = 1000;
 
 async function readText(source) {
   if (source instanceof File) return source.text();
@@ -58,7 +62,7 @@ function parseVhdr(text) {
 // `sampleOffset` is the absolute sample index of float32[0], used to compute absolute timestamps
 // so the returned timestamps[0] is the chunk's real start time (not 0).
 //
-// Runs in DEMUX_CHUNK_SAMPLES-sized bursts, yielding to the browser between them (see
+// Runs in bursts of up to DEMUX_FRAME_BUDGET_MS, yielding to the browser between them (see
 // yieldToMain) so demuxing a large buffered chunk doesn't block the main thread in one shot.
 // If `signal` is aborted during a pause, stops and throws an AbortError instead of finishing
 // work whose result would be thrown away.
@@ -69,27 +73,30 @@ async function demuxFloat32(float32, nChannels, nSamples, sampleOffset, fs, sign
 
   // Allocate separate arrays for each channel.
   const channels = Array.from({ length: nChannels }, () => new Float32Array(nSamples));
-  // TEMP timing log — remove once DEMUX_CHUNK_SAMPLES is tuned
+  // TEMP timing log — remove once the buffer-reload freeze is diagnosed
   const demuxStart = performance.now();
   const burstTimes = [];
+  let burstStart = performance.now();
   // Inner loop over channels keeps sequential reads on float32 (cache-friendly)
-  for (let chunkStart = 0; chunkStart < nSamples; chunkStart += DEMUX_CHUNK_SAMPLES) {
-    const burstStart = performance.now();
-    const chunkEnd = Math.min(chunkStart + DEMUX_CHUNK_SAMPLES, nSamples);
-    for (let t = chunkStart; t < chunkEnd; t++) {
-      const offset = t * nChannels;
-      for (let ch = 0; ch < nChannels; ch++) {
-        channels[ch][t] = float32[offset + ch];
-      }
+  for (let t = 0; t < nSamples; t++) {
+    const offset = t * nChannels;
+    for (let ch = 0; ch < nChannels; ch++) {
+      channels[ch][t] = float32[offset + ch];
     }
-    burstTimes.push(performance.now() - burstStart);
-    if (chunkEnd < nSamples) {
-      await yieldToMain(); // pause the function and let the browser handle whatever is waiting) then continue
+
+    // every DEMUX_CLOCK_CHECK_INTERVAL time points (and only if there's more to do):
+    // pause if this burst has used up its time budget
+    const isClockCheck = (t + 1) % DEMUX_CLOCK_CHECK_INTERVAL === 0 && t + 1 < nSamples;
+    if (isClockCheck && performance.now() - burstStart >= DEMUX_FRAME_BUDGET_MS) {
+      burstTimes.push(performance.now() - burstStart);
+      await yieldToMain(); // pause the function and let the browser handle whatever is waiting, then continue
       signal?.throwIfAborted(); // a newer request may have replaced this one during the pause
+      burstStart = performance.now();
     }
   }
+  burstTimes.push(performance.now() - burstStart); // the final burst
 
-  // TEMP timing log — remove once DEMUX_CHUNK_SAMPLES is tuned
+  // TEMP timing log — remove once the buffer-reload freeze is diagnosed
   const workMs = burstTimes.reduce((sum, ms) => sum + ms, 0);
   const totalMs = performance.now() - demuxStart;
   console.log(
