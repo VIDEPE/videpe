@@ -1,4 +1,10 @@
 import { parseElectrodeContactName } from './intracranialDetection';
+import { getTukeyWindow, applyMontageRowFilter } from './eegFilters';
+import { yieldToMain } from './yieldToMain';
+
+// Once a filtering pass has worked this long without pausing, it yields to the browser — keeps
+// each uninterrupted block comfortably under one frame (~16ms) so the app stays responsive
+const FILTER_FRAME_BUDGET_MS = 8;
 
 // ─── EEG channel referencing ──────────────────────────────────────────────────────────
 //
@@ -292,6 +298,78 @@ export function deriveMontageRowSamples(channels, row, referenceSeries) {
   // else: substract the reference channel from the channel
   const referenceSamples = channels[row.referenceIndex];
   return channelSamples.map((v, i) => v - referenceSamples[i]);
+}
+
+/**
+ * Derives (see deriveMontageRowSamples) and filters every display row's full buffered signal,
+ * one row at a time. Filtering a big montage takes seconds, so this pauses (see yieldToMain)
+ * whenever it has worked `frameBudgetMs` without a break, keeping the app responsive.
+ *
+ * @param {Float32Array[]} channels - the raw buffered samples, one array per channel.
+ * @param {{ id: string, highPass: number|null, lowPass: number|null, notch: number|null }[]} displayRows -
+ *   from buildMontageDisplayRows.
+ * @param {{ average: number[]|null, median: number[]|null }|null} referenceSeries - from
+ *   computeReferenceSeries.
+ * @param {number} fs - sampling frequency in Hz.
+ * @param {{ signal?: AbortSignal, frameBudgetMs?: number }} [options] - `signal` cancels the pass
+ *   (checked at the start and after every pause); `frameBudgetMs` is how long to work before
+ *   pausing.
+ * @returns {Promise<Map<string, Float32Array|number[]>>} each row's filtered samples, keyed by row
+ *   id. A row without a filter keeps its derived samples as-is (no copy).
+ * @throws {DOMException} an AbortError when `signal` is aborted.
+ */
+export async function filterMontageRows(
+  channels,
+  displayRows,
+  referenceSeries,
+  fs,
+  { signal, frameBudgetMs = FILTER_FRAME_BUDGET_MS } = {}
+) {
+  signal?.throwIfAborted();
+
+  // one Tukey window shared by every row (they all have the buffer's length), only built when
+  // some row actually has a filter to apply it to
+  const hasAnyFilter = displayRows.some(
+    (row) => row.highPass !== null || row.lowPass !== null || row.notch !== null
+  );
+  const window = hasAnyFilter ? getTukeyWindow(channels[0].length + fs, 0.1) : undefined;
+
+  // TEMP timing log — remove once the buffer-reload freeze is diagnosed
+  const passStart = performance.now();
+  let workMs = 0;
+  let pauseCount = 0;
+  let filteredRowCount = 0;
+
+  const samplesByRowId = new Map();
+  let burstStart = performance.now();
+  for (let iRow = 0; iRow < displayRows.length; iRow++) {
+    const row = displayRows[iRow];
+    const raw = deriveMontageRowSamples(channels, row, referenceSeries);
+    const filtered = applyMontageRowFilter(raw, row, fs, window);
+    samplesByRowId.set(row.id, filtered);
+    if (filtered !== raw) filteredRowCount++;
+
+    // worked long enough without a break: pause, then stop here if a newer pass replaced this one
+    // (no pause after the last row — there's nothing left to do, so just finish)
+    const isLastRow = iRow === displayRows.length - 1;
+    if (!isLastRow && performance.now() - burstStart >= frameBudgetMs) {
+      workMs += performance.now() - burstStart;
+      await yieldToMain();
+      pauseCount++;
+      signal?.throwIfAborted();
+      burstStart = performance.now();
+    }
+  }
+  workMs += performance.now() - burstStart;
+
+  // TEMP timing log — remove once the buffer-reload freeze is diagnosed
+  const totalMs = performance.now() - passStart;
+  console.log(
+    `[filter] ${displayRows.length} rows (${filteredRowCount} with a filter) × ${channels[0].length} time points | ` +
+      `work ${workMs.toFixed(0)}ms + ${pauseCount} pauses ${(totalMs - workMs).toFixed(0)}ms = total ${totalMs.toFixed(0)}ms`
+  );
+
+  return samplesByRowId;
 }
 
 /**

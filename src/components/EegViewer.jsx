@@ -25,10 +25,10 @@ import {
 import { minMaxDownsample } from '@/utils/downsample';
 import {
   buildMontageDisplayRows,
-  deriveMontageRowSamples,
   computeReferenceSeries,
   getNeededReferenceSeries,
   getRowCrosshairPosition,
+  filterMontageRows,
 } from '@/utils/eegViewerUtils';
 import { useEegBuffer } from '@/loaders/eegBuffer';
 import { useContainerResize } from '@/hooks/useContainerResize';
@@ -46,7 +46,6 @@ import { EegTopoViewer } from '@/components/EegTopoViewer';
 import { FileDropZone } from '@/components/FileDropZone';
 import { StatusLed } from '@/components/StatusLed';
 import { EegMontageEditor } from './EegMontageEditor';
-import { getTukeyWindow, applyMontageRowFilter } from '../utils/eegFilters';
 
 const EEG_LOADING_TOAST_ID = 'eeg-buffer-loading'; // fixed id so the loading/success toasts update in place rather than stacking
 const Y_AXIS_WIDTH = 80; // px for the y-axis area (channel name + tick space) — must match x-axis strip left padding
@@ -548,28 +547,41 @@ export const EegViewer = ({
 
   // Stage 1: derive (== subtract ref) + filter each buffered signal
   // - only re-runs on data/montage/filter-setting changes, not on pan/zoom/resize.
-  const filteredRowSamples = useMemo(() => {
-    if (!channels) return null;
-    // create Tukey window once => shared across row, which have the same buffered length
-    const window = getTukeyWindow(timestamps.length + provider.fs, 0.1);
-
-    return displayRows.map((row) => {
-      const raw = deriveMontageRowSamples(channels, row, referenceSeries);
-      return applyMontageRowFilter(raw, row, provider.fs, window);
-    });
+  // Filtering a big montage takes seconds, so it runs in pauseable steps (filterMontageRows)
+  // and a newer run cancels the previous one. Until a run finishes, the previous result stays
+  // on screen. The samples are stored together with the timestamps they were computed from,
+  // so a new buffer's timestamps are never paired with the old buffer's samples.
+  const [filteredRows, setFilteredRows] = useState(null); // { timestamps, samplesByRowId }
+  useEffect(() => {
+    if (!channels) return undefined;
+    const controller = new AbortController();
+    filterMontageRows(channels, displayRows, referenceSeries, provider.fs, {
+      signal: controller.signal,
+    })
+      .then((samplesByRowId) => setFilteredRows({ timestamps, samplesByRowId }))
+      .catch((error) => {
+        // a cancelled run ends in an AbortError on purpose, so ignore it; re-throw real errors
+        if (error.name !== 'AbortError') throw error;
+      });
+    // inputs changed (or the viewer closed): cancel this run, a newer one takes over
+    return () => controller.abort();
   }, [channels, timestamps, provider.fs, displayRows, referenceSeries]);
 
   // Stage 2: downsample the already-filtered signal for the current viewport — reruns on
   // pan/zoom/resize, but never re-filters.
   const displayedData = useMemo(() => {
     // Guards: If we don't have valid dimensions or data yet, return empty arrays for each row to avoid rendering broken plots
-    if (plotWidth === 0 || !timestamps || timestamps.length === 0 || !filteredRowSamples)
+    if (plotWidth === 0 || !filteredRows || filteredRows.timestamps.length === 0)
       return displayRows.map(() => [[], []]);
     const endTime = startTime + windowSize;
-    return filteredRowSamples.map((samples) =>
-      minMaxDownsample(timestamps, samples, startTime, endTime, plotWidth)
-    );
-  }, [timestamps, filteredRowSamples, displayRows, startTime, windowSize, plotWidth]);
+    // looked up by row id: a row added since the last finished run stays empty until its data is ready
+    return displayRows.map((row) => {
+      const samples = filteredRows.samplesByRowId.get(row.id);
+      return samples
+        ? minMaxDownsample(filteredRows.timestamps, samples, startTime, endTime, plotWidth)
+        : [[], []];
+    });
+  }, [filteredRows, displayRows, startTime, windowSize, plotWidth]);
 
   // Stacking only makes sense with more than one channel — if bad-channel/montage edits drop
   // displayedData to ≤1 row while stacked, fall back to unstacked instead of leaving the view

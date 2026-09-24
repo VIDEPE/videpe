@@ -8,6 +8,7 @@ import {
   compareChannelNamesNaturally,
   buildSeegBipolarReferences,
   getRowCrosshairPosition,
+  filterMontageRows,
 } from '@/utils/eegViewerUtils';
 
 // ---------------------------------------------------------------------------
@@ -604,5 +605,72 @@ describe('buildSeegBipolarReferences', () => {
     const { references, monopolar } = buildSeegBipolarReferences(channelNames, settings);
     expect(references.size).toBe(0);
     expect(monopolar).toEqual(['GND']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// filterMontageRows
+// ---------------------------------------------------------------------------
+
+describe('filterMontageRows', () => {
+  const FS = 100;
+  // 2 channels, 5 s at 100 Hz: a slow 1 Hz wave plus a constant offset of 10
+  const nSamples = 5 * FS;
+  const channels = [0, 1].map(() =>
+    Float32Array.from({ length: nSamples }, (_, i) => 10 + Math.sin((2 * Math.PI * i) / FS))
+  );
+  const makeRow = (id, channelIndex, filters = {}) => ({
+    id,
+    channelIndex,
+    referenceIndex: null,
+    referenceMode: null,
+    highPass: null,
+    lowPass: null,
+    notch: null,
+    ...filters,
+  });
+
+  it('returns each row keyed by its id, leaving rows without a filter untouched', async () => {
+    const rows = [makeRow('a', 0), makeRow('b', 1)];
+    const result = await filterMontageRows(channels, rows, null, FS);
+    expect([...result.keys()]).toEqual(['a', 'b']);
+    expect(result.get('a')).toBe(channels[0]); // same array: nothing to filter, nothing copied
+    expect(result.get('b')).toBe(channels[1]);
+  });
+
+  it('filters a row that has a filter set, keeping its length', async () => {
+    // a 0.5 Hz high pass removes the constant offset of 10, so the filtered middle averages ~0
+    const rows = [makeRow('a', 0, { highPass: 0.5 })];
+    const filtered = (await filterMontageRows(channels, rows, null, FS)).get('a');
+    expect(filtered).toHaveLength(nSamples);
+    const middle = Array.from(filtered).slice(FS, 4 * FS);
+    const mean = middle.reduce((sum, v) => sum + v, 0) / middle.length;
+    expect(Math.abs(mean)).toBeLessThan(0.5);
+  });
+
+  it('applies the row reference before filtering', async () => {
+    // channel 0 minus channel 1 (identical signals) is all zeros
+    const rows = [{ ...makeRow('a', 0), referenceIndex: 1 }];
+    const result = (await filterMontageRows(channels, rows, null, FS)).get('a');
+    expect(Array.from(result).every((v) => v === 0)).toBe(true);
+  });
+
+  it('rejects with an AbortError when the signal is already aborted', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    await expect(
+      filterMontageRows(channels, [makeRow('a', 0)], null, FS, { signal: controller.signal })
+    ).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
+  it('rejects with an AbortError when aborted during a pause between rows', async () => {
+    const controller = new AbortController();
+    // frameBudgetMs 0 pauses after every row, so aborting right away lands in the first pause
+    const promise = filterMontageRows(channels, [makeRow('a', 0), makeRow('b', 1)], null, FS, {
+      signal: controller.signal,
+      frameBudgetMs: 0,
+    });
+    controller.abort();
+    await expect(promise).rejects.toMatchObject({ name: 'AbortError' });
   });
 });
