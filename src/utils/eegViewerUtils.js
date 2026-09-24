@@ -355,6 +355,36 @@ export async function filterMontageRows(
 }
 
 /**
+ * Picks a y-scale that fits the given rows' amplitudes — used once on file load so
+ * recordings with very different gains all open at a readable zoom level. Takes each row's
+ * max absolute voltage, then the median of those, so a single artifact-heavy channel can't
+ * shrink every other channel to a flat line.
+ *
+ * A plain loop rather than Math.max(...samples): spreading a buffer of hundreds of thousands
+ * of samples into function arguments exceeds the engine's argument limit and throws.
+ *
+ * @param {(number[]|Float32Array)[]} rows - one array of samples per display row.
+ * @returns {number|null} the y-scale, or null when there's no signal to fit (no rows, or
+ *   all empty/zero), in which case the caller should keep its current scale.
+ */
+export function computeAutoYScale(rows) {
+  // find the max absolute voltage in each channel
+  const maxAbsPerRow = [];
+  for (const samples of rows) {
+    if (samples.length === 0) continue;
+    let maxAbs = 0;
+    for (let i = 0; i < samples.length; i++) {
+      maxAbs = Math.max(maxAbs, Math.abs(samples[i]));
+    }
+    maxAbsPerRow.push(maxAbs);
+  }
+  // take the median maxAbs to avoid high outliers in a channel to determine the auto Yscale
+  maxAbsPerRow.sort((a, b) => a - b);
+  const median = maxAbsPerRow[Math.floor(maxAbsPerRow.length / 2)];
+  return median > 0 ? median : null;
+}
+
+/**
  * Compares two channel names for display ordering. Contact-shaped names ("E1", "E9", "b'7")
  * sort by their electrode group (case-insensitive prefix, apostrophe included) and then
  * numerically by contact number — so "E9" sorts before "E99" and "E100", where a plain string

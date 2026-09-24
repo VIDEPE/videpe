@@ -108,6 +108,7 @@ afterEach(() => {
 });
 
 const INITIAL_Y_SCALE = 0.15; // must match the yScale useState default in EegViewer
+const AUTO_FIT_Y_SCALE = 7; // the y-scale auto-fitted on load: median of CHANNEL_DATA's per-channel max |v| (4, 7, 10)
 const OVERDRAW = 2; // must match the OVERDRAW constant in EegViewer
 
 const channelNames = ['EEG1', 'EEG2', 'EEG3'];
@@ -573,10 +574,11 @@ describe('EegViewer — plot rendering', () => {
 
     await renderViewer();
 
-    // +1 for the fixed x-axis strip. Rendered three times:
-    // once while the initial buffer is loading, once after it resolves,
-    // and once after the electrode position file loads and updates matched channels.
-    expect(UplotReactMock).toHaveBeenCalledTimes(3 * (channelNames.length + 1));
+    // +1 for the fixed x-axis strip. Rendered four times:
+    // once while the initial buffer is loading, once after it resolves, once after the
+    // y-range auto-fits to the first filtered buffer, and once after the electrode position
+    // file loads and updates matched channels.
+    expect(UplotReactMock).toHaveBeenCalledTimes(4 * (channelNames.length + 1));
   });
 
   it('renders a label overlay for each channel name', async () => {
@@ -846,6 +848,32 @@ describe('EegViewer — onChannelTypesChange reporting', () => {
   });
 });
 
+describe('EegViewer — range auto-fit on load', () => {
+  it('sets the range to the median of the per-channel max |voltage| once the data loads', async () => {
+    await renderViewer();
+    // max |v| per channel in CHANNEL_DATA: 4, 7, 10 → median 7
+    await waitFor(() => expect(screen.getByRole('spinbutton', { name: /range/i })).toHaveValue(7));
+  });
+
+  it('does not re-fit the range when the data is re-filtered later', async () => {
+    const provider = makeProvider();
+    const { rerender } = await renderViewer(provider);
+    const rangeInput = screen.getByRole('spinbutton', { name: /range/i });
+    await waitFor(() => expect(rangeInput).toHaveValue(7));
+
+    fireEvent.change(rangeInput, { target: { value: '3' } });
+    fireEvent.blur(rangeInput);
+    // a new channelNames array rebuilds the display rows, which re-runs the filter pass
+    rerender(<EegViewer provider={provider} channelNames={[...provider.channelNames]} />);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(rangeInput).toHaveValue(3);
+  });
+});
+
 describe('EegViewer — range controls', () => {
   it('zoom in button halves the plot y-range', async () => {
     const { default: UplotReactMock } = await import('uplot-react');
@@ -859,8 +887,8 @@ describe('EegViewer — range controls', () => {
     await user.click(zoomInBtn);
 
     const [yMin, yMax] = UplotReactMock.mock.calls[0][0].options.scales.y.range;
-    expect(yMin).toBeCloseTo((-INITIAL_Y_SCALE / 2) * OVERDRAW, 3);
-    expect(yMax).toBeCloseTo((INITIAL_Y_SCALE / 2) * OVERDRAW, 3);
+    expect(yMin).toBeCloseTo((-AUTO_FIT_Y_SCALE / 2) * OVERDRAW, 3);
+    expect(yMax).toBeCloseTo((AUTO_FIT_Y_SCALE / 2) * OVERDRAW, 3);
   });
 
   it('zoom out button doubles the plot y-range', async () => {
@@ -875,8 +903,8 @@ describe('EegViewer — range controls', () => {
     await user.click(zoomOutBtn);
 
     const [yMin, yMax] = UplotReactMock.mock.calls[0][0].options.scales.y.range;
-    expect(yMin).toBeCloseTo(-INITIAL_Y_SCALE * 2 * OVERDRAW, 3);
-    expect(yMax).toBeCloseTo(INITIAL_Y_SCALE * 2 * OVERDRAW, 3);
+    expect(yMin).toBeCloseTo(-AUTO_FIT_Y_SCALE * 2 * OVERDRAW, 3);
+    expect(yMax).toBeCloseTo(AUTO_FIT_Y_SCALE * 2 * OVERDRAW, 3);
   });
 
   it('zoom in rounds plot y-range to nearest 0.001', async () => {
@@ -1270,8 +1298,8 @@ describe('EegViewer — keyboard navigation', () => {
     fireEvent.keyDown(viewer(), { key: 'ArrowUp' });
 
     const [yMin, yMax] = UplotReactMock.mock.calls[0][0].options.scales.y.range;
-    expect(yMin).toBeCloseTo((-INITIAL_Y_SCALE / 2) * OVERDRAW, 3);
-    expect(yMax).toBeCloseTo((INITIAL_Y_SCALE / 2) * OVERDRAW, 3);
+    expect(yMin).toBeCloseTo((-AUTO_FIT_Y_SCALE / 2) * OVERDRAW, 3);
+    expect(yMax).toBeCloseTo((AUTO_FIT_Y_SCALE / 2) * OVERDRAW, 3);
   });
 
   it('ArrowDown doubles the range (zoom out)', async () => {
@@ -1282,8 +1310,8 @@ describe('EegViewer — keyboard navigation', () => {
     fireEvent.keyDown(viewer(), { key: 'ArrowDown' });
 
     const [yMin, yMax] = UplotReactMock.mock.calls[0][0].options.scales.y.range;
-    expect(yMin).toBeCloseTo(-INITIAL_Y_SCALE * 2 * OVERDRAW, 3);
-    expect(yMax).toBeCloseTo(INITIAL_Y_SCALE * 2 * OVERDRAW, 3);
+    expect(yMin).toBeCloseTo(-AUTO_FIT_Y_SCALE * 2 * OVERDRAW, 3);
+    expect(yMax).toBeCloseTo(AUTO_FIT_Y_SCALE * 2 * OVERDRAW, 3);
   });
 
   it('ArrowRight pans forward by the shift step', async () => {
