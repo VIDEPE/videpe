@@ -27,6 +27,7 @@ import {
   buildMontageDisplayRows,
   deriveMontageRowSamples,
   computeReferenceSeries,
+  getNeededReferenceSeries,
   getRowCrosshairPosition,
 } from '@/utils/eegViewerUtils';
 import { useEegBuffer } from '@/loaders/eegBuffer';
@@ -367,12 +368,15 @@ export const EegViewer = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- updateVisibleChannelCount isn't memoized
   }, [visibleChannelCount, displayRows.length]);
 
-  // Shared average/median reference series (see the diagram atop eegViewerUtils.js) —
-  // computed once from the raw buffer's non-bad channels, then handed to both the montage
-  // row waveform below (deriveMontageRowSamples) and the topography/connectome/ESI
-  // snapshot (useTimepointSnapshot's always-average referencing) rather than each
-  // recomputing it. The filtered non-bad array itself is only a transient local — nothing
-  // but the small { average, median } result needs to survive between renders.
+  // Average/median reference series (see the diagram atop eegViewerUtils.js), computed once
+  // from the non-bad channels and shared by the montage rows and the topography/connectome/
+  // ESI snapshot. Only the series in use are computed: median for Med rows, average for Avg
+  // rows or once a plot click has set a snapshot timepoint. Booleans as memo dependencies,
+  // so montage edits that don't change which references are used don't recompute.
+  const { needsAverage, needsMedian } = getNeededReferenceSeries(
+    displayRows,
+    topoTimepoint !== null
+  );
   const referenceSeries = useMemo(() => {
     if (!channels) return null;
     const nonBadChannels = channels.filter(
@@ -380,13 +384,14 @@ export const EegViewer = ({
     );
     // TEMP timing log — remove once the buffer-reload freeze is diagnosed
     const refStart = performance.now();
-    const series = computeReferenceSeries(nonBadChannels);
+    const series = computeReferenceSeries(nonBadChannels, { needsAverage, needsMedian });
     console.log(
-      `[reference] avg+median over ${nonBadChannels.length} channels × ${channels[0]?.length ?? 0} time points: ` +
+      `[reference] average ${needsAverage ? 'on' : 'off'}, median ${needsMedian ? 'on' : 'off'} over ` +
+        `${nonBadChannels.length} channels × ${channels[0]?.length ?? 0} time points: ` +
         `${(performance.now() - refStart).toFixed(0)}ms (one block, no pauses)`
     );
     return series;
-  }, [channels, channelSettings, channelNames]);
+  }, [channels, channelSettings, channelNames, needsAverage, needsMedian]);
 
   // Bad channels are hidden from topography/connectome/ESI entirely, not just excluded from
   // the reference calc — a bad electrode's position never appears as a node to plot, and
