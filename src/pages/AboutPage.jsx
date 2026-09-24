@@ -179,6 +179,24 @@ export const AboutPage = () => {
               </div>
             </div>
 
+            <div id="feature-demo" className="flex gap-3">
+              <FlaskConical
+                size={22}
+                className="shrink-0 mt-0.5"
+                style={{ color: 'var(--c-primary)' }}
+              />
+              <div>
+                <p className="font-semibold text-heading">Built-in demo</p>
+                <p className="text-sm mt-1" style={{ color: 'var(--c-foreground)' }}>
+                  Want to explore VIDEPE before committing your own files?
+                  <br />
+                  Hit <strong>Load Demo</strong> on the patient view to instantly load a synthetic
+                  EEG recording alongside aligned MRI, PET, and SPECT volumes
+                  <br />— no upload, no account, no wait.
+                </p>
+              </div>
+            </div>
+
             <div id="feature-eeg" className="flex gap-3">
               <ChartLine
                 size={22}
@@ -204,28 +222,29 @@ export const AboutPage = () => {
                   className="text-sm mt-2 flex flex-col gap-1 list-disc list-inside"
                   style={{ color: 'var(--c-foreground)' }}
                 >
-                  <li>Adjustable range (µV scale), window size, and time step</li>
                   <li>
-                    Interactive timeline scrubber for fast navigation across the full recording
+                    <strong>Display controls</strong> — range (µV), window size, time step, and
+                    number of visible channels
                   </li>
                   <li>
-                    Keyboard navigation — arrow keys for range/panning, Page Up/Down and Space for
-                    window jumps, Home/End to jump to the start/end
-                  </li>
-                  <li>Configurable number of simultaneously visible channels</li>
-                  <li>Min-max downsampling keeps rendering fast at any zoom level</li>
-                  <li>
-                    Drag-to-resize handle on the plot row to trade channel height for more visible
-                    channels
+                    <strong>Timeline scrubber</strong> — jump anywhere in the recording
                   </li>
                   <li>
-                    Stack/unstack toggle — overlay all visible channels on a single plot to spot
-                    cross-channel patterns, with fading trace opacity as channel count grows and the
-                    hovered channel's name shown on hover
+                    <strong>Keyboard navigation</strong> — arrows for range/panning, Page Up/Down
+                    and Space to jump a window, Home/End for start/end
                   </li>
                   <li>
-                    EEG topography — a resizable panel showing a 3D voltage map at the selected time
-                    point using{' '}
+                    <strong>Built for long recordings</strong> — only part of the file is kept in
+                    memory, and drawing and filtering run in the background, so hour-long,
+                    high-channel-count recordings stay smooth
+                  </li>
+                  <li>
+                    <strong>Stacked view</strong> — overlay all visible channels on one plot; traces
+                    fade as the count grows and the hovered channel is named
+                  </li>
+                  <li>
+                    <strong>Topography</strong> — a resizable 3D voltage map at the selected time
+                    point, rendered with{' '}
                     <a
                       href="https://niivue.com/"
                       target="_blank"
@@ -233,13 +252,72 @@ export const AboutPage = () => {
                       style={{ color: 'var(--c-primary)' }}
                     >
                       NiiVue
-                    </a>{' '}
-                    mesh rendering; re-reference on the fly (none, average, or median); diverging
-                    blue-white-red colormap with a live colorbar (µV) and a colour-blind-friendly
-                    mode; individual electrode markers on the mesh, voltage-coloured for matched
-                    channels; uses fsaverage_1005 (FreeSurfer) electrode positions by default with
-                    support for custom <code>.elc</code> or <code>.tsv</code> files; 3D rotation is
-                    synchronised with the neuroimaging viewer — rotate one and the other follows
+                    </a>
+                    : none/average/median reference, blue-white-red colormap with live colorbar and
+                    colour-blind mode, and voltage-coloured electrode markers
+                  </li>
+                  <li>
+                    <strong>Electrode positions</strong> — fsaverage_1005 (FreeSurfer) by default,
+                    or load your own <code>.elc</code> or <code>.tsv</code> file
+                  </li>
+                  <li>
+                    <strong>Channel to anatomy</strong> — click a channel label to move the
+                    neuroimaging crosshair to its electrode; bipolar rows jump to the midpoint
+                    between their two electrodes
+                  </li>
+                  <li>
+                    <strong>Linked rotation</strong> — rotate the topography or the neuroimaging
+                    viewer and the other follows
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            <div id="feature-montage-editor" className="flex gap-3">
+              <MonitorCog
+                size={22}
+                className="shrink-0 mt-0.5"
+                style={{ color: 'var(--c-primary)' }}
+              />
+              <div>
+                <p className="font-semibold text-heading">Montage Editor</p>
+                <p className="text-sm mt-1" style={{ color: 'var(--c-foreground)' }}>
+                  Open it from the <strong>Montage</strong> button in the EEG viewer.
+                </p>
+                <ul
+                  className="text-sm mt-2 flex flex-col gap-1 list-disc list-inside"
+                  style={{ color: 'var(--c-foreground)' }}
+                >
+                  <li>
+                    <strong>Channels</strong> — set each channel's type, flag bad channels, and see
+                    which have a known electrode position
+                  </li>
+                  <li>
+                    <strong>Custom montages</strong> — build referenced or bipolar rows with their
+                    own colours; the waveform shows exactly those rows
+                  </li>
+                  <li>
+                    <strong>Filtering</strong> — per-row high-pass, low-pass, and mains notch
+                    (zero-phase Butterworth)
+                  </li>
+                  <li>
+                    <strong>Bulk edits</strong> — set a value for every row at once from its column
+                    header; click Channel or Type to sort
+                  </li>
+                  <li>
+                    <strong>Re-referencing</strong> — none, common average, or median, with bad and
+                    missing channels left out
+                  </li>
+                  <li>
+                    <strong>Presets</strong> — e.g. double and triple banana, from the EEG sidebar
+                  </li>
+                  <li>
+                    <strong>Safety check</strong> — warns before applying a montage that uses a bad
+                    or missing channel
+                  </li>
+                  <li>
+                    <strong>Import/export</strong> — load AnyWave or Cartool montages
+                    (auto-detected), save as AnyWave with filters included
                   </li>
                 </ul>
               </div>
@@ -266,46 +344,29 @@ export const AboutPage = () => {
                   style={{ color: 'var(--c-foreground)' }}
                 >
                   <li>
-                    Multi-layer support for MRI, PET, SPECT and meshes in one view. Supports NIfTI
-                    (.nii, .nii.gz), MGH/MGZ, GIFTI, PLY, OBJ, and DICOM (converted to NIfTI on load
-                    via dcm2niix)
+                    <strong>Multi-layer</strong> — MRI, PET, SPECT and meshes in one view: NIfTI
+                    (.nii, .nii.gz), MGH/MGZ, GIFTI, PLY, OBJ, and DICOM (converted via dcm2niix)
                   </li>
                   <li>
-                    Per-layer opacity/mesh xray, colormap, colorbar, inversion and threshold
-                    controls
+                    <strong>Per-layer controls</strong> — opacity/mesh x-ray, colormap, colorbar,
+                    inversion, and threshold
                   </li>
                   <li>
-                    Drag-to-reorder layers, with a modality subtype label shown on each volume
+                    <strong>Layer order</strong> — drag to reorder; each volume shows its modality
+                    subtype
                   </li>
                   <li>
-                    Slice view buttons for axial, coronal, sagittal, multiplanar, and 3D render
+                    <strong>Views</strong> — axial, coronal, sagittal, multiplanar, and 3D render
                   </li>
                   <li>
-                    Radiological/neurological convention toggle and clip plane toggle (3D render
-                    view only)
+                    <strong>Display toggles</strong> — radiological/neurological convention, and a
+                    clip plane in 3D render
                   </li>
                   <li>
-                    Adjustable node/edge size sliders for connectome layers (ESI and SEEG electrode
-                    connectomes)
+                    <strong>Connectome sizing</strong> — node/edge size sliders for ESI and SEEG
+                    electrode connectomes
                   </li>
                 </ul>
-              </div>
-            </div>
-
-            <div id="feature-demo" className="flex gap-3">
-              <FlaskConical
-                size={22}
-                className="shrink-0 mt-0.5"
-                style={{ color: 'var(--c-primary)' }}
-              />
-              <div>
-                <p className="font-semibold text-heading">Built-in demo</p>
-                <p className="text-sm mt-1" style={{ color: 'var(--c-foreground)' }}>
-                  Want to explore VIDEPE before committing your own files? Hit{' '}
-                  <strong>Load Demo</strong> on the patient view to instantly load a synthetic EEG
-                  recording alongside aligned MRI, PET, and SPECT volumes — no upload, no account,
-                  no wait.
-                </p>
               </div>
             </div>
 
@@ -314,69 +375,32 @@ export const AboutPage = () => {
               <div>
                 <p className="font-semibold text-heading">Electrical Source Imaging (ESI)</p>
                 <p className="text-sm mt-1" style={{ color: 'var(--c-foreground)' }}>
-                  Load an inverse solution file (currently Fieldtrip{' '}
-                  <code>*_inversefilters.mat</code> only) to visualise per-source power at the
-                  selected EEG time point, rendered as either a 3D connectome or a 3D volumetric
-                  heatmap — toggle between the two in the imaging controls.
+                  Load an inverse solution (currently FieldTrip <code>*_inversefilters.mat</code>{' '}
+                  only), enable ESI, and click the EEG plot to see the source power at that time
+                  point in the neuroimaging viewer.
                 </p>
                 <ul
                   className="text-sm mt-2 flex flex-col gap-1 list-disc list-inside"
                   style={{ color: 'var(--c-foreground)' }}
                 >
                   <li>
-                    Requires the Average montage — VIDEPE switches to it automatically when an
-                    inverse solution is loaded
+                    <strong>Volume or connectome</strong> — show source power as a 3D heatmap or as
+                    a connectome; switch in the layer's imaging controls
                   </li>
                   <li>
-                    The ESI layer is hidden if you switch away from the Average montage, and
-                    reappears when you switch back
-                  </li>
-                  <li>Volume rendering defaults to the Inferno colormap</li>
-                </ul>
-              </div>
-            </div>
-
-            <div id="feature-montage-editor" className="flex gap-3">
-              <MonitorCog
-                size={22}
-                className="shrink-0 mt-0.5"
-                style={{ color: 'var(--c-primary)' }}
-              />
-              <div>
-                <p className="font-semibold text-heading">Montage Editor</p>
-                <p className="text-sm mt-1" style={{ color: 'var(--c-foreground)' }}>
-                  A dedicated window for building custom EEG montages, opened from the{' '}
-                  <strong>Montage</strong> button in the EEG viewer.
-                </p>
-                <ul
-                  className="text-sm mt-2 flex flex-col gap-1 list-disc list-inside"
-                  style={{ color: 'var(--c-foreground)' }}
-                >
-                  <li>
-                    Channel-selection pane for setting each channel's type and flagging bad
-                    channels, with electrode-position match shown per row
+                    <strong>Jump to peak</strong> — the crosshair moves to the source with the
+                    highest power on every click
                   </li>
                   <li>
-                    Montage pane for building referenced or bipolar rows from selected channels,
-                    with per-row colour, reordering, sort-by-name/type, and a bulk{' '}
-                    <strong>Set all as</strong> control to reference or colour every row at once
+                    <strong>Channel matching</strong> — every channel in the inverse solution must
+                    be in the recording and typed EEG; a status LED shows the match
                   </li>
                   <li>
-                    Built-in presets (e.g. double/triple banana) available from the EEG sidebar
-                    dropdown
+                    <strong>Bad channels</strong> — left out of the source computation
                   </li>
                   <li>
-                    Re-reference on the fly — none, common average (CAR), or median — with bad or
-                    missing channels automatically excluded from the calculation
-                  </li>
-                  <li>Warns before applying a montage that references a bad or missing channel</li>
-                  <li>
-                    Once rows are built, the EEG waveform view shows exactly those rows instead of
-                    the raw channel list
-                  </li>
-                  <li>
-                    Import montage files in AnyWave (XML) or Cartool (plain-text) format —
-                    auto-detected from file content — and export back out as AnyWave XML
+                    <strong>Any montage</strong> — ESI always uses the common-average reference,
+                    whatever montage the waveform shows
                   </li>
                 </ul>
               </div>
@@ -400,21 +424,20 @@ export const AboutPage = () => {
                   style={{ color: 'var(--c-foreground)' }}
                 >
                   <li>
-                    Intracranial channels are shown as a per-electrode-group, per-contact voltage
-                    matrix instead of the scalp topography mesh
+                    <strong>Voltage matrix</strong> — intracranial channels shown per electrode
+                    group and contact, instead of the scalp mesh
                   </li>
                   <li>
-                    Once electrode positions are loaded, intracranial electrodes are also rendered
-                    as a 3D electrode connectome in the neuroimaging viewer, synchronised with the
-                    selected EEG timepoint
+                    <strong>3D connectome</strong> — with electrode positions loaded, electrodes
+                    render in the neuroimaging viewer, synced to the selected timepoint
                   </li>
                   <li>
-                    Supports custom electrode positions via <code>.elc</code> or <code>.tsv</code>{' '}
+                    <strong>Custom positions</strong> — load <code>.elc</code> or <code>.tsv</code>{' '}
                     files
                   </li>
                   <li>
-                    Colour/size the 3D electrode connectome nodes by any custom metric read from
-                    extra <code>.tsv</code> columns, not just voltage
+                    <strong>Custom metrics</strong> — colour/size connectome nodes by any extra{' '}
+                    <code>.tsv</code> column, not just voltage
                   </li>
                 </ul>
               </div>
@@ -437,13 +460,15 @@ export const AboutPage = () => {
                   style={{ color: 'var(--c-foreground)' }}
                 >
                   <li>
-                    EEG: BrainVision (<code>.vhdr</code> + <code>.eeg</code>) — drop both together
-                    or one at a time
+                    <strong>EEG</strong> — BrainVision (<code>.vhdr</code> + <code>.eeg</code>),
+                    dropped together or one at a time
                   </li>
-                  <li>Volumes: NIfTI, MGH/MGZ, GIFTI, PLY, OBJ, DICOM</li>
                   <li>
-                    Drop multiple imaging files at once to load them as separate layers, or append
-                    them to an already-active neuroimaging viewer
+                    <strong>Volumes</strong> — NIfTI, MGH/MGZ, GIFTI, PLY, OBJ, DICOM
+                  </li>
+                  <li>
+                    <strong>Multiple files</strong> — drop several imaging files to load them as
+                    separate layers, or add them to an open viewer
                   </li>
                 </ul>
               </div>

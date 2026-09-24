@@ -85,7 +85,7 @@ const FEATURES = [
     icon: MonitorCog,
     label: 'Montage Editor',
     description:
-      'Build custom or use preset referenced or bipolar montages, and import/export AnyWave or Cartool montage files.',
+      'Build custom or use preset referenced or bipolar montages, apply frequency filtering, and import/export AnyWave or Cartool montage files.',
     anchor: '#feature-montage-editor',
   },
   {
