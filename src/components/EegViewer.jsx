@@ -25,9 +25,11 @@ import {
 import { minMaxDownsample } from '@/utils/downsample';
 import {
   buildMontageDisplayRows,
-  deriveMontageRowSamples,
   computeReferenceSeries,
+  getNeededReferenceSeries,
   getRowCrosshairPosition,
+  filterMontageRows,
+  computeAutoYScale,
 } from '@/utils/eegViewerUtils';
 import { useEegBuffer } from '@/loaders/eegBuffer';
 import { useContainerResize } from '@/hooks/useContainerResize';
@@ -366,19 +368,22 @@ export const EegViewer = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- updateVisibleChannelCount isn't memoized
   }, [visibleChannelCount, displayRows.length]);
 
-  // Shared average/median reference series (see the diagram atop eegViewerUtils.js) —
-  // computed once from the raw buffer's non-bad channels, then handed to both the montage
-  // row waveform below (deriveMontageRowSamples) and the topography/connectome/ESI
-  // snapshot (useTimepointSnapshot's always-average referencing) rather than each
-  // recomputing it. The filtered non-bad array itself is only a transient local — nothing
-  // but the small { average, median } result needs to survive between renders.
+  // Average/median reference series (see the diagram atop eegViewerUtils.js), computed once
+  // from the non-bad channels and shared by the montage rows and the topography/connectome/
+  // ESI snapshot. Only the series in use are computed: median for Med rows, average for Avg
+  // rows or once a plot click has set a snapshot timepoint. Booleans as memo dependencies,
+  // so montage edits that don't change which references are used don't recompute.
+  const { needsAverage, needsMedian } = getNeededReferenceSeries(
+    displayRows,
+    topoTimepoint !== null
+  );
   const referenceSeries = useMemo(() => {
     if (!channels) return null;
     const nonBadChannels = channels.filter(
       (_, index) => !channelSettings[channelNames[index]]?.bad
     );
-    return computeReferenceSeries(nonBadChannels);
-  }, [channels, channelSettings, channelNames]);
+    return computeReferenceSeries(nonBadChannels, { needsAverage, needsMedian });
+  }, [channels, channelSettings, channelNames, needsAverage, needsMedian]);
 
   // Bad channels are hidden from topography/connectome/ESI entirely, not just excluded from
   // the reference calc — a bad electrode's position never appears as a node to plot, and
@@ -533,24 +538,56 @@ export const EegViewer = ({
     return () => toast.dismiss(EEG_LOADING_TOAST_ID);
   }, []);
 
-  // Downsample each display row's (possibly channel-minus-reference) series for the
-  // visible window
-  const displayedData = useMemo(() => {
-    // If we don't have valid dimensions or data yet, return empty arrays for each row to avoid rendering broken plots
-    const empty = displayRows.map(() => [[], []]);
-    if (plotWidth === 0 || !timestamps || timestamps.length === 0 || !channels) return empty;
+  // Stage 1: derive (== subtract ref) + filter each buffered signal
+  // - only re-runs on data/montage/filter-setting changes, not on pan/zoom/resize.
+  // Filtering a big montage takes seconds, so it runs in pauseable steps (filterMontageRows)
+  // and a newer run cancels the previous one. Until a run finishes, the previous result stays
+  // on screen. The samples are stored together with the timestamps they were computed from,
+  // so a new buffer's timestamps are never paired with the old buffer's samples.
+  const [filteredRows, setFilteredRows] = useState(null); // { timestamps, samplesByRowId }
+  useEffect(() => {
+    if (!channels) return undefined;
+    const controller = new AbortController();
+    filterMontageRows(channels, displayRows, referenceSeries, provider.fs, {
+      signal: controller.signal,
+    })
+      .then((samplesByRowId) => setFilteredRows({ timestamps, samplesByRowId }))
+      .catch((error) => {
+        // a cancelled run ends in an AbortError on purpose, so ignore it; re-throw real errors
+        if (error.name !== 'AbortError') throw error;
+      });
+    // inputs changed (or the viewer closed): cancel this run, a newer one takes over
+    return () => controller.abort();
+  }, [channels, timestamps, provider.fs, displayRows, referenceSeries]);
 
+  // Auto-fit the y-range once, when the first filtered buffer arrives — gain differs a lot
+  // between recordings, so a fixed default range is too flat or too clipped for most files.
+  // Only once per mount (i.e. per loaded file): after that the range is the user's to set,
+  // so later re-filters (pan to a new buffer, montage/filter edits) never touch it again.
+  const hasAutoFittedYScaleRef = useRef(false);
+  useEffect(() => {
+    if (hasAutoFittedYScaleRef.current || !filteredRows) return;
+    hasAutoFittedYScaleRef.current = true; // set flag so this runs only once
+    const autoYScale = computeAutoYScale([...filteredRows.samplesByRowId.values()]);
+    if (autoYScale !== null) updateYScale(autoYScale);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- updateYScale isn't memoized
+  }, [filteredRows]);
+
+  // Stage 2: downsample the already-filtered signal for the current viewport — reruns on
+  // pan/zoom/resize, but never re-filters.
+  const displayedData = useMemo(() => {
+    // Guards: If we don't have valid dimensions or data yet, return empty arrays for each row to avoid rendering broken plots
+    if (plotWidth === 0 || !filteredRows || filteredRows.timestamps.length === 0)
+      return displayRows.map(() => [[], []]);
     const endTime = startTime + windowSize;
-    return displayRows.map((row) =>
-      minMaxDownsample(
-        timestamps,
-        deriveMontageRowSamples(channels, row, referenceSeries),
-        startTime,
-        endTime,
-        plotWidth
-      )
-    );
-  }, [timestamps, channels, referenceSeries, displayRows, startTime, windowSize, plotWidth]);
+    // looked up by row id: a row added since the last finished run stays empty until its data is ready
+    return displayRows.map((row) => {
+      const samples = filteredRows.samplesByRowId.get(row.id);
+      return samples
+        ? minMaxDownsample(filteredRows.timestamps, samples, startTime, endTime, plotWidth)
+        : [[], []];
+    });
+  }, [filteredRows, displayRows, startTime, windowSize, plotWidth]);
 
   // Stacking only makes sense with more than one channel — if bad-channel/montage edits drop
   // displayedData to ≤1 row while stacked, fall back to unstacked instead of leaving the view
@@ -1479,6 +1516,7 @@ export const EegViewer = ({
           onApplyChannelSettings={applyChannelSettings}
           montageChannels={montageChannels}
           onApplyMontageChannels={applyMontageChannels}
+          fs={provider.fs}
         />
       )}
     </>

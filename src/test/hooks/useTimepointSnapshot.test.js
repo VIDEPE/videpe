@@ -12,7 +12,7 @@ const channels = [
   [1, 3, 6, 10], // channel 0
   [2, 8, 5, 40], // channel 1
 ];
-// Per-sample cross-channel mean: [1.5, 5.5, 5.5, 25]. montagedChannels (channel - mean):
+// Per-sample cross-channel mean: [1.5, 5.5, 5.5, 25]. Average-referenced (channel - mean):
 //   channel 0: [-0.5, -2.5, 0.5, -15]
 //   channel 1: [ 0.5,  2.5, -0.5, 15]
 // The caller (EegViewer.jsx) computes this once from non-bad channels and passes it in —
@@ -40,21 +40,31 @@ const setup = (overrides = {}) =>
     },
   });
 
-describe('useTimepointSnapshot — montagedChannels', () => {
-  it('is null before channels load', () => {
-    const { result } = setup({ channels: null });
-    expect(result.current.montagedChannels).toBeNull();
+describe('useTimepointSnapshot — average referencing', () => {
+  it('has no voltages before channels load, even with a clicked timepoint', () => {
+    const { result } = setup({ channels: null, topoTimepoint: 2 });
+    expect(result.current.topoVoltages).toEqual([]);
+    expect(result.current.topoVoltagesByChannel).toEqual([]);
   });
 
   it('always applies average referencing, unconditionally', () => {
-    const { result } = setup();
-    expect(result.current.montagedChannels[0]).toEqual([-0.5, -2.5, 0.5, -15]);
-    expect(result.current.montagedChannels[1]).toEqual([0.5, 2.5, -0.5, 15]);
+    for (const [timepoint, expected] of [
+      [0, [-0.5, 0.5]],
+      [1, [-2.5, 2.5]],
+      [2, [0.5, -0.5]],
+      [3, [-15, 15]],
+    ]) {
+      const { result } = setup({ topoTimepoint: timepoint });
+      expect(result.current.topoVoltagesByChannel).toEqual(expected);
+    }
   });
 
-  it('returns the raw channels unchanged when referenceSeries has no average (e.g. every channel is bad)', () => {
-    const { result } = setup({ referenceSeries: { average: null, median: null } });
-    expect(result.current.montagedChannels).toEqual(channels);
+  it('uses the raw voltages when referenceSeries has no average (e.g. every channel is bad)', () => {
+    const { result } = setup({
+      referenceSeries: { average: null, median: null },
+      topoTimepoint: 2,
+    });
+    expect(result.current.topoVoltagesByChannel).toEqual([6, 5]);
   });
 });
 

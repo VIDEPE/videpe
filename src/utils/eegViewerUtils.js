@@ -1,5 +1,10 @@
-import { mean, median } from './arrayAndMatrixMathUtils';
 import { parseElectrodeContactName } from './intracranialDetection';
+import { getTukeyWindow, applyMontageRowFilter } from './eegFilters';
+import { yieldToMain } from './yieldToMain';
+
+// Once a filtering pass has worked this long without pausing, it yields to the browser — keeps
+// each uninterrupted block comfortably under one frame (~16ms) so the app stays responsive
+const FILTER_FRAME_BUDGET_MS = 8;
 
 // ─── EEG channel referencing ──────────────────────────────────────────────────────────
 //
@@ -12,7 +17,9 @@ import { parseElectrodeContactName } from './intracranialDetection';
 //      filter non-bad
 //           │
 //           ▼
-//   computeReferenceSeries(nonBad) → { average, median }   ← computed ONCE
+//   computeReferenceSeries(nonBad) → { average, median }   ← computed ONCE (only the
+//           │                              │                   series in use — see
+//           │                              │                   getNeededReferenceSeries)
 //           │                              │
 //           ▼                              ▼
 //   deriveMontageRowSamples          applyReferenceSeries(channels, series.average)
@@ -31,26 +38,140 @@ import { parseElectrodeContactName } from './intracranialDetection';
  * caller has already excluded bad channels, since a bad channel's own noise/artifacts
  * shouldn't skew what everything else is referenced against).
  *
+ * Each series is only computed when requested (see getNeededReferenceSeries) — on a large
+ * buffer the median in particular is expensive, so skipping an unused one matters.
+ *
  * @param {number[][]} nonBadChannels - one array of samples per non-bad channel; all
  *   channels must have the same length.
+ * @param {{ needsAverage?: boolean, needsMedian?: boolean }} [needed] - which series to
+ *   compute; both by default.
  * @returns {{ average: number[]|null, median: number[]|null }} one value per sample,
- *   averaged/medianed across channels; both null when there are no channels to reference
- *   against (e.g. every channel is currently marked bad).
+ *   averaged/medianed across channels; null for a series that wasn't requested, and both
+ *   null when there are no channels to reference against (e.g. every channel is marked bad).
  */
-export function computeReferenceSeries(nonBadChannels) {
+export function computeReferenceSeries(
+  nonBadChannels,
+  { needsAverage = true, needsMedian = true } = {}
+) {
   if (nonBadChannels.length === 0) return { average: null, median: null };
+  return {
+    average: needsAverage ? computeAverageSeries(nonBadChannels) : null,
+    median: needsMedian ? computeMedianSeries(nonBadChannels) : null,
+  };
+}
 
-  const nSamples = nonBadChannels[0].length;
-  const averageSeries = Array(nSamples);
-  const medianSeries = Array(nSamples);
-
-  for (let iSample = 0; iSample < nSamples; iSample++) {
-    const valuesAtSample = nonBadChannels.map((chan) => chan[iSample]);
-    averageSeries[iSample] = mean(valuesAtSample);
-    medianSeries[iSample] = median(valuesAtSample);
+// Channel-by-channel (not time-point-by-time-point), so each channel's samples are read in
+// order — much faster than gathering all channels' values per time point.
+function computeAverageSeries(channels) {
+  const nSamples = channels[0].length;
+  const series = new Array(nSamples).fill(0);
+  // sum all channels' values at each time point
+  for (const chan of channels) {
+    for (let iSample = 0; iSample < nSamples; iSample++) {
+      series[iSample] += chan[iSample];
+    }
   }
+  // divide each time point's sum by the channel count to get the average
+  for (let iSample = 0; iSample < nSamples; iSample++) {
+    series[iSample] /= channels.length;
+  }
+  return series;
+}
 
-  return { average: averageSeries, median: medianSeries };
+// Reuses one scratch array for every time point, and finds the middle value with
+// selectKthSmallest instead of fully sorting all channels' values each time.
+function computeMedianSeries(channels) {
+  const nChannels = channels.length;
+  const nSamples = channels[0].length;
+  // position of the middle value once sorted (the upper of the two middles for an even count)
+  const mid = Math.floor(nChannels / 2);
+  // created once and overwritten for every time point, instead of a new array each time
+  const scratch = new Float64Array(nChannels);
+  const series = new Array(nSamples); // one median value per time point
+  for (let iSample = 0; iSample < nSamples; iSample++) {
+    // copy every channel's value at this time point into the scratch array
+    for (let ch = 0; ch < nChannels; ch++) scratch[ch] = channels[ch][iSample];
+    // find the value that would sit at position `mid` if the scratch array were sorted
+    const upperMiddle = selectKthSmallest(scratch, mid);
+    if (nChannels % 2 === 1) {
+      // odd channel count: there is exactly one middle value, which is the median
+      series[iSample] = upperMiddle;
+    } else {
+      // even channel count: the median is the average of the two middle values
+      // selectKthSmallest leaves every value left of `mid` <= the upper middle, so the lower
+      // middle value is simply the largest of those
+      let lowerMiddle = scratch[0];
+      for (let i = 1; i < mid; i++) if (scratch[i] > lowerMiddle) lowerMiddle = scratch[i];
+      series[iSample] = (lowerMiddle + upperMiddle) / 2;
+    }
+  }
+  return series;
+}
+
+// Quickselect: partially reorders `values` in place until values[k] holds the value that
+// would be at index k if sorted, with smaller-or-equal values left of it. On average this
+// touches each value about twice, instead of the many passes a full sort needs.
+//
+// Example: the median of [7, 1, 9, 2, 4] is the value at k = 2 (counting from 0) once sorted.
+//   The pivot is always the value at the middle position of the part still being looked at.
+//   pivot 9:  smaller left, larger right  → [7, 1, 4, 2, 9]
+//             k = 2 is in the left part    → keep [7, 1, 4, 2], drop [9]
+//   pivot 1:  smaller left, larger right  → [1, 7, 4, 2]
+//             k = 2 is in the right part   → keep [7, 4, 2] (positions 1-3), drop [1]
+//   pivot 4:  smaller left, larger right  → [2, 4, 7]
+//             the pivot itself landed on position 2 → done: everything left of it is
+//             smaller and everything right of it is larger, so 4 already sits exactly
+//             where it would in the fully sorted array
+//   result: [1, 2, 4, 7, 9] → values[2] = 4 is the median
+function selectKthSmallest(values, k) {
+  // [left, right] is the part of the array that still has to be sorted out; it starts as the whole array
+  let left = 0;
+  let right = values.length - 1;
+  while (left < right) {
+    // pick the value in the middle of the remaining part as the pivot
+    const pivot = values[Math.floor((left + right) / 2)];
+    // i walks in from the left, j from the right
+    let i = left;
+    let j = right;
+    // move values smaller than the pivot to the left side and larger ones to the right side
+    while (i <= j) {
+      while (values[i] < pivot) i++; // skip values already on the correct (left) side
+      while (values[j] > pivot) j--; // skip values already on the correct (right) side
+      // values[i] belongs on the right and values[j] on the left: swap them
+      if (i <= j) {
+        const tmp = values[i];
+        values[i] = values[j];
+        values[j] = tmp;
+        i++;
+        j--;
+      }
+    }
+    // now everything up to j is <= pivot and everything from i onward is >= pivot:
+    // keep only the side that contains position k and throw the other side away
+    if (k <= j) right = j;
+    else if (k >= i) left = i;
+    else break; // k landed among values equal to the pivot — already in place
+  }
+  // the remaining part has shrunk to position k alone, which now holds the kth smallest value
+  return values[k];
+}
+
+/**
+ * Decides which reference series are actually used right now, so computeReferenceSeries
+ * can skip the rest.
+ *
+ * @param {{ referenceMode: 'average'|'median'|null }[]} displayRows - from buildMontageDisplayRows.
+ * @param {boolean} isSnapshotShown - whether a timepoint snapshot (topography/connectome/ESI)
+ *   is shown; those always use the common average reference.
+ * @returns {{ needsAverage: boolean, needsMedian: boolean }}
+ */
+export function getNeededReferenceSeries(displayRows, isSnapshotShown) {
+  return {
+    // needsAverage (boolean): needed when a snapshot is shown (it always uses the average) or any row references Avg
+    needsAverage: isSnapshotShown || displayRows.some((row) => row.referenceMode === 'average'),
+    // needsMedian (boolean): needed only when any row references Med
+    needsMedian: displayRows.some((row) => row.referenceMode === 'median'),
+  };
 }
 
 /**
@@ -99,12 +220,15 @@ export function buildMontageDisplayRows(channelNames, channelSettings, montageCh
   if (montageChannels.length === 0) {
     return channelNames
       .map((name, index) => ({
-        id: name,
-        name: name,
-        channelIndex: index,
+        id: name, // unique id of this channel
+        name: name, // name to display the display row with in uPlot
+        channelIndex: index, // channel index
         referenceIndex: null, // channel index of the reference (if reference not n/a, average or median)
         referenceMode: null, // if reference is average / median, this field will indicate so
-        color: null,
+        color: null, // without montage the channels don't have a colour set
+        highPass: null, // no highPass filter set without montage (null indicates off)
+        lowPass: null, // no lowPass filter set without montage (null indicates off)
+        notch: null, // no bandstop filter set without montage (null indicates off)
       }))
       .filter(({ name }) => !channelSettings[name]?.bad);
   }
@@ -137,6 +261,9 @@ export function buildMontageDisplayRows(channelNames, channelSettings, montageCh
             row.reference && !isSpecialReference ? channelNames.indexOf(row.reference) : null,
           referenceMode: isSpecialReference ? row.reference : null,
           color: row.color,
+          highPass: row.highPass ?? null, // highPass frequency to filters buffered signal (null when not set)
+          lowPass: row.lowPass ?? null, // lowPass frequency to filters buffered signal (null when not set)
+          notch: row.notch ?? null, // bandstop frequency to filters buffered signal (null when not set)
         };
       })
   );
@@ -171,6 +298,90 @@ export function deriveMontageRowSamples(channels, row, referenceSeries) {
   // else: substract the reference channel from the channel
   const referenceSamples = channels[row.referenceIndex];
   return channelSamples.map((v, i) => v - referenceSamples[i]);
+}
+
+/**
+ * Derives (see deriveMontageRowSamples) and filters every display row's full buffered signal,
+ * one row at a time. Filtering a big montage takes seconds, so this pauses (see yieldToMain)
+ * whenever it has worked `frameBudgetMs` without a break, keeping the app responsive.
+ *
+ * @param {Float32Array[]} channels - the raw buffered samples, one array per channel.
+ * @param {{ id: string, highPass: number|null, lowPass: number|null, notch: number|null }[]} displayRows -
+ *   from buildMontageDisplayRows.
+ * @param {{ average: number[]|null, median: number[]|null }|null} referenceSeries - from
+ *   computeReferenceSeries.
+ * @param {number} fs - sampling frequency in Hz.
+ * @param {{ signal?: AbortSignal, frameBudgetMs?: number }} [options] - `signal` cancels the pass
+ *   (checked at the start and after every pause); `frameBudgetMs` is how long to work before
+ *   pausing.
+ * @returns {Promise<Map<string, Float32Array|number[]>>} each row's filtered samples, keyed by row
+ *   id. A row without a filter keeps its derived samples as-is (no copy).
+ * @throws {DOMException} an AbortError when `signal` is aborted.
+ */
+export async function filterMontageRows(
+  channels,
+  displayRows,
+  referenceSeries,
+  fs,
+  { signal, frameBudgetMs = FILTER_FRAME_BUDGET_MS } = {}
+) {
+  signal?.throwIfAborted();
+
+  // one Tukey window shared by every row (they all have the buffer's length), only built when
+  // some row actually has a filter to apply it to
+  const hasAnyFilter = displayRows.some(
+    (row) => row.highPass !== null || row.lowPass !== null || row.notch !== null
+  );
+  const window = hasAnyFilter ? getTukeyWindow(channels[0].length + fs, 0.1) : undefined;
+
+  const samplesByRowId = new Map();
+  let burstStart = performance.now(); // when the current burst started, for the time budget
+  for (let iRow = 0; iRow < displayRows.length; iRow++) {
+    const row = displayRows[iRow];
+    const raw = deriveMontageRowSamples(channels, row, referenceSeries);
+    samplesByRowId.set(row.id, applyMontageRowFilter(raw, row, fs, window));
+
+    // worked long enough without a break: pause, then stop here if a newer pass replaced this one
+    // (no pause after the last row — there's nothing left to do, so just finish)
+    const isLastRow = iRow === displayRows.length - 1;
+    if (!isLastRow && performance.now() - burstStart >= frameBudgetMs) {
+      await yieldToMain();
+      signal?.throwIfAborted();
+      burstStart = performance.now();
+    }
+  }
+
+  return samplesByRowId;
+}
+
+/**
+ * Picks a y-scale that fits the given rows' amplitudes — used once on file load so
+ * recordings with very different gains all open at a readable zoom level. Takes each row's
+ * max absolute voltage, then the median of those, so a single artifact-heavy channel can't
+ * shrink every other channel to a flat line.
+ *
+ * A plain loop rather than Math.max(...samples): spreading a buffer of hundreds of thousands
+ * of samples into function arguments exceeds the engine's argument limit and throws.
+ *
+ * @param {(number[]|Float32Array)[]} rows - one array of samples per display row.
+ * @returns {number|null} the y-scale, or null when there's no signal to fit (no rows, or
+ *   all empty/zero), in which case the caller should keep its current scale.
+ */
+export function computeAutoYScale(rows) {
+  // find the max absolute voltage in each channel
+  const maxAbsPerRow = [];
+  for (const samples of rows) {
+    if (samples.length === 0) continue;
+    let maxAbs = 0;
+    for (let i = 0; i < samples.length; i++) {
+      maxAbs = Math.max(maxAbs, Math.abs(samples[i]));
+    }
+    maxAbsPerRow.push(maxAbs);
+  }
+  // take the median maxAbs to avoid high outliers in a channel to determine the auto Yscale
+  maxAbsPerRow.sort((a, b) => a - b);
+  const median = maxAbsPerRow[Math.floor(maxAbsPerRow.length / 2)];
+  return median > 0 ? median : null;
 }
 
 /**

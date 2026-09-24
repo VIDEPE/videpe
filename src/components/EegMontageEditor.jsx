@@ -12,6 +12,7 @@ import { cn } from '@/utils/utils';
 import {
   Plus,
   X,
+  Check,
   MoveUp,
   MoveDown,
   ArrowUpAZ,
@@ -19,13 +20,18 @@ import {
   ArrowUpWideNarrow,
   ArrowDownWideNarrow,
 } from 'lucide-react';
+import { e } from 'mathjs';
+
+// ─── Window sizing constants ────────────────────────────────────────────────
+// Default/minimum window size in px — default matches the previous fixed w-96 h-80 (24rem x 20rem)
+const START_WINDOW_POS = { x: 40, y: 50 };
+const DEFAULT_WINDOW_SIZE = { width: 1000, height: 600 };
+const MIN_WINDOW_WIDTH = 600;
+const MIN_WINDOW_HEIGHT = 450;
+const DEFAULT_SPLIT_PERCENT = 27;
+const RESIZE_DIRECTIONS = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
 
 // ─── EEG Montage settings ────────────────────────────────────────
-// Shared title styling — keeps panes titles visually consistent, with the same height (TrafficLightButtons are 16px tall).
-const PANEL_TITLE_CLASS = 'h-5 flex items-center text-xs font-medium leading-none text-header';
-// Shared Channel column sizing for both row lists' header and rows — flex-1 so it fills
-// leftover width, min-w so it stops shrinking there and the other columns scroll instead.
-const CHANNEL_COL_CLASS = 'flex-1 min-w-8';
 const TYPE_LIST = {
   eeg: 'EEG',
   seeg: 'SEEG',
@@ -39,12 +45,26 @@ const TYPE_ORDER = Object.keys(TYPE_LIST);
 // an extra option for a row's current color when it isn't one of these presets.
 const PRESET_COLORS = ['red', 'blue', 'green', 'yellow', 'cyan', 'magenta'];
 
-// ─── Window sizing constants ────────────────────────────────────────────────
-// Default/minimum window size in px — default matches the previous fixed w-96 h-80 (24rem x 20rem)
-const DEFAULT_WINDOW_SIZE = { width: 870, height: 620 };
-const MIN_WINDOW_WIDTH = 600;
-const MIN_WINDOW_HEIGHT = 450;
-const RESIZE_DIRECTIONS = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
+// ─── Shared styling settings ────────────────────────────────────────
+// Shared title styling — keeps panes titles visually consistent, with the same height (TrafficLightButtons are 16px tall).
+const PANEL_TITLE_CLASS = 'h-5 flex items-center text-xs font-medium leading-none text-header';
+// Shared Channel column sizing for both row lists' header and rows — flex-1 so it fills
+// leftover width, min-w so it stops shrinking there and the other columns scroll instead.
+const CHANNEL_NAME_COL_CLASS = 'flex-1 min-w-8';
+// Shared column-width classes for every other column that carries a bulk "set all as"
+// control inline in its header (see channelSelectionPane/montageSelectionPane below) — the
+// header cell and each row's own control both use the exact same class, so the two can
+// never drift out of alignment the way independently-picked widths did before.
+const CHANNEL_POS_COL_CLASS = 'w-8 pl-2 pr-1 shrink-0 text-center';
+const CHANNEL_TYPE_COL_CLASS = 'w-16 shrink-0';
+const CHANNEL_BAD_COL_CLASS = 'w-9 shrink-0';
+// Montage pane's read-only Type column (channel type, looked up live — not bulk-editable
+// like TYPE_COL_CLASS above, which is the channel-selection pane's editable Type column).
+const MONTAGE_TYPE_COL_CLASS = 'w-13 shrink-0';
+const REF_COL_CLASS = 'w-18 shrink-0';
+const COLOR_COL_CLASS = 'w-20 shrink-0';
+const FILTER_COL_CLASS = 'w-14 shrink-0';
+const CLEAR_COL_CLASS = 'w-4 shrink-0';
 
 export function EegMontageEditor({
   electrodes,
@@ -61,9 +81,30 @@ export function EegMontageEditor({
   onApplyChannelSettings, // (Record<name, {type, bad}>) => void — commits the draft on Apply/OK
   montageChannels, // Array<{id, channel, reference, color}> — live state owned by EegViewer/useMontageChannels
   onApplyMontageChannels, // (Array<{id, channel, reference, color}>) => void — commits the draft on Apply/OK
+  fs, // sampling frequency of the loaded EEG recording
 }) {
   const { isDarkMode } = useTheme();
   const channelDividerColor = isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
+  const nyquist = fs / 2;
+
+  // Builds a fresh montage row for `name` — shared by the three "add row(s)" actions below
+  // plus Load. No `type` field: a row's type is always looked up live from
+  // draftChannelSettings[row.channel] at render time, so it stays in sync with later edits.
+  // `overrides` lets Load seed reference/color from a parsed file; every other caller omits
+  // it (or, via .map(makeMontageRow), passes the ignored numeric index), so the `??`
+  // fallbacks apply unchanged.
+  const makeMontageRow = useCallback(
+    (name, overrides = {}) => ({
+      id: crypto.randomUUID(),
+      channel: name,
+      reference: overrides.reference ?? null,
+      color: overrides.color ?? null,
+      highPass: overrides.highPass ?? null,
+      lowPass: overrides.lowPass ?? null,
+      notch: overrides.notch ?? null,
+    }),
+    []
+  );
 
   // Draft channelSettings/montageChannels — this component remounts fresh every time it's
   // opened (EegViewer conditionally renders it), so seeding draft state from the live props
@@ -94,6 +135,22 @@ export function EegMontageEditor({
     setDraftMontageChannels((prev) => prev.map((row) => (row.id === id ? { ...row, color } : row)));
   }, []);
 
+  const setDraftMontageRowHighPass = useCallback((id, highPass) => {
+    setDraftMontageChannels((prev) =>
+      prev.map((row) => (row.id === id ? { ...row, highPass } : row))
+    );
+  }, []);
+
+  const setDraftMontageRowLowPass = useCallback((id, lowPass) => {
+    setDraftMontageChannels((prev) =>
+      prev.map((row) => (row.id === id ? { ...row, lowPass } : row))
+    );
+  }, []);
+
+  const setDraftMontageRowNotch = useCallback((id, notch) => {
+    setDraftMontageChannels((prev) => prev.map((row) => (row.id === id ? { ...row, notch } : row)));
+  }, []);
+
   // Channels checked in the channel-selection pane, pending "+ Add selected" — purely
   // ephemeral editor UI state, not part of either draft and never committed on Apply/OK.
   const [selectedChannels, setSelectedChannels] = useState(() => new Set());
@@ -111,22 +168,6 @@ export function EegMontageEditor({
   const handleChannelPaneBackgroundClick = useCallback((e) => {
     if (e.target === e.currentTarget) setSelectedChannels(new Set());
   }, []);
-
-  // Builds a fresh montage row for `name` — shared by the three "add row(s)" actions below
-  // plus Load. No `type` field: a row's type is always looked up live from
-  // draftChannelSettings[row.channel] at render time, so it stays in sync with later edits.
-  // `overrides` lets Load seed reference/color from a parsed file; every other caller omits
-  // it (or, via .map(makeMontageRow), passes the ignored numeric index), so the `??`
-  // fallbacks apply unchanged.
-  const makeMontageRow = useCallback(
-    (name, overrides = {}) => ({
-      id: crypto.randomUUID(),
-      channel: name,
-      reference: overrides.reference ?? null,
-      color: overrides.color ?? null,
-    }),
-    []
-  );
 
   // Adds one new montage row per currently-selected channel, then clears the selection so
   // the next pick starts fresh. Rows aren't deduped against existing ones — a channel can
@@ -276,7 +317,13 @@ export function EegMontageEditor({
         const { rows, channelTypes } = await parseMontageFile(file);
         setDraftMontageChannels(
           rows.map((row) =>
-            makeMontageRow(row.channel, { reference: row.reference, color: row.color })
+            makeMontageRow(row.channel, {
+              reference: row.reference,
+              color: row.color,
+              highPass: row.highPass,
+              lowPass: row.lowPass,
+              notch: row.notch,
+            })
           )
         );
         // AnyWave files carry a per-channel type alongside each row; patch those into the
@@ -470,6 +517,29 @@ export function EegMontageEditor({
     draftMontageChannels.forEach((row) => setDraftMontageRowColor(row.id, bulkColor || null));
   };
 
+  // Bulk "set all as" filter controls — each of the three applies independently (its own
+  // checkmark button, inline under its column header), not as one combined action. A blank
+  // field clears that one setting (off) for every row, matching bulkColor's always-overwrite
+  // behavior above. Each typed value is clamped to [0, nyquist], mirroring the per-row
+  // inputs' own bounds.
+  const [bulkHighPass, setBulkHighPass] = useState('');
+  const [bulkLowPass, setBulkLowPass] = useState('');
+  const [bulkNotch, setBulkNotch] = useState('');
+  const clampBulkFilterValue = (value) =>
+    value === '' ? null : Math.min(nyquist, Math.max(0, Number(value)));
+  const handleSetAllHighPass = () => {
+    const highPass = clampBulkFilterValue(bulkHighPass);
+    draftMontageChannels.forEach((row) => setDraftMontageRowHighPass(row.id, highPass));
+  };
+  const handleSetAllLowPass = () => {
+    const lowPass = clampBulkFilterValue(bulkLowPass);
+    draftMontageChannels.forEach((row) => setDraftMontageRowLowPass(row.id, lowPass));
+  };
+  const handleSetAllNotch = () => {
+    const notch = clampBulkFilterValue(bulkNotch);
+    draftMontageChannels.forEach((row) => setDraftMontageRowNotch(row.id, notch));
+  };
+
   // ─── Refs ───────────────────────────────────────────────────────────────────
   const fileInputRef = useRef(null);
   const dragOffset = useRef(null);
@@ -477,7 +547,7 @@ export function EegMontageEditor({
   // ─── State ──────────────────────────────────────────────────────────────────
   const [isMaximized, setIsMaximized] = useState(false);
   const [maximizedPanel, setMaximizedPanel] = useState(null); // null | 'left' | 'right'
-  const [position, setPosition] = useState({ x: 100, y: 70 });
+  const [position, setPosition] = useState({ x: START_WINDOW_POS.x, y: START_WINDOW_POS.y });
   const [size, setSize] = useState(DEFAULT_WINDOW_SIZE);
   // Whether SplitPane's two panes are currently swapped — used to flip the montage pane's
   // own internal add-row-controls/row-list layout so the controls stay on the outer edge.
@@ -645,27 +715,78 @@ export function EegMontageEditor({
             together instead of squeezing when the pane is narrow. */}
         <div className="flex-1 min-h-0 overflow-x-auto">
           <div className="h-full flex flex-col w-max min-w-full">
-            {/* Column headers — widths mirror each row's controls below so labels stay aligned */}
-            <div
-              className="shrink-0 flex items-center gap-2 px-1 py-0.5 text-xs font-medium text-header border-b border-border"
-              onClick={handleChannelPaneBackgroundClick}
-            >
-              <span className={CHANNEL_COL_CLASS}>Channel</span>
-              <span className="w-13 shrink-0 text-center" title="Electrode Position Match">
-                Pos
-              </span>
-              <span className="w-8 shrink-0" title="Channel Type">
-                Type
-              </span>
-              <span className="w-11 shrink-0 text-center" title="Bad channel">
-                Bad
-              </span>
-            </div>
             <div
               className="flex-1 min-h-0 pb-4 overflow-y-auto border-header"
               data-testid="channel-list"
               onClick={handleChannelPaneBackgroundClick}
             >
+              {/* Column headers — sticky inside the row scroll container, so the scrollbar
+                  shrinks both by the same amount and they can't drift out of alignment. */}
+              <div
+                className="sticky top-0 z-10 flex items-end gap-2 px-1 py-1 text-xs font-medium text-header border-b-2 border-border bg-background"
+                onClick={handleChannelPaneBackgroundClick}
+              >
+                <span className={cn(CHANNEL_NAME_COL_CLASS, 'cursor-default')}>Channel</span>
+                <span
+                  className={cn(CHANNEL_POS_COL_CLASS, 'cursor-default')}
+                  title="Electrode Position Match"
+                >
+                  Pos
+                </span>
+                {/* Channel Type — bulk "set all as" lives inline: pick a type, click the
+                  checkmark to apply it to every channel (see handleSetAllType). */}
+                <div
+                  className={cn(CHANNEL_TYPE_COL_CLASS, 'flex flex-col gap-0.5')}
+                  title="Channel Type"
+                >
+                  <span className="cursor-default">Type</span>
+                  <div className="flex items-center gap-1">
+                    <select
+                      className="flex-1 min-w-0 text-xs border border-border rounded bg-surface"
+                      data-testid="bulk-type-select"
+                      value={bulkType}
+                      onChange={(e) => setBulkType(e.target.value)}
+                    >
+                      {Object.entries(TYPE_LIST).map(([typeValue, typeLabel]) => (
+                        <option key={typeValue} value={typeValue}>
+                          {typeLabel}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className="shrink-0 w-4 h-4 rounded-full bg-primary text-background flex items-center justify-center cursor-pointer"
+                      data-testid="bulk-type-apply-button"
+                      title="Set every channel to this type"
+                      onClick={handleSetAllType}
+                    >
+                      <Check size={10} />
+                    </button>
+                  </div>
+                </div>
+                {/* Bad — checking this marks every channel bad, unchecking marks every channel
+                  good; auto-checks itself once every channel is already bad (see isAllBad/
+                  handleFlipBadChannels), independent of the "set all as" pattern above since
+                  there's no value to pick — it's a pure toggle. */}
+                <div
+                  className={cn(CHANNEL_BAD_COL_CLASS, 'flex flex-col items-center gap-0.5')}
+                  title="Bad channel"
+                >
+                  <span className="cursor-default">Bad</span>
+                  <input
+                    type="checkbox"
+                    className="accent-alert"
+                    data-testid="bulk-bad-checkbox"
+                    checked={isAllBad}
+                    onChange={handleFlipBadChannels}
+                    title={
+                      isAllBad
+                        ? 'Uncheck to mark every channel good'
+                        : 'Check to mark every channel bad'
+                    }
+                  />
+                </div>
+              </div>
               {channelNames.map((name) => {
                 // take channel settings from draftChannelSetting (if exist) or default (type: 'eeg', bad: false)
                 const settings = draftChannelSettings[name] ?? { type: 'eeg', bad: false };
@@ -690,7 +811,7 @@ export function EegMontageEditor({
                         montage settings pane. */}
                     <span
                       className={cn(
-                        CHANNEL_COL_CLASS,
+                        CHANNEL_NAME_COL_CLASS,
                         'truncate text-sm cursor-pointer select-none',
                         settings.bad && 'text-alert'
                       )}
@@ -701,7 +822,7 @@ export function EegMontageEditor({
                       {name}
                     </span>
                     {/* Electrode Position Match */}
-                    <div className="w-4 shrink-0 flex justify-center">
+                    <div className={CHANNEL_POS_COL_CLASS}>
                       <input
                         type="checkbox"
                         className="text-xs rounded accent-border opacity-60 cursor-help"
@@ -711,9 +832,13 @@ export function EegMontageEditor({
                         disabled={true}
                       ></input>
                     </div>
-                    {/* Channel Type */}
+                    {/* Channel Type — same TYPE_COL_CLASS width as the bulk header select
+                        above, so the two columns stay aligned. */}
                     <select
-                      className="w-16 shrink-0 text-xs border border-border rounded bg-surface"
+                      className={cn(
+                        CHANNEL_TYPE_COL_CLASS,
+                        'text-xs border border-border rounded bg-surface'
+                      )}
                       data-testid={`channel-type-${name}`}
                       value={settings.type}
                       onChange={(e) => setDraftChannelType(name, e.target.value)}
@@ -724,8 +849,9 @@ export function EegMontageEditor({
                         </option>
                       ))}
                     </select>
-                    {/* Bad Channel */}
-                    <div className="w-4 shrink-0 flex justify-center">
+                    {/* Bad Channel — same BAD_COL_CLASS width as the bulk header checkbox
+                        above, so the two columns stay aligned. */}
+                    <div className={cn(CHANNEL_BAD_COL_CLASS, 'flex justify-center')}>
                       <input
                         type="checkbox"
                         className="accent-alert"
@@ -741,36 +867,6 @@ export function EegMontageEditor({
           </div>
         </div>
       </div>
-      {/* Channel Selection Settings */}
-      <div
-        className="h-32 shrink-0 flex flex-col items-start gap-2 p-2 border-t border-border bg-surface"
-        onClick={handleChannelPaneBackgroundClick}
-      >
-        <button className="button" onClick={() => handleFlipBadChannels()}>
-          {isAllBad ? 'Set all Good' : 'Set all Bad'}
-        </button>
-        <div className="flex items-center gap-2">
-          <button
-            className="button"
-            data-testid="bulk-type-apply-button"
-            onClick={handleSetAllType}
-          >
-            Set all as
-          </button>
-          <select
-            className="text-xs border border-border rounded bg-surface"
-            data-testid="bulk-type-select"
-            value={bulkType}
-            onChange={(e) => setBulkType(e.target.value)}
-          >
-            {Object.entries(TYPE_LIST).map(([typeValue, typeLabel]) => (
-              <option key={typeValue} value={typeValue}>
-                {typeLabel}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
     </div>
   );
   // ─── Montage Selection Pane ──────────────────────────────────────────────────────
@@ -782,6 +878,8 @@ export function EegMontageEditor({
   // positioned on either side via the order classes applied where it's rendered — when
   // SplitPane's panes are swapped, this column flips to the opposite side so it stays on
   // the window's outer edge instead of jumping next to the divider.
+
+  // ─── Ad montage row controls
   const addRowControls = (
     <div
       className={cn(
@@ -816,6 +914,20 @@ export function EegMontageEditor({
         >
           Add ALL
         </button>
+        <button
+          type="button"
+          className="button"
+          data-testid="clear-all-button"
+          onClick={handleClearAllMontageRows}
+          disabled={draftMontageChannels.length === 0}
+          title={
+            draftMontageChannels.length === 0
+              ? 'No montage rows to clear'
+              : 'Remove all montage rows'
+          }
+        >
+          Clear ALL
+        </button>
       </div>
       {/* Add bye type button + select */}
       <div className="flex flex-col gap-2 pt-6 border-t border-border">
@@ -828,7 +940,6 @@ export function EegMontageEditor({
         >
           Add by Type
         </button>
-
         <select
           className="text-xs border border-border rounded bg-surface"
           data-testid="add-by-type-select"
@@ -863,6 +974,8 @@ export function EegMontageEditor({
       </div>
     </div>
   );
+
+  // ─── Montage rows + settings
   const montageSelectionPane = (
     <div className="h-full flex bg-surface">
       {addRowControls}
@@ -879,29 +992,250 @@ export function EegMontageEditor({
             together instead of squeezing when the pane is narrow. */}
         <div className="flex-1 min-h-0 overflow-x-auto">
           <div className="h-full flex flex-col w-max min-w-full">
-            {/* Column headers — widths mirror each row's controls below so labels stay aligned */}
-            <div
-              className="shrink-0 flex items-center gap-2 pl-3 pr-1 py-0.5 text-xs font-medium text-header border-b border-border"
-              onClick={handleMontagePaneBackgroundClick}
-            >
-              <span className={CHANNEL_COL_CLASS} title="Montage Channel">
-                Channel
-              </span>
-              <span className="w-17 shrink-0 text-center" title="Channel Type">
-                Type
-              </span>
-              <span className="w-23 shrink-0 text-center" title="Reference Channel">
-                Ref
-              </span>
-              <span className="w-20 shrink-0" title="Montage Channel Color">
-                Color
-              </span>
-            </div>
             <div
               className="flex-1 min-h-0 pb-4 overflow-y-auto border-header"
               data-testid="montage-row-list"
               onClick={handleMontagePaneBackgroundClick}
             >
+              {/* Column headers — sticky inside the row scroll container, so the scrollbar
+                  shrinks both by the same amount and they can't drift out of alignment. */}
+              <div
+                className="sticky top-0 z-10 flex items-end gap-2 pl-3 pr-1 py-1 text-xs font-medium text-header border-b-2 border-border bg-background"
+                onClick={handleMontagePaneBackgroundClick}
+              >
+                {/* <span> has no real `disabled` attribute — it's guarded here instead by
+                    only wiring onClick/cursor-pointer when there's something to sort. */}
+                <span
+                  className={cn(
+                    CHANNEL_NAME_COL_CLASS,
+                    'flex items-center gap-1',
+                    draftMontageChannels.length === 0
+                      ? 'opacity-40 cursor-default'
+                      : 'cursor-pointer'
+                  )}
+                  title={`Montage Channel - Click to sort rows by channel name (${nameSortDescending ? 'descending' : 'ascending'})`}
+                  data-testid="sort-by-name-button"
+                  onClick={draftMontageChannels.length === 0 ? undefined : handleSortByName} // spans can't be disabled to we need to disable the onclick instead
+                >
+                  Channel {nameSortDescending ? <ArrowDownAZ size={15} /> : <ArrowUpAZ size={15} />}
+                </span>
+                <span
+                  className={cn(
+                    MONTAGE_TYPE_COL_CLASS,
+                    'flex items-center justify-center gap-1',
+                    draftMontageChannels.length === 0
+                      ? 'opacity-40 cursor-default'
+                      : 'cursor-pointer'
+                  )}
+                  title={`Channel Type - Click to sort rows by channel type (${typeSortDescending ? 'descending' : 'ascending'})`}
+                  data-testid="sort-by-type-button"
+                  onClick={draftMontageChannels.length === 0 ? undefined : handleSortByType} // spans can't be disabled to we need to disable the onclick instead
+                >
+                  Type
+                  {typeSortDescending ? (
+                    <ArrowDownWideNarrow size={15} />
+                  ) : (
+                    <ArrowUpWideNarrow size={15} />
+                  )}
+                </span>
+                {/* Reference — bulk "set all as" lives inline: pick a reference, click the
+                  checkmark to apply it to every montage row (see handleSetAllReference). */}
+                <div
+                  className={cn(
+                    REF_COL_CLASS,
+                    'flex flex-col gap-0.5',
+                    draftMontageChannels.length === 0 && 'opacity-40'
+                  )}
+                  title="Reference Channel"
+                >
+                  <span className="text-center cursor-default">Ref</span>
+                  <div className="flex items-center gap-1">
+                    <select
+                      className="flex-1 min-w-0 text-xs border border-border rounded bg-surface"
+                      data-testid="bulk-reference-select"
+                      disabled={draftMontageChannels.length === 0}
+                      value={bulkReference}
+                      onChange={(e) => setBulkReference(e.target.value)}
+                    >
+                      {referenceOptions}
+                    </select>
+                    <button
+                      type="button"
+                      className="shrink-0 w-4 h-4 rounded-full bg-primary text-background flex items-center justify-center disabled:opacity-40 cursor-pointer"
+                      data-testid="bulk-reference-apply-button"
+                      title="Set every row to this reference"
+                      disabled={draftMontageChannels.length === 0}
+                      onClick={handleSetAllReference}
+                    >
+                      <Check size={10} />
+                    </button>
+                  </div>
+                </div>
+                {/* Color — same inline bulk-apply pattern as Reference (see handleSetAllColor). */}
+                <div
+                  className={cn(
+                    COLOR_COL_CLASS,
+                    'flex flex-col gap-0.5',
+                    draftMontageChannels.length === 0 && 'opacity-40'
+                  )}
+                  title="Montage Channel Color"
+                >
+                  <span className="cursor-default">Color</span>
+                  <div className="flex items-center gap-1">
+                    <select
+                      className="flex-1 min-w-0 text-xs border border-border rounded bg-surface"
+                      data-testid="bulk-color-select"
+                      disabled={draftMontageChannels.length === 0}
+                      value={bulkColor}
+                      onChange={(e) => setBulkColor(e.target.value)}
+                    >
+                      <option value="">Default</option>
+                      {colorOptions}
+                    </select>
+                    <button
+                      type="button"
+                      className="shrink-0 w-4 h-4 rounded-full bg-primary text-background flex items-center justify-center disabled:opacity-40 cursor-pointer"
+                      data-testid="bulk-color-apply-button"
+                      title="Set every row to this color"
+                      disabled={draftMontageChannels.length === 0}
+                      onClick={handleSetAllColor}
+                    >
+                      <Check size={10} />
+                    </button>
+                  </div>
+                </div>
+                {/* High Pass / Low Pass / Notch — each applies independently: pick a value in
+                  that column and click its own checkmark (see handleSetAllHighPass/LowPass/
+                  Notch). A blank field clears that one setting (off) for every row, matching
+                  bulkColor's always-overwrite behavior above. */}
+                {/* High Pass filter header with set all controls */}
+                <div
+                  className={cn(
+                    FILTER_COL_CLASS,
+                    'flex flex-col gap-0.5',
+                    draftMontageChannels.length === 0 && 'opacity-40'
+                  )}
+                  title="High Pass filter frequency"
+                >
+                  <span className="text-center cursor-default">High Pass</span>
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      placeholder="Hz"
+                      aria-label="Set all rows' High Pass filter frequency"
+                      className="flex-1 min-w-0 text-xs border border-border rounded bg-surface"
+                      data-testid="bulk-highpass-input"
+                      disabled={draftMontageChannels.length === 0}
+                      min={0}
+                      max={nyquist}
+                      step="any"
+                      value={bulkHighPass}
+                      onChange={(e) => setBulkHighPass(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="shrink-0 w-4 h-4 rounded-full bg-primary text-background flex items-center justify-center disabled:opacity-40 cursor-pointer"
+                      data-testid="bulk-highpass-apply-button"
+                      title="Set every row's High Pass to this value"
+                      disabled={draftMontageChannels.length === 0}
+                      onClick={handleSetAllHighPass}
+                    >
+                      <Check size={10} />
+                    </button>
+                  </div>
+                </div>
+                {/* Low Pass filter header with set all controls */}
+                <div
+                  className={cn(
+                    FILTER_COL_CLASS,
+                    'flex flex-col gap-0.5',
+                    draftMontageChannels.length === 0 && 'opacity-40'
+                  )}
+                  title="Low Pass filter frequency"
+                >
+                  <span className="text-center cursor-default">Low Pass</span>
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      placeholder="Hz"
+                      aria-label="Set all rows' Low Pass filter frequency"
+                      className="flex-1 min-w-0 text-xs border border-border rounded bg-surface"
+                      data-testid="bulk-lowpass-input"
+                      disabled={draftMontageChannels.length === 0}
+                      min={0}
+                      max={nyquist}
+                      step="any"
+                      value={bulkLowPass}
+                      onChange={(e) => setBulkLowPass(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="shrink-0 w-4 h-4 rounded-full bg-primary text-background flex items-center justify-center disabled:opacity-40 cursor-pointer"
+                      data-testid="bulk-lowpass-apply-button"
+                      title="Set every row's Low Pass to this value"
+                      disabled={draftMontageChannels.length === 0}
+                      onClick={handleSetAllLowPass}
+                    >
+                      <Check size={10} />
+                    </button>
+                  </div>
+                </div>
+                {/* Notch filter header with set all controls */}
+                <div
+                  className={cn(
+                    FILTER_COL_CLASS,
+                    'flex flex-col gap-0.5',
+                    draftMontageChannels.length === 0 && 'opacity-40'
+                  )}
+                  title="Notch filter frequency"
+                >
+                  <span className="text-center cursor-default">Notch</span>
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      placeholder="Hz"
+                      aria-label="Set all rows' Notch filter frequency"
+                      className="flex-1 min-w-0 text-xs border border-border rounded bg-surface"
+                      data-testid="bulk-notch-input"
+                      disabled={draftMontageChannels.length === 0}
+                      min={0}
+                      max={nyquist}
+                      step="any"
+                      value={bulkNotch}
+                      onChange={(e) => setBulkNotch(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="shrink-0 w-4 h-4 rounded-full bg-primary text-background flex items-center justify-center disabled:opacity-40 cursor-pointer"
+                      data-testid="bulk-notch-apply-button"
+                      title="Set every row's Notch to this value"
+                      disabled={draftMontageChannels.length === 0}
+                      onClick={handleSetAllNotch}
+                    >
+                      <Check size={10} />
+                    </button>
+                  </div>
+                </div>
+                {/* Clear column header — replaces the old standalone "Clear all" footer
+                  button; aligned with each row's own Remove (×) button below via
+                  CLEAR_COL_CLASS. */}
+                <div className={cn(CLEAR_COL_CLASS, 'flex flex-col items-center gap-0.5')}>
+                  <button
+                    type="button"
+                    className="shrink-0 w-4 h-4 flex items-center justify-center disabled:opacity-40 text-header hover:text-alert cursor-pointer"
+                    data-testid="clear-all-header-button"
+                    title={
+                      draftMontageChannels.length === 0
+                        ? 'No montage rows to clear'
+                        : 'Remove all montage rows'
+                    }
+                    disabled={draftMontageChannels.length === 0}
+                    onClick={handleClearAllMontageRows}
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              </div>
               {draftMontageChannels.length === 0 && (
                 <p className="max-w-sm text-xs text-header pl-3 pr-1 py-2">
                   {`No montage rows yet — select channel(s) in the Channel Selection pane (${isPanesSwapped ? 'right' : 'left'})
@@ -961,7 +1295,7 @@ export function EegMontageEditor({
                     {/* Channel name */}
                     <span
                       className={cn(
-                        CHANNEL_COL_CLASS,
+                        CHANNEL_NAME_COL_CLASS,
                         'truncate text-sm',
                         isChannelBad && 'text-alert',
                         isChannelMissing && 'text-red-500'
@@ -982,7 +1316,7 @@ export function EegMontageEditor({
                         rather than freezing whatever the type was when the row was added. A
                         missing channel has no draftChannelSettings entry to read a type from. */}
                     <span
-                      className="w-23 shrink-0 text-center truncate text-sm"
+                      className={cn(MONTAGE_TYPE_COL_CLASS, 'text-center truncate text-sm')}
                       data-testid={`montage-type-${row.id}`}
                     >
                       {channelType ? TYPE_LIST[channelType] : '—'}
@@ -998,7 +1332,10 @@ export function EegMontageEditor({
                         every option in the dropdown instead of just the one that's actually bad
                         or missing. */}
                     <select
-                      className="w-16 shrink-0 text-xs border border-border rounded bg-surface cursor-default"
+                      className={cn(
+                        REF_COL_CLASS,
+                        'text-xs border border-border rounded bg-surface cursor-default'
+                      )}
                       title={
                         isReferenceMissing
                           ? 'Reference channel not found in this recording'
@@ -1024,7 +1361,10 @@ export function EegMontageEditor({
                         theme-independent unlike the old scheme where "Default" was literally
                         stored as 'white' or 'black'. */}
                     <select
-                      className="w-16 shrink-0 text-xs border border-border rounded bg-surface cursor-default"
+                      className={cn(
+                        COLOR_COL_CLASS,
+                        'text-xs border border-border rounded bg-surface cursor-default'
+                      )}
                       data-testid={`color-${row.id}`}
                       value={row.color ?? ''}
                       disabled={isChannelMissing}
@@ -1041,10 +1381,89 @@ export function EegMontageEditor({
                       )}
                       {colorOptions}
                     </select>
+
+                    {/* Channel HPF */}
+                    <input
+                      data-testid={`montage-highpass-${row.id}`}
+                      type="number"
+                      value={row.highPass ?? ''}
+                      disabled={isChannelMissing}
+                      min={0}
+                      max={Number.isFinite(row.lowPass) ? Math.min(row.lowPass, nyquist) : nyquist} // High pass cannot be higher than low pass
+                      step={'any'}
+                      onChange={(e) =>
+                        setDraftMontageRowHighPass(
+                          row.id,
+                          e.target.value ? Number(e.target.value) : null
+                        )
+                      }
+                      onBlur={() => {
+                        if (!Number.isFinite(row.highPass)) return;
+                        const upperBound = Number.isFinite(row.lowPass)
+                          ? Math.min(nyquist, row.lowPass)
+                          : nyquist; // highpass must be lower than nyquist but als lower than row.lowPass
+                        const clamped = Math.min(row.highPass, upperBound);
+                        if (clamped !== row.highPass) setDraftMontageRowHighPass(row.id, clamped);
+                      }}
+                      aria-label="High Pass filter frequency"
+                      className={cn(FILTER_COL_CLASS, 'text-xs bg-surface')}
+                    />
+                    {/* Channel LPF */}
+                    <input
+                      data-testid={`montage-lowpass-${row.id}`}
+                      type="number"
+                      value={row.lowPass ?? ''}
+                      disabled={isChannelMissing}
+                      min={Number.isFinite(row.highPass) ? row.highPass : 0} // lowPass can never be lower than high pass
+                      max={nyquist}
+                      step={'any'}
+                      onChange={(e) =>
+                        setDraftMontageRowLowPass(
+                          row.id,
+                          e.target.value ? Number(e.target.value) : null
+                        )
+                      }
+                      onBlur={() => {
+                        if (!Number.isFinite(row.lowPass)) return;
+                        const lowerBound = Number.isFinite(row.highPass) ? row.highPass : 0;
+                        const clamped = Math.min(Math.max(lowerBound, row.lowPass), nyquist);
+                        if (clamped !== row.lowPass) setDraftMontageRowLowPass(row.id, clamped);
+                      }}
+                      aria-label="Low Pass filter frequency"
+                      className={cn(FILTER_COL_CLASS, 'text-xs bg-surface')}
+                    />
+                    {/* Channel Notch */}
+                    <input
+                      data-testid={`montage-notch-${row.id}`}
+                      type="number"
+                      value={row.notch ?? ''}
+                      disabled={isChannelMissing}
+                      min={0} // lowPass can never be lower than high pass
+                      max={nyquist}
+                      step={'any'}
+                      onChange={(e) =>
+                        setDraftMontageRowNotch(
+                          row.id,
+                          e.target.value ? Number(e.target.value) : null
+                        )
+                      }
+                      onBlur={() => {
+                        if (!Number.isFinite(row.notch)) return;
+                        const lowerBound = 0;
+                        const clamped = Math.min(Math.max(lowerBound, row.notch), nyquist);
+                        if (clamped !== row.notch) setDraftMontageRowNotch(row.id, clamped);
+                      }}
+                      aria-label="Notch filter frequency"
+                      className={cn(FILTER_COL_CLASS, 'text-xs bg-surface')}
+                    />
+
                     {/* Remove row */}
                     <button
                       type="button"
-                      className="shrink-0 text-header hover:text-alert cursor-pointer"
+                      className={cn(
+                        CLEAR_COL_CLASS,
+                        'flex items-center justify-center text-header hover:text-alert cursor-pointer'
+                      )}
                       data-testid={`remove-row-${row.id}`}
                       title={`Remove ${row.channel} from the montage`}
                       onClick={() => handleRemoveMontageRow(row.id)}
@@ -1057,172 +1476,83 @@ export function EegMontageEditor({
             </div>
           </div>
         </div>
-        {/* Montage Settings — a row of three column groups (Clear/Sort/Move), each stacking
-            its own buttons; the Move group is pushed to the right edge (ml-auto) since it
-            acts on row selection rather than the list as a whole, like Clear/Sort do. A
-            second row below holds Load/Save side by side. */}
+        {/* Montage Settings — Load/Save on the left, Move Up/Down pinned to the right edge
+            (ml-auto) since they act on row selection rather than the list as a whole, like
+            Load/Save do. */}
         <div
           className="shrink-0 flex flex-col p-2 border-t border-border bg-surface"
           onClick={handleMontagePaneBackgroundClick}
         >
-          {/* Scrolls horizontally as one unit when the pane is too narrow, so a single
-              scrollbar sits below Load/Save instead of one wedged between the two rows. */}
+          {/* Scrolls horizontally as one unit when the pane is too narrow. */}
           <div className="overflow-x-auto">
-            <div className="flex flex-col gap-4 pb-2 w-max min-w-full">
-              <div className="flex items-start gap-4">
-                {/* Clear group */}
-                <div className="flex flex-col gap-2 shrink-0">
-                  <button
-                    type="button"
-                    className="button whitespace-nowrap"
-                    data-testid="clear-all-button"
-                    disabled={draftMontageChannels.length === 0}
-                    onClick={handleClearAllMontageRows}
-                    title="Remove all montage rows"
-                  >
-                    Clear all
-                  </button>
-                </div>
-                {/* Sort group — the arrow shows the direction the next click will sort in. */}
-                <div className="flex flex-col gap-2 shrink-0">
-                  <button
-                    type="button"
-                    className="button flex items-center gap-1 whitespace-nowrap"
-                    data-testid="sort-by-name-button"
-                    disabled={draftMontageChannels.length === 0}
-                    onClick={handleSortByName}
-                    title={`Sort rows by channel name (${nameSortDescending ? 'descending' : 'ascending'})`}
-                  >
-                    Sort by Name
-                    {nameSortDescending ? <ArrowDownAZ size={15} /> : <ArrowUpAZ size={15} />}
-                  </button>
-                  <button
-                    type="button"
-                    className="button flex items-center gap-1 whitespace-nowrap"
-                    data-testid="sort-by-type-button"
-                    disabled={draftMontageChannels.length === 0}
-                    onClick={handleSortByType}
-                    title={`Sort rows by channel type (${typeSortDescending ? 'descending' : 'ascending'})`}
-                  >
-                    Sort by Type
-                    {typeSortDescending ? (
-                      <ArrowDownWideNarrow size={15} />
-                    ) : (
-                      <ArrowUpWideNarrow size={15} />
-                    )}
-                  </button>
-                </div>
-                {/* Set all Ref group */}
-                <div className="flex flex-col gap-2 shrink-0">
-                  <button
-                    className="button whitespace-nowrap"
-                    data-testid="bulk-reference-apply-button"
-                    disabled={draftMontageChannels.length === 0}
-                    onClick={handleSetAllReference}
-                  >
-                    Set all as
-                  </button>
-                  <select
-                    className="text-xs border border-border rounded bg-surface"
-                    data-testid="bulk-reference-select"
-                    disabled={draftMontageChannels.length === 0}
-                    value={bulkReference}
-                    onChange={(e) => setBulkReference(e.target.value)}
-                  >
-                    {referenceOptions}
-                  </select>
-                </div>
-
-                {/* Set all Color group */}
-                <div className="flex flex-col gap-2 shrink-0">
-                  <button
-                    className="button whitespace-nowrap"
-                    data-testid="bulk-color-apply-button"
-                    disabled={draftMontageChannels.length === 0}
-                    onClick={handleSetAllColor}
-                  >
-                    Set all as
-                  </button>
-                  <select
-                    className="text-xs border border-border rounded bg-surface"
-                    data-testid="bulk-color-select"
-                    disabled={draftMontageChannels.length === 0}
-                    value={bulkColor}
-                    onChange={(e) => setBulkColor(e.target.value)}
-                  >
-                    <option value="">Default</option>
-                    {colorOptions}
-                  </select>
-                </div>
-
-                {/* Move group — acts on whichever row(s) are selected (click a row's channel
-                    name above to select it); disabled with none selected since there's nothing
-                    to move. overflow-hidden + p-1 clips the buttons' :hover scale so it can't
-                    escape into the scrollable toolbar's width and flicker the scrollbar. */}
-                <div className="flex flex-col gap-2 shrink-0 ml-auto overflow-hidden p-1">
-                  <button
-                    type="button"
-                    className="button button-icon"
-                    data-testid="move-up-button"
-                    disabled={selectedMontageRows.size === 0}
-                    onClick={handleMoveSelectedUp}
-                    title={
-                      selectedMontageRows.size === 0
-                        ? 'Select montage row(s) first'
-                        : 'Move selected row(s) up'
-                    }
-                  >
-                    <MoveUp size={20} />
-                  </button>
-                  <button
-                    type="button"
-                    className="button button-icon"
-                    data-testid="move-down-button"
-                    disabled={selectedMontageRows.size === 0}
-                    onClick={handleMoveSelectedDown}
-                    title={
-                      selectedMontageRows.size === 0
-                        ? 'Select montage row(s) first'
-                        : 'Move selected row(s) down'
-                    }
-                  >
-                    <MoveDown size={20} />
-                  </button>
-                </div>
-              </div>
-              {/* File row — Load replaces all draft rows wholesale (grouped conceptually with
-                  Clear, both whole-list-replacing); Save always exports AnyWave format
+            <div className="flex items-center gap-2 py-2 w-max min-w-full">
+              {/* File group — Load replaces all draft rows wholesale (grouped conceptually
+                  with Clear, both whole-list-replacing); Save always exports AnyWave format
                   regardless of the montage's origin. Both .mtg formats share the same file
                   extension, so format detection happens by content-sniffing in
                   parseMontageFile, not via the file input's accept filter. */}
-              <div className="flex items-center gap-2 shrink-0">
+              {/* Load montage button */}
+              <button
+                type="button"
+                className="button whitespace-nowrap"
+                data-testid="load-montage-button"
+                onClick={() => fileInputRef.current?.click()}
+                title="Load a montage from an AnyWave or Cartool .mtg file (replaces all current rows)"
+              >
+                Load
+              </button>
+              {/* Save montage button */}
+              <button
+                type="button"
+                className="button whitespace-nowrap"
+                data-testid="save-montage-button"
+                disabled={draftMontageChannels.length === 0}
+                onClick={handleSaveMontage}
+                title="Save the current montage as an AnyWave .mtg file"
+              >
+                Save
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".mtg"
+                hidden
+                data-testid="montage-file-input"
+                onChange={handleLoadMontageFile}
+              />
+              {/* Move group — acts on whichever row(s) are selected (click a row's channel
+                  name above to select it); disabled with none selected since there's nothing
+                  to move. overflow-hidden + p-1 clips the buttons' :hover scale so it can't
+                  escape into the scrollable toolbar's width and flicker the scrollbar. */}
+              <div className="flex items-center gap-2 shrink-0 ml-auto overflow-hidden p-1">
                 <button
                   type="button"
-                  className="button whitespace-nowrap"
-                  data-testid="load-montage-button"
-                  onClick={() => fileInputRef.current?.click()}
-                  title="Load a montage from an AnyWave or Cartool .mtg file (replaces all current rows)"
+                  className="button button-icon"
+                  data-testid="move-up-button"
+                  disabled={selectedMontageRows.size === 0}
+                  onClick={handleMoveSelectedUp}
+                  title={
+                    selectedMontageRows.size === 0
+                      ? 'Select montage row(s) first'
+                      : 'Move selected row(s) up'
+                  }
                 >
-                  Load
+                  <MoveUp size={20} />
                 </button>
                 <button
                   type="button"
-                  className="button whitespace-nowrap"
-                  data-testid="save-montage-button"
-                  disabled={draftMontageChannels.length === 0}
-                  onClick={handleSaveMontage}
-                  title="Save the current montage as an AnyWave .mtg file"
+                  className="button button-icon"
+                  data-testid="move-down-button"
+                  disabled={selectedMontageRows.size === 0}
+                  onClick={handleMoveSelectedDown}
+                  title={
+                    selectedMontageRows.size === 0
+                      ? 'Select montage row(s) first'
+                      : 'Move selected row(s) down'
+                  }
                 >
-                  Save
+                  <MoveDown size={20} />
                 </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".mtg"
-                  hidden
-                  data-testid="montage-file-input"
-                  onChange={handleLoadMontageFile}
-                />
               </div>
             </div>
           </div>
@@ -1285,7 +1615,7 @@ export function EegMontageEditor({
         onSwapChange={setIsPanesSwapped}
         left={channelSelectionPane}
         right={montageSelectionPane}
-        defaultSplitPercent={30}
+        defaultSplitPercent={DEFAULT_SPLIT_PERCENT}
       />
 
       {/* Footer — Apply/OK commit the draft to EegViewer's live channelSettings; Cancel (and

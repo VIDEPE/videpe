@@ -58,6 +58,9 @@ export function useEegBuffer(provider, startTime, windowSize) {
   const [buffer, setBuffer] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const requestIdRef = useRef(0);
+  // Cancels the in-flight getChunk when a newer request replaces it (or on unmount), so a
+  // superseded reload stops demuxing instead of finishing work that would be thrown away.
+  const abortControllerRef = useRef(null);
   // Throttle (not debounce): at most one pending reload timer. A plain
   // debounce can starve under sustained rapid navigation (e.g. holding
   // Time-Step) — the timer keeps getting cancelled/rescheduled and never
@@ -108,19 +111,31 @@ export function useEegBuffer(provider, startTime, windowSize) {
       // Why it's needed: if the user scrolls quickly, a new request can fire before an earlier one resolves. Without this guard, whichever promise resolves last wins
       const requestId = ++requestIdRef.current;
 
-      current.provider.getChunk(start, end).then(({ timestamps, channels }) => {
-        if (requestIdRef.current !== requestId) return; // superseded by a newer request
+      // cancel the previous request, if it's still running, so it stops demuxing data nobody will use
+      abortControllerRef.current?.abort();
+      // new cancel token for this request; stored so the next load (or unmount) can cancel it
+      abortControllerRef.current = new AbortController();
 
-        setBuffer({
-          provider: current.provider,
-          bufferStart: start,
-          bufferEnd: end,
-          margin,
-          timestamps,
-          channels,
+      current.provider
+        // pass the token's signal, so getChunk can check whether it has been cancelled
+        .getChunk(start, end, abortControllerRef.current.signal)
+        .then(({ timestamps, channels }) => {
+          if (requestIdRef.current !== requestId) return; // superseded by a newer request
+
+          setBuffer({
+            provider: current.provider,
+            bufferStart: start,
+            bufferEnd: end,
+            margin,
+            timestamps,
+            channels,
+          });
+          setIsLoading(false);
+        })
+        .catch((error) => {
+          // a cancelled request ends in an AbortError on purpose, so ignore it; re-throw real errors
+          if (error.name !== 'AbortError') throw error;
         });
-        setIsLoading(false);
-      });
     };
 
     // If this is the first load, do it immediately. Also clear any pending
@@ -144,10 +159,11 @@ export function useEegBuffer(provider, startTime, windowSize) {
     return undefined;
   }, [provider, startTime, windowSize, buffer]);
 
-  // Clear any pending reload timer on unmount.
+  // Clear any pending reload timer and cancel any in-flight request on unmount.
   useEffect(() => {
     return () => {
       if (pendingTimerRef.current !== null) clearTimeout(pendingTimerRef.current);
+      abortControllerRef.current?.abort();
     };
   }, []);
 
