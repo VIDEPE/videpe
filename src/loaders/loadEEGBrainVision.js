@@ -1,8 +1,19 @@
+import { yieldToMain } from '@/utils/yieldToMain';
+
 // BrainVision EEG files come in two parts: a text header (.vhdr) and a binary data file (.eeg).
 // The .eeg file is raw, uncompressed, multiplexed IEEE_FLOAT_32 data (4 bytes per channel
 // per sample-time), so an arbitrary time range maps directly to an arbitrary byte range —
 // this lets loadBrainVisionEEG avoid reading the whole file for multi-hour recordings.
 const BYTES_PER_SAMPLE = 4; // sizeof(IEEE_FLOAT_32); existing assumption, BinaryFormat is not parsed
+
+// The demux pauses briefly once it has worked DEMUX_FRAME_BUDGET_MS without a break, so the
+// browser can redraw and respond to clicks. Without these pauses, a large file/large buffer reload
+// would run as one uninterrupted block and freeze the app until all channels are demuxed.
+// A time budget (rather than a fixed number of time points) adapts to the channel count and
+// machine speed: 8ms keeps each block comfortably under one frame (~16ms).
+const DEMUX_FRAME_BUDGET_MS = 8;
+// Time points between clock checks — checking after every single one would waste time
+const DEMUX_CLOCK_CHECK_INTERVAL = 1000;
 
 async function readText(source) {
   if (source instanceof File) return source.text();
@@ -50,18 +61,33 @@ function parseVhdr(text) {
 // Demultiplexes a range of MULTIPLEXED float32 samples: [s0_ch0, s0_ch1, ..., s0_chN, s1_ch0, ...]
 // `sampleOffset` is the absolute sample index of float32[0], used to compute absolute timestamps
 // so the returned timestamps[0] is the chunk's real start time (not 0).
-function demuxFloat32(float32, nChannels, nSamples, sampleOffset, fs) {
+//
+// Runs in bursts of up to DEMUX_FRAME_BUDGET_MS, yielding to the browser between them (see
+// yieldToMain) so demuxing a large buffered chunk doesn't block the main thread in one shot.
+// If `signal` is aborted during a pause, stops and throws an AbortError instead of finishing
+// work whose result would be thrown away.
+async function demuxFloat32(float32, nChannels, nSamples, sampleOffset, fs, signal) {
   const timestamps = new Float32Array(nSamples);
   // Compute absolute timestamps for each sample in the chunk based on the sample offset and sampling frequency.
   for (let t = 0; t < nSamples; t++) timestamps[t] = (sampleOffset + t) / fs;
 
   // Allocate separate arrays for each channel.
   const channels = Array.from({ length: nChannels }, () => new Float32Array(nSamples));
+  let burstStart = performance.now(); // when the current burst started, for the time budget
   // Inner loop over channels keeps sequential reads on float32 (cache-friendly)
   for (let t = 0; t < nSamples; t++) {
     const offset = t * nChannels;
     for (let ch = 0; ch < nChannels; ch++) {
       channels[ch][t] = float32[offset + ch];
+    }
+
+    // every DEMUX_CLOCK_CHECK_INTERVAL time points (and only if there's more to do):
+    // pause if this burst has used up its time budget
+    const isClockCheck = (t + 1) % DEMUX_CLOCK_CHECK_INTERVAL === 0 && t + 1 < nSamples;
+    if (isClockCheck && performance.now() - burstStart >= DEMUX_FRAME_BUDGET_MS) {
+      await yieldToMain(); // pause the function and let the browser handle whatever is waiting, then continue
+      signal?.throwIfAborted(); // a newer request may have replaced this one during the pause
+      burstStart = performance.now();
     }
   }
 
@@ -69,18 +95,31 @@ function demuxFloat32(float32, nChannels, nSamples, sampleOffset, fs) {
 }
 
 /**
- * Load a BrainVision recording's metadata and return a chunk-loading provider.
- * `header` and `data` can each be a URL string or a File object, so this function
- * works for both demo (URL) and user-upload (File) cases.
+ * Loads a BrainVision recording's metadata and returns a chunk-loading provider. Works for
+ * both demo (URL) and user-upload (File) sources.
  *
- * Returns `{ channelNames, fs, tMax, getChunk }`. `tMax` (total duration in seconds)
- * is derived from the data source's byte size without reading its content — for `File`
- * sources this is synchronous (`File.size`); for URL sources the data is fetched once
- * and cached (demo recordings are small, so an eager fetch is cheap).
+ * `tMax` is derived from the data source's byte size without reading its content: for a
+ * `File` that's synchronous (`File.size`); a URL's data is fetched once and cached (demo
+ * recordings are small, so an eager fetch is cheap).
  *
- * `getChunk(startTime, endTime)` resolves to `{ timestamps, channels }` for that time
- * range — `channels[i]` is the float32 signal for channel i, and `timestamps[0]` is the
- * chunk's absolute start time (so it can be a sub-range of the full recording).
+ * @param {string|File} header - the .vhdr header, as a URL or a File.
+ * @param {string|File} data - the .eeg binary data, as a URL or a File.
+ * @returns {Promise<{
+ *   channelNames: string[],
+ *   fs: number,
+ *   tMax: number,
+ *   getChunk: (startTime: number, endTime: number, signal?: AbortSignal) =>
+ *     Promise<{ timestamps: Float32Array, channels: Float32Array[] }>
+ * }>} the provider:
+ *   - `channelNames`: channel labels in file order.
+ *   - `fs`: sampling frequency in Hz.
+ *   - `tMax`: total recording duration in seconds.
+ *   - `getChunk(startTime, endTime, signal)`: loads one time range (in seconds, clamped to
+ *     [0, tMax]). Resolves to `channels[i]`, the samples of channel i, and `timestamps`,
+ *     absolute times in seconds (so `timestamps[0]` is the chunk's real start time). The
+ *     optional `signal` (from an AbortController) cancels the request: once aborted, getChunk
+ *     stops at its next check and rejects with an AbortError.
+ * @throws {Error} when the header lacks NumberOfChannels/SamplingInterval, or a URL fetch fails.
  */
 export async function loadBrainVisionEEG(header, data) {
   // extract header text from .vhdr file and parse it to get requirements for reading the binary file
@@ -112,7 +151,8 @@ export async function loadBrainVisionEEG(header, data) {
   // getChunk is the core of this loader:
   // it maps a requested time range to a byte range, reads that chunk of data, and demuxes it into separate channel arrays.
   // The returned timestamps are absolute (not relative to the chunk) so they can be compared across chunks.
-  const getChunk = async (startTime, endTime) => {
+  const getChunk = async (startTime, endTime, signal) => {
+    signal?.throwIfAborted(); // already cancelled before it started
     // Clamp requested times to recording duration, convert to sample indices, then byte offsets.
     const clampedStart = Math.max(0, Math.min(startTime, tMax));
     const clampedEnd = Math.max(0, Math.min(endTime, tMax));
@@ -128,10 +168,11 @@ export async function loadBrainVisionEEG(header, data) {
       cachedBuffer !== null
         ? cachedBuffer.slice(byteStart, byteEnd)
         : await data.slice(byteStart, byteEnd).arrayBuffer();
+    signal?.throwIfAborted(); // cancelled while the file was being read
 
     // Demux the multiplexed float32 samples into separate channel arrays.
     const float32 = new Float32Array(buffer);
-    return demuxFloat32(float32, nChannels, endSample - startSample, startSample, fs);
+    return demuxFloat32(float32, nChannels, endSample - startSample, startSample, fs, signal);
   };
 
   return { channelNames, fs, tMax, getChunk };

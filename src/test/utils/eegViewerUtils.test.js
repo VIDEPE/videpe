@@ -1,12 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import {
   computeReferenceSeries,
+  getNeededReferenceSeries,
   applyReferenceSeries,
   buildMontageDisplayRows,
   deriveMontageRowSamples,
   compareChannelNamesNaturally,
   buildSeegBipolarReferences,
   getRowCrosshairPosition,
+  filterMontageRows,
 } from '@/utils/eegViewerUtils';
 
 // ---------------------------------------------------------------------------
@@ -70,6 +72,118 @@ describe('computeReferenceSeries', () => {
       [1, 2],
       [3, 4],
     ]);
+  });
+
+  it('works on Float32Array channels (the real buffer type)', () => {
+    const channels = [
+      Float32Array.from([1, 10]),
+      Float32Array.from([2, 20]),
+      Float32Array.from([6, 30]),
+    ];
+    const { average, median } = computeReferenceSeries(channels);
+    expect(average).toEqual([3, 20]);
+    expect(median).toEqual([2, 20]);
+  });
+
+  it('only computes the average when only the average is requested', () => {
+    const channels = [
+      [1, 2],
+      [3, 4],
+    ];
+    expect(computeReferenceSeries(channels, { needsAverage: true, needsMedian: false })).toEqual({
+      average: [2, 3],
+      median: null,
+    });
+  });
+
+  it('only computes the median when only the median is requested', () => {
+    const channels = [[1], [2], [9]];
+    expect(computeReferenceSeries(channels, { needsAverage: false, needsMedian: true })).toEqual({
+      average: null,
+      median: [2],
+    });
+  });
+
+  it('computes neither series when neither is requested', () => {
+    expect(computeReferenceSeries([[1], [2]], { needsAverage: false, needsMedian: false })).toEqual(
+      {
+        average: null,
+        median: null,
+      }
+    );
+  });
+
+  // The median uses a fast method that finds the middle value without fully sorting. This
+  // checks it against the slow but obviously correct way (sort, take the middle) on lots of
+  // random data: odd and even channel counts, and many equal values.
+  it('the fast median gives the same answer as sorting the values and taking the middle one', () => {
+    const sortMedian = (values) => {
+      const sorted = [...values].sort((a, b) => a - b);
+      const mid = Math.floor(sorted.length / 2);
+      return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+    };
+    // seeded generator so a failure is reproducible; small integer range so ties are common
+    let seed = 1;
+    const random = () => {
+      seed = (seed * 16807) % 2147483647;
+      return seed / 2147483647;
+    };
+    for (const nChannels of [1, 2, 3, 7, 8, 64, 257]) {
+      const nSamples = 50;
+      const channels = Array.from({ length: nChannels }, () =>
+        Array.from({ length: nSamples }, () => Math.floor(random() * 20) - 10)
+      );
+      const { median } = computeReferenceSeries(channels, {
+        needsAverage: false,
+        needsMedian: true,
+      });
+      for (let iSample = 0; iSample < nSamples; iSample++) {
+        expect(median[iSample]).toBeCloseTo(sortMedian(channels.map((chan) => chan[iSample])));
+      }
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getNeededReferenceSeries
+// ---------------------------------------------------------------------------
+
+describe('getNeededReferenceSeries', () => {
+  const row = (referenceMode) => ({ referenceMode });
+
+  it('needs neither series when no row uses Avg/Med and no snapshot is shown', () => {
+    expect(getNeededReferenceSeries([row(null), row(null)], false)).toEqual({
+      needsAverage: false,
+      needsMedian: false,
+    });
+  });
+
+  it('needs the average when a row uses the average reference', () => {
+    expect(getNeededReferenceSeries([row(null), row('average')], false)).toEqual({
+      needsAverage: true,
+      needsMedian: false,
+    });
+  });
+
+  it('needs the median when a row uses the median reference', () => {
+    expect(getNeededReferenceSeries([row('median')], false)).toEqual({
+      needsAverage: false,
+      needsMedian: true,
+    });
+  });
+
+  it('needs the average when a timepoint snapshot (topography/connectome/ESI) is shown', () => {
+    expect(getNeededReferenceSeries([row(null)], true)).toEqual({
+      needsAverage: true,
+      needsMedian: false,
+    });
+  });
+
+  it('needs both when rows use both references', () => {
+    expect(getNeededReferenceSeries([row('average'), row('median')], false)).toEqual({
+      needsAverage: true,
+      needsMedian: true,
+    });
   });
 });
 
@@ -491,5 +605,72 @@ describe('buildSeegBipolarReferences', () => {
     const { references, monopolar } = buildSeegBipolarReferences(channelNames, settings);
     expect(references.size).toBe(0);
     expect(monopolar).toEqual(['GND']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// filterMontageRows
+// ---------------------------------------------------------------------------
+
+describe('filterMontageRows', () => {
+  const FS = 100;
+  // 2 channels, 5 s at 100 Hz: a slow 1 Hz wave plus a constant offset of 10
+  const nSamples = 5 * FS;
+  const channels = [0, 1].map(() =>
+    Float32Array.from({ length: nSamples }, (_, i) => 10 + Math.sin((2 * Math.PI * i) / FS))
+  );
+  const makeRow = (id, channelIndex, filters = {}) => ({
+    id,
+    channelIndex,
+    referenceIndex: null,
+    referenceMode: null,
+    highPass: null,
+    lowPass: null,
+    notch: null,
+    ...filters,
+  });
+
+  it('returns each row keyed by its id, leaving rows without a filter untouched', async () => {
+    const rows = [makeRow('a', 0), makeRow('b', 1)];
+    const result = await filterMontageRows(channels, rows, null, FS);
+    expect([...result.keys()]).toEqual(['a', 'b']);
+    expect(result.get('a')).toBe(channels[0]); // same array: nothing to filter, nothing copied
+    expect(result.get('b')).toBe(channels[1]);
+  });
+
+  it('filters a row that has a filter set, keeping its length', async () => {
+    // a 0.5 Hz high pass removes the constant offset of 10, so the filtered middle averages ~0
+    const rows = [makeRow('a', 0, { highPass: 0.5 })];
+    const filtered = (await filterMontageRows(channels, rows, null, FS)).get('a');
+    expect(filtered).toHaveLength(nSamples);
+    const middle = Array.from(filtered).slice(FS, 4 * FS);
+    const mean = middle.reduce((sum, v) => sum + v, 0) / middle.length;
+    expect(Math.abs(mean)).toBeLessThan(0.5);
+  });
+
+  it('applies the row reference before filtering', async () => {
+    // channel 0 minus channel 1 (identical signals) is all zeros
+    const rows = [{ ...makeRow('a', 0), referenceIndex: 1 }];
+    const result = (await filterMontageRows(channels, rows, null, FS)).get('a');
+    expect(Array.from(result).every((v) => v === 0)).toBe(true);
+  });
+
+  it('rejects with an AbortError when the signal is already aborted', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    await expect(
+      filterMontageRows(channels, [makeRow('a', 0)], null, FS, { signal: controller.signal })
+    ).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
+  it('rejects with an AbortError when aborted during a pause between rows', async () => {
+    const controller = new AbortController();
+    // frameBudgetMs 0 pauses after every row, so aborting right away lands in the first pause
+    const promise = filterMontageRows(channels, [makeRow('a', 0), makeRow('b', 1)], null, FS, {
+      signal: controller.signal,
+      frameBudgetMs: 0,
+    });
+    controller.abort();
+    await expect(promise).rejects.toMatchObject({ name: 'AbortError' });
   });
 });

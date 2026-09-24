@@ -1,10 +1,9 @@
 import { useMemo, useEffect } from 'react';
-import { applyReferenceSeries } from '@/utils/eegViewerUtils';
 
 /**
- * Always re-references the raw channel buffer to the common average of the good (non-bad)
- * channels, then derives the per-electrode and per-channel voltage snapshots at the clicked
- * topography timepoint — and lifts both upward so PatientView can build the intracranial
+ * Derives the per-electrode and per-channel voltage snapshots at the clicked topography
+ * timepoint, always referenced to the common average of the good (non-bad) channels (only
+ * that one time point is referenced, not the whole buffer) — and lifts both upward so PatientView can build the intracranial
  * connectome layer (fires regardless of whether the topography window is open) and drive
  * Electrical Source Imaging (fires only on user clicks, not on every buffer refresh).
  * Unlike the montage editor's per-row references, this referencing isn't user-selectable —
@@ -38,9 +37,7 @@ import { applyReferenceSeries } from '@/utils/eegViewerUtils';
  * @param {(snapshot: {isIntracranial: boolean, channelNames: string[], channelTypes: Array, voltages: number[]}) => void} params.onChannelSnapshotChange
  *   Called only when the user clicks a new topography timepoint, so PatientView/ESI can
  *   recompute source power from the full per-channel snapshot.
- * @returns {Object} The re-referenced buffer and derived voltage snapshots:
- *   - `montagedChannels` (Array|null) — `channels` re-referenced to the common average of
- *     the good channels, or `null` before `channels` is loaded.
+ * @returns {Object} The average-referenced voltage snapshots:
  *   - `topoVoltages` (number[]) — one voltage per position-matched electrode at
  *     `topoTimepoint`, `[]` when there's nothing to show yet.
  *   - `topoVoltagesByChannel` (number[]) — one voltage per channel (not position-gated)
@@ -59,13 +56,6 @@ export function useTimepointSnapshot({
   onElectrodeSnapshotChange,
   onChannelSnapshotChange,
 }) {
-  // Re-reference to the common average of the good channels once, shared by the
-  // topography/connectome/ESI snapshot below — always applied, not user-selectable.
-  const montagedChannels = useMemo(() => {
-    if (!channels) return null;
-    return applyReferenceSeries(channels, referenceSeries?.average);
-  }, [channels, referenceSeries]);
-
   // Sample index shared by both voltage snapshots below.
   const topoSampleIndex = useMemo(() => {
     if (topoTimepoint === null || !timestamps?.length) return null;
@@ -75,19 +65,19 @@ export function useTimepointSnapshot({
     );
   }, [topoTimepoint, timestamps, fs]);
 
-  // Extract one voltage per matched channel at the clicked timepoint — drives the
-  // scalp mesh and the intracranial 3D connectome (both need real x/y/z positions).
-  const topoVoltages = useMemo(() => {
-    if (topoSampleIndex === null || !montagedChannels || !matched.length) return [];
-    return matched.map((m) => montagedChannels[m.channelIdx]?.[topoSampleIndex] ?? 0);
-  }, [topoSampleIndex, montagedChannels, matched]);
-
-  // Extract one voltage per channel (not just position-matched ones) at the same
-  // timepoint — drives the intracranial matrix, which has no position-file gate.
+  // Extract one average-referenced voltage per channel (not just position-matched ones) at
+  // the clicked timepoint — drives the intracranial matrix, which has no position-file gate.
   const topoVoltagesByChannel = useMemo(() => {
-    if (topoSampleIndex === null || !montagedChannels) return [];
-    return montagedChannels.map((ch) => ch?.[topoSampleIndex] ?? 0);
-  }, [topoSampleIndex, montagedChannels]);
+    if (topoSampleIndex === null || !channels) return [];
+    return snapshotVoltagesAt(channels, topoSampleIndex, referenceSeries?.average);
+  }, [topoSampleIndex, channels, referenceSeries]);
+
+  // Extract one voltage per matched channel at the same timepoint — drives the scalp mesh
+  // and the intracranial 3D connectome (both need real x/y/z positions).
+  const topoVoltages = useMemo(() => {
+    if (!topoVoltagesByChannel.length || !matched.length) return [];
+    return matched.map((m) => topoVoltagesByChannel[m.channelIdx] ?? 0);
+  }, [topoVoltagesByChannel, matched]);
 
   // Lift the live electrode/voltage state up so PatientView can build the
   // intracranial connectome layer for the Neuroimaging pane — fires regardless of
@@ -101,15 +91,28 @@ export function useTimepointSnapshot({
   // also fire whenever timestamps shift during buffer loads, causing rapid cascading
   // re-renders that supersede EegTopoViewer's async mesh load and leave it stuck loading.
   useEffect(() => {
-    if (topoTimepoint === null || !montagedChannels || !timestamps?.length) return;
+    if (topoTimepoint === null || !channels || !timestamps?.length) return;
     const sampleIndex = Math.max(
       0,
       Math.min(timestamps.length - 1, Math.round((topoTimepoint - timestamps[0]) * fs))
     );
-    const voltages = montagedChannels.map((ch) => ch?.[sampleIndex] ?? 0);
+    const voltages = snapshotVoltagesAt(channels, sampleIndex, referenceSeries?.average);
     onChannelSnapshotChange?.({ isIntracranial, channelNames, channelTypes, voltages });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [topoTimepoint, isIntracranial, channelNames, channelTypes, onChannelSnapshotChange]);
 
-  return { montagedChannels, topoVoltages, topoVoltagesByChannel };
+  return { topoVoltages, topoVoltagesByChannel };
+}
+
+// One voltage per channel at `sampleIndex`, referenced to the common average at that sample.
+// Only this one time point is referenced (a few hundred subtractions) instead of the whole buffer.
+// There is no average only when every channel is marked bad; the raw voltages are returned then,
+// but callers hide/zero bad channels anyway, so they never reach the screen.
+// A missing channel/sample gives 0.
+function snapshotVoltagesAt(channels, sampleIndex, average) {
+  return channels.map((channel) => {
+    const value = channel?.[sampleIndex];
+    if (value === undefined) return 0;
+    return average ? value - average[sampleIndex] : value;
+  });
 }

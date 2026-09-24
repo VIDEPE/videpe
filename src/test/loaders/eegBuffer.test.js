@@ -46,7 +46,11 @@ describe('useEegBuffer — initial load', () => {
     const expectedStart = startTime - N_BUFFER_WINDOWS * windowSize;
     const expectedEnd = startTime + windowSize + N_BUFFER_WINDOWS * windowSize;
     expect(provider.getChunk).toHaveBeenCalledTimes(1);
-    expect(provider.getChunk).toHaveBeenCalledWith(expectedStart, expectedEnd);
+    expect(provider.getChunk).toHaveBeenCalledWith(
+      expectedStart,
+      expectedEnd,
+      expect.any(AbortSignal)
+    );
     expect(result.current.timestamps).not.toBeNull();
     expect(result.current.channels).not.toBeNull();
   });
@@ -56,7 +60,7 @@ describe('useEegBuffer — initial load', () => {
     const { result } = renderHook(() => useEegBuffer(provider, 0, 20));
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     // bufferStart = clamp(0 - N_BUFFER_WINDOWS*20, 0, 100) = 0, bufferEnd = clamp(0 + 20 + N_BUFFER_WINDOWS*20, 0, 100) = 100
-    expect(provider.getChunk).toHaveBeenCalledWith(0, 100);
+    expect(provider.getChunk).toHaveBeenCalledWith(0, 100, expect.any(AbortSignal));
   });
 
   it('clamps the buffer to [0, tMax] near the end of the recording', async () => {
@@ -64,7 +68,7 @@ describe('useEegBuffer — initial load', () => {
     const { result } = renderHook(() => useEegBuffer(provider, 80, 20)); // window = [80, 100]
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     // bufferStart = clamp(80 - N_BUFFER_WINDOWS*20, 0, 100) = 0, bufferEnd = clamp(80 + 20 + N_BUFFER_WINDOWS*20, 0, 100) = 100
-    expect(provider.getChunk).toHaveBeenCalledWith(0, 100);
+    expect(provider.getChunk).toHaveBeenCalledWith(0, 100, expect.any(AbortSignal));
   });
 });
 
@@ -117,7 +121,8 @@ describe('useEegBuffer — reload triggers', () => {
     // recentered around newStart
     expect(provider.getChunk).toHaveBeenLastCalledWith(
       newStart - BUFFER_MARGIN,
-      newStart + WINDOW_SIZE + BUFFER_MARGIN
+      newStart + WINDOW_SIZE + BUFFER_MARGIN,
+      expect.any(AbortSignal)
     );
   });
 
@@ -149,7 +154,8 @@ describe('useEegBuffer — reload triggers', () => {
     // recentered around the LATEST startTime (lastStart)
     expect(provider.getChunk).toHaveBeenLastCalledWith(
       lastStart - BUFFER_MARGIN,
-      lastStart + WINDOW_SIZE + BUFFER_MARGIN
+      lastStart + WINDOW_SIZE + BUFFER_MARGIN,
+      expect.any(AbortSignal)
     );
   });
 
@@ -185,7 +191,8 @@ describe('useEegBuffer — reload triggers', () => {
     expect(provider.getChunk).toHaveBeenCalledTimes(2); // 1 initial + 1 throttled reload
     expect(provider.getChunk).toHaveBeenLastCalledWith(
       lastStart - BUFFER_MARGIN,
-      lastStart + WINDOW_SIZE + BUFFER_MARGIN
+      lastStart + WINDOW_SIZE + BUFFER_MARGIN,
+      expect.any(AbortSignal)
     );
   });
 });
@@ -207,7 +214,8 @@ describe('useEegBuffer — memory cap', () => {
 
     expect(provider.getChunk).toHaveBeenLastCalledWith(
       startTime - margin,
-      startTime + windowSize + margin
+      startTime + windowSize + margin,
+      expect.any(AbortSignal)
     );
   });
 
@@ -221,7 +229,11 @@ describe('useEegBuffer — memory cap', () => {
     const { result } = renderHook(() => useEegBuffer(provider, startTime, windowSize));
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
-    expect(provider.getChunk).toHaveBeenLastCalledWith(startTime, startTime + windowSize);
+    expect(provider.getChunk).toHaveBeenLastCalledWith(
+      startTime,
+      startTime + windowSize,
+      expect.any(AbortSignal)
+    );
   });
 
   it('still triggers reloads via a proportionally-scaled threshold when the margin is capped', async () => {
@@ -316,5 +328,59 @@ describe('useEegBuffer — stale response handling', () => {
 
     expect(Array.from(result.current.timestamps)).toEqual([325, 505]);
     expect(result.current.isLoading).toBe(false);
+  });
+});
+
+describe('useEegBuffer — cancelling superseded requests', () => {
+  // getChunk that never resolves on its own, but rejects with an AbortError once its
+  // signal is aborted — like the real loader does
+  const makeAbortableProvider = () => {
+    const signals = [];
+    const resolvers = [];
+    const provider = {
+      tMax: 10000,
+      fs: 256,
+      channelNames: ['Ch1'],
+      getChunk: vi.fn(
+        (start, end, signal) =>
+          new Promise((resolve, reject) => {
+            signals.push(signal);
+            resolvers.push(resolve);
+            signal.addEventListener('abort', () =>
+              reject(new DOMException('Aborted', 'AbortError'))
+            );
+          })
+      ),
+    };
+    return { provider, signals, resolvers };
+  };
+
+  it('aborts the in-flight request when a newer request starts', async () => {
+    const { provider, signals, resolvers } = makeAbortableProvider();
+    const { result, rerender } = renderHook(
+      ({ startTime }) => useEegBuffer(provider, startTime, 20),
+      { initialProps: { startTime: 500 } }
+    );
+
+    // no buffer has loaded yet, so this second request fires immediately
+    rerender({ startTime: 405 });
+    await act(async () => {});
+    expect(provider.getChunk).toHaveBeenCalledTimes(2);
+    expect(signals[0].aborted).toBe(true);
+    expect(signals[1].aborted).toBe(false);
+
+    // the aborted first request's AbortError is swallowed; the newer one still lands
+    resolvers[1](makeChunk(325, 505));
+    await act(async () => {});
+    expect(Array.from(result.current.timestamps)).toEqual([325, 505]);
+  });
+
+  it('aborts the in-flight request when the viewer unmounts', async () => {
+    const { provider, signals } = makeAbortableProvider();
+    const { unmount } = renderHook(() => useEegBuffer(provider, 500, 20));
+    expect(signals[0].aborted).toBe(false);
+
+    unmount();
+    expect(signals[0].aborted).toBe(true);
   });
 });
