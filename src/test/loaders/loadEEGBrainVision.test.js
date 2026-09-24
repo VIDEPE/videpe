@@ -149,6 +149,50 @@ describe('loadBrainVisionEEG — getChunk (File sources)', () => {
   });
 });
 
+describe('loadBrainVisionEEG — getChunk (large chunks and cancelling)', () => {
+  // 2 channels × 25,000 time points: more than one demux burst, so the pauses in between
+  // (and aborting during them) are exercised. ch0 = 0, 1, 2, ...; ch1 = the negative of ch0.
+  const N_LARGE = 25000;
+  const setupLarge = () => {
+    const values = [];
+    for (let t = 0; t < N_LARGE; t++) values.push(t, -t);
+    const headerFile = new File([VHDR], 'test.vhdr', { type: 'text/plain' });
+    const dataFile = new File([makeEegBuffer(values)], 'test.eeg');
+    return { headerFile, dataFile };
+  };
+
+  it('demuxes a chunk spanning several bursts correctly', async () => {
+    const { headerFile, dataFile } = setupLarge();
+    const provider = await loadBrainVisionEEG(headerFile, dataFile);
+    const { channels } = await provider.getChunk(0, provider.tMax);
+    expect(channels[0]).toHaveLength(N_LARGE);
+    // spot-check both ends and values around the burst boundaries
+    for (const t of [0, 9999, 10000, 10001, 19999, 20000, N_LARGE - 1]) {
+      expect(channels[0][t]).toBe(t);
+      expect(channels[1][t]).toBe(-t);
+    }
+  });
+
+  it('rejects with an AbortError when the signal is already aborted', async () => {
+    const { headerFile, dataFile } = setupLarge();
+    const provider = await loadBrainVisionEEG(headerFile, dataFile);
+    const controller = new AbortController();
+    controller.abort();
+    await expect(provider.getChunk(0, provider.tMax, controller.signal)).rejects.toMatchObject({
+      name: 'AbortError',
+    });
+  });
+
+  it('rejects with an AbortError when aborted while loading', async () => {
+    const { headerFile, dataFile } = setupLarge();
+    const provider = await loadBrainVisionEEG(headerFile, dataFile);
+    const controller = new AbortController();
+    const chunkPromise = provider.getChunk(0, provider.tMax, controller.signal);
+    controller.abort();
+    await expect(chunkPromise).rejects.toMatchObject({ name: 'AbortError' });
+  });
+});
+
 describe('loadBrainVisionEEG — getChunk (URL sources)', () => {
   it('demultiplexes the requested range correctly', async () => {
     mockFetch();
