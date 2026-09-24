@@ -29,6 +29,7 @@ import {
   getNeededReferenceSeries,
   getRowCrosshairPosition,
   filterMontageRows,
+  computeAutoYScale,
 } from '@/utils/eegViewerUtils';
 import { useEegBuffer } from '@/loaders/eegBuffer';
 import { useContainerResize } from '@/hooks/useContainerResize';
@@ -558,6 +559,19 @@ export const EegViewer = ({
     // inputs changed (or the viewer closed): cancel this run, a newer one takes over
     return () => controller.abort();
   }, [channels, timestamps, provider.fs, displayRows, referenceSeries]);
+
+  // Auto-fit the y-range once, when the first filtered buffer arrives — gain differs a lot
+  // between recordings, so a fixed default range is too flat or too clipped for most files.
+  // Only once per mount (i.e. per loaded file): after that the range is the user's to set,
+  // so later re-filters (pan to a new buffer, montage/filter edits) never touch it again.
+  const hasAutoFittedYScaleRef = useRef(false);
+  useEffect(() => {
+    if (hasAutoFittedYScaleRef.current || !filteredRows) return;
+    hasAutoFittedYScaleRef.current = true; // set flag so this runs only once
+    const autoYScale = computeAutoYScale([...filteredRows.samplesByRowId.values()]);
+    if (autoYScale !== null) updateYScale(autoYScale);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- updateYScale isn't memoized
+  }, [filteredRows]);
 
   // Stage 2: downsample the already-filtered signal for the current viewport — reruns on
   // pan/zoom/resize, but never re-filters.

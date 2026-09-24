@@ -9,7 +9,42 @@ import {
   buildSeegBipolarReferences,
   getRowCrosshairPosition,
   filterMontageRows,
+  computeAutoYScale,
 } from '@/utils/eegViewerUtils';
+
+// ---------------------------------------------------------------------------
+// computeAutoYScale
+// ---------------------------------------------------------------------------
+
+describe('computeAutoYScale', () => {
+  it('returns the median of the per-row max absolute voltages', () => {
+    // max |v| per row: 30, 40, 70 → median 40
+    const rows = [
+      [0, 30, -10],
+      [0, -40, 20],
+      [0, 70, 5],
+    ];
+    expect(computeAutoYScale(rows)).toBe(40);
+  });
+
+  it('ignores a single artifact-heavy row instead of letting it dominate', () => {
+    const rows = [
+      [0, 10, -10],
+      [0, 10, -10],
+      [0, 10000, -10000],
+    ];
+    expect(computeAutoYScale(rows)).toBe(10);
+  });
+
+  it('skips empty rows', () => {
+    expect(computeAutoYScale([[], [0, 2, -2]])).toBe(2);
+  });
+
+  it('returns null when there is no signal to fit', () => {
+    expect(computeAutoYScale([])).toBeNull();
+    expect(computeAutoYScale([[], [0, 0]])).toBeNull();
+  });
+});
 
 // ---------------------------------------------------------------------------
 // computeReferenceSeries
