@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   classifyDataset,
   selectEegIntakeFiles,
+  selectImagingFiles,
   selectExtraDataFileNames,
 } from '@/loaders/shanoirFiles';
 
@@ -59,6 +60,34 @@ describe('selectEegIntakeFiles', () => {
   it('is case-insensitive', () => {
     const files = [file('REC.VHDR'), file('Sub-01_Electrodes.TSV')];
     expect(names(selectEegIntakeFiles(files))).toEqual(['REC.VHDR', 'Sub-01_Electrodes.TSV']);
+  });
+});
+
+describe('selectImagingFiles', () => {
+  it('keeps volumes and surface meshes', () => {
+    const files = [
+      file('sub-01_T1w.nii.gz'),
+      file('sub-01_pet.nii'),
+      file('aseg.mgz'),
+      file('orig.mgh'),
+      file('lh.pial.gii'),
+    ];
+    expect(names(selectImagingFiles(files))).toEqual(names(files));
+  });
+
+  it('drops conversion sidecars that are not images', () => {
+    // Shanoir's DICOM → NIfTI conversion can add JSON sidecars and diffusion gradient files.
+    const files = [
+      file('sub-01_dwi.nii.gz'),
+      file('sub-01_dwi.json'),
+      file('sub-01_dwi.bval'),
+      file('sub-01_dwi.bvec'),
+    ];
+    expect(names(selectImagingFiles(files))).toEqual(['sub-01_dwi.nii.gz']);
+  });
+
+  it('is case-insensitive', () => {
+    expect(names(selectImagingFiles([file('T1.NII.GZ')]))).toEqual(['T1.NII.GZ']);
   });
 });
 

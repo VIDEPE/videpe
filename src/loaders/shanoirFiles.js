@@ -6,6 +6,12 @@ import { EEG_FORMAT_EXTENSIONS, INV_SOLUTIONS_EXTENSIONS } from './eegFormatRegi
 // Their downloads (format=nii) contain NIfTI volumes or meshes, which filesToLayers handles.
 const IMAGING_DATASET_TYPES = ['Mr', 'Pet', 'Spect', 'Ct', 'Segmentation', 'Mesh'];
 
+// Image files the neuroimaging viewer opens from a Shanoir imaging download: NIfTI volumes
+// (what format=nii returns), FreeSurfer MGH/MGZ volumes and GIFTI surface meshes. Anything
+// else in the zip — e.g. the JSON sidecars and .bval/.bvec files Shanoir's DICOM → NIfTI
+// conversion can add — would fail to load as a layer.
+const IMAGING_EXTENSIONS = ['.nii', '.nii.gz', '.mgh', '.mgz', '.gii'];
+
 // Electrode positions: '.elc', or a BIDS '*_electrodes.tsv'. Other .tsv files
 // (BIDS _channels.tsv, _events.tsv, _scans.tsv) are not positions, and would be
 // misrouted since the EEG intake routes every .tsv to the electrode-position parser.
@@ -43,6 +49,17 @@ export function selectEegIntakeFiles(files) {
     (f) =>
       isEegRecordingFile(f.name) || isElectrodePositionFile(f.name) || isInverseSolutionFile(f.name)
   );
+}
+
+/**
+ * Picks the image files (volumes and surface meshes) from an unzipped imaging dataset, for
+ * filesToLayers. Conversion sidecars and other non-image files are dropped.
+ *
+ * @param {File[]} files
+ * @returns {File[]} the subset to load, in the original order.
+ */
+export function selectImagingFiles(files) {
+  return files.filter((f) => IMAGING_EXTENSIONS.some((ext) => f.name.toLowerCase().endsWith(ext)));
 }
 
 /**
