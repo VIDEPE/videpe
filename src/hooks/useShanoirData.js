@@ -1,4 +1,4 @@
-// New src/hooks/useShanoirLaunch.js: modelled on src/hooks/useDemoData.js (same setIsLoading, the eegReadyResolveRef/niiReadyResolveRef ready promises, one toast.promise).
+// New src/hooks/useShanoirData.js: modelled on src/hooks/useDemoData.js (same setIsLoading, the eegReadyResolveRef/niiReadyResolveRef ready promises, one toast.promise).
 // For EEG datasets: unzip, then handleEegFiles(files) from src/hooks/useEegFileIntake.js. It already routes .vhdr/.eeg, electrode .tsv/.elc and inverse .mat in one call, using detectAndLoadEEG in src/loaders/eegFormatRegistry.js. loadBrainVisionEEG already reads Files with File.slice.
 // Filter .tsv before handing files over. BIDS folders also contain _channels.tsv / _events.tsv, and useEegFileIntake routes every .tsv to the electrode parser (ELEC_POS_EXTENSIONS). Pass only *_electrodes.tsv and .elc, and ignore other .tsv files. .mat goes through unchanged (inverse solution).
 // Examination extra-data: read extraDataFilePathList from GET /shanoir-ng/datasets/examinations/{examinationId}. Download *_electrodes.tsv, .elc and .mat entries via GET /shanoir-ng/datasets/examinations/extra-data-download/{examinationId}/{fileName}/ and pass them to handleEegFiles the same way (see "Electrode positions" below).
@@ -46,7 +46,7 @@ import { fetchShanoirExamination } from '@/loaders/fetchShanoirExamination';
  *     none. An examination can hold several EEG recordings but only the first is loaded, so
  *     this tells the user which one is on screen.
  */
-export function useShanoirLaunch({
+export function useShanoirData({
   handleEegFiles,
   setLayers,
   setIsLoading,

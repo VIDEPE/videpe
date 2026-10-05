@@ -15,6 +15,7 @@ import { buildElectrodeLayer } from '../utils/eegTopographyUtils';
 import { useEegFileIntake } from '../hooks/useEegFileIntake';
 import { useElectricalSourceImaging } from '../hooks/useElectricalSourceImaging';
 import { useDemoData } from '../hooks/useDemoData';
+import { useShanoirData } from '../hooks/useShanoirLaunch';
 
 // Shared title styling — keeps "Neuroimaging" and the toggle's labels visually
 // consistent, and both header bars the same height (TrafficLightButtons are 16px tall).
@@ -39,8 +40,8 @@ export const PatientView = () => {
   // them) when e.g. a montage-editor channel-type edit clears electrodeLayer.
   const [niiHasOwnContent, setNiiHasOwnContent] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const eegReadyResolveRef = useRef(null); // set before demo load; EegViewer calls it when charts are ready
-  const niiReadyResolveRef = useRef(null); // set before demo load; NiiViewer calls it when volumes are ready
+  const eegReadyResolveRef = useRef(null); // set before demo/shanoir load; EegViewer calls it when charts are ready
+  const niiReadyResolveRef = useRef(null); // set before demo/shanoir load; NiiViewer calls it when volumes are ready
   const [maximizedPanel, setMaximizedPanel] = useState(null); // null | 'left' | 'right'
 
   // Live EEG/electrode state lifted out of EegViewer — drives the intracranial connectome
@@ -97,6 +98,18 @@ export const PatientView = () => {
     setIsLoading,
     eegReadyResolveRef,
     niiReadyResolveRef,
+  });
+
+  const { isShanoirLoading, handleLoadShanoir } = useShanoirData({
+    handleEegFiles,
+    setLayers,
+    setIsLoading,
+    loadedEegName,
+    eegReadyResolveRef,
+    niiReadyResolveRef,
+    client,
+    examinationId,
+    signal,
   });
 
   // Build the electrode layer if the toggle is on.

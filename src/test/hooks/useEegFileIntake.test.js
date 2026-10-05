@@ -5,7 +5,7 @@ import { detectAndLoadEEG } from '@/loaders/eegFormatRegistry';
 
 // Covers what handleEegFiles resolves to — `true` only when an EEG recording was loaded
 // (setEeg called) — which callers that wait for EegViewer to render rely on (see
-// useShanoirLaunch): when no recording is set, the viewer never appears, so they must not wait.
+// useShanoirData): when no recording is set, the viewer never appears, so they must not wait.
 
 vi.mock('react-hot-toast', () => {
   const toast = vi.fn();

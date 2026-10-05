@@ -101,7 +101,7 @@ export function useEegFileIntake({ setEeg, setIsLoading, onInverseSolutionFile }
    *   `true` if an EEG recording was loaded (`setEeg` was called) and `false` otherwise —
    *   e.g. the batch had no recording files, the files are incomplete or unrecognized, or
    *   parsing failed. Callers that wait for EegViewer to render the recording (see
-   *   useShanoirLaunch) use this to avoid waiting for a viewer that will never appear.
+   *   useShanoirData) use this to avoid waiting for a viewer that will never appear.
    *   The reason for a `false` is shown through toasts and this hook's `pendingEegFiles`
    *   and `eegHint` return values.
    */

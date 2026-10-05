@@ -27,7 +27,7 @@ const datasetLabel = (dataset) => ({
  * - Anything else is not downloaded, and is reported back in `skippedDatasets`.
  *
  * Downloads run in parallel. Nothing is handed to the viewers here — the caller does that
- * once, with the complete sets (see useShanoirLaunch).
+ * once, with the complete sets (see useShanoirData).
  *
  * @param {Object} params
  * @param {ReturnType<import('./shanoirClient').createShanoirClient>} params.client
