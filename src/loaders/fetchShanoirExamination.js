@@ -34,7 +34,7 @@ const datasetLabel = (dataset) => ({
  * @param {number} params.examinationId
  * @param {AbortSignal} [params.signal] - cancels all requests.
  * @returns {Promise<{
- *   eegDataset: { id: number, name: string, type: string }|null,
+ *   eegDatasetName: { id: number, name: string, type: string }|null,
  *   eegFiles: File[],
  *   imagingFiles: File[],
  *   skippedDatasets: { id: number, name: string, type: string, reason: string }[],
@@ -94,7 +94,9 @@ export async function fetchShanoirExamination({ client, examinationId, signal })
   const [eegDatasetFiles, imagingDatasetFiles, extraDataFiles] = await Promise.all([
     eegDataset ? downloadAndUnzipFiles(eegDataset) : [],
     Promise.all(imagingDatasets.map((dataset) => downloadAndUnzipFiles(dataset))),
-    Promise.all(extraDataNames.map((name) => client.downloadExtraData(examinationId, name, signal))),
+    Promise.all(
+      extraDataNames.map((name) => client.downloadExtraData(examinationId, name, signal))
+    ),
   ]);
 
   // bundle eegFiles and imagingFiles
@@ -102,7 +104,7 @@ export async function fetchShanoirExamination({ client, examinationId, signal })
   const imagingFiles = selectImagingFiles(imagingDatasetFiles.flat()); // flat is needed to get single array instead of array of arrays
 
   return {
-    eegDataset: eegDataset ? datasetLabel(eegDataset) : null,
+    loadedEegName: eegDataset ? datasetLabel(eegDataset) : null,
     eegFiles: eegFiles,
     imagingFiles: imagingFiles,
     skippedDatasets,
