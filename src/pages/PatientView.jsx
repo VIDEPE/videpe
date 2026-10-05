@@ -34,6 +34,7 @@ export const PatientView = () => {
   }, []);
 
   const [eeg, setEeg] = useState(null); // recording provider: { channelNames, fs, tMax, getChunk }
+  const loadedEegName = useState(null); // name of the EEG recording loaded through Shanoir
   const [layers, setLayers] = useState([]); // image volumes/meshes loaded from files
   // Whether NiiViewer holds layers dropped into its own internal dropzone — those never
   // touch `layers` above, so this prevents wrongly unmounting NiiViewer (and discarding
