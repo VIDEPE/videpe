@@ -36,7 +36,8 @@ function describeHttpError(response, what) {
  * @param {string} params.apiBase - datasets service base URL, without trailing slash.
  * @param {() => Promise<string>} params.getAccessToken - resolves to a valid access token;
  *   called before every request so a token renewed mid-session is picked up.
- * @param {typeof fetch} [params.fetchImpl=fetch] - injectable for tests.
+ * @param {typeof fetch} [params.fetchImpl=fetch] - fetch implementation function to make HTTP requests,
+ *  default the browser's default 'fetch' is used. This way tests can swap in fake vi.fn() instead of real fetch.
  * @returns {{
  *   getExamination: (examinationId: number, signal?: AbortSignal) => Promise<object>,
  *   listExaminationDatasets: (examinationId: number, signal?: AbortSignal) => Promise<object[]>,
@@ -47,7 +48,18 @@ function describeHttpError(response, what) {
  */
 export function createShanoirClient({ apiBase, getAccessToken, fetchImpl = fetch }) {
   // Authenticated GET; resolves to the Response, rejects on non-2xx.
+  // Shared by every method below: `path` is appended to apiBase, `what` names the
+  // requested item in error messages (e.g. "dataset 42 was not found in Shanoir.").
+  // Signal carries the AbortSignal (optional), which when given can cancel in-flight requests
+  // HTTP Status codes:
+  // Range	| Meaning	            | Examples
+  // ---------------------------------------------------------
+  // 2xx	  | Success	            | 200 OK, 204 No Content
+  // 3xx	  | Redirect	          | 301, 302
+  // 4xx	  | Request was refused	| 401 not signed in, 403 no permission, 404 not found
+  // 5xx	  | Server failed	      | 500, 502
   const get = async (path, what, signal) => {
+    // Ask for the token on every request, so a token renewed mid-session is used
     const token = await getAccessToken();
     const response = await fetchImpl(`${apiBase}/${path}`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -57,7 +69,10 @@ export function createShanoirClient({ apiBase, getAccessToken, fetchImpl = fetch
     return response;
   };
 
+  // The client: one method per Shanoir endpoint VIDEPE uses (all read-only).
   return {
+    // Examination details as JSON — VIDEPE uses its extraDataFilePathList (files
+    // attached to the examination, e.g. electrode positions).
     async getExamination(examinationId, signal) {
       const response = await get(
         `examinations/${examinationId}`,
@@ -67,6 +82,8 @@ export function createShanoirClient({ apiBase, getAccessToken, fetchImpl = fetch
       return response.json();
     },
 
+    // Metadata of every dataset in the examination (id, name, type: 'Eeg', 'Mr', …),
+    // used to decide what to download — no data files yet.
     async listExaminationDatasets(examinationId, signal) {
       const response = await get(
         `datasets/examination/${examinationId}`,
@@ -78,6 +95,8 @@ export function createShanoirClient({ apiBase, getAccessToken, fetchImpl = fetch
       return response.json();
     },
 
+    // Downloads one dataset's files as a ZIP Blob (Shanoir offers no per-file download);
+    // unzip with unzipToFiles.
     async downloadDatasetZip(datasetId, signal) {
       const response = await get(
         `datasets/download/${datasetId}?format=${IMAGING_DOWNLOAD_FORMAT}`,
@@ -87,6 +106,8 @@ export function createShanoirClient({ apiBase, getAccessToken, fetchImpl = fetch
       return response.blob();
     },
 
+    // Downloads one file attached to the examination (not zipped), returned as a File
+    // named after it, so it can go straight into the EEG intake.
     async downloadExtraData(examinationId, fileName, signal) {
       // Trailing slash matches Shanoir's route `extra-data-download/{examinationId}/{fileName:.+}/`
       const response = await get(

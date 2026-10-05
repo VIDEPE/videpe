@@ -5,12 +5,11 @@
 // For imaging datasets (Mr, Pet, …): download with format=nii, unzip, then filesToLayers(files) from src/utils/NiiViewer.utils.js (it handles NIfTI and in-browser DICOM), then setLayers.
 // Ignore other types with a toast note.
 
-
 import { useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { loadBrainVisionEEG } from '@/loaders/loadEEGBrainVision';
 import { detectVolumeType } from '@/utils/NiiViewer.utils';
-import { unzipToFiles } from '@/loaders/unzipToFiles'
+import { unzipToFiles } from '@/loaders/unzipToFiles';
 
 // const DEMO_EEG = {
 //   header: 'demo_data/sub-synth_task-rest_desc-spkavgall_eeg.vhdr',
@@ -43,7 +42,7 @@ async function fetchZipAsFiles(url) {
   const response = await fetch(url);
   if (!response.ok) throw new Error(`Failed to fetch ${url}: ${response.statusText}`);
   const zipBlob = await response.blob();
-  return unzipToFiles(zipBlob)
+  return unzipToFiles(zipBlob);
 }
 
 /**
@@ -114,16 +113,21 @@ export function useShanoirData({
     });
     try {
       const base = import.meta.env.BASE_URL; // base is the public folder in Vite, so demo_data is at `${base}demo_data/...`
-      await toast.promise(
-        (async () => {
+      await toast.promise(async () => {
         // createShanoirClient({ apiBase, getAccessToken }) from the launch context
         // fetch shanoir examination
-        const { eegFiles, imagingFiles, skipped } = fetchShanoirExamination({ client, examinationId, signal })
-        if (eegFiles.length > 0) await handleEegFiles(eegFiles)
-        if (imagingFiles.length > 0) setLayers(await filesToLayers(imagingFiles))
-        if (skipped.length > 0) toast(`Skipped the following datasets: ${skipped}.`, {
+        const { eegFiles, imagingFiles, skipped } = fetchShanoirExamination({
+          client,
+          examinationId,
+          signal,
+        });
+        if (eegFiles.length > 0) await handleEegFiles(eegFiles);
+        if (imagingFiles.length > 0) setLayers(await filesToLayers(imagingFiles));
+        if (skipped.length > 0)
+          toast(`Skipped the following datasets: ${skipped}.`, {
             icon: '⚠️',
           });
+
         // // await only the ready promises for the viewers you actually gave data to
         // // toast the skippedDatasets, if any
         //   // Load and set EEG
@@ -143,8 +147,7 @@ export function useShanoirData({
         //   loading: 'Loading demo data…',
         //   success: 'Demo data loaded!',
         //   error: (err) => `Error loading demo data:\n${err.message}`,
-        }
-      );
+      });
     } finally {
       setIsLoading(false);
       setIsShanoirLoading(false);

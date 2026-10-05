@@ -6,7 +6,7 @@ import {
   selectExtraDataFileNames,
 } from './shanoirFiles';
 
-// Readable name for a Shanoir dataset in user-facing messages.
+// Helper function to get readable name for a Shanoir dataset => used for user-facing messages.
 const datasetLabel = (dataset) => ({
   id: dataset.id,
   name: dataset.name ?? `dataset ${dataset.id}`,
@@ -53,40 +53,58 @@ export async function fetchShanoirExamination({ client, examinationId, signal })
   ]);
 
   // Route every dataset by type before downloading anything
-  const eegDatasets = datasets.filter((d) => classifyDataset(d) === 'eeg');
-  const imagingDatasets = datasets.filter((d) => classifyDataset(d) === 'imaging');
-  const [eegDataset, ...additionalEegDatasets] = eegDatasets;
-  const skippedDatasets = [
-    ...additionalEegDatasets.map((d) => ({
-      ...datasetLabel(d),
-      reason: 'additional EEG recording',
-    })),
-    ...datasets
-      .filter((d) => classifyDataset(d) === null)
-      .map((d) => ({ ...datasetLabel(d), reason: 'unsupported type' })),
-  ];
+  const imagingDatasets = datasets.filter((dataset) => classifyDataset(dataset) === 'imaging');
+  const otherDatasets = datasets.filter((dataset) => classifyDataset(dataset) === null);
+  const eegDatasets = datasets.filter((dataset) => classifyDataset(dataset) === 'eeg');
+  // only keep the first eeg dataset the examination contains e.g. multiple runs
+  // group others under additionalEegDatasets
+  const eegDataset = eegDatasets[0];
+  const additionalEegDatasets = eegDatasets.slice(1);
 
-  // Downloads a dataset's zip and returns its files
-  const downloadFiles = async (dataset) =>
-    unzipToFiles(await client.downloadDatasetZip(dataset.id, signal));
+  // both additionalEegDatasets and otherDatasets are skipped, but logged in the skippedDatasets
+  // so the user knows what is and isn't displayed
+  const skippedDatasets = additionalEegDatasets.map((dataset) => ({
+    id: dataset.id,
+    name: dataset.name ?? `dataset ${dataset.id}`,
+    type: dataset.type,
+    reason: 'additional EEG recording',
+  }));
+  skippedDatasets.push(
+    ...otherDatasets.map((dataset) => ({
+      id: dataset.id,
+      name: dataset.name ?? `dataset ${dataset.id}`,
+      type: dataset.type,
+      reason: 'unsupported type',
+    }))
+  );
 
   // Extra-data (electrode positions, inverse solutions) only matters alongside a recording
+  // Note these are names (not file!), but since these are not zipped these can be checked if
+  // they can be used before downloading, unlike the zip files
   const extraDataNames = eegDataset
     ? selectExtraDataFileNames(examination?.extraDataFilePathList)
     : [];
 
-  const [eegDatasetFiles, extraDataFiles, imagingFilesPerDataset] = await Promise.all([
-    eegDataset ? downloadFiles(eegDataset) : [],
-    Promise.all(
-      extraDataNames.map((name) => client.downloadExtraData(examinationId, name, signal))
-    ),
-    Promise.all(imagingDatasets.map(downloadFiles)),
+  // Helper function to download a dataset's zip and return its files.
+  const downloadAndUnzipFiles = async (dataset) =>
+    unzipToFiles(await client.downloadDatasetZip(dataset.id, signal));
+
+  // Now download zip and unzip the files
+  // All three downloads are started together, then awaited as one
+  const [eegDatasetFiles, imagingDatasetFiles, extraDataFiles] = await Promise.all([
+    eegDataset ? downloadAndUnzipFiles(eegDataset) : [],
+    Promise.all(imagingDatasets.map((dataset) => downloadAndUnzipFiles(dataset))),
+    Promise.all(extraDataNames.map((name) => client.downloadExtraData(examinationId, name, signal))),
   ]);
+
+  // bundle eegFiles and imagingFiles
+  const eegFiles = [...selectEegIntakeFiles(eegDatasetFiles), ...extraDataFiles];
+  const imagingFiles = selectImagingFiles(imagingDatasetFiles.flat()); // flat is needed to get single array instead of array of arrays
 
   return {
     eegDataset: eegDataset ? datasetLabel(eegDataset) : null,
-    eegFiles: [...selectEegIntakeFiles(eegDatasetFiles), ...extraDataFiles],
-    imagingFiles: selectImagingFiles(imagingFilesPerDataset.flat()),
+    eegFiles: eegFiles,
+    imagingFiles: imagingFiles,
     skippedDatasets,
   };
 }
