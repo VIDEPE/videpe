@@ -107,8 +107,9 @@ export function useShanoirLaunch({
 
           // forward eegFiles to the handles that wire the files like a normal load would
           if (eegFiles.length > 0) {
-            await handleEegFiles(eegFiles);
-            await eegReady;
+            const isEegSet = await handleEegFiles(eegFiles);
+            // only wait for EEG Viewer to finish loading if EEG data is set and the viewer is actually initialising, or else promise never fulfills
+            if (isEegSet) await eegReady;
           }
           if (imagingFiles.length > 0) {
             setLayers(await filesToLayers(imagingFiles));
