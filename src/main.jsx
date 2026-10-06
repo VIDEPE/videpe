@@ -4,9 +4,9 @@ import './index.css';
 import App from './App.jsx';
 
 import { getShanoirConfig } from '@/config/appConfig';
-import { createShanoirUserManager } from '@/auth/shanoirAuth';
+import { createShanoirUserManager, getAccessToken } from '@/auth/shanoirAuth';
 import { resolveShanoirLaunch } from '@/auth/shanoirLaunch';
-import { ShanoirLaunchContext } from '@/auth/ShanoirLaunchContext'; // not written yet
+import { ShanoirLaunchContext } from '@/auth/ShanoirLaunchContext';
 
 const root = createRoot(document.getElementById('root'));
 async function start() {
@@ -34,7 +34,9 @@ async function start() {
           value={{
             examinationId: launch.examinationId,
             apiBase: config.apiBase,
-            getAccessToken: async () => (await userManager.geUser()).access_token,
+            // Wrapped in `() =>` so it isn't run now: the client calls it before every request,
+            // and each call fetches the current (possibly renewed) token.
+            getAccessToken: () => getAccessToken(userManager),
           }}
         >
           <App />
@@ -47,5 +49,22 @@ async function start() {
 }
 
 start().catch((err) => {
-  /* render a small error message instead of a blank page */
+  console.error(err); // full stack trace for debugging
+  root.render(
+    <StrictMode>
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4 p-6 text-center bg-white text-gray-900 dark:bg-gray-900 dark:text-gray-100">
+        <h1 className="text-xl font-semibold">VIDEPE could not be opened</h1>
+        <p className="max-w-xl whitespace-pre-line text-gray-600 dark:text-gray-400">
+          {err?.message ?? String(err)}
+        </p>
+        <p className="text-sm">
+          Reopen VIDEPE from Shanoir, or{' '}
+          <a className="underline" href={import.meta.env.BASE_URL}>
+            open VIDEPE without Shanoir
+          </a>{' '}
+          to view local files.
+        </p>
+      </div>
+    </StrictMode>
+  );
 });
