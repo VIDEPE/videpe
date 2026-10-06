@@ -37,7 +37,7 @@ describe('fetchShanoirExamination', () => {
     // .vmrk and the .json sidecar are dropped by the per-viewer file selection
     expect(names(result.eegFiles)).toEqual(['rec.eeg', 'rec.vhdr']);
     expect(names(result.imagingFiles)).toEqual(['sub-01_T1w.nii.gz', 'sub-01_pet.nii.gz']);
-    expect(result.loadedEegName).toEqual({ id: 1, name: 'rest', type: 'Eeg' });
+    expect(result.eegDataset).toEqual({ id: 1, name: 'rest', type: 'Eeg' });
     expect(result.skippedDatasets).toEqual([]);
   });
 
@@ -53,7 +53,7 @@ describe('fetchShanoirExamination', () => {
     });
     const result = await fetchShanoirExamination({ client, examinationId: 7 });
 
-    expect(result.loadedEegName.name).toBe('run-1');
+    expect(result.eegDataset.name).toBe('run-1');
     expect(client.downloadDatasetZip).toHaveBeenCalledTimes(1);
     expect(result.skippedDatasets).toEqual([
       { id: 2, name: 'run-2', type: 'Eeg', reason: 'additional EEG recording' },
@@ -107,7 +107,7 @@ describe('fetchShanoirExamination', () => {
     });
     const result = await fetchShanoirExamination({ client, examinationId: 7 });
 
-    expect(result.loadedEegName).toBeNull();
+    expect(result.eegDataset).toBeNull();
     expect(result.eegFiles).toEqual([]);
     expect(client.downloadExtraData).not.toHaveBeenCalled();
   });
@@ -116,7 +116,7 @@ describe('fetchShanoirExamination', () => {
     const client = makeClient({ datasets: [] });
     const result = await fetchShanoirExamination({ client, examinationId: 7 });
     expect(result).toEqual({
-      loadedEegName: null,
+      eegDataset: null,
       eegFiles: [],
       imagingFiles: [],
       skippedDatasets: [],

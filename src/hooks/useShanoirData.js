@@ -5,7 +5,7 @@
 // For imaging datasets (Mr, Pet, …): download with format=nii, unzip, then filesToLayers(files) from src/utils/NiiViewer.utils.js (it handles NIfTI and in-browser DICOM), then setLayers.
 // Ignore other types with a toast note.
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useEffectEvent } from 'react';
 import toast from 'react-hot-toast';
 import { filesToLayers } from '@/utils/NiiViewer.utils';
 import { fetchShanoirExamination } from '@/loaders/fetchShanoirExamination';
@@ -23,9 +23,6 @@ import { fetchShanoirExamination } from '@/loaders/fetchShanoirExamination';
  *   drop at the EEG dropzone (it sets the EEG recording itself).
  * @param {(layers: object[]) => void} params.setLayers
  *   Called with the imaging layers built from the downloaded volumes/meshes.
- * @param {(loading: boolean) => void} params.setIsLoading
- *   Called with `true` for the duration of the whole load, and `false` once it finishes
- *   (whether it succeeded or failed) — the same flag real file loads use.
  * @param {{ current: (() => void)|null }} params.eegReadyResolveRef
  *   Ref that this hook assigns a resolver function into before starting the load.
  *   EegViewer calls that resolver once its charts have actually finished rendering the
@@ -34,14 +31,14 @@ import { fetchShanoirExamination } from '@/loaders/fetchShanoirExamination';
  * @param {{ current: (() => void)|null }} params.niiReadyResolveRef
  *   Same pattern as eegReadyResolveRef, but for NiiViewer finishing to render the
  *   imaging volumes.
- * @param {ReturnType<import('@/loaders/shanoirClient').createShanoirClient>} params.client
- *   Shanoir API client for the signed-in user.
- * @param {number} params.examinationId - the Shanoir examination to load (from the launch URL).
- * @param {AbortSignal} [params.signal] - cancels all Shanoir requests (from an AbortController).
- * @returns {Object} The loading state, the loaded recording's name, and the trigger function:
- *   - `isShanoirLoading` (boolean) — true for the duration of the Shanoir load.
- *   - `handleLoadShanoir` () => Promise<void> — fetches and loads the examination,
- *     resolving once the viewers that received data report they've finished rendering it.
+ * @param {ReturnType<import('@/loaders/shanoirClient').createShanoirClient>} [params.client]
+ *   Shanoir API client for the signed-in user; undefined when not launched from Shanoir, in
+ *   which case this hook does nothing.
+ * @param {number} [params.examinationId] - the Shanoir examination to load (from the launch URL).
+ * @returns {Object} The loading state and the loaded recording's name. The load itself starts
+ *   automatically once, when a client is given, and is cancelled when the component unmounts.
+ *   - `isShanoirLoading` (boolean) — true from the first render of a Shanoir launch until the
+ *     examination has loaded (or failed).
  *   - `loadedEegName` (string|null) — name of the EEG dataset that was loaded, or null if
  *     none. An examination can hold several EEG recordings but only the first is loaded, so
  *     this tells the user which one is on screen.
@@ -49,93 +46,107 @@ import { fetchShanoirExamination } from '@/loaders/fetchShanoirExamination';
 export function useShanoirData({
   handleEegFiles,
   setLayers,
-  setIsLoading,
-  loadedEegName,
   eegReadyResolveRef,
   niiReadyResolveRef,
   client,
   examinationId,
-  signal,
 }) {
-  const [isShanoirLoading, setIsShanoirLoading] = useState(false);
+  // Starts as true when launched from Shanoir: the page is loading from its very first render.
+  // (Switching it on from inside the effect instead would trigger an extra render — React's
+  // set-state-in-effect rule.) Only switched off once the load has finished or failed.
+  const [isShanoirLoading, setIsShanoirLoading] = useState(Boolean(client));
+  const [loadedEegName, setLoadedEegName] = useState(null);
 
   /**
    * Downloads the examination's datasets (see fetchShanoirExamination), reports any datasets
    * that were skipped, then hands the EEG files to handleEegFiles and the imaging files to
-   * setLayers — the same handlers a manual file drop would use. Wrapped in `toast.promise`
-   * so the user sees a single loading → success/error toast for the whole sequence, rather
-   * than one per file.
+   * setLayers — the same handlers a manual file drop would use. Shows a single
+   * loading → success/error toast for the whole sequence, rather than one per file.
    *
+   * @param {AbortSignal} signal - cancels the load (aborted when the page unmounts).
    * @returns {Promise<void>} Resolves once the viewers that received data (EegViewer and/or
    *   NiiViewer) report, via eegReadyResolveRef/niiReadyResolveRef, that they've finished
-   *   rendering it. Doesn't return a value — callers observe the outcome through this
-   *   hook's `isShanoirLoading` and `loadedEegName` return values, and the `eeg`/`layers`
-   *   state the handlers update.
+   *   rendering it. Never rejects: errors end up in the toast, and a cancelled load just
+   *   removes its toast. Callers observe the outcome through this hook's `isShanoirLoading`
+   *   and `loadedEegName` return values, and the `eeg`/`layers` state the handlers update.
    */
-  const handleLoadShanoir = useCallback(async () => {
-    setIsLoading(true);
-    setIsShanoirLoading(true);
-    // Create ready promises before setting state — the viewers resolve them once fully rendered
-    const eegReady = new Promise((resolve) => {
-      eegReadyResolveRef.current = resolve;
-    });
-    const niiReady = new Promise((resolve) => {
-      niiReadyResolveRef.current = resolve;
-    });
-    try {
-      await toast.promise(
-        (async () => {
-          // fetch shanoir examination
-          const { loadedEegName, eegFiles, imagingFiles, skippedDatasets } =
-            await fetchShanoirExamination({
-              client,
-              examinationId,
-              signal,
-            });
+  const handleLoadShanoir = useCallback(
+    async (signal) => {
+      const toastId = toast.loading('Loading Shanoir data…');
 
-          // Display toast of datasets that have been skipped
-          if (skippedDatasets.length > 0) {
-            toast(
-              `Skipped the following datasets: ${skippedDatasets
-                .map((d) => `${d.name} (${d.reason})`)
-                .join(', ')}`,
-              {
-                icon: '⚠️',
-              }
-            );
-          }
+      // Create ready promises before setting state — the viewers resolve them once fully rendered
+      const eegReady = new Promise((resolve) => {
+        eegReadyResolveRef.current = resolve;
+      });
+      const niiReady = new Promise((resolve) => {
+        niiReadyResolveRef.current = resolve;
+      });
 
-          // forward eegFiles to the handles that wire the files like a normal load would
-          if (eegFiles.length > 0) {
-            const isEegSet = await handleEegFiles(eegFiles);
-            // only wait for EEG Viewer to finish loading if EEG data is set and the viewer is actually initialising, or else promise never fulfills
-            if (isEegSet) await eegReady;
-          }
-          if (imagingFiles.length > 0) {
-            setLayers(await filesToLayers(imagingFiles));
-            await niiReady;
-          }
-        })(),
-        {
-          loading: 'Loading Shanoir data…',
-          success: 'Shanoir data loaded!',
-          error: (err) => `Error loading Shanoir data:\n${err.message}`,
+      // try to fetch the data
+      try {
+        // fetch shanoir examination
+        const { eegDataset, eegFiles, imagingFiles, skippedDatasets } =
+          await fetchShanoirExamination({ client, examinationId, signal });
+        // The download may have finished just as the load was cancelled (unzipping doesn't
+        // listen to the signal): stop here, so a cancelled load never fills the viewers.
+        // Throws an AbortError, handled like any other cancellation below.
+        signal.throwIfAborted();
+        setLoadedEegName(eegDataset?.name ?? null);
+
+        // Display toast of datasets that have been skipped
+        if (skippedDatasets.length > 0) {
+          toast(
+            `Skipped the following datasets: ${skippedDatasets
+              .map((d) => `${d.name} (${d.reason})`)
+              .join(', ')}`,
+            {
+              icon: '⚠️',
+            }
+          );
         }
-      );
-    } finally {
-      setIsLoading(false);
-      setIsShanoirLoading(false);
-    }
-  }, [
-    handleEegFiles,
-    setLayers,
-    setIsLoading,
-    eegReadyResolveRef,
-    niiReadyResolveRef,
-    client,
-    examinationId,
-    signal,
-  ]);
 
-  return { isShanoirLoading, handleLoadShanoir, loadedEegName };
+        // forward eegFiles to the handles that wire the files like a normal load would
+        if (eegFiles.length > 0) {
+          const isEegSet = await handleEegFiles(eegFiles);
+          // only wait for EEG Viewer to finish loading if EEG data is set and the viewer is actually initialising, or else promise never fulfills
+          if (isEegSet) await eegReady;
+        }
+        if (imagingFiles.length > 0) {
+          setLayers(await filesToLayers(imagingFiles));
+          await niiReady;
+        }
+        // loaded successfully
+        toast.success('Shanoir data loaded!', { id: toastId });
+      } catch (err) {
+        if (err.name === 'AbortError') {
+          // just remove toast (no need to show toast when e.g. using the back button)
+          toast.dismiss(toastId);
+        } else {
+          toast.error(`Error loading Shanoir data:\n${err.message}`, { id: toastId });
+        }
+      } finally {
+        // In development, StrictMode cancels the first run while the real (second) load is still going.
+        // This should not disable the loading flag, cause loading is still in progress.
+        if (!signal.aborted) setIsShanoirLoading(false);
+      }
+    },
+    [handleEegFiles, setLayers, eegReadyResolveRef, niiReadyResolveRef, client, examinationId]
+  );
+
+  // Calls the newest handleLoadShanoir, but never changes itself — so the effect below doesn't
+  // need it as a dependency. (handleLoadShanoir changes during the load; as a dependency, every
+  // change would abort the download and start it again.)
+  const startLoad = useEffectEvent((signal) => handleLoadShanoir(signal));
+
+  // Starts the load once, and cancels it when the page unmounts.
+  useEffect(() => {
+    if (!client) return; // not launched from Shanoir
+    const controller = new AbortController(); // new one per load: once aborted, it stays aborted
+    // False positive: every setState in the load comes after an `await`, which this rule can't follow.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    startLoad(controller.signal);
+    return () => controller.abort(); // runs later, on unmount — not now
+  }, [client, examinationId]);
+
+  return { isShanoirLoading, loadedEegName };
 }

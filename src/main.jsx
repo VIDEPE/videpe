@@ -6,8 +6,11 @@ import App from './App.jsx';
 import { getShanoirConfig } from '@/config/appConfig';
 import { createShanoirUserManager, getAccessToken } from '@/auth/shanoirAuth';
 import { resolveShanoirLaunch } from '@/auth/shanoirLaunch';
-import { ShanoirLaunchContext } from '@/auth/ShanoirLaunchContext';
+import { ShanoirSessionContext } from '@/auth/ShanoirSessionContext';
+
 import { ShanoirErrorPage, ShanoirSignInPage } from '@/pages/ShanoirLaunchPages';
+
+import { createShanoirClient } from './loaders/shanoirClient.js';
 
 const root = createRoot(document.getElementById('root'));
 async function start() {
@@ -33,20 +36,27 @@ async function start() {
 
   if (launch.status === 'redirecting') return; // browser is leaving for Keycloak
 
+  const client =
+    launch.status === 'ready'
+      ? // getAccessToken wrapped in `() =>` so it isn't run now: the client calls it before every request,
+        // and each call fetches the current (possibly renewed) token.
+        createShanoirClient({
+          apiBase: config.apiBase,
+          getAccessToken: () => getAccessToken(userManager),
+        })
+      : null;
+
   root.render(
     <StrictMode>
       {launch.status === 'ready' ? (
-        <ShanoirLaunchContext.Provider
+        <ShanoirSessionContext.Provider
           value={{
+            client: client,
             examinationId: launch.examinationId,
-            apiBase: config.apiBase,
-            // Wrapped in `() =>` so it isn't run now: the client calls it before every request,
-            // and each call fetches the current (possibly renewed) token.
-            getAccessToken: () => getAccessToken(userManager),
           }}
         >
           <App />
-        </ShanoirLaunchContext.Provider>
+        </ShanoirSessionContext.Provider>
       ) : (
         <App />
       )}

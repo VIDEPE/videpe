@@ -104,7 +104,7 @@ export async function fetchShanoirExamination({ client, examinationId, signal })
   const imagingFiles = selectImagingFiles(imagingDatasetFiles.flat()); // flat is needed to get single array instead of array of arrays
 
   return {
-    loadedEegName: eegDataset ? datasetLabel(eegDataset) : null,
+    eegDataset: eegDataset ? datasetLabel(eegDataset) : null,
     eegFiles: eegFiles,
     imagingFiles: imagingFiles,
     skippedDatasets,

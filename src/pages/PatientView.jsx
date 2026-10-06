@@ -3,18 +3,21 @@ import { Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { Niivue } from '@niivue/niivue';
 import toast from 'react-hot-toast';
-
+// Components
 import { FullWidthLayout } from '../components/FullWidthLayout';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { EegViewer } from '../components/EegViewer';
 import { NiiViewer } from '../components/NiiViewer';
 import { SplitPane } from '../components/SplitPane';
 import { FileDropZone } from '../components/FileDropZone';
+// Utils
 import { filesToLayers } from '../utils/NiiViewer.utils';
 import { buildElectrodeLayer } from '../utils/eegTopographyUtils';
+// Hooks
 import { useEegFileIntake } from '../hooks/useEegFileIntake';
 import { useElectricalSourceImaging } from '../hooks/useElectricalSourceImaging';
 import { useDemoData } from '../hooks/useDemoData';
+import { useShanoirSession } from '../auth/ShanoirSessionContext';
 import { useShanoirData } from '../hooks/useShanoirData';
 
 // Shared title styling — keeps "Neuroimaging" and the toggle's labels visually
@@ -34,7 +37,6 @@ export const PatientView = () => {
   }, []);
 
   const [eeg, setEeg] = useState(null); // recording provider: { channelNames, fs, tMax, getChunk }
-  const loadedEegName = useState(null); // name of the EEG recording loaded through Shanoir
   const [layers, setLayers] = useState([]); // image volumes/meshes loaded from files
   // Whether NiiViewer holds layers dropped into its own internal dropzone — those never
   // touch `layers` above, so this prevents wrongly unmounting NiiViewer (and discarding
@@ -101,16 +103,15 @@ export const PatientView = () => {
     niiReadyResolveRef,
   });
 
-  const { isShanoirLoading, handleLoadShanoir } = useShanoirData({
+  const shanoirSession = useShanoirSession(); // null, or { client, examinationId }
+
+  const { isShanoirLoading, loadedEegName } = useShanoirData({
     handleEegFiles,
     setLayers,
-    setIsLoading,
-    loadedEegName,
     eegReadyResolveRef,
     niiReadyResolveRef,
-    client,
-    examinationId,
-    signal,
+    client: shanoirSession?.client, // the client, or undefined
+    examinationId: shanoirSession?.examinationId, // the examinationId, or undefined
   });
 
   // Build the electrode layer if the toggle is on.
@@ -258,7 +259,7 @@ export const PatientView = () => {
             onClick={
               eeg || layers.length > 0 || pendingEegFiles.length > 0 ? handleReset : handleLoadDemo
             }
-            disabled={isLoading}
+            disabled={isLoading || isShanoirLoading}
             title={
               isDemoLoading
                 ? 'Loading demo data…'
