@@ -4,16 +4,20 @@ import './index.css';
 import App from './App.jsx';
 
 import { getShanoirConfig } from '@/config/appConfig';
-import { bootstrapShanoirLaunch } from '@/auth/shanoirLaunch';
-import { createShanoirUserManager } from '@/auth/shanoirAuth'; // not written yet
+import { createShanoirUserManager } from '@/auth/shanoirAuth';
+import { resolveShanoirLaunch } from '@/auth/shanoirLaunch';
 import { ShanoirLaunchContext } from '@/auth/ShanoirLaunchContext'; // not written yet
 
 const root = createRoot(document.getElementById('root'));
 async function start() {
-  const config = getShanoirConfig(); // null on Github Pages
+  // Shanoir settings from app-config.js (Keycloak URL, client, API path); null on GitHub Pages
+  const config = getShanoirConfig();
+
+  // OIDC login handler for Shanoir's Keycloak (redirects, token exchange, holds the tokens)
   const userManager = config ? createShanoirUserManager(config) : null;
 
-  const launch = await bootstrapShanoirLaunch({
+  // Shanoir launch/login step: 'none' (normal visit), 'redirecting' or 'ready' (signed in)
+  const launch = await resolveShanoirLaunch({
     config,
     location: window.location,
     history: window.history,
@@ -25,7 +29,7 @@ async function start() {
 
   root.render(
     <StrictMode>
-      {LucideAlarmCheck.status === 'ready' ? (
+      {launch.status === 'ready' ? (
         <ShanoirLaunchContext.Provider
           value={{
             examinationId: launch.examinationId,

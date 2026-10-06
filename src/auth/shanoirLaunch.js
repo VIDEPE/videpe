@@ -21,9 +21,13 @@ export const PATIENT_VIEW_HASH = '#/patient-view';
  */
 export function parseExaminationId(value) {
   const text = String(value ?? '');
-  if (!/^\d+$/.test(text)) return null; // digits only: rejects '', '-3', '1.5', '12abc'
-  const id = Number(text);
-  return id > 0 ? id : null;
+  if (/^\d+$/.test(text)) {
+    // digits only — rules out '', '-3', '1.5', '12abc'
+    const id = Number(text);
+    return id > 0 ? id : null; // '0' is digits too, but not a valid ID
+  } else {
+    return null;
+  }
 }
 
 /**
@@ -44,7 +48,7 @@ export function parseExaminationId(value) {
  *   - `ready`: signed in; the URL now points at PatientView for `examinationId`.
  * @throws {Error} on an invalid examinationId, or when Keycloak/the token exchange fails.
  */
-export async function bootstrapShanoirLaunch({ config, location, history, baseUrl, userManager }) {
+export async function resolveShanoirLaunch({ config, location, history, baseUrl, userManager }) {
   if (!config) return { status: 'none' };
 
   const params = new URLSearchParams(location.search);
@@ -57,9 +61,10 @@ export async function bootstrapShanoirLaunch({ config, location, history, baseUr
     if (examinationId === null) {
       throw new Error('Shanoir sign-in succeeded, but no valid examinationId was carried over.');
     }
-    // Drop code/state and set the hash route before the first render, so HashRouter
-    // starts on PatientView and the landing page never mounts. examinationId stays in
-    // the URL so a page reload re-launches the same examination.
+    // Rewrite the URL without reloading: remove the single-use login code/state (a reload
+    // would fail re-using them), keep examinationId (a reload re-launches the same exam),
+    // and set #/patient-view before the first render so HashRouter opens there directly.
+    // replaceState (not pushState) also keeps the used code out of the Back-button history.
     history.replaceState(null, '', `${baseUrl}?examinationId=${examinationId}${PATIENT_VIEW_HASH}`);
     return { status: 'ready', examinationId };
   }

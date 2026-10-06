@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { parseExaminationId, bootstrapShanoirLaunch } from '@/auth/shanoirLaunch';
+import { parseExaminationId, resolveShanoirLaunch } from '@/auth/shanoirLaunch';
 
 const CONFIG = {
   authority: 'https://shanoir.example/auth/realms/shanoir-ng',
@@ -9,7 +9,7 @@ const CONFIG = {
 const BASE_URL = '/videpe/';
 
 // Minimal stand-ins for window.location/window.history and oidc-client-ts's UserManager —
-// bootstrapShanoirLaunch takes them as parameters so no real redirect ever happens here.
+// resolveShanoirLaunch takes them as parameters so no real redirect ever happens here.
 const makeLocation = (search, hash = '') => ({
   search,
   hash,
@@ -34,11 +34,11 @@ describe('parseExaminationId', () => {
   });
 });
 
-describe('bootstrapShanoirLaunch', () => {
+describe('resolveShanoirLaunch', () => {
   it('does nothing when Shanoir is not configured (GitHub Pages build)', async () => {
     const userManager = makeUserManager();
     const history = makeHistory();
-    const result = await bootstrapShanoirLaunch({
+    const result = await resolveShanoirLaunch({
       config: null,
       location: makeLocation('?examinationId=5'),
       history,
@@ -52,7 +52,7 @@ describe('bootstrapShanoirLaunch', () => {
 
   it('does nothing when opened without launch parameters (plain local-files use)', async () => {
     const userManager = makeUserManager();
-    const result = await bootstrapShanoirLaunch({
+    const result = await resolveShanoirLaunch({
       config: CONFIG,
       location: makeLocation('', '#/about'),
       history: makeHistory(),
@@ -65,7 +65,7 @@ describe('bootstrapShanoirLaunch', () => {
 
   it('starts the OIDC redirect, carrying the examinationId in the OIDC state', async () => {
     const userManager = makeUserManager();
-    const result = await bootstrapShanoirLaunch({
+    const result = await resolveShanoirLaunch({
       config: CONFIG,
       location: makeLocation('?examinationId=123'),
       history: makeHistory(),
@@ -79,7 +79,7 @@ describe('bootstrapShanoirLaunch', () => {
   it('rejects an invalid examinationId instead of redirecting', async () => {
     const userManager = makeUserManager();
     await expect(
-      bootstrapShanoirLaunch({
+      resolveShanoirLaunch({
         config: CONFIG,
         location: makeLocation('?examinationId=abc'),
         history: makeHistory(),
@@ -94,7 +94,7 @@ describe('bootstrapShanoirLaunch', () => {
     const userManager = makeUserManager({ examinationId: 123 });
     const history = makeHistory();
     const location = makeLocation('?code=abc&state=xyz');
-    const result = await bootstrapShanoirLaunch({
+    const result = await resolveShanoirLaunch({
       config: CONFIG,
       location,
       history,
@@ -117,7 +117,7 @@ describe('bootstrapShanoirLaunch', () => {
     const userManager = makeUserManager();
     userManager.signinRedirectCallback.mockRejectedValue(new Error('access_denied'));
     await expect(
-      bootstrapShanoirLaunch({
+      resolveShanoirLaunch({
         config: CONFIG,
         location: makeLocation('?error=access_denied&state=xyz'),
         history: makeHistory(),
@@ -130,7 +130,7 @@ describe('bootstrapShanoirLaunch', () => {
   it('rejects a callback whose OIDC state carries no valid examinationId', async () => {
     const userManager = makeUserManager({});
     await expect(
-      bootstrapShanoirLaunch({
+      resolveShanoirLaunch({
         config: CONFIG,
         location: makeLocation('?code=abc&state=xyz'),
         history: makeHistory(),

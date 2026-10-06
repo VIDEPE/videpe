@@ -15,7 +15,7 @@ import { buildElectrodeLayer } from '../utils/eegTopographyUtils';
 import { useEegFileIntake } from '../hooks/useEegFileIntake';
 import { useElectricalSourceImaging } from '../hooks/useElectricalSourceImaging';
 import { useDemoData } from '../hooks/useDemoData';
-import { useShanoirData } from '../hooks/useShanoirLaunch';
+import { useShanoirData } from '../hooks/useShanoirData';
 
 // Shared title styling — keeps "Neuroimaging" and the toggle's labels visually
 // consistent, and both header bars the same height (TrafficLightButtons are 16px tall).
