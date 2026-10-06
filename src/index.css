@@ -270,6 +270,21 @@ code {
   animation: var(--animate-fade-in);
 }
 
+/* Stays invisible for 0.3s, then fades in — so a screen shown only briefly (e.g. the
+   Shanoir sign-in redirect) never flashes, and only appears when it takes a while. */
+.animate-delayed-fade-in {
+  animation: delayed-fade-in 0.3s ease-out 0.3s both;
+}
+
+@keyframes delayed-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 @keyframes animate-bounce-up {
   0%,
   100% {
