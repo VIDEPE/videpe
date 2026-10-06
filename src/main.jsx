@@ -7,7 +7,7 @@ import { getShanoirConfig } from '@/config/appConfig';
 import { createShanoirUserManager, getAccessToken } from '@/auth/shanoirAuth';
 import { resolveShanoirLaunch } from '@/auth/shanoirLaunch';
 import { ShanoirLaunchContext } from '@/auth/ShanoirLaunchContext';
-import { ShanoirErrorPage, ShanoirLoadingPage } from '@/pages/ShanoirLaunchPages';
+import { ShanoirErrorPage, ShanoirSignInPage } from '@/pages/ShanoirLaunchPages';
 
 const root = createRoot(document.getElementById('root'));
 async function start() {
@@ -20,7 +20,7 @@ async function start() {
   // Show the sign-in screen only for an actual launch (launch link or Keycloak callback),
   // so normal visits — and the GitHub Pages build — start exactly as before
   const isLaunching = config && /[?&](examinationId|code|error)=/.test(window.location.search);
-  if (isLaunching) root.render(<ShanoirLoadingPage />);
+  if (isLaunching) root.render(<ShanoirSignInPage />);
 
   // Shanoir launch/login step: 'none' (normal visit), 'redirecting' or 'ready' (signed in)
   const launch = await resolveShanoirLaunch({
@@ -55,7 +55,7 @@ async function start() {
 }
 
 // Dev-only preview of the start-up screens, to check how they look without a Shanoir setup:
-// open /videpe/?preview=loading or /videpe/?preview=error under `npm run dev`.
+// open /videpe/?preview=signin or /videpe/?preview=error under `npm run dev`.
 // import.meta.env.DEV is false in production builds, so Vite strips this out entirely.
 //
 // http://localhost:5173/videpe/?preview=error
@@ -65,13 +65,13 @@ async function start() {
 // There's no `#…` part in this URL, so location.hash is ''.
 const preview = import.meta.env.DEV && new URLSearchParams(window.location.search).get('preview');
 
-if (preview === 'loading') {
+if (preview === 'signin') {
   // in Dev mode and there is a preview search key => only render that preview page
-  root.render(<ShanoirLoadingPage />);
+  root.render(<ShanoirSignInPage />);
 } else if (preview === 'error') {
   root.render(
     <ShanoirErrorPage
-      error={new Error('Example error: Shanoir sign-in has expired, reopen VIDEPE from Shanoir')}
+      error={new Error('EXAMPLE ERROR: Shanoir sign-in has expired, reopen VIDEPE from Shanoir')}
     />
   );
 } else {
