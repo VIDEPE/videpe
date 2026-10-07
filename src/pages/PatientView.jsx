@@ -253,27 +253,40 @@ export const PatientView = () => {
           <Link to="/" className="button flex items-center gap-2 px-3 py-1">
             <ArrowLeft size={16} /> Back
           </Link>
-          <button
-            type="button"
-            className="button px-3 py-1"
-            onClick={
-              eeg || layers.length > 0 || pendingEegFiles.length > 0 ? handleReset : handleLoadDemo
-            }
-            disabled={isLoading || isShanoirLoading}
-            title={
-              isDemoLoading
-                ? 'Loading demo data…'
+          {/* Normal VIDEPE Top button layout (Back + Demo buttons) */}
+          {shanoirSession ? (
+            /* Launched from Shanoir: the Shanoir logo instead of the demo/reset button */
+            <img
+              src={`${import.meta.env.BASE_URL}shanoirLogoBlack.svg`}
+              alt="Shanoir logo"
+              className="app-logo pt-2 h-7 w-auto"
+            />
+          ) : (
+            /* Normal VIDEPE: Load Demo / Reset button */
+            <button
+              type="button"
+              className="button px-3 py-1"
+              onClick={
+                eeg || layers.length > 0 || pendingEegFiles.length > 0
+                  ? handleReset
+                  : handleLoadDemo
+              }
+              disabled={isLoading || isShanoirLoading}
+              title={
+                isDemoLoading
+                  ? 'Loading demo data…'
+                  : eeg || layers.length > 0 || pendingEegFiles.length > 0
+                    ? 'Reset both viewers'
+                    : 'Load demo data to test VIDEPE without needing your own files'
+              }
+            >
+              {isDemoLoading
+                ? 'Loading…'
                 : eeg || layers.length > 0 || pendingEegFiles.length > 0
-                  ? 'Reset both viewers'
-                  : 'Load demo data to test VIDEPE without needing your own files'
-            }
-          >
-            {isDemoLoading
-              ? 'Loading…'
-              : eeg || layers.length > 0 || pendingEegFiles.length > 0
-                ? 'Reset'
-                : 'Load Demo'}
-          </button>
+                  ? 'Reset'
+                  : 'Load Demo'}
+            </button>
+          )}
         </div>
 
         {/* Center column: title always stays between the two side columns */}
