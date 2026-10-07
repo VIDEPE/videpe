@@ -3,14 +3,12 @@ import { createRoot } from 'react-dom/client';
 import './index.css';
 import App from './App.jsx';
 
-import { getShanoirConfig } from '@/config/appConfig';
-import { createShanoirUserManager, getAccessToken } from '@/auth/shanoirAuth';
-import { resolveShanoirLaunch } from '@/auth/shanoirLaunch';
-import { ShanoirSessionContext } from '@/auth/ShanoirSessionContext';
-
-import { ShanoirErrorPage, ShanoirSignInPage } from '@/pages/ShanoirLaunchPages';
-
-import { createShanoirClient } from './loaders/shanoirClient.js';
+import { getShanoirConfig } from '@/shanoir/shanoirConfig';
+import { createShanoirUserManager, getAccessToken } from '@/shanoir/shanoirAuth';
+import { resolveShanoirLaunch } from '@/shanoir/shanoirLaunch';
+import { ShanoirSessionContext } from '@/shanoir/ShanoirSessionContext';
+import { ShanoirErrorPage, ShanoirSignInPage } from '@/shanoir/ShanoirLaunchPages';
+import { createShanoirClient } from '@/shanoir/shanoirClient';
 
 const root = createRoot(document.getElementById('root'));
 async function start() {

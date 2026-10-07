@@ -1,4 +1,4 @@
-// New src/hooks/useShanoirData.js: modelled on src/hooks/useDemoData.js (same setIsLoading, the eegReadyResolveRef/niiReadyResolveRef ready promises, one toast.promise).
+// New src/shanoir/useShanoirData.js: modelled on src/hooks/useDemoData.js (same setIsLoading, the eegReadyResolveRef/niiReadyResolveRef ready promises, one toast.promise).
 // For EEG datasets: unzip, then handleEegFiles(files) from src/hooks/useEegFileIntake.js. It already routes .vhdr/.eeg, electrode .tsv/.elc and inverse .mat in one call, using detectAndLoadEEG in src/loaders/eegFormatRegistry.js. loadBrainVisionEEG already reads Files with File.slice.
 // Filter .tsv before handing files over. BIDS folders also contain _channels.tsv / _events.tsv, and useEegFileIntake routes every .tsv to the electrode parser (ELEC_POS_EXTENSIONS). Pass only *_electrodes.tsv and .elc, and ignore other .tsv files. .mat goes through unchanged (inverse solution).
 // Examination extra-data: read extraDataFilePathList from GET /shanoir-ng/datasets/examinations/{examinationId}. Download *_electrodes.tsv, .elc and .mat entries via GET /shanoir-ng/datasets/examinations/extra-data-download/{examinationId}/{fileName}/ and pass them to handleEegFiles the same way (see "Electrode positions" below).
@@ -8,7 +8,7 @@
 import { useState, useCallback, useEffect, useEffectEvent } from 'react';
 import toast from 'react-hot-toast';
 import { filesToLayers } from '@/utils/NiiViewer.utils';
-import { fetchShanoirExamination } from '@/loaders/fetchShanoirExamination';
+import { fetchShanoirExamination } from '@/shanoir/fetchShanoirExamination';
 
 /**
  * Loads one Shanoir examination (EEG recording, electrode positions, inverse solution and
@@ -31,7 +31,7 @@ import { fetchShanoirExamination } from '@/loaders/fetchShanoirExamination';
  * @param {{ current: (() => void)|null }} params.niiReadyResolveRef
  *   Same pattern as eegReadyResolveRef, but for NiiViewer finishing to render the
  *   imaging volumes.
- * @param {ReturnType<import('@/loaders/shanoirClient').createShanoirClient>} [params.client]
+ * @param {ReturnType<import('@/shanoir/shanoirClient').createShanoirClient>} [params.client]
  *   Shanoir API client for the signed-in user; undefined when not launched from Shanoir, in
  *   which case this hook does nothing.
  * @param {number} [params.examinationId] - the Shanoir examination to load (from the launch URL).

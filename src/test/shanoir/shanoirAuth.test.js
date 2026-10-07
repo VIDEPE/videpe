@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { User } from 'oidc-client-ts';
-import { createShanoirUserManager } from '@/auth/shanoirAuth';
+import { createShanoirUserManager } from '@/shanoir/shanoirAuth';
 
 const CONFIG = {
   authority: 'https://shanoir.example/auth/realms/shanoir-ng',

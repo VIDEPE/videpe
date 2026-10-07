@@ -1,4 +1,4 @@
-// Runtime (deploy-time) configuration, read from `window.videpeConfig`.
+// Shanoir settings from the runtime (deploy-time) configuration, read from `window.videpeConfig`.
 //
 // `public/app-config.js` sets `window.videpeConfig` and is loaded by index.html before the
 // app bundle. It is copied into the build unhashed, so one build serves every deployment:

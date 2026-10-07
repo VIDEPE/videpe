@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { createShanoirClient } from '@/loaders/shanoirClient';
+import { createShanoirClient } from '@/shanoir/shanoirClient';
 
 const API_BASE = '/shanoir-ng/datasets';
 

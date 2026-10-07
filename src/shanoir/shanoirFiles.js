@@ -1,4 +1,4 @@
-import { EEG_FORMAT_EXTENSIONS, INV_SOLUTIONS_EXTENSIONS } from './eegFormatRegistry';
+import { EEG_FORMAT_EXTENSIONS, INV_SOLUTIONS_EXTENSIONS } from '@/loaders/eegFormatRegistry';
 
 // Decides which Shanoir datasets and files VIDEPE loads, and where they go.
 

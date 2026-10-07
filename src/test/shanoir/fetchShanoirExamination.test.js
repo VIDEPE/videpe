@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { zipSync, strToU8 } from 'fflate';
-import { fetchShanoirExamination } from '@/loaders/fetchShanoirExamination';
+import { fetchShanoirExamination } from '@/shanoir/fetchShanoirExamination';
 
 // Builds an in-memory zip Blob from a list of file paths (content is irrelevant here).
 const makeZip = (paths) =>

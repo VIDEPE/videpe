@@ -18,7 +18,7 @@ export const ShanoirSessionContext = createContext(null);
  * Reads the Shanoir session from ShanoirSessionContext, so components don't need to import the
  * context object or useContext themselves.
  *
- * @returns {{ client: ReturnType<import('@/loaders/shanoirClient').createShanoirClient>,
+ * @returns {{ client: ReturnType<import('@/shanoir/shanoirClient').createShanoirClient>,
  *   examinationId: number }|null} the signed-in Shanoir client and the examination to load,
  *   or null when VIDEPE wasn't launched from Shanoir.
  */

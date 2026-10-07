@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { getShanoirConfig } from '@/config/appConfig';
+import { getShanoirConfig } from '@/shanoir/shanoirConfig';
 
 const VALID_SHANOIR = {
   authority: 'https://shanoir.example/auth/realms/shanoir-ng',

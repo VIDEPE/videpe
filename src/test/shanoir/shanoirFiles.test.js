@@ -4,7 +4,7 @@ import {
   selectEegIntakeFiles,
   selectImagingFiles,
   selectExtraDataFileNames,
-} from '@/loaders/shanoirFiles';
+} from '@/shanoir/shanoirFiles';
 
 const file = (name) => new File(['x'], name);
 const names = (files) => files.map((f) => f.name);

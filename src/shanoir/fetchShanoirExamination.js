@@ -1,4 +1,4 @@
-import { unzipToFiles } from './unzipToFiles';
+import { unzipToFiles } from '@/loaders/unzipToFiles';
 import {
   classifyDataset,
   selectEegIntakeFiles,

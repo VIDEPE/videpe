@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { parseExaminationId, resolveShanoirLaunch } from '@/auth/shanoirLaunch';
+import { parseExaminationId, resolveShanoirLaunch } from '@/shanoir/shanoirLaunch';
 
 const CONFIG = {
   authority: 'https://shanoir.example/auth/realms/shanoir-ng',
