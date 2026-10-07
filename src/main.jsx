@@ -82,6 +82,23 @@ if (preview === 'signin') {
       error={new Error('EXAMPLE ERROR: Shanoir sign-in has expired, reopen VIDEPE from Shanoir')}
     />
   );
+} else if (preview === 'shanoir') {
+  // fake client is provided in dev mode (never in production mode)
+  const { createFakeShanoirClient } = await import('./shanoir/fakeShanoirClient.js');
+  const fakeClient = createFakeShanoirClient();
+  history.replaceState(null, '', '?preview=shanoir#/patient-view');
+  root.render(
+    <StrictMode>
+      <ShanoirSessionContext.Provider
+        value={{
+          client: fakeClient,
+          examinationId: 42,
+        }}
+      >
+        <App />
+      </ShanoirSessionContext.Provider>
+    </StrictMode>
+  );
 } else {
   // else just start the app as normal
   start().catch((err) => {
