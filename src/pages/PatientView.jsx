@@ -246,10 +246,11 @@ export const PatientView = () => {
 
   return (
     <FullWidthLayout>
-      {/* Top bar: 3-column flex row so the title is always geometrically between the left buttons and right toggle */}
-      <div className="shrink-0 flex items-start border-b border-border">
+      {/* Top bar: 3-column grid with equal side columns (1fr | auto | 1fr), so the title stays
+          centered on the screen however wide the left/right content is */}
+      <div className="shrink-0 grid grid-cols-[1fr_auto_1fr] items-start border-b border-border">
         {/* Left column: Back + Load Demo in normal flow — top bar never scrolls so fixed isn't needed */}
-        <div className="shrink-0 flex flex-col items-start gap-2 px-5 py-3 z-10">
+        <div className="flex flex-col items-start gap-2 px-5 py-3 z-10">
           <Link to="/" className="button flex items-center gap-2 px-3 py-1">
             <ArrowLeft size={16} /> Back
           </Link>
@@ -289,8 +290,8 @@ export const PatientView = () => {
           )}
         </div>
 
-        {/* Center column: title always stays between the two side columns */}
-        <div className="flex-1 min-w-0 flex flex-col items-center justify-center py-2 text-center select-none pointer-events-none">
+        {/* Center column: title, centered on the screen because the side columns are equally wide */}
+        <div className="flex flex-col items-center justify-center py-2 text-center select-none pointer-events-none">
           <h1 className="!mb-3">VIDEPE</h1>
           <p className="text-sm text-foreground/70 py-2">
             <span className="font-bold">V</span>isualization & <span className="font-bold">I</span>
@@ -305,7 +306,7 @@ export const PatientView = () => {
 
         {/* Right column: ThemeToggle rendered inline (not fixed) — top bar never scrolls so fixed isn't needed,
             and inline keeps it locked to the layout as the window resizes */}
-        <div className="shrink-0 flex items-start px-5 py-3">
+        <div className="flex justify-end items-start px-5 py-3">
           <ThemeToggle className="" />
         </div>
       </div>
