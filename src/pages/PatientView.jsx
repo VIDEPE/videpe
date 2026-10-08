@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Info } from 'lucide-react';
 import { Niivue } from '@niivue/niivue';
 import toast from 'react-hot-toast';
 // Components
@@ -253,11 +253,26 @@ export const PatientView = () => {
       {/* Top bar: 3-column grid with equal side columns (1fr | auto | 1fr), so the title stays
           centered on the screen however wide the left/right content is */}
       <div className="shrink-0 grid grid-cols-[1fr_auto_1fr] items-start border-b border-border">
-        {/* Left column: Back + Load Demo in normal flow — top bar never scrolls so fixed isn't needed */}
+        {/* Left column: Back + Load Demo (or, from Shanoir: About + Shanoir logo) in normal flow — top bar never scrolls so fixed isn't needed */}
         <div className="flex flex-col items-start gap-2 px-5 py-3 z-10">
-          <Link to="/" className="button flex items-center gap-2 px-3 py-1">
-            <ArrowLeft size={16} /> Back
-          </Link>
+          {shanoirSession ? (
+            /* Launched from Shanoir: no Back (leaving the patient view would discard the loaded
+               examination), but the About page in a new tab. BASE_URL drops the launch URL's
+               ?examinationId, so that tab opens plain VIDEPE instead of signing in and loading again. */
+            <a
+              href={`${import.meta.env.BASE_URL}#/about`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="button flex items-center gap-2 px-3 py-1"
+              title="Opens in a new tab"
+            >
+              <Info size={16} /> About VIDEPE
+            </a>
+          ) : (
+            <Link to="/" className="button flex items-center gap-2 px-3 py-1">
+              <ArrowLeft size={16} /> Back
+            </Link>
+          )}
           {/* Normal VIDEPE Top button layout (Back + Demo buttons) */}
           {shanoirSession ? (
             /* Launched from Shanoir: the Shanoir logo instead of the demo/reset button */
