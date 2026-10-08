@@ -14,6 +14,12 @@ A web-based viewer for EEG and neuroimaging data (MRI, PET, SPECT), developed at
 
 All data processing happens entirely in your browser. No files are ever uploaded to a server, sent to a third party, or stored outside your own machine. This makes VIDEPE safe to use with sensitive medical data — including identifiable patient recordings — without any institutional data-sharing agreement or de-identification step.
 
+## Shanoir integration
+
+VIDEPE can also be opened from the [Shanoir](https://github.com/fli-iam/shanoir-ng) neuroimaging database: a **View in VIDEPE** button on an examination opens its EEG and imaging directly in VIDEPE, after signing in with the user's Shanoir account (single sign-on). In this mode the data is downloaded from Shanoir over HTTPS and, as always, processed only in the browser; VIDEPE never writes back to Shanoir.
+
+This mode only exists on a Shanoir deployment, which serves VIDEPE from its own server using the [VIDEPE Docker image](https://github.com/VIDEPE/videpe/pkgs/container/videpe). The GitHub Pages version always works with local files only. See [docs/shanoir-integration.md](docs/shanoir-integration.md) for how Shanoir sets it up.
+
 ## Features
 
 ### EEG Viewer
@@ -118,12 +124,32 @@ npm test          # watch mode (re-runs affected tests after file changes)
 npm run test:run  # single run (used in CI)
 ```
 
+### Previewing the Shanoir mode
+
+Under `npm run dev`, these URLs show the Shanoir screens without a Shanoir server:
+
+- [`/videpe/?preview=shanoir`](http://localhost:5173/videpe/?preview=shanoir) — the patient view as if opened from Shanoir, loading the demo data through a fake Shanoir client
+- [`/videpe/?preview=signin`](http://localhost:5173/videpe/?preview=signin) and [`/videpe/?preview=error`](http://localhost:5173/videpe/?preview=error) — the sign-in and error pages
+
+### Docker image
+
+The [`Dockerfile`](Dockerfile) packages the built app in nginx under `/videpe/`, for servers that host VIDEPE themselves (see [Shanoir integration](#shanoir-integration)). To try it locally (requires [Docker](https://www.docker.com/)):
+
+```bash
+npm run build                      # the image contains the built dist/ folder
+docker build -t videpe .
+docker run --rm -p 8080:80 videpe  # then open http://localhost:8080/
+```
+
+Runtime settings, such as the Shanoir connection, live in [`public/app-config.js`](public/app-config.js); a deployment replaces that file instead of rebuilding the app.
+
 ## CI/CD
 
-Two GitHub Actions workflows handle testing and deployment:
+Three GitHub Actions workflows handle testing and deployment:
 
 - [`test.yml`](.github/workflows/test.yml) — runs on every pull request targeting `develop` or `main`. Installs dependencies and runs the test suite; PRs targeting `main` additionally run a production build to catch build-only failures before release.
 - [`deploy.yml`](.github/workflows/deploy.yml) — runs on every push to `main`. Builds the app and publishes it to GitHub Pages.
+- [`docker.yml`](.github/workflows/docker.yml) — runs on every push to `main` (or manually). Builds the app and publishes the Docker image to `ghcr.io/videpe/videpe`, tagged with the version and `latest`; manual runs from other branches only build it.
 
 ## Links
 
