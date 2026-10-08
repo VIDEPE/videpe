@@ -23,6 +23,10 @@ import { fetchShanoirExamination } from '@/shanoir/fetchShanoirExamination';
  *   drop at the EEG dropzone (it sets the EEG recording itself).
  * @param {(layers: object[]) => void} params.setLayers
  *   Called with the imaging layers built from the downloaded volumes/meshes.
+ * @param {(name: string|null) => void} params.setShanoirEegName
+ *   Called with the name of the EEG dataset that was loaded, or null if none. An examination
+ *   can hold several EEG recordings but only the first is loaded, so the caller can show the
+ *   user which one is on screen (and clear it when the EEG viewer is reset).
  * @param {{ current: (() => void)|null }} params.eegReadyResolveRef
  *   Ref that this hook assigns a resolver function into before starting the load.
  *   EegViewer calls that resolver once its charts have actually finished rendering the
@@ -35,17 +39,15 @@ import { fetchShanoirExamination } from '@/shanoir/fetchShanoirExamination';
  *   Shanoir API client for the signed-in user; undefined when not launched from Shanoir, in
  *   which case this hook does nothing.
  * @param {number} [params.examinationId] - the Shanoir examination to load (from the launch URL).
- * @returns {Object} The loading state and the loaded recording's name. The load itself starts
- *   automatically once, when a client is given, and is cancelled when the component unmounts.
+ * @returns {Object} The loading state. The load itself starts automatically once, when a client
+ *   is given, and is cancelled when the component unmounts.
  *   - `isShanoirLoading` (boolean) — true from the first render of a Shanoir launch until the
  *     examination has loaded (or failed).
- *   - `loadedEegName` (string|null) — name of the EEG dataset that was loaded, or null if
- *     none. An examination can hold several EEG recordings but only the first is loaded, so
- *     this tells the user which one is on screen.
  */
 export function useShanoirData({
   handleEegFiles,
   setLayers,
+  setShanoirEegName,
   eegReadyResolveRef,
   niiReadyResolveRef,
   client,
@@ -55,7 +57,6 @@ export function useShanoirData({
   // (Switching it on from inside the effect instead would trigger an extra render — React's
   // set-state-in-effect rule.) Only switched off once the load has finished or failed.
   const [isShanoirLoading, setIsShanoirLoading] = useState(Boolean(client));
-  const [loadedEegName, setLoadedEegName] = useState(null);
 
   /**
    * Downloads the examination's datasets (see fetchShanoirExamination), reports any datasets
@@ -68,7 +69,7 @@ export function useShanoirData({
    *   NiiViewer) report, via eegReadyResolveRef/niiReadyResolveRef, that they've finished
    *   rendering it. Never rejects: errors end up in the toast, and a cancelled load just
    *   removes its toast. Callers observe the outcome through this hook's `isShanoirLoading`
-   *   and `loadedEegName` return values, and the `eeg`/`layers` state the handlers update.
+   *   return value, and the `eeg`/`layers`/EEG-name state the handlers update.
    */
   const handleLoadShanoir = useCallback(
     async (signal) => {
@@ -91,7 +92,7 @@ export function useShanoirData({
         // listen to the signal): stop here, so a cancelled load never fills the viewers.
         // Throws an AbortError, handled like any other cancellation below.
         signal.throwIfAborted();
-        setLoadedEegName(eegDataset?.name ?? null);
+        setShanoirEegName(eegDataset?.name ?? null);
 
         // Display toast of datasets that have been skipped
         if (skippedDatasets.length > 0) {
@@ -130,7 +131,15 @@ export function useShanoirData({
         if (!signal.aborted) setIsShanoirLoading(false);
       }
     },
-    [handleEegFiles, setLayers, eegReadyResolveRef, niiReadyResolveRef, client, examinationId]
+    [
+      handleEegFiles,
+      setLayers,
+      setShanoirEegName,
+      eegReadyResolveRef,
+      niiReadyResolveRef,
+      client,
+      examinationId,
+    ]
   );
 
   // Calls the newest handleLoadShanoir, but never changes itself — so the effect below doesn't
@@ -148,5 +157,5 @@ export function useShanoirData({
     return () => controller.abort(); // runs later, on unmount — not now
   }, [client, examinationId]);
 
-  return { isShanoirLoading, loadedEegName };
+  return { isShanoirLoading };
 }

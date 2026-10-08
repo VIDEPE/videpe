@@ -6,15 +6,15 @@ const BASE = `${import.meta.env.BASE_URL}demo_data/`;
 const DATASETS = [
   {
     id: 1,
-    name: 'EEG (demo)',
+    name: 'Shanoir demo (EEG)',
     type: 'Eeg',
     files: [
       'sub-synth_task-rest_desc-spkavgall_eeg.vhdr',
       'sub-synth_task-rest_desc-spkavgall_eeg.eeg',
     ],
   },
-  { id: 2, name: 'T1w (demo)', type: 'Mr', files: ['sub-synth_T1w.nii.gz'] },
-  { id: 3, name: 'dummy (demo)', type: 'dummy', files: ['dummy.bak'] },
+  { id: 2, name: 'Shanoir demo (T1w)', type: 'Mr', files: ['sub-synth_T1w.nii.gz'] },
+  { id: 3, name: 'Shanoir demo (dummy)', type: 'dummy', files: ['dummy.bak'] },
   // more: WM/CSF segmentations, or a second Eeg / an unsupported type to trigger the "skipped" toast
 ];
 

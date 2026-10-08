@@ -23,6 +23,7 @@ import { useShanoirData } from '../shanoir/useShanoirData';
 // Shared title styling — keeps "Neuroimaging" and the toggle's labels visually
 // consistent, and both header bars the same height (TrafficLightButtons are 16px tall).
 const PANEL_TITLE_CLASS = 'h-7 flex items-center text-xl font-medium leading-none text-header';
+const PANEL_SUBTITLE_CLASS = 'text-xs font-medium text-foreground pl-2';
 
 export const PatientView = () => {
   // Prevent default browser drag-and-drop behavior (e.g., opening files in a new tab)
@@ -37,6 +38,7 @@ export const PatientView = () => {
   }, []);
 
   const [eeg, setEeg] = useState(null); // recording provider: { channelNames, fs, tMax, getChunk }
+  const [shanoirEegName, setShanoirEegName] = useState(null); // name of the EEG dataset loaded from Shanoir, shown in the EEG panel header
   const [layers, setLayers] = useState([]); // image volumes/meshes loaded from files
   // Whether NiiViewer holds layers dropped into its own internal dropzone — those never
   // touch `layers` above, so this prevents wrongly unmounting NiiViewer (and discarding
@@ -105,9 +107,10 @@ export const PatientView = () => {
 
   const shanoirSession = useShanoirSession(); // null, or { client, examinationId }
 
-  const { isShanoirLoading, loadedEegName } = useShanoirData({
+  const { isShanoirLoading } = useShanoirData({
     handleEegFiles,
     setLayers,
+    setShanoirEegName,
     eegReadyResolveRef,
     niiReadyResolveRef,
     client: shanoirSession?.client, // the client, or undefined
@@ -223,6 +226,7 @@ export const PatientView = () => {
     setChannelSnapshot(null);
     setElectrodeRenderEnabled(false);
     setEsiEnabled(false);
+    setShanoirEegName(null);
   };
 
   // SplitPane's right (Neuroimaging) panel reset button — clears only the imaging volumes
@@ -257,11 +261,16 @@ export const PatientView = () => {
           {/* Normal VIDEPE Top button layout (Back + Demo buttons) */}
           {shanoirSession ? (
             /* Launched from Shanoir: the Shanoir logo instead of the demo/reset button */
-            <img
-              src={`${import.meta.env.BASE_URL}shanoirLogoBlack.svg`}
-              alt="Shanoir logo"
-              className="app-logo pt-2 h-7 w-auto"
-            />
+            <div className="flex flex-col items-start gap-2 pt-2">
+              <img
+                src={`${import.meta.env.BASE_URL}shanoirLogoBlack.svg`}
+                alt="Shanoir logo"
+                className="app-logo h-7 w-auto"
+              />
+              <span className="text-xs text-foreground">
+                Examination ID: {shanoirSession.examinationId}
+              </span>
+            </div>
           ) : (
             /* Normal VIDEPE: Load Demo / Reset button */
             <button
@@ -312,7 +321,19 @@ export const PatientView = () => {
       </div>
 
       <SplitPane
-        leftLabel={<span className={PANEL_TITLE_CLASS}>EEG</span>}
+        leftLabel={
+          <span className={PANEL_TITLE_CLASS}>
+            EEG
+            {eeg && shanoirEegName && (
+              // truncate: long names end in "…" instead of pushing the header buttons away; the
+              // full name shows on hover (pointer-events-auto, as SplitPane's header ignores the mouse)
+              <span
+                className={`${PANEL_SUBTITLE_CLASS} truncate pointer-events-auto`}
+                title={shanoirEegName}
+              >{`- ${shanoirEegName}`}</span>
+            )}
+          </span>
+        }
         rightLabel={<span className={PANEL_TITLE_CLASS}>Neuroimaging</span>}
         onLeftReset={eeg || pendingEegFiles.length > 0 ? handleEegReset : undefined}
         onRightReset={niiViewerHasContent ? handleNiiReset : undefined}
