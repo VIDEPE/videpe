@@ -1,20 +1,24 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <!-- text encoding (é, ü, … display correctly) -->
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/brain-circuit.svg" />
+    <!-- correct scaling on phones/tablets -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- browser tab text -->
     <title>VIDEPE</title>
-    <script>
-      // This switches the theme before the page is rendered, to avoid a flash of the wrong theme
-      const t = localStorage.getItem('theme');
-      if (t === 'dark' || (!t && matchMedia('(prefers-color-scheme: dark)').matches)) {
-        document.documentElement.classList.add('dark');
-      }
-    </script>
+    <!-- browser tab icon -->
+    <link rel="icon" type="image/svg+xml" href="/brain-circuit.svg" />
+    <!-- This switches the theme before the page is rendered, to avoid a flash of the wrong theme -->
+    <script src="theme-init.js"></script>
+    <!-- Runtime config (deployment settings, see public/app-config.js); must load before the app -->
+    <script src="app-config.js"></script>
   </head>
   <body>
+    <!-- empty box: React draws the whole app in here -->
     <div id="root"></div>
+    <!-- starts the app -->
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

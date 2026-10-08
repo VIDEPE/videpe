@@ -11,6 +11,12 @@ import { ShanoirErrorPage, ShanoirSignInPage } from '@/shanoir/ShanoirLaunchPage
 import { createShanoirClient } from '@/shanoir/shanoirClient';
 
 const root = createRoot(document.getElementById('root'));
+
+// Starts the app, launching from Shanoir first when configured. The Shanoir chain:
+//   config → userManager (login) → getAccessToken (current token)
+//     → client (requests with token) → useShanoirData (loads, in PatientView)
+// Each step only runs when the previous one succeeded: no config (GitHub Pages) or no launch
+// parameters in the URL means no Shanoir session, and VIDEPE starts as the local-files app.
 async function start() {
   // Shanoir settings from app-config.js (Keycloak URL, client, API path); null on GitHub Pages
   const config = getShanoirConfig();
