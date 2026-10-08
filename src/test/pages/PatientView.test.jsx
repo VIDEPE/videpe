@@ -20,6 +20,7 @@ import { electricalSourceImaging } from '@/utils/electricalSourceImagingUtils';
 import { FileDropZone } from '@/components/FileDropZone';
 import { NiiViewer } from '@/components/NiiViewer';
 import { EegViewer } from '@/components/EegViewer';
+import { ShanoirSessionContext } from '@/shanoir/ShanoirSessionContext';
 
 // toast(...) itself must be callable (used for plain info toasts), with toast.promise
 // just running and returning the promise, and toast.error a no-op.
@@ -1590,5 +1591,52 @@ describe('PatientView — cross-panel 3D rotation sync', () => {
 
     expect(nvNii.broadcastTo).toHaveBeenLastCalledWith([]);
     expect(nvTopo.broadcastTo).toHaveBeenLastCalledWith([]);
+  });
+});
+
+describe('PatientView — top bar when opened from Shanoir', () => {
+  // A Shanoir client whose requests never finish: these tests only look at the top bar,
+  // not at the loading itself (see useShanoirData.test.js for that)
+  const pendingClient = {
+    getExamination: () => new Promise(() => {}),
+    listExaminationDatasets: () => new Promise(() => {}),
+    downloadDatasetZip: () => new Promise(() => {}),
+    downloadExtraData: () => new Promise(() => {}),
+  };
+
+  const renderFromShanoir = () =>
+    render(
+      <MemoryRouter>
+        <ShanoirSessionContext.Provider value={{ client: pendingClient, examinationId: 42 }}>
+          <PatientView />
+        </ShanoirSessionContext.Provider>
+      </MemoryRouter>
+    );
+
+  it('shows the Back link and the demo button in normal use', () => {
+    renderPatientView();
+    expect(screen.getByRole('link', { name: /back/i })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /about videpe/i })).not.toBeInTheDocument();
+    expect(getDemoResetButton()).toBeInTheDocument();
+  });
+
+  it('replaces Back with an About link that opens plain VIDEPE in a new tab', () => {
+    renderFromShanoir();
+    // Back would leave the patient view and discard the loaded examination
+    expect(screen.queryByRole('link', { name: /back/i })).not.toBeInTheDocument();
+
+    const about = screen.getByRole('link', { name: /about videpe/i });
+    expect(about).toHaveAttribute('target', '_blank');
+    // Without the launch URL's ?examinationId, so the new tab doesn't sign in and load again
+    expect(about).toHaveAttribute('href', `${import.meta.env.BASE_URL}#/about`);
+  });
+
+  it('shows the Shanoir logo and examination ID instead of the demo button', () => {
+    renderFromShanoir();
+    expect(screen.getByAltText(/shanoir/i)).toBeInTheDocument();
+    expect(screen.getByText(/examination id: 42/i)).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /^(load demo|reset|loading…)$/i })
+    ).not.toBeInTheDocument();
   });
 });

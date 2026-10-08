@@ -97,13 +97,17 @@ export function useEegFileIntake({ setEeg, setIsLoading, onInverseSolutionFile }
    *
    * @param {FileList|File[]} newFiles - the files from this single drop/selection. Not
    *   the full accumulated set — that's tracked internally via `pendingEegFiles`.
-   * @returns {Promise<void>} Resolves once this batch has been fully routed/processed.
-   *   Has no return value of its own — the outcome is observed through this hook's
-   *   `eeg` (via `setEeg`), `pendingEegFiles`, and `eegHint` return values, plus toasts
-   *   for user-facing feedback.
+   * @returns {Promise<boolean>} Resolves once this batch has been fully routed/processed, to
+   *   `true` if an EEG recording was loaded (`setEeg` was called) and `false` otherwise —
+   *   e.g. the batch had no recording files, the files are incomplete or unrecognized, or
+   *   parsing failed. Callers that wait for EegViewer to render the recording (see
+   *   useShanoirData) use this to avoid waiting for a viewer that will never appear.
+   *   The reason for a `false` is shown through toasts and this hook's `pendingEegFiles`
+   *   and `eegHint` return values.
    */
   const handleEegFiles = useCallback(
     async (newFiles) => {
+      let isEegSet = false; // flag to return that indicates whether setEEG is called
       const allFiles = Array.from(newFiles);
       // Detect and handle electrode position files
       const elecPosFiles = allFiles.filter((f) =>
@@ -148,7 +152,7 @@ export function useEegFileIntake({ setEeg, setIsLoading, onInverseSolutionFile }
         );
       }
 
-      if (eegFiles.length === 0) return; // pure electrode-position/inv-filter/unsupported drop — nothing else to do
+      if (eegFiles.length === 0) return isEegSet; // pure electrode-position/inv-filter/unsupported drop — nothing else to do
 
       // Merge pending with new files
       const merged = [...pendingEegFiles, ...eegFiles];
@@ -184,6 +188,7 @@ export function useEegFileIntake({ setEeg, setIsLoading, onInverseSolutionFile }
             );
           }
           setEeg(parsed);
+          isEegSet = true; // flip flag as EEG has been set
         } catch (err) {
           toast.error(`Error loading EEG:\n${err.message}`);
         } finally {
@@ -199,6 +204,7 @@ export function useEegFileIntake({ setEeg, setIsLoading, onInverseSolutionFile }
         setEegHint(null);
         toast.error(`Unrecognized EEG format.\nSupported: BrainVision (.vhdr + .eeg)`);
       }
+      return isEegSet;
     },
     [pendingEegFiles, handleElecPosFile, onInverseSolutionFile, setEeg, setIsLoading]
   );

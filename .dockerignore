@@ -1,0 +1,4 @@
+# Docker only needs dist/ (built beforehand) and docker/nginx.conf => ignore everything except these two
+*
+!dist/
+!docker/nginx.conf

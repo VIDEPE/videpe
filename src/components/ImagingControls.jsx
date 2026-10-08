@@ -331,7 +331,8 @@ function SortableSettingsCard({
           </span>
         )}
 
-        <span className="flex-1 text-sm font-medium text-heading truncate">
+        {/* truncate: long file names end in "…"; title shows the full name on hover */}
+        <span className="flex-1 text-sm font-medium text-heading truncate" title={label}>
           {layer.type ?? `Layer ${index + 1}`}
           {layer.subtype && (
             <span className="text-xs font-normal text-foreground/60 ml-1">- {layer.subtype}</span>
