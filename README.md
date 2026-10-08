@@ -151,6 +151,20 @@ Three GitHub Actions workflows handle testing and deployment:
 - [`deploy.yml`](.github/workflows/deploy.yml) — runs on every push to `main`. Builds the app and publishes it to GitHub Pages.
 - [`docker.yml`](.github/workflows/docker.yml) — runs on every push to `main` (or manually). Builds the app and publishes the Docker image to `ghcr.io/videpe/videpe`, tagged with the version and `latest`; manual runs from other branches only build it.
 
+## Team
+
+- **Dr. Jeroen Buil**: Biomedical Engineer & Software Developer, Department of Clinical Neuroscience, University of Geneva (UNIGE) ([website](https://jeroenbuil.github.io/), [LinkedIn](https://linkedin.com/in/jeroen-buil))
+- **Dr. Nicolas Roehri**: Principal Investigator, Department of Clinical Neuroscience, University of Geneva (UNIGE) ([research group](https://neurocenter-unige.ch/research-groups/nicolas-roehri/), [LinkedIn](https://linkedin.com/in/nicolas-roehri-43526580))
+- **Dr. Isotta Rigoni**: Maître Assistante, Department of Clinical Neuroscience, University of Geneva (UNIGE) ([profile](https://www.unige.ch/medecine/neucli/groupes-de-recherche/serge-vulliemoz/membres-du-groupe/isotta-rigoni), [LinkedIn](https://linkedin.com/in/isotta-rigoni))
+- **Prof. Serge Vulliémoz, MD**: Associate Professor, EEG and Epilepsy Unit, Geneva University Hospitals (HUG) and Center for Biomedical Imaging (CIBM) ([research group](https://neurocenter-unige.ch/research-groups/serge-vulliemoz/))
+
+## Funding & Support
+
+- This work was funded by the [CIBM Center for Biomedical Imaging](https://cibm.ch/).
+- This work was funded by a grant from the [Private Foundation of the Geneva University Hospitals (HUG)](https://www.fondationhug.org/en).
+- This work received the Pépite Award from the [Innovation Center of the Geneva University Hospitals (HUG)](https://www.hug.ch/en/innovation-center).
+- Dr. Nicolas Roehri is supported by the [Swiss National Science Foundation](https://www.snf.ch/en) ([grant 209120](https://data.snf.ch/grants/grant/209120)).
+
 ## Links
 
 - [GitHub repository](https://github.com/VIDEPE/videpe)
