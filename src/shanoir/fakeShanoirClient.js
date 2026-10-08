@@ -18,7 +18,10 @@ const DATASETS = [
   // more: WM/CSF segmentations, or a second Eeg / an unsupported type to trigger the "skipped" toast
 ];
 
-export function createFakeShanoirClient({ delayMs = 1500 } = {}) {
+// a Promise that resolves after `ms` milliseconds, so it can be awaited
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+export function createFakeShanoirClient({ delayMs = 1000 } = {}) {
   // Delay to simulate real loading
   setTimeout(delayMs);
   return {
@@ -41,6 +44,9 @@ export function createFakeShanoirClient({ delayMs = 1500 } = {}) {
     async downloadDatasetZip(datasetId, signal) {
       const dataset = DATASETS.find((d) => d.id === datasetId);
       if (!dataset) throw new Error(`Dataset ${datasetId} not found`);
+
+      // simulate network delay for downloading
+      await wait(delayMs);
 
       // fetch every file of the dataset in parallel, as [fileName, bytes] pairs
       const entries = await Promise.all(
