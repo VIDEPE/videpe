@@ -159,7 +159,8 @@ export const SplitPane = ({
   // Helper to render the header for each panel, with label and control buttons
   const panelHeader = (label, side, onReset) => (
     <div className="shrink-0 flex items-center justify-between px-3 py-1 border-b border-border bg-surface">
-      <h2 style={{ margin: 0 }} className="select-none pointer-events-none">
+      {/* min-w-0: lets the label shrink (and truncate) instead of pushing the buttons away */}
+      <h2 style={{ margin: 0 }} className="min-w-0 select-none pointer-events-none">
         {label}
       </h2>
       <TrafficLightButtons

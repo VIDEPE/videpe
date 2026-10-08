@@ -547,16 +547,7 @@ export const AboutPage = () => {
         <Section title="Team" id="team">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <PersonCard
-              name="Nicolas Roehri"
-              role="Principle Investigator"
-              affiliation="Department of Clinical Neuroscience - University of Geneva (UNIGE)"
-              url="https://neurocenter-unige.ch/research-groups/nicolas-roehri/"
-              urlLabel="Research group"
-              secondaryUrl="https://linkedin.com/in/nicolas-roehri-43526580"
-              secondaryLabel="LinkedIn"
-            />
-            <PersonCard
-              name="Jeroen Buil"
+              name="Dr. Jeroen Buil"
               role="Biomedical Engineer & Software Developer"
               affiliation="Department of Clinical Neuroscience - University of Geneva (UNIGE)"
               url="https://jeroenbuil.github.io/"
@@ -565,7 +556,16 @@ export const AboutPage = () => {
               secondaryLabel="LinkedIn"
             />
             <PersonCard
-              name="Isotta Rigoni"
+              name="Dr. Nicolas Roehri"
+              role="Principal Investigator"
+              affiliation="Department of Clinical Neuroscience - University of Geneva (UNIGE)"
+              url="https://neurocenter-unige.ch/research-groups/nicolas-roehri/"
+              urlLabel="Research group"
+              secondaryUrl="https://linkedin.com/in/nicolas-roehri-43526580"
+              secondaryLabel="LinkedIn"
+            />
+            <PersonCard
+              name="Dr. Isotta Rigoni"
               role="Maître Assistante"
               affiliation="Department of Clinical Neuroscience - University of Geneva (UNIGE)"
               url="https://www.unige.ch/medecine/neucli/groupes-de-recherche/serge-vulliemoz/membres-du-groupe/isotta-rigoni"
@@ -574,7 +574,7 @@ export const AboutPage = () => {
               secondaryLabel="LinkedIn"
             />
             <PersonCard
-              name="Serge Vulliémoz"
+              name="Prof. Serge Vulliémoz, MD"
               role="Associate Professor"
               affiliation={[
                 'EEG and Epilepsy Unit - Geneva University Hospitals (HUG)',
@@ -591,16 +591,61 @@ export const AboutPage = () => {
         <Section title="Funding & Support">
           <div className="flex flex-col gap-3">
             <FundingBadge>
+              This work was funded by the{' '}
+              <a
+                href="https://cibm.ch/"
+                target="_blank"
+                rel="noreferrer"
+                style={{ color: 'var(--c-primary)' }}
+              >
+                <strong>CIBM Center for Biomedical Imaging</strong>
+              </a>
+              .
+            </FundingBadge>
+            <FundingBadge>
               This work was funded by a grant from the{' '}
-              <strong>Private Foundation of the Geneva University Hospitals</strong>.
+              <a
+                href="https://www.fondationhug.org/en"
+                target="_blank"
+                rel="noreferrer"
+                style={{ color: 'var(--c-primary)' }}
+              >
+                <strong>Private Foundation of the Geneva University Hospitals (HUG)</strong>
+              </a>
+              .
             </FundingBadge>
             <FundingBadge>
               This work received the <strong>Pépite Award</strong> from the{' '}
-              <strong>Centre of Innovation of the Geneva University Hospitals</strong>.
+              <a
+                href="https://www.hug.ch/en/innovation-center"
+                target="_blank"
+                rel="noreferrer"
+                style={{ color: 'var(--c-primary)' }}
+              >
+                <strong>Innovation Center of the Geneva University Hospitals (HUG)</strong>
+              </a>
+              .
             </FundingBadge>
             <FundingBadge>
-              NR is supported by the <strong>Swiss National Science Foundation</strong> (grant
-              209120).
+              Dr. Nicolas Roehri is supported by the{' '}
+              <a
+                href="https://www.snf.ch/en"
+                target="_blank"
+                rel="noreferrer"
+                style={{ color: 'var(--c-primary)' }}
+              >
+                <strong>Swiss National Science Foundation</strong>
+              </a>{' '}
+              (
+              <a
+                href="https://data.snf.ch/grants/grant/209120"
+                target="_blank"
+                rel="noreferrer"
+                style={{ color: 'var(--c-primary)' }}
+              >
+                grant 209120
+              </a>
+              ).
             </FundingBadge>
           </div>
         </Section>

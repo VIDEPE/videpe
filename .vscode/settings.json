@@ -1,8 +1,11 @@
 {
   "css.lint.unknownAtRules": "ignore",
   "editor.autoSave": "off",
-  "editor.formatOnSave": false,
+  "editor.formatOnSave": true,
   "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.tabSize": 2,
+  "editor.insertSpaces": true,
+  "files.eol": "\n",
   "[javascriptreact]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
   }

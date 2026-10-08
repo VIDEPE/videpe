@@ -1,24 +1,29 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Info } from 'lucide-react';
 import { Niivue } from '@niivue/niivue';
 import toast from 'react-hot-toast';
-
+// Components
 import { FullWidthLayout } from '../components/FullWidthLayout';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { EegViewer } from '../components/EegViewer';
 import { NiiViewer } from '../components/NiiViewer';
 import { SplitPane } from '../components/SplitPane';
 import { FileDropZone } from '../components/FileDropZone';
+// Utils
 import { filesToLayers } from '../utils/NiiViewer.utils';
 import { buildElectrodeLayer } from '../utils/eegTopographyUtils';
+// Hooks
 import { useEegFileIntake } from '../hooks/useEegFileIntake';
 import { useElectricalSourceImaging } from '../hooks/useElectricalSourceImaging';
 import { useDemoData } from '../hooks/useDemoData';
+import { useShanoirSession } from '../shanoir/ShanoirSessionContext';
+import { useShanoirData } from '../shanoir/useShanoirData';
 
 // Shared title styling — keeps "Neuroimaging" and the toggle's labels visually
 // consistent, and both header bars the same height (TrafficLightButtons are 16px tall).
 const PANEL_TITLE_CLASS = 'h-7 flex items-center text-xl font-medium leading-none text-header';
+const PANEL_SUBTITLE_CLASS = 'text-xs font-medium text-foreground pl-2';
 
 export const PatientView = () => {
   // Prevent default browser drag-and-drop behavior (e.g., opening files in a new tab)
@@ -33,14 +38,15 @@ export const PatientView = () => {
   }, []);
 
   const [eeg, setEeg] = useState(null); // recording provider: { channelNames, fs, tMax, getChunk }
+  const [shanoirEegName, setShanoirEegName] = useState(null); // name of the EEG dataset loaded from Shanoir, shown in the EEG panel header
   const [layers, setLayers] = useState([]); // image volumes/meshes loaded from files
   // Whether NiiViewer holds layers dropped into its own internal dropzone — those never
   // touch `layers` above, so this prevents wrongly unmounting NiiViewer (and discarding
   // them) when e.g. a montage-editor channel-type edit clears electrodeLayer.
   const [niiHasOwnContent, setNiiHasOwnContent] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const eegReadyResolveRef = useRef(null); // set before demo load; EegViewer calls it when charts are ready
-  const niiReadyResolveRef = useRef(null); // set before demo load; NiiViewer calls it when volumes are ready
+  const eegReadyResolveRef = useRef(null); // set before demo/shanoir load; EegViewer calls it when charts are ready
+  const niiReadyResolveRef = useRef(null); // set before demo/shanoir load; NiiViewer calls it when volumes are ready
   const [maximizedPanel, setMaximizedPanel] = useState(null); // null | 'left' | 'right'
 
   // Live EEG/electrode state lifted out of EegViewer — drives the intracranial connectome
@@ -97,6 +103,18 @@ export const PatientView = () => {
     setIsLoading,
     eegReadyResolveRef,
     niiReadyResolveRef,
+  });
+
+  const shanoirSession = useShanoirSession(); // null, or { client, examinationId }
+
+  const { isShanoirLoading } = useShanoirData({
+    handleEegFiles,
+    setLayers,
+    setShanoirEegName,
+    eegReadyResolveRef,
+    niiReadyResolveRef,
+    client: shanoirSession?.client, // the client, or undefined
+    examinationId: shanoirSession?.examinationId, // the examinationId, or undefined
   });
 
   // Build the electrode layer if the toggle is on.
@@ -208,6 +226,7 @@ export const PatientView = () => {
     setChannelSnapshot(null);
     setElectrodeRenderEnabled(false);
     setEsiEnabled(false);
+    setShanoirEegName(null);
   };
 
   // SplitPane's right (Neuroimaging) panel reset button — clears only the imaging volumes
@@ -231,38 +250,72 @@ export const PatientView = () => {
 
   return (
     <FullWidthLayout>
-      {/* Top bar: 3-column flex row so the title is always geometrically between the left buttons and right toggle */}
-      <div className="shrink-0 flex items-start border-b border-border">
-        {/* Left column: Back + Load Demo in normal flow — top bar never scrolls so fixed isn't needed */}
-        <div className="shrink-0 flex flex-col items-start gap-2 px-5 py-3 z-10">
-          <Link to="/" className="button flex items-center gap-2 px-3 py-1">
-            <ArrowLeft size={16} /> Back
-          </Link>
-          <button
-            type="button"
-            className="button px-3 py-1"
-            onClick={
-              eeg || layers.length > 0 || pendingEegFiles.length > 0 ? handleReset : handleLoadDemo
-            }
-            disabled={isLoading}
-            title={
-              isDemoLoading
-                ? 'Loading demo data…'
+      {/* Top bar: 3-column grid with equal side columns (1fr | auto | 1fr), so the title stays
+          centered on the screen however wide the left/right content is */}
+      <div className="shrink-0 grid grid-cols-[1fr_auto_1fr] items-start border-b border-border">
+        {/* Left column: Back + Load Demo (or, from Shanoir: About + Shanoir logo) in normal flow — top bar never scrolls so fixed isn't needed */}
+        <div className="flex flex-col items-start gap-2 px-5 py-3 z-10">
+          {shanoirSession ? (
+            /* Launched from Shanoir: no Back (leaving the patient view would discard the loaded
+               examination), but the About page in a new tab. BASE_URL drops the launch URL's
+               ?examinationId, so that tab opens plain VIDEPE instead of signing in and loading again. */
+            <a
+              href={`${import.meta.env.BASE_URL}#/about`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="button flex items-center gap-2 px-3 py-1"
+              title="Opens in a new tab"
+            >
+              <Info size={16} /> About VIDEPE
+            </a>
+          ) : (
+            <Link to="/" className="button flex items-center gap-2 px-3 py-1">
+              <ArrowLeft size={16} /> Back
+            </Link>
+          )}
+          {/* Normal VIDEPE Top button layout (Back + Demo buttons) */}
+          {shanoirSession ? (
+            /* Launched from Shanoir: the Shanoir logo instead of the demo/reset button */
+            <div className="flex flex-col items-start gap-2 pt-2">
+              <img
+                src={`${import.meta.env.BASE_URL}shanoirLogoBlack.svg`}
+                alt="Shanoir logo"
+                className="app-logo h-7 w-auto"
+              />
+              <span className="text-xs text-foreground">
+                Examination ID: {shanoirSession.examinationId}
+              </span>
+            </div>
+          ) : (
+            /* Normal VIDEPE: Load Demo / Reset button */
+            <button
+              type="button"
+              className="button px-3 py-1"
+              onClick={
+                eeg || layers.length > 0 || pendingEegFiles.length > 0
+                  ? handleReset
+                  : handleLoadDemo
+              }
+              disabled={isLoading || isShanoirLoading}
+              title={
+                isDemoLoading
+                  ? 'Loading demo data…'
+                  : eeg || layers.length > 0 || pendingEegFiles.length > 0
+                    ? 'Reset both viewers'
+                    : 'Load demo data to test VIDEPE without needing your own files'
+              }
+            >
+              {isDemoLoading
+                ? 'Loading…'
                 : eeg || layers.length > 0 || pendingEegFiles.length > 0
-                  ? 'Reset both viewers'
-                  : 'Load demo data to test VIDEPE without needing your own files'
-            }
-          >
-            {isDemoLoading
-              ? 'Loading…'
-              : eeg || layers.length > 0 || pendingEegFiles.length > 0
-                ? 'Reset'
-                : 'Load Demo'}
-          </button>
+                  ? 'Reset'
+                  : 'Load Demo'}
+            </button>
+          )}
         </div>
 
-        {/* Center column: title always stays between the two side columns */}
-        <div className="flex-1 min-w-0 flex flex-col items-center justify-center py-2 text-center select-none pointer-events-none">
+        {/* Center column: title, centered on the screen because the side columns are equally wide */}
+        <div className="flex flex-col items-center justify-center py-2 text-center select-none pointer-events-none">
           <h1 className="!mb-3">VIDEPE</h1>
           <p className="text-sm text-foreground/70 py-2">
             <span className="font-bold">V</span>isualization & <span className="font-bold">I</span>
@@ -277,13 +330,25 @@ export const PatientView = () => {
 
         {/* Right column: ThemeToggle rendered inline (not fixed) — top bar never scrolls so fixed isn't needed,
             and inline keeps it locked to the layout as the window resizes */}
-        <div className="shrink-0 flex items-start px-5 py-3">
+        <div className="flex justify-end items-start px-5 py-3">
           <ThemeToggle className="" />
         </div>
       </div>
 
       <SplitPane
-        leftLabel={<span className={PANEL_TITLE_CLASS}>EEG</span>}
+        leftLabel={
+          <span className={PANEL_TITLE_CLASS}>
+            EEG
+            {eeg && shanoirEegName && (
+              // truncate: long names end in "…" instead of pushing the header buttons away; the
+              // full name shows on hover (pointer-events-auto, as SplitPane's header ignores the mouse)
+              <span
+                className={`${PANEL_SUBTITLE_CLASS} truncate pointer-events-auto`}
+                title={shanoirEegName}
+              >{`- ${shanoirEegName}`}</span>
+            )}
+          </span>
+        }
         rightLabel={<span className={PANEL_TITLE_CLASS}>Neuroimaging</span>}
         onLeftReset={eeg || pendingEegFiles.length > 0 ? handleEegReset : undefined}
         onRightReset={niiViewerHasContent ? handleNiiReset : undefined}
