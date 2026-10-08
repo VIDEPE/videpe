@@ -62,8 +62,10 @@ async function start() {
   );
 }
 
-// Dev-only preview of the start-up screens, to check how they look without a Shanoir setup:
-// open /videpe/?preview=signin or /videpe/?preview=error under `npm run dev`.
+// Dev-only previews, to check the Shanoir screens without a Shanoir setup (under `npm run dev`):
+// - /videpe/?preview=signin or ?preview=error: the start-up pages.
+// - /videpe/?preview=shanoir: PatientView as if launched from Shanoir, with a fake client
+//   serving the demo data (everything after sign-in: downloading, unzipping, loading).
 // import.meta.env.DEV is false in production builds, so Vite strips this out entirely.
 //
 // http://localhost:5173/videpe/?preview=error
@@ -83,7 +85,8 @@ if (preview === 'signin') {
     />
   );
 } else if (preview === 'shanoir') {
-  // fake client is provided in dev mode (never in production mode)
+  // fake client is provided in dev mode (never in production mode: dynamic import, so it's
+  // only loaded when this branch runs, and Vite strips the branch from production builds)
   const { createFakeShanoirClient } = await import('./shanoir/fakeShanoirClient.js');
   const fakeClient = createFakeShanoirClient();
   history.replaceState(null, '', '?preview=shanoir#/patient-view');

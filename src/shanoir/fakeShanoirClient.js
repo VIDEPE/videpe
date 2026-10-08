@@ -14,6 +14,7 @@ const DATASETS = [
     ],
   },
   { id: 2, name: 'Shanoir demo (T1w)', type: 'Mr', files: ['sub-synth_T1w.nii.gz'] },
+  // Unsupported type: skipped before downloading, so its file is never fetched (and doesn't exist)
   { id: 3, name: 'Shanoir demo (dummy)', type: 'dummy', files: ['dummy.bak'] },
   // more: WM/CSF segmentations, or a second Eeg / an unsupported type to trigger the "skipped" toast
 ];
@@ -21,16 +22,16 @@ const DATASETS = [
 // a Promise that resolves after `ms` milliseconds, so it can be awaited
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// Same methods as createShanoirClient, minus parameters this fake doesn't need (JavaScript
+// ignores extra arguments, so callers can still pass them).
 export function createFakeShanoirClient({ delayMs = 1000 } = {}) {
-  // Delay to simulate real loading
-  setTimeout(delayMs);
   return {
-    async listExaminationDatasets(examinationId, signal) {
+    async listExaminationDatasets() {
       // The examination's datasets as { id, name, type }, like Shanoir's DatasetDTOs
       // (without `files`, which only this fake uses to know what goes in each ZIP)
-      return DATASETS.map(({ files, ...dataset }) => dataset);
+      return DATASETS.map((d) => ({ id: d.id, name: d.name, type: d.type }));
     },
-    async getExamination(examinationId, signal) {
+    async getExamination(examinationId) {
       // The examination, with the names of its attached files (electrodes, inverse solution);
       // these are downloaded one by one through downloadExtraData
       return {

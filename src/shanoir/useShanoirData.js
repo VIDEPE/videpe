@@ -151,8 +151,6 @@ export function useShanoirData({
   useEffect(() => {
     if (!client) return; // not launched from Shanoir
     const controller = new AbortController(); // new one per load: once aborted, it stays aborted
-    // False positive: every setState in the load comes after an `await`, which this rule can't follow.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     startLoad(controller.signal);
     return () => controller.abort(); // runs later, on unmount — not now
   }, [client, examinationId]);

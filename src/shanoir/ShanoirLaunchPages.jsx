@@ -46,7 +46,7 @@ export function ShanoirErrorPage({ error }) {
         <p>Reopen VIDEPE from Shanoir</p>
         <p>or</p>
         <p>
-          <a>Open </a>
+          Open{' '}
           <a className="underline" href={import.meta.env.BASE_URL}>
             VIDEPE without Shanoir
           </a>{' '}
