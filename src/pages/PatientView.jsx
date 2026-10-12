@@ -263,13 +263,13 @@ export const PatientView = () => {
               href={`${import.meta.env.BASE_URL}#/about`}
               target="_blank"
               rel="noopener noreferrer"
-              className="button flex items-center gap-2 px-3 py-1"
+              className="button flex items-center gap-2 px-3 py-1 whitespace-nowrap"
               title="Opens in a new tab"
             >
               <Info size={16} /> About VIDEPE
             </a>
           ) : (
-            <Link to="/" className="button flex items-center gap-2 px-3 py-1">
+            <Link to="/" className="button flex items-center gap-2 px-3 py-1 whitespace-nowrap">
               <ArrowLeft size={16} /> Back
             </Link>
           )}
@@ -290,7 +290,7 @@ export const PatientView = () => {
             /* Normal VIDEPE: Load Demo / Reset button */
             <button
               type="button"
-              className="button px-3 py-1"
+              className="button px-3 py-1 whitespace-nowrap"
               onClick={
                 eeg || layers.length > 0 || pendingEegFiles.length > 0
                   ? handleReset
