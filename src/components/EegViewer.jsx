@@ -206,7 +206,11 @@ export const EegViewer = ({
   const { containerRef, width: plotWidth, height: channelAreaHeight } = useContainerResize();
 
   // Drag-to-resize for the canvas row's min-height.
-  const { rowRef, handleResizeStart } = useRowResize(MIN_PLOT_ROW_HEIGHT);
+  const {
+    rowRef,
+    handleResizeStart,
+    isDragging: isRowResizing,
+  } = useRowResize(MIN_PLOT_ROW_HEIGHT);
 
   // Channel count / x-range / time-step / y-range controls, plus their input handlers
   const {
@@ -967,9 +971,9 @@ export const EegViewer = ({
           className="flex-1 flex flex-row"
           style={{ minHeight: MIN_PLOT_ROW_HEIGHT }}
         >
-          {/* Left sidebar: Channels controls centered in the available height, Montage pinned to the bottom-left corner */}
+          {/* Left sidebar: Topo/3D/ESI toggles at the top with the Channels controls directly below them, Montage pinned to the bottom-left corner */}
           <div className="shrink-0 flex flex-col px-1">
-            <div className="flex flex-col gap-1 absolute pl-7 pt-7">
+            <div className="flex flex-col gap-1 pl-7 pt-5 sm:pt-7">
               {/* EEG Topography Toggle*/}
               <div
                 className=""
@@ -1052,12 +1056,8 @@ export const EegViewer = ({
               </div>
             </div>
 
-            {/* Channel Controls — the stack toggle lives at the bottom of this same bordered
-                box (rather than in the icon list above) to show it's linked to the channel-count
-                controls above it: stacking overlays every channel into one plot sized like a
-                single unstacked lane, so "how many channels" no longer applies and those
-                controls are disabled while it's active. */}
-            <div className="flex-1 flex flex-row items-center">
+            {/* Channel Controls */}
+            <div className="flex-1 flex flex-row items-start mt-5 sm:mt-10">
               <div className="flex flex-row items-center gap-1 py-1 border-border/50 border-1 border-r-0 rounded-tl-md rounded-bl-md">
                 <span className="text-xs text-foreground/60 whitespace-nowrap [writing-mode:vertical-rl] rotate-180 select-none pointer-events-none">
                   Channels
@@ -1471,9 +1471,10 @@ export const EegViewer = ({
           since min-height never shrinks a flex item below what it'd render at anyway. See handleCanvasResizeStart*/}
         <div
           data-testid="eeg-plot-resize-handle"
-          className="h-1.5 w-full shrink-0 cursor-row-resize rounded-sm select-none bg-border hover:bg-secondary active:bg-primary"
+          className={`h-1.5 pointer-coarse:h-3 w-full shrink-0 cursor-row-resize rounded-sm select-none touch-none ${isRowResizing ? 'bg-primary' : 'bg-border hover:bg-secondary'}`}
           title="Drag to resize the EEG plot area"
           onMouseDown={handleResizeStart}
+          onTouchStart={handleResizeStart}
         />
       </div>
 

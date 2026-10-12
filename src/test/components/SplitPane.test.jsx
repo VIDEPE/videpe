@@ -166,3 +166,20 @@ describe('SplitPane — reset buttons', () => {
     expect(within(getRightHeader()).queryByTitle('Reset viewer')).not.toBeInTheDocument();
   });
 });
+
+describe('SplitPane — touch drag', () => {
+  it('highlights the divider while it is dragged and stops when the touch ends', () => {
+    renderPane();
+    fireEvent.touchStart(getDivider(), { touches: [{ clientX: 0, clientY: 0 }] });
+    expect(getDivider()).toHaveClass('bg-primary');
+    fireEvent.touchEnd(window);
+    expect(getDivider()).not.toHaveClass('bg-primary');
+  });
+
+  it('stops the drag when the touch is cancelled (e.g. by a system gesture)', () => {
+    renderPane();
+    fireEvent.touchStart(getDivider(), { touches: [{ clientX: 0, clientY: 0 }] });
+    fireEvent.touchCancel(window); // no touchend follows a cancelled touch
+    expect(getDivider()).not.toHaveClass('bg-primary');
+  });
+});
