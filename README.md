@@ -164,7 +164,7 @@ Three GitHub Actions workflows handle testing and deployment:
 - This work was funded by the [CIBM Center for Biomedical Imaging](https://cibm.ch/).
 - This work was funded by [a grant](https://www.fondationhug.org/reunir-les-donnees-pour-mieux-soigner-une-solution-numerique-pour-la-chirurgie-de-lepilepsie) from the [Private Foundation of the Geneva University Hospitals (HUG)](https://www.fondationhug.org/en).
 - This work received the Pépite Award from the [Innovation Center of the Geneva University Hospitals (HUG)](https://www.hug.ch/en/innovation-center).
-- Dr. Nicolas Roehri is supported by the [Swiss National Science Foundation](https://www.snf.ch/en) ([grant 209120](https://data.snf.ch/grants/grant/209120)).
+- Dr. Nicolas Roehri is supported by the [Swiss National Science Foundation](https://www.snf.ch/en) ([Ambizione grant 209120](https://data.snf.ch/grants/grant/209120)).
 
 ## Links
 

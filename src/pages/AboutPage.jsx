@@ -697,7 +697,7 @@ export const AboutPage = () => {
                 rel="noreferrer"
                 style={{ color: 'var(--c-primary)' }}
               >
-                grant 209120
+                Ambizione grant 209120
               </a>
               ).
             </FundingBadge>
