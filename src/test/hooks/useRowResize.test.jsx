@@ -6,8 +6,16 @@ import { useRowResize } from '@/hooks/useRowResize';
 // NiiViewer.test.jsx and EegViewer.test.jsx keeps one smoke test confirming the hook is actually wired up to the real resize handle.
 
 function TestComponent({ minHeight }) {
-  const { rowRef, handleResizeStart } = useRowResize(minHeight);
-  return <div data-testid="row" ref={rowRef} onMouseDown={handleResizeStart} />;
+  const { rowRef, handleResizeStart, isDragging } = useRowResize(minHeight);
+  return (
+    <div
+      data-testid="row"
+      data-dragging={isDragging}
+      ref={rowRef}
+      onMouseDown={handleResizeStart}
+      onTouchStart={handleResizeStart}
+    />
+  );
 }
 
 describe('useRowResize', () => {
@@ -62,5 +70,57 @@ describe('useRowResize', () => {
     fireEvent.mouseMove(window, { clientY: 500 }); // should be ignored — drag already ended
 
     expect(row.style.minHeight).toBe('500px');
+  });
+
+  // isDragging lets the handle stay highlighted for the whole drag, even when the pointer or
+  // finger moves off it (CSS :active doesn't cover that)
+  it('reports isDragging for the whole mouse drag', () => {
+    const row = setup();
+    expect(row.dataset.dragging).toBe('false');
+    fireEvent.mouseDown(row, { clientY: 0 });
+    fireEvent.mouseMove(window, { clientY: 100 });
+    expect(row.dataset.dragging).toBe('true');
+    fireEvent.mouseUp(window);
+    expect(row.dataset.dragging).toBe('false');
+  });
+
+  // Touch screens send touch events instead of mouse events while dragging a finger
+  describe('touch', () => {
+    it('reports isDragging until the touch ends', () => {
+      const row = setup();
+      fireEvent.touchStart(row, { touches: [{ clientY: 0 }] });
+      fireEvent.touchMove(window, { touches: [{ clientY: 100 }] });
+      expect(row.dataset.dragging).toBe('true');
+      fireEvent.touchEnd(window);
+      expect(row.dataset.dragging).toBe('false');
+    });
+
+    it('resizes the row when the handle is dragged with a finger', () => {
+      const row = setup();
+      fireEvent.touchStart(row, { touches: [{ clientY: 0 }] });
+      fireEvent.touchMove(window, { touches: [{ clientY: 150 }] });
+      fireEvent.touchEnd(window);
+
+      expect(row.style.minHeight).toBe('550px'); // 400 (starting height) + 150 (drag delta)
+    });
+
+    it('stops responding to finger movement once the touch ends', () => {
+      const row = setup();
+      fireEvent.touchStart(row, { touches: [{ clientY: 0 }] });
+      fireEvent.touchMove(window, { touches: [{ clientY: 100 }] });
+      fireEvent.touchEnd(window);
+      fireEvent.touchMove(window, { touches: [{ clientY: 500 }] }); // drag already ended
+
+      expect(row.style.minHeight).toBe('500px');
+    });
+
+    it('stops the drag when the touch is cancelled (e.g. by a system gesture)', () => {
+      const row = setup();
+      fireEvent.touchStart(row, { touches: [{ clientY: 0 }] });
+      fireEvent.touchCancel(window);
+      fireEvent.touchMove(window, { touches: [{ clientY: 500 }] });
+
+      expect(row.style.minHeight).toBe(''); // never resized
+    });
   });
 });

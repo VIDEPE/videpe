@@ -40,12 +40,53 @@ const Section = ({ title, id, className, children }) => (
   </section>
 );
 
-const PersonCard = ({ name, role, affiliation, url, urlLabel, secondaryUrl, secondaryLabel }) => (
+// ORCID iD icon (green circle with "iD"), the usual mark next to a researcher's name
+const OrcidIcon = ({ size = 16 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+    <circle cx="12" cy="12" r="12" fill="#A6CE39" />
+    <text
+      x="12"
+      y="16.5"
+      textAnchor="middle"
+      fontSize="12"
+      fontWeight="bold"
+      fontFamily="Arial, sans-serif"
+      fill="#fff"
+    >
+      iD
+    </text>
+  </svg>
+);
+
+const PersonCard = ({
+  name,
+  role,
+  affiliation,
+  orcid,
+  url,
+  urlLabel,
+  secondaryUrl,
+  secondaryLabel,
+}) => (
   <div
     className="flex flex-col gap-1 p-4 rounded-lg border"
     style={{ borderColor: 'var(--c-border)', background: 'var(--c-surface)' }}
   >
-    <p className="font-bold text-heading">{name}</p>
+    <p className="flex items-center gap-1.5 font-bold text-heading">
+      {name}
+      {orcid && (
+        <a
+          href={`https://orcid.org/${orcid}`}
+          target="_blank"
+          rel="noreferrer"
+          aria-label={`ORCID profile of ${name}`}
+          title={`ORCID: ${orcid}`}
+          className="shrink-0"
+        >
+          <OrcidIcon />
+        </a>
+      )}
+    </p>
     <p className="text-sm text-heading font-thin">{role}</p>
     {affiliation &&
       (Array.isArray(affiliation) ? affiliation : [affiliation]).map((a, i) => (
@@ -548,6 +589,7 @@ export const AboutPage = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <PersonCard
               name="Dr. Jeroen Buil"
+              orcid="0009-0005-6448-0650"
               role="Biomedical Engineer & Software Developer"
               affiliation="Department of Clinical Neuroscience - University of Geneva (UNIGE)"
               url="https://jeroenbuil.github.io/"
@@ -557,6 +599,7 @@ export const AboutPage = () => {
             />
             <PersonCard
               name="Dr. Nicolas Roehri"
+              orcid="0000-0002-6948-1055"
               role="Principal Investigator"
               affiliation="Department of Clinical Neuroscience - University of Geneva (UNIGE)"
               url="https://neurocenter-unige.ch/research-groups/nicolas-roehri/"
@@ -566,6 +609,7 @@ export const AboutPage = () => {
             />
             <PersonCard
               name="Dr. Isotta Rigoni"
+              orcid="0000-0002-5804-2137"
               role="Maître Assistante"
               affiliation="Department of Clinical Neuroscience - University of Geneva (UNIGE)"
               url="https://www.unige.ch/medecine/neucli/groupes-de-recherche/serge-vulliemoz/membres-du-groupe/isotta-rigoni"
@@ -575,6 +619,7 @@ export const AboutPage = () => {
             />
             <PersonCard
               name="Prof. Serge Vulliémoz, MD"
+              orcid="0000-0002-1877-8625"
               role="Associate Professor"
               affiliation={[
                 'EEG and Epilepsy Unit - Geneva University Hospitals (HUG)',
@@ -603,7 +648,16 @@ export const AboutPage = () => {
               .
             </FundingBadge>
             <FundingBadge>
-              This work was funded by a grant from the{' '}
+              This work was funded by{' '}
+              <a
+                href="https://www.fondationhug.org/reunir-les-donnees-pour-mieux-soigner-une-solution-numerique-pour-la-chirurgie-de-lepilepsie"
+                target="_blank"
+                rel="noreferrer"
+                style={{ color: 'var(--c-primary)' }}
+              >
+                a grant
+              </a>{' '}
+              from the{' '}
               <a
                 href="https://www.fondationhug.org/en"
                 target="_blank"
@@ -643,7 +697,7 @@ export const AboutPage = () => {
                 rel="noreferrer"
                 style={{ color: 'var(--c-primary)' }}
               >
-                grant 209120
+                Ambizione grant 209120
               </a>
               ).
             </FundingBadge>

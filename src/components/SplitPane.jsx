@@ -20,7 +20,7 @@ export const SplitPane = ({
   const [splitPercent, setSplitPercent] = useState(defaultSplitPercent); // proportion of the first panel (0–100)
   const [maximized, setMaximized] = useState(null); // null | 'left' | 'right'
   const [swapped, setSwapped] = useState(false); // whether the left/right (or top/bottom) content is swapped
-  const [isDragging, setIsDragging] = useState(false); // true while the divider is being dragged — used to highlight it on touch where active: pseudo-class is unreliable
+  const [isSplitResizing, setIsSplitResizing] = useState(false); // true while the divider is being dragged — used to highlight it on touch where active: pseudo-class is unreliable
   const [isColumn, setIsColumn] = useState(
     () => typeof window !== 'undefined' && window.innerWidth < COLUMN_BREAKPOINT
   ); // true on narrow viewports — panels stack vertically instead of side by side
@@ -28,7 +28,7 @@ export const SplitPane = ({
   const containerRef = useRef(null); // for measuring dimensions and mouse/touch position during drag
   const leftPanelRef = useRef(null); // for directly updating panel sizes during drag without triggering React re-renders
   const rightPanelRef = useRef(null);
-  const isDraggingRef = useRef(false); // tracks whether the divider is currently being dragged
+  const isSplitResizingRef = useRef(false); // tracks whether the divider is currently being dragged
   const rafRef = useRef(null); // stores the pending requestAnimationFrame id so we can cancel it if needed
   const splitPercentRef = useRef(50); // mirrors splitPercent without triggering re-renders during drag
   const swappedRef = useRef(false); // mirrors swapped for use inside rAF callbacks
@@ -61,12 +61,12 @@ export const SplitPane = ({
   useEffect(() => {
     // Shared drag update logic — used by both mouse and touch handlers
     const applyDrag = (clientX, clientY) => {
-      if (!isDraggingRef.current || !containerRef.current) return;
+      if (!isSplitResizingRef.current || !containerRef.current) return;
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
 
       // Capture coordinates before the rAF fires — the event object may be recycled by then
       rafRef.current = requestAnimationFrame(() => {
-        if (!isDraggingRef.current || !containerRef.current) return;
+        if (!isSplitResizingRef.current || !containerRef.current) return;
         const rect = containerRef.current.getBoundingClientRect();
         const isCol = isColumnRef.current;
         const isSwapped = swappedRef.current;
@@ -105,17 +105,17 @@ export const SplitPane = ({
       // Guard: this listener is global (any mouseup in the window), not scoped to the divider,
       // so without this check releasing an unrelated drag (e.g. a parent window's title bar)
       // would force-sync splitPercent to the stale splitPercentRef default and clobber it.
-      if (!isDraggingRef.current) return;
+      if (!isSplitResizingRef.current) return;
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      isDraggingRef.current = false;
-      setIsDragging(false);
+      isSplitResizingRef.current = false;
+      setIsSplitResizing(false);
       // Sync React state once at end of drag so subsequent renders use the correct value
       setSplitPercent(splitPercentRef.current);
     };
 
     const onMouseMove = (e) => applyDrag(e.clientX, e.clientY);
     const onTouchMove = (e) => {
-      if (!isDraggingRef.current) return;
+      if (!isSplitResizingRef.current) return;
       e.preventDefault(); // prevent page scroll while dragging the divider
       applyDrag(e.touches[0].clientX, e.touches[0].clientY);
     };
@@ -124,11 +124,13 @@ export const SplitPane = ({
     window.addEventListener('mouseup', stopDrag);
     window.addEventListener('touchmove', onTouchMove, { passive: false });
     window.addEventListener('touchend', stopDrag);
+    window.addEventListener('touchcancel', stopDrag); // interrupted touch (e.g. a system gesture): no touchend follows
     return () => {
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', stopDrag);
       window.removeEventListener('touchmove', onTouchMove);
       window.removeEventListener('touchend', stopDrag);
+      window.removeEventListener('touchcancel', stopDrag);
     };
   }, []);
 
@@ -182,7 +184,7 @@ export const SplitPane = ({
       {/* Left/top content — DOM-first; visually right/bottom when swapped (order:3) */}
       <div
         ref={leftPanelRef}
-        className={`flex flex-col min-h-0 overflow-hidden ${isDragging ? '' : 'transition-[width,flex-grow] duration-200 ease-in-out'}`}
+        className={`flex flex-col min-h-0 overflow-hidden ${isSplitResizing ? '' : 'transition-[width,flex-grow] duration-200 ease-in-out'}`}
         style={leftStyle}
       >
         {panelHeader(leftLabel, 'left', onLeftReset)}
@@ -196,19 +198,20 @@ export const SplitPane = ({
           style={{ order: 2 }}
           className={
             isColumn
-              ? `h-1.5 w-full shrink-0 cursor-row-resize my-1 transition-colors select-none ${isDragging ? 'bg-primary' : 'bg-border hover:bg-secondary'}`
-              : `w-1.5 shrink-0 cursor-col-resize mx-1 transition-colors select-none ${isDragging ? 'bg-primary' : 'bg-border hover:bg-secondary'}`
+              ? `h-1.5 pointer-coarse:h-4 w-full shrink-0 cursor-row-resize rounded-sm my-1 transition-colors select-none touch-none ${isSplitResizing ? 'bg-primary' : 'bg-border hover:bg-secondary'}`
+              : `w-1.5 pointer-coarse:w-4 shrink-0 cursor-col-resize rounded-sm mx-1 transition-colors select-none touch-none ${isSplitResizing ? 'bg-primary' : 'bg-border hover:bg-secondary'}`
           }
           title="Drag to resize the split view"
           onMouseDown={(e) => {
             e.preventDefault();
-            isDraggingRef.current = true;
-            setIsDragging(true);
+            isSplitResizingRef.current = true;
+            setIsSplitResizing(true);
           }}
-          onTouchStart={(e) => {
-            e.preventDefault();
-            isDraggingRef.current = true;
-            setIsDragging(true);
+          // No preventDefault here: React's touchstart listener is passive, so it would be ignored
+          // (with a console warning). touch-none on the divider and onTouchMove stop the page scroll.
+          onTouchStart={() => {
+            isSplitResizingRef.current = true;
+            setIsSplitResizing(true);
           }}
         />
       )}
@@ -216,7 +219,7 @@ export const SplitPane = ({
       {/* Right/bottom content — DOM-second; visually left/top when swapped (order:1) */}
       <div
         ref={rightPanelRef}
-        className={`flex flex-col min-h-0 overflow-hidden ${isDragging ? '' : 'transition-[width,flex-grow] duration-200 ease-in-out'}`}
+        className={`flex flex-col min-h-0 overflow-hidden ${isSplitResizing ? '' : 'transition-[width,flex-grow] duration-200 ease-in-out'}`}
         style={rightStyle}
       >
         {panelHeader(rightLabel, 'right', onRightReset)}

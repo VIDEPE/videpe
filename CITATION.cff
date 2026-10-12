@@ -1,0 +1,47 @@
+cff-version: 1.2.0
+message: 'If you use VIDEPE in your work, please cite it using the metadata below.'
+type: software
+title: 'VIDEPE: Visualization & Integration of Data for Epilepsy Presurgical Evaluation'
+abstract: >-
+  VIDEPE is an open-source web application for reviewing EEG and neuroimaging data
+  (MRI, PET, SPECT) side by side, developed at the Epilepsy and Brain Networks Lab,
+  University of Geneva. It runs entirely in the browser: no installation, and no
+  data is uploaded.
+doi: 10.5281/zenodo.23312820
+authors:
+  - given-names: Jeroen
+    family-names: Buil
+    affiliation: 'University of Geneva (UNIGE)'
+    orcid: 'https://orcid.org/0009-0005-6448-0650'
+  - given-names: Nicolas
+    family-names: Roehri
+    affiliation: 'Department of Clinical Neuroscience, University of Geneva (UNIGE)'
+    orcid: 'https://orcid.org/0000-0002-6948-1055'
+  - given-names: Isotta
+    family-names: Rigoni
+    affiliation: 'Department of Clinical Neuroscience, University of Geneva (UNIGE)'
+    orcid: 'https://orcid.org/0000-0002-5804-2137'
+  - given-names: Serge
+    family-names: Vulliémoz
+    affiliation: 'EEG and Epilepsy Unit, Geneva University Hospitals (HUG)'
+    orcid: 'https://orcid.org/0000-0002-1877-8625'
+license: AGPL-3.0-only
+repository-code: 'https://github.com/VIDEPE/videpe'
+url: 'https://videpe.github.io/videpe/'
+keywords:
+  - Brain Imaging Data Structure (BIDS)
+  - DICOM
+  - Drug Resistant Epilepsy
+  - Electrical Source Imaging (ESI)
+  - Electroencephalography (EEG)
+  - Epilepsy
+  - Intracranial EEG
+  - Magnetic Resonance Imaging (MRI)
+  - Neuroimaging
+  - NIfTI
+  - Open Source
+  - Positron Emission Tomography (PET)
+  - Preoperative Care
+  - Presurgical Evaluation
+  - Stereoelectroencephalography (SEEG)
+  - Web Application
