@@ -1,6 +1,7 @@
 # VIDEPE
 
-![Version](https://img.shields.io/badge/version-0.19.0-blue)
+![Version](https://img.shields.io/badge/version-0.19.1-blue)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23312820.svg)](https://doi.org/10.5281/zenodo.23312820)
 
 **V**isualization & **I**ntegration of **D**ata for **E**pilepsy **P**resurgical **E**valuation
 
@@ -161,7 +162,7 @@ Three GitHub Actions workflows handle testing and deployment:
 ## Funding & Support
 
 - This work was funded by the [CIBM Center for Biomedical Imaging](https://cibm.ch/).
-- This work was funded by a grant from the [Private Foundation of the Geneva University Hospitals (HUG)](https://www.fondationhug.org/en).
+- This work was funded by [a grant](https://www.fondationhug.org/reunir-les-donnees-pour-mieux-soigner-une-solution-numerique-pour-la-chirurgie-de-lepilepsie) from the [Private Foundation of the Geneva University Hospitals (HUG)](https://www.fondationhug.org/en).
 - This work received the Pépite Award from the [Innovation Center of the Geneva University Hospitals (HUG)](https://www.hug.ch/en/innovation-center).
 - Dr. Nicolas Roehri is supported by the [Swiss National Science Foundation](https://www.snf.ch/en) ([grant 209120](https://data.snf.ch/grants/grant/209120)).
 
