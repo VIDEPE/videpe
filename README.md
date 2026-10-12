@@ -155,9 +155,9 @@ Three GitHub Actions workflows handle testing and deployment:
 ## Team
 
 - **Dr. Jeroen Buil**: Biomedical Engineer & Software Developer, Department of Clinical Neuroscience, University of Geneva (UNIGE) ([website](https://jeroenbuil.github.io/), [LinkedIn](https://linkedin.com/in/jeroen-buil))
-- **Dr. Nicolas Roehri**: Principal Investigator, Department of Clinical Neuroscience, University of Geneva (UNIGE) ([research group](https://neurocenter-unige.ch/research-groups/nicolas-roehri/), [LinkedIn](https://linkedin.com/in/nicolas-roehri-43526580))
-- **Dr. Isotta Rigoni**: Maître Assistante, Department of Clinical Neuroscience, University of Geneva (UNIGE) ([profile](https://www.unige.ch/medecine/neucli/groupes-de-recherche/serge-vulliemoz/membres-du-groupe/isotta-rigoni), [LinkedIn](https://linkedin.com/in/isotta-rigoni))
 - **Prof. Serge Vulliémoz, MD**: Associate Professor, EEG and Epilepsy Unit, Geneva University Hospitals (HUG) and Center for Biomedical Imaging (CIBM) ([research group](https://neurocenter-unige.ch/research-groups/serge-vulliemoz/))
+- **Dr. Isotta Rigoni**: Maître Assistante, Department of Clinical Neuroscience, University of Geneva (UNIGE) ([profile](https://www.unige.ch/medecine/neucli/groupes-de-recherche/serge-vulliemoz/membres-du-groupe/isotta-rigoni), [LinkedIn](https://linkedin.com/in/isotta-rigoni))
+- **Dr. Nicolas Roehri**: Principal Investigator, Department of Clinical Neuroscience, University of Geneva (UNIGE) ([research group](https://neurocenter-unige.ch/research-groups/nicolas-roehri/), [LinkedIn](https://linkedin.com/in/nicolas-roehri-43526580))
 
 ## Funding & Support
 
