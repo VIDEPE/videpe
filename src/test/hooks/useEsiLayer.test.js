@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor, act } from '@testing-library/react';
 import { useEsiLayer } from '@/hooks/useEsiLayer';
-import { ESI_LAYER_URL } from '@/utils/NiiViewer.utils';
+import { ESI_LAYER_URL, DEFAULT_MESH_XRAY } from '@/utils/NiiViewer.utils';
 
 // This hook has no NiiViewer.test.jsx integration coverage today (unlike the intracranial
 // connectome, which is exercised extensively there) — these tests cover the connectome/volume
@@ -179,14 +179,14 @@ describe('useEsiLayer', () => {
     });
 
     // Regression test: NiiVue's own default for nv.opts.meshXRay is 0, but this app's default
-    // settings value (see getInitialLayerSettings) is 1 — the build effect must write that
+    // settings value (DEFAULT_MESH_XRAY) differs — the build effect must write that
     // default onto nv.opts.meshXRay itself, not just leave it for the user's own slider drag.
-    it('initializes nv.opts.meshXRay to the default settings value (1) when the mesh is first built', () => {
+    it('initializes nv.opts.meshXRay to DEFAULT_MESH_XRAY when the mesh is first built', () => {
       const esiLayer = makeEsiLayer();
       renderHook((props) => useHarness(props), {
         initialProps: { esiLayer, isEsiVolumeMode: false, nvRef },
       });
-      expect(nv.opts.meshXRay).toBe(1);
+      expect(nv.opts.meshXRay).toBe(DEFAULT_MESH_XRAY);
     });
 
     // Regression test: on first appearance the build effect runs before the merge effect's new

@@ -22,6 +22,7 @@ import {
   MAX_RANDOM_COLORMAP_LABELS,
   ESI_LAYER_URL,
   ELECTRODE_LAYER_URL,
+  DEFAULT_MESH_XRAY,
 } from '@/utils/NiiViewer.utils';
 
 describe('isAnyColorbarActive', () => {
@@ -68,10 +69,10 @@ describe('isImageVolumeLayer', () => {
 });
 
 describe('getCurrentMeshXRay', () => {
-  it('returns 1 (the default) when there is no mesh/connectome layer yet', () => {
+  it('returns DEFAULT_MESH_XRAY when there is no mesh/connectome layer yet', () => {
     const layers = [{ type: 'MRI' }, { type: 'PET' }];
     const layerSettings = [{ meshXRay: 1 }, { meshXRay: 0.6 }];
-    expect(getCurrentMeshXRay(layers, layerSettings)).toBe(1);
+    expect(getCurrentMeshXRay(layers, layerSettings)).toBe(DEFAULT_MESH_XRAY);
   });
 
   it("returns the first mesh/connectome layer's meshXRay", () => {

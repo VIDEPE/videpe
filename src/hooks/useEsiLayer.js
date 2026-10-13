@@ -220,8 +220,8 @@ export function useEsiLayer({
       });
       mesh.opacity = settings.visible ? settings.opacity : 0;
       // nv.opts.meshXRay is a scene-global NiiVue option, not a per-mesh property, and NiiVue's
-      // own default (0) doesn't match this app's default (1, see getInitialLayerSettings) —
-      // apply it here on build, or the card's slider would show 100% while the mesh actually
+      // own default (0) doesn't match this app's default (DEFAULT_MESH_XRAY, see getInitialLayerSettings) —
+      // apply it here on build, or the card's slider would show 75% while the mesh actually
       // renders opaque until the user drags the slider once.
       nv.opts.meshXRay = settings.meshXRay;
 

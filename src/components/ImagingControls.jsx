@@ -10,6 +10,7 @@ import {
   isImageVolumeLayer,
   DEFAULT_NODE_SCALE,
   DEFAULT_EDGE_SCALE,
+  DEFAULT_MESH_XRAY,
 } from '@/utils/NiiViewer.utils';
 import { useDoubleClickToDefault } from '@/hooks/useSingleAndDoubleClick';
 import { cn } from '@/utils/utils';
@@ -289,7 +290,7 @@ function SortableSettingsCard({
   const handleOpacityThumbClick = useDoubleClickToDefault(commitOpacity, 100);
   const handleCalMinThumbClick = useDoubleClickToDefault(commitCalMin, isEsiLayer ? 1 : 0);
   const handleCalMaxThumbClick = useDoubleClickToDefault(commitCalMax, 100);
-  const handleMeshXRayThumbClick = useDoubleClickToDefault(commitMeshXRay, 100);
+  const handleMeshXRayThumbClick = useDoubleClickToDefault(commitMeshXRay, DEFAULT_MESH_XRAY * 100); // commitMeshXRay takes a percentage
   const handleNodeScaleThumbClick = useDoubleClickToDefault(
     (val) => onSettingChange(index, 'nodeScale', val),
     DEFAULT_NODE_SCALE

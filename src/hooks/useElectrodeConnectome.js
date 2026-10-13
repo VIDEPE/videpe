@@ -192,8 +192,8 @@ export function useElectrodeConnectome({
     });
 
     mesh.opacity = settings.visible ? settings.opacity : 0; // 0 = hidden, same convention as image volumes
-    // meshXRay is scene-global, and NiiVue's default (0) doesn't match this app's (1) — apply
-    // it on build, or the card's slider reads 100% while the mesh renders opaque.
+    // meshXRay is scene-global, and NiiVue's default (0) doesn't match this app's (DEFAULT_MESH_XRAY) — apply
+    // it on build, or the card's slider reads 75% while the mesh renders opaque.
     nv.opts.meshXRay = settings.meshXRay;
 
     nv.addMesh(mesh);

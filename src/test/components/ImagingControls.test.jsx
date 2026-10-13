@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ImagingControls } from '@/components/ImagingControls';
+import { DEFAULT_MESH_XRAY } from '@/utils/NiiViewer.utils';
 
 const makeVolume = (type, url) => ({ type, url });
 
@@ -741,14 +742,14 @@ describe('ImagingControls', () => {
       expect(onSettingChange).toHaveBeenCalledWith(0, 'cal_max', 1);
     });
 
-    it('resets Mesh Xray to 100% (1.0)', async () => {
+    it('resets Mesh Xray to DEFAULT_MESH_XRAY (0.75)', async () => {
       const onSettingChange = vi.fn();
       renderControls([makeIntracranialLayer()], [makeSettings({ meshXRay: 0.3 })], onSettingChange);
       await userEvent.click(
         screen.getByRole('button', { name: /expand.*intracranial - electrodes/i })
       );
       doubleClick(screen.getByLabelText('Intracranial - Electrodes meshXRay slider'));
-      expect(onSettingChange).toHaveBeenCalledWith(0, 'meshXRay', 1);
+      expect(onSettingChange).toHaveBeenCalledWith(0, 'meshXRay', DEFAULT_MESH_XRAY);
     });
 
     it('resets Node Size to DEFAULT_NODE_SCALE (4)', async () => {
