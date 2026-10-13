@@ -835,6 +835,13 @@ describe('NiiViewer', () => {
       expect(result[1].opacity).toBe(0.6);
     });
 
+    it('in ESI volume mode, a non-first layer defaults to 0.9 opacity, but the first layer stays fully opaque', () => {
+      const [first] = getInitialLayerSettings([{ url: ESI_LAYER_URL }], 0, true);
+      const [later] = getInitialLayerSettings([{ url: ESI_LAYER_URL }], 1, true);
+      expect(first.opacity).toBe(1.0);
+      expect(later.opacity).toBe(0.9);
+    });
+
     it('defaults electrodeDisplayMode to "none" for the Electrodes layer only', () => {
       const result = getInitialLayerSettings([
         { type: 'MRI' },

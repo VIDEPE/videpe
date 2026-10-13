@@ -174,7 +174,12 @@ export function useEsiLayer({
     const existingIndex = orderedLayers.findIndex((l) => l.url === ESI_LAYER_URL);
     const settings =
       layerSettings[existingIndex] ?? // existing settings, preserved across this rebuild
-      getInitialLayerSettings([activeEsiLayer], orderedLayers.length)[0]; // fresh defaults on first appearance
+      getInitialLayerSettings(
+        [activeEsiLayer],
+        orderedLayers.length,
+        isEsiVolumeMode,
+        getCurrentMeshXRay(orderedLayers, layerSettings)
+      )[0]; // fresh defaults on first appearance — same args as the merge effect's, so the two match
 
     if (activeEsiLayer.kind === 'connectome') {
       // Connectome mode — drop any leftover volume from a previous volume-mode rebuild first.

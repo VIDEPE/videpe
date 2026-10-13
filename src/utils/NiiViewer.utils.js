@@ -62,7 +62,12 @@ export const getInitialLayerSettings = (
   layers.map((layer, index) => ({
     url: layer.url, // identifier to link this settings entry to its layer, since array position can shift
     visible: true, // eye-toggle state — hidden layers get their opacity forced to 0 downstream
-    opacity: startIndex + index === 0 ? 1.0 : 0.6, // first loaded layer is fully opaque, others slightly transparent by default
+    opacity:
+      startIndex + index === 0
+        ? 1.0 // first loaded layer is fully opaque, others slightly transparent by default
+        : isEsiVolumeMode
+          ? 0.9 // Esi Volumes are more opaque than other layers
+          : 0.6,
     meshXRay: currentMeshXRay, // shared across all mesh/connectome layers
     nodeScale: DEFAULT_NODE_SCALE, // connectome-only — radius multiplier for node spheres, per-layer (unlike meshXRay)
     edgeScale: DEFAULT_EDGE_SCALE, // connectome-only — radius multiplier for edge tubes, per-layer (unlike meshXRay)
