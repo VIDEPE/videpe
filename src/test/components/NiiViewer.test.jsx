@@ -8,6 +8,7 @@ import {
   filesToLayers,
   ESI_LAYER_URL,
   ELECTRODE_LAYER_URL,
+  DEFAULT_MESH_XRAY,
 } from '@/utils/NiiViewer.utils';
 import {
   NiiViewer,
@@ -835,6 +836,13 @@ describe('NiiViewer', () => {
       expect(result[1].opacity).toBe(0.6);
     });
 
+    it('in ESI volume mode, a non-first layer defaults to 0.9 opacity, but the first layer stays fully opaque', () => {
+      const [first] = getInitialLayerSettings([{ url: ESI_LAYER_URL }], 0, true);
+      const [later] = getInitialLayerSettings([{ url: ESI_LAYER_URL }], 1, true);
+      expect(first.opacity).toBe(1.0);
+      expect(later.opacity).toBe(0.9);
+    });
+
     it('defaults electrodeDisplayMode to "none" for the Electrodes layer only', () => {
       const result = getInitialLayerSettings([
         { type: 'MRI' },
@@ -1294,10 +1302,10 @@ describe('NiiViewer', () => {
     };
 
     // Regression test: NiiVue's own default for nv.opts.meshXRay is 0, but this app's default
-    // settings value (see getInitialLayerSettings) is 1 — that default must be written onto
+    // settings value (DEFAULT_MESH_XRAY) differs — that default must be written onto
     // nv.opts.meshXRay as soon as a mesh/connectome is built, not only once the user drags the
     // slider (which is the only other place that write happened before this fix).
-    it('initializes nv.opts.meshXRay to the default settings value (1) as soon as a mesh/connectome loads, without needing a user interaction', async () => {
+    it('initializes nv.opts.meshXRay to DEFAULT_MESH_XRAY as soon as a mesh/connectome loads, without needing a user interaction', async () => {
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
       render(
@@ -1305,7 +1313,7 @@ describe('NiiViewer', () => {
       );
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
 
-      expect(nvRef.current.opts.meshXRay).toBe(1);
+      expect(nvRef.current.opts.meshXRay).toBe(DEFAULT_MESH_XRAY);
     });
 
     // meshXRay's nv-side write is throttled through requestAnimationFrame (one redraw per frame
@@ -1390,7 +1398,9 @@ describe('NiiViewer', () => {
       // Toggling one card's visibility is unrelated to meshXRay and shouldn't broadcast anything.
       await userEvent.click(screen.getByRole('button', { name: /hide.*mesh - cortex/i }));
 
-      expect(screen.getByLabelText('Electrodes - Intracranial EEG meshXRay')).toHaveValue(100);
+      expect(screen.getByLabelText('Electrodes - Intracranial EEG meshXRay')).toHaveValue(
+        DEFAULT_MESH_XRAY * 100
+      );
     });
   });
 

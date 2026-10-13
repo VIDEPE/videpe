@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor, act } from '@testing-library/react';
 import { useEsiLayer } from '@/hooks/useEsiLayer';
-import { ESI_LAYER_URL } from '@/utils/NiiViewer.utils';
+import { ESI_LAYER_URL, DEFAULT_MESH_XRAY } from '@/utils/NiiViewer.utils';
 
 // This hook has no NiiViewer.test.jsx integration coverage today (unlike the intracranial
 // connectome, which is exercised extensively there) — these tests cover the connectome/volume
@@ -67,10 +67,17 @@ function makeNv() {
 // pending (not-yet-in-nv.volumes) MRI/PET layer, same as useLayerLoader does synchronously
 // before its own async nv load resolves. setOrderedLayers/setLayerSettings are also returned
 // so a test can simulate that async load "finishing" (a new orderedLayers/layerSettings array
-// arriving) independently of the ESI layer itself changing.
-function useHarness({ esiLayer, isEsiVolumeMode, nvRef, initialOrderedLayers = [] }) {
+// arriving) independently of the ESI layer itself changing. initialLayerSettings seeds the
+// matching settings entries, for tests that need a pre-existing layer's settings (e.g. meshXRay).
+function useHarness({
+  esiLayer,
+  isEsiVolumeMode,
+  nvRef,
+  initialOrderedLayers = [],
+  initialLayerSettings = [],
+}) {
   const [orderedLayers, setOrderedLayers] = useState(initialOrderedLayers);
-  const [layerSettings, setLayerSettings] = useState([]);
+  const [layerSettings, setLayerSettings] = useState(initialLayerSettings);
   const hookResult = useEsiLayer({
     esiLayer,
     isEsiVolumeMode,
@@ -172,14 +179,33 @@ describe('useEsiLayer', () => {
     });
 
     // Regression test: NiiVue's own default for nv.opts.meshXRay is 0, but this app's default
-    // settings value (see getInitialLayerSettings) is 1 — the build effect must write that
+    // settings value (DEFAULT_MESH_XRAY) differs — the build effect must write that
     // default onto nv.opts.meshXRay itself, not just leave it for the user's own slider drag.
-    it('initializes nv.opts.meshXRay to the default settings value (1) when the mesh is first built', () => {
+    it('initializes nv.opts.meshXRay to DEFAULT_MESH_XRAY when the mesh is first built', () => {
       const esiLayer = makeEsiLayer();
       renderHook((props) => useHarness(props), {
         initialProps: { esiLayer, isEsiVolumeMode: false, nvRef },
       });
-      expect(nv.opts.meshXRay).toBe(1);
+      expect(nv.opts.meshXRay).toBe(DEFAULT_MESH_XRAY);
+    });
+
+    // Regression test: on first appearance the build effect runs before the merge effect's new
+    // settings entry has committed, so it builds from its own fallback defaults. Those must
+    // join the scene's current meshXRay (like the merge effect's entry does), or appearing
+    // resets nv.opts.meshXRay back to 1 while the slider keeps showing the user's value.
+    it("keeps the scene's current meshXRay when the mesh first appears alongside an existing mesh", () => {
+      const meshLayer = { url: 'blob:mesh', name: 'pial.gii', kind: 'mesh' };
+      const esiLayer = makeEsiLayer();
+      renderHook((props) => useHarness(props), {
+        initialProps: {
+          esiLayer,
+          isEsiVolumeMode: false,
+          nvRef,
+          initialOrderedLayers: [meshLayer],
+          initialLayerSettings: [{ url: 'blob:mesh', meshXRay: 0.3 }],
+        },
+      });
+      expect(nv.opts.meshXRay).toBe(0.3);
     });
 
     it('rebuilds the mesh (remove + re-add) when the connectome data object changes', () => {
@@ -299,6 +325,35 @@ describe('useEsiLayer', () => {
       expect(nv.volumes[0].cal_min).toBeCloseTo(1); // 0.01 * 100
       expect(nv.volumes[0].cal_max).toBe(100);
       expect(nv.volumes[0].colormapType).toBe(2); // Hard transition between transparant and opaque
+    });
+
+    it('sets opacity to 1 when esiLayer is the first layer', async () => {
+      const esiLayer = makeEsiLayer();
+      renderHook((props) => useHarness(props), {
+        initialProps: { esiLayer: esiLayer, isEsiVolumeMode: true, nvRef },
+      });
+      await waitFor(() => expect(nv.volumes).toHaveLength(1));
+      // with only 1 layer the opacity should be 1
+      expect(nv.setOpacity).toHaveBeenCalledWith(0, 1);
+    });
+
+    it('sets opacity to 0.9 when esiLayer is not the first layer', async () => {
+      // add mri layer to nv.volumes
+      const mriLayer = { url: 'blob:mri', name: 'mri.nii', kind: 'volume' };
+      nv.volumes = [{ id: 'vol-mri' }];
+      // Add ESI layer, MRI is already known and loaded, so ESI isn't the first layer
+      const esiLayer = makeEsiLayer();
+      renderHook((props) => useHarness(props), {
+        initialProps: {
+          esiLayer,
+          isEsiVolumeMode: true,
+          nvRef,
+          initialOrderedLayers: [mriLayer],
+        },
+      });
+      await waitFor(() => expect(nv.volumes).toHaveLength(2));
+      // with another layer present esi layer opacity should be 0.9
+      expect(nv.setOpacity).toHaveBeenCalledWith(1, 0.9);
     });
 
     it('snaps the crosshair to maxSourcePowerLocation once the volume finishes loading', async () => {

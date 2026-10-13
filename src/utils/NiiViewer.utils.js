@@ -48,21 +48,30 @@ export const isImageVolumeLayer = (layer) => layer.kind !== 'connectome' && laye
 export const DEFAULT_NODE_SCALE = 4;
 export const DEFAULT_EDGE_SCALE = 0.5;
 
+// Mesh X-ray default — the starting value for a scene's first mesh/connectome. Exported for the
+// same reason as the scale defaults above: ImagingControls' double-click reset uses it.
+export const DEFAULT_MESH_XRAY = 0.75;
+
 // Returns default display settings, one per layer. Settings are keyed by the layer's url
 // (not array position, which shifts as layers are added/reordered). startIndex is where
 // `layers` starts among all loaded layers, so only the very first layer overall gets full
-// opacity. currentMeshXRay seeds the meshXRay field: pass 1 for a scene's first mesh/
+// opacity. currentMeshXRay seeds the meshXRay field: pass DEFAULT_MESH_XRAY for a scene's first mesh/
 // connectome, or getCurrentMeshXRay(...) when appending to an already-populated scene.
 export const getInitialLayerSettings = (
   layers,
   startIndex = 0,
   isEsiVolumeMode,
-  currentMeshXRay = 1
+  currentMeshXRay = DEFAULT_MESH_XRAY
 ) =>
   layers.map((layer, index) => ({
     url: layer.url, // identifier to link this settings entry to its layer, since array position can shift
     visible: true, // eye-toggle state — hidden layers get their opacity forced to 0 downstream
-    opacity: startIndex + index === 0 ? 1.0 : 0.6, // first loaded layer is fully opaque, others slightly transparent by default
+    opacity:
+      startIndex + index === 0
+        ? 1.0 // first loaded layer is fully opaque, others slightly transparent by default
+        : isEsiVolumeMode
+          ? 0.9 // Esi Volumes are more opaque than other layers
+          : 0.6,
     meshXRay: currentMeshXRay, // shared across all mesh/connectome layers
     nodeScale: DEFAULT_NODE_SCALE, // connectome-only — radius multiplier for node spheres, per-layer (unlike meshXRay)
     edgeScale: DEFAULT_EDGE_SCALE, // connectome-only — radius multiplier for edge tubes, per-layer (unlike meshXRay)
@@ -88,7 +97,7 @@ export const getInitialLayerSettings = (
 // current value instead of resetting the scene back to the default.
 export function getCurrentMeshXRay(layers, layerSettings) {
   const index = layers.findIndex((layer) => !isImageVolumeLayer(layer));
-  return index === -1 ? 1 : layerSettings[index].meshXRay;
+  return index === -1 ? DEFAULT_MESH_XRAY : layerSettings[index].meshXRay;
 }
 
 // Detects imaging modality from a filename using BIDS suffix first, then keyword fallback.
@@ -292,8 +301,8 @@ export async function syncMeshesAndApplySettings(nv, meshLayers, meshLayerSettin
     const setting = meshLayerSettings[index];
     mesh.opacity = setting.visible ? setting.opacity : 0;
     // nv.opts.meshXRay is a scene-global NiiVue option, not a per-mesh property, and NiiVue's
-    // own default (0) doesn't match this app's default (1, see getInitialLayerSettings) — apply
-    // it here on load, or the card's slider would show 100% while the mesh actually renders
+    // own default (0) doesn't match this app's default (DEFAULT_MESH_XRAY, see getInitialLayerSettings) — apply
+    // it here on load, or the card's slider would show the default while the mesh actually renders
     // opaque until the user drags the slider once.
     nv.opts.meshXRay = setting.meshXRay;
   });
