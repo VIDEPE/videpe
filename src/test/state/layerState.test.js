@@ -9,7 +9,7 @@ import {
   LOAD_FILE_LAYERS,
   APPEND_FILE_LAYERS,
   REMOVE_LAYERS,
-  UPSERT_SENTINEL,
+  SYNC_GENERATED_LAYER,
   REORDER,
   UPDATE_SETTINGS,
 } from '@/state/layerState';
@@ -66,7 +66,7 @@ describe('LOAD_FILE_LAYERS', () => {
   it('replaces the file layers but keeps the electrode/ESI entries and their settings', () => {
     let state = run(
       initLayerState([mri]),
-      { type: UPSERT_SENTINEL, url: ELECTRODE_LAYER_URL, layer: electrodes },
+      { type: SYNC_GENERATED_LAYER, url: ELECTRODE_LAYER_URL, layer: electrodes },
       { type: UPDATE_SETTINGS, url: ELECTRODE_LAYER_URL, patch: { nodeScale: 9 } }
     );
     state = layerReducer(state, { type: LOAD_FILE_LAYERS, layers: [pet] });
@@ -79,7 +79,7 @@ describe('LOAD_FILE_LAYERS', () => {
   // *settings* by url, so an ESI volume (kind 'volume') lost its layer but kept its settings.
   it('with no layers, keeps an ESI volume entry whole (layer and settings together)', () => {
     let state = run(initLayerState([mri]), {
-      type: UPSERT_SENTINEL,
+      type: SYNC_GENERATED_LAYER,
       url: ESI_LAYER_URL,
       layer: esiVolume,
     });
@@ -92,7 +92,7 @@ describe('LOAD_FILE_LAYERS', () => {
   it("joins new file meshes at the scene's current meshXRay", () => {
     let state = run(
       initLayerState(),
-      { type: UPSERT_SENTINEL, url: ELECTRODE_LAYER_URL, layer: electrodes },
+      { type: SYNC_GENERATED_LAYER, url: ELECTRODE_LAYER_URL, layer: electrodes },
       { type: UPDATE_SETTINGS, url: ELECTRODE_LAYER_URL, patch: { meshXRay: 0.3 } }
     );
     state = layerReducer(state, { type: LOAD_FILE_LAYERS, layers: [pial] });
@@ -110,7 +110,7 @@ describe('APPEND_FILE_LAYERS', () => {
   it('places an appended volume above existing connectomes (volumes first)', () => {
     const state = run(
       initLayerState([mri]),
-      { type: UPSERT_SENTINEL, url: ELECTRODE_LAYER_URL, layer: electrodes },
+      { type: SYNC_GENERATED_LAYER, url: ELECTRODE_LAYER_URL, layer: electrodes },
       { type: APPEND_FILE_LAYERS, layers: [pet] }
     );
     expect(urls(state)).toEqual(['blob:mri', 'blob:pet', ELECTRODE_LAYER_URL]);
@@ -133,26 +133,26 @@ describe('REMOVE_LAYERS', () => {
   });
 });
 
-describe('UPSERT_SENTINEL', () => {
+describe('SYNC_GENERATED_LAYER', () => {
   it('no layer + not present: returns the same state', () => {
     const state = initLayerState([mri]);
-    expect(layerReducer(state, { type: UPSERT_SENTINEL, url: ESI_LAYER_URL, layer: null })).toBe(
-      state
-    );
+    expect(
+      layerReducer(state, { type: SYNC_GENERATED_LAYER, url: ESI_LAYER_URL, layer: null })
+    ).toBe(state);
   });
 
   it('no layer + present: removes the entry', () => {
     const state = run(
       initLayerState([mri]),
-      { type: UPSERT_SENTINEL, url: ELECTRODE_LAYER_URL, layer: electrodes },
-      { type: UPSERT_SENTINEL, url: ELECTRODE_LAYER_URL, layer: null }
+      { type: SYNC_GENERATED_LAYER, url: ELECTRODE_LAYER_URL, layer: electrodes },
+      { type: SYNC_GENERATED_LAYER, url: ELECTRODE_LAYER_URL, layer: null }
     );
     expect(urls(state)).toEqual(['blob:mri']);
   });
 
   it('layer + not present: appends it with default settings', () => {
     const state = layerReducer(initLayerState([mri]), {
-      type: UPSERT_SENTINEL,
+      type: SYNC_GENERATED_LAYER,
       url: ELECTRODE_LAYER_URL,
       layer: electrodes,
     });
@@ -166,12 +166,16 @@ describe('UPSERT_SENTINEL', () => {
 
   it('layer + present, same object: returns the same state', () => {
     const state = layerReducer(initLayerState(), {
-      type: UPSERT_SENTINEL,
+      type: SYNC_GENERATED_LAYER,
       url: ELECTRODE_LAYER_URL,
       layer: electrodes,
     });
     expect(
-      layerReducer(state, { type: UPSERT_SENTINEL, url: ELECTRODE_LAYER_URL, layer: electrodes })
+      layerReducer(state, {
+        type: SYNC_GENERATED_LAYER,
+        url: ELECTRODE_LAYER_URL,
+        layer: electrodes,
+      })
     ).toBe(state);
   });
 
@@ -179,24 +183,39 @@ describe('UPSERT_SENTINEL', () => {
     const refreshed = { ...electrodes, hasVoltageSnapshot: true };
     const state = run(
       initLayerState([mri]),
-      { type: UPSERT_SENTINEL, url: ELECTRODE_LAYER_URL, layer: electrodes },
+      { type: SYNC_GENERATED_LAYER, url: ELECTRODE_LAYER_URL, layer: electrodes },
       {
         type: UPDATE_SETTINGS,
         url: ELECTRODE_LAYER_URL,
         patch: { electrodeDisplayMode: 'voltage' },
       },
-      { type: UPSERT_SENTINEL, url: ELECTRODE_LAYER_URL, layer: refreshed }
+      { type: SYNC_GENERATED_LAYER, url: ELECTRODE_LAYER_URL, layer: refreshed }
     );
     const entry = selectEntry(state, ELECTRODE_LAYER_URL);
     expect(entry.layer).toBe(refreshed);
     expect(entry.settings.electrodeDisplayMode).toBe('voltage');
   });
 
+  it('layer + present, new object: replaces it in place, keeping its position', () => {
+    const state = run(
+      initLayerState([mri]),
+      { type: SYNC_GENERATED_LAYER, url: ELECTRODE_LAYER_URL, layer: electrodes },
+      { type: SYNC_GENERATED_LAYER, url: ESI_LAYER_URL, layer: esiConnectome }, // below electrodes
+      {
+        type: SYNC_GENERATED_LAYER,
+        url: ELECTRODE_LAYER_URL,
+        layer: { ...electrodes, hasVoltageSnapshot: true },
+      }
+    );
+    // the refreshed electrodes stay above the ESI connectome — not moved to the end
+    expect(urls(state)).toEqual(['blob:mri', ELECTRODE_LAYER_URL, ESI_LAYER_URL]);
+  });
+
   it('places a new ESI volume above the electrode connectome (volumes first)', () => {
     const state = run(
       initLayerState([mri]),
-      { type: UPSERT_SENTINEL, url: ELECTRODE_LAYER_URL, layer: electrodes },
-      { type: UPSERT_SENTINEL, url: ESI_LAYER_URL, layer: esiVolume }
+      { type: SYNC_GENERATED_LAYER, url: ELECTRODE_LAYER_URL, layer: electrodes },
+      { type: SYNC_GENERATED_LAYER, url: ESI_LAYER_URL, layer: esiVolume }
     );
     expect(urls(state)).toEqual(['blob:mri', ESI_LAYER_URL, ELECTRODE_LAYER_URL]);
   });
@@ -204,16 +223,16 @@ describe('UPSERT_SENTINEL', () => {
   it('moves the ESI entry up into the volume group when it switches from connectome to volume', () => {
     const state = run(
       initLayerState([mri]),
-      { type: UPSERT_SENTINEL, url: ELECTRODE_LAYER_URL, layer: electrodes },
-      { type: UPSERT_SENTINEL, url: ESI_LAYER_URL, layer: esiConnectome }, // below electrodes
-      { type: UPSERT_SENTINEL, url: ESI_LAYER_URL, layer: esiVolume }
+      { type: SYNC_GENERATED_LAYER, url: ELECTRODE_LAYER_URL, layer: electrodes },
+      { type: SYNC_GENERATED_LAYER, url: ESI_LAYER_URL, layer: esiConnectome }, // below electrodes
+      { type: SYNC_GENERATED_LAYER, url: ESI_LAYER_URL, layer: esiVolume }
     );
     expect(urls(state)).toEqual(['blob:mri', ESI_LAYER_URL, ELECTRODE_LAYER_URL]);
   });
 
   it('seeds a new ESI entry with the last chosen mode and its 0.9 volume opacity', () => {
     const state = layerReducer(initLayerState([mri]), {
-      type: UPSERT_SENTINEL,
+      type: SYNC_GENERATED_LAYER,
       url: ESI_LAYER_URL,
       layer: esiVolume,
     });
@@ -227,7 +246,7 @@ describe('UPSERT_SENTINEL', () => {
     const state = run(
       initLayerState([pial]),
       { type: UPDATE_SETTINGS, url: 'blob:pial', patch: { meshXRay: 0.3 } },
-      { type: UPSERT_SENTINEL, url: ELECTRODE_LAYER_URL, layer: electrodes }
+      { type: SYNC_GENERATED_LAYER, url: ELECTRODE_LAYER_URL, layer: electrodes }
     );
     expect(selectEntry(state, ELECTRODE_LAYER_URL).settings.meshXRay).toBe(0.3);
   });
@@ -246,7 +265,7 @@ describe('REORDER', () => {
   it('keeps volumes first even if the requested order puts a connectome above them', () => {
     const state = run(
       initLayerState([mri]),
-      { type: UPSERT_SENTINEL, url: ELECTRODE_LAYER_URL, layer: electrodes },
+      { type: SYNC_GENERATED_LAYER, url: ELECTRODE_LAYER_URL, layer: electrodes },
       { type: REORDER, urls: [ELECTRODE_LAYER_URL, 'blob:mri'] }
     );
     expect(urls(state)).toEqual(['blob:mri', ELECTRODE_LAYER_URL]);
@@ -275,7 +294,7 @@ describe('UPDATE_SETTINGS', () => {
   it('writes meshXRay onto every mesh/connectome entry, not onto image volumes', () => {
     const state = run(
       initLayerState([mri, pial]),
-      { type: UPSERT_SENTINEL, url: ELECTRODE_LAYER_URL, layer: electrodes },
+      { type: SYNC_GENERATED_LAYER, url: ELECTRODE_LAYER_URL, layer: electrodes },
       { type: UPDATE_SETTINGS, url: ELECTRODE_LAYER_URL, patch: { meshXRay: 0.2 } }
     );
     expect(selectEntry(state, ELECTRODE_LAYER_URL).settings.meshXRay).toBe(0.2);
@@ -286,10 +305,10 @@ describe('UPDATE_SETTINGS', () => {
   it("remembers the ESI layer's isEsiVolume choice in lastEsiVolumeMode, which outlives the entry", () => {
     const state = run(
       initLayerState(),
-      { type: UPSERT_SENTINEL, url: ESI_LAYER_URL, layer: esiVolume },
+      { type: SYNC_GENERATED_LAYER, url: ESI_LAYER_URL, layer: esiVolume },
       { type: UPDATE_SETTINGS, url: ESI_LAYER_URL, patch: { isEsiVolume: false } },
       { type: REMOVE_LAYERS, urls: [ESI_LAYER_URL] },
-      { type: UPSERT_SENTINEL, url: ESI_LAYER_URL, layer: esiConnectome }
+      { type: SYNC_GENERATED_LAYER, url: ESI_LAYER_URL, layer: esiConnectome }
     );
     expect(state.lastEsiVolumeMode).toBe(false);
     expect(selectEntry(state, ESI_LAYER_URL).settings.isEsiVolume).toBe(false);
@@ -307,8 +326,8 @@ describe('UPDATE_SETTINGS', () => {
   it('lands on the right layer even after an ESI volume was merged in and re-sorted first', () => {
     const state = run(
       initLayerState([mri]),
-      { type: UPSERT_SENTINEL, url: ELECTRODE_LAYER_URL, layer: electrodes },
-      { type: UPSERT_SENTINEL, url: ESI_LAYER_URL, layer: esiVolume }, // sorted above electrodes
+      { type: SYNC_GENERATED_LAYER, url: ELECTRODE_LAYER_URL, layer: electrodes },
+      { type: SYNC_GENERATED_LAYER, url: ESI_LAYER_URL, layer: esiVolume }, // sorted above electrodes
       {
         type: UPDATE_SETTINGS,
         url: ELECTRODE_LAYER_URL,
@@ -324,8 +343,8 @@ describe('UPDATE_SETTINGS', () => {
 describe('selectors', () => {
   const state = run(
     initLayerState([mri, pial, pet]),
-    { type: UPSERT_SENTINEL, url: ELECTRODE_LAYER_URL, layer: electrodes },
-    { type: UPSERT_SENTINEL, url: ESI_LAYER_URL, layer: esiVolume }
+    { type: SYNC_GENERATED_LAYER, url: ELECTRODE_LAYER_URL, layer: electrodes },
+    { type: SYNC_GENERATED_LAYER, url: ESI_LAYER_URL, layer: esiVolume }
   );
 
   it('selectOrderedLayers/selectLayerSettings return index-aligned arrays', () => {
@@ -354,16 +373,16 @@ describe('invariants', () => {
   it('hold after every action in a mixed sequence', () => {
     const actions = [
       { type: LOAD_FILE_LAYERS, layers: [mri] },
-      { type: UPSERT_SENTINEL, url: ELECTRODE_LAYER_URL, layer: electrodes },
+      { type: SYNC_GENERATED_LAYER, url: ELECTRODE_LAYER_URL, layer: electrodes },
       { type: APPEND_FILE_LAYERS, layers: [pial, pet] },
       { type: UPDATE_SETTINGS, url: 'blob:pial', patch: { meshXRay: 0.4 } },
-      { type: UPSERT_SENTINEL, url: ESI_LAYER_URL, layer: esiVolume },
+      { type: SYNC_GENERATED_LAYER, url: ESI_LAYER_URL, layer: esiVolume },
       { type: REORDER, urls: [ELECTRODE_LAYER_URL, 'blob:pet', ESI_LAYER_URL, 'blob:mri'] },
-      { type: UPSERT_SENTINEL, url: ESI_LAYER_URL, layer: esiConnectome },
+      { type: SYNC_GENERATED_LAYER, url: ESI_LAYER_URL, layer: esiConnectome },
       { type: UPDATE_SETTINGS, url: ESI_LAYER_URL, patch: { isEsiVolume: false } },
       { type: REMOVE_LAYERS, urls: ['blob:pet'] },
       { type: LOAD_FILE_LAYERS, layers: [] },
-      { type: UPSERT_SENTINEL, url: ELECTRODE_LAYER_URL, layer: null },
+      { type: SYNC_GENERATED_LAYER, url: ELECTRODE_LAYER_URL, layer: null },
     ];
     let state = initLayerState();
     for (const action of actions) {

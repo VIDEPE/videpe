@@ -139,9 +139,9 @@ function SortableSettingsCard({
   useEffect(() => {
     if (!hasAutoSelectedVoltageMetric.current && layer.hasVoltageSnapshot) {
       hasAutoSelectedVoltageMetric.current = true;
-      onSettingChange(index, 'electrodeDisplayMode', 'voltage');
+      onSettingChange(layer.url, 'electrodeDisplayMode', 'voltage');
     }
-  }, [layer.hasVoltageSnapshot, index]);
+  }, [layer.hasVoltageSnapshot, layer.url]);
 
   // Local string state — allows typing a partial value (e.g. empty string) without breaking the numeric opacity
   const [opacityStr, setOpacityStr] = useState(() => String(Math.round(settings.opacity * 100)));
@@ -153,14 +153,14 @@ function SortableSettingsCard({
     setOpacityStr(e.target.value);
     const val = Number(e.target.value);
     if (e.target.value !== '' && !isNaN(val))
-      onSettingChange(index, 'opacity', Math.max(0, Math.min(100, Math.round(val))) / 100);
+      onSettingChange(layer.url, 'opacity', Math.max(0, Math.min(100, Math.round(val))) / 100);
   };
 
   // Radix's Slider always yields a single valid value in range, so unlike the typing handler
   // above there's no parsing/clamping to do here.
   const handleOpacitySliderChange = ([val]) => {
     setOpacityStr(String(val));
-    onSettingChange(index, 'opacity', val / 100);
+    onSettingChange(layer.url, 'opacity', val / 100);
   };
 
   // Blur-time commit: unlike the typing handler above, this always forces a valid
@@ -168,7 +168,7 @@ function SortableSettingsCard({
   const commitOpacity = (raw) => {
     const clamped = Math.max(0, Math.min(100, Math.round(Number(raw) || 0)));
     setOpacityStr(String(clamped));
-    onSettingChange(index, 'opacity', clamped / 100);
+    onSettingChange(layer.url, 'opacity', clamped / 100);
   };
 
   // Local string state — allows typing a partial value (e.g. empty string) without breaking the numeric opacity
@@ -190,14 +190,14 @@ function SortableSettingsCard({
     setMeshXRayStr(e.target.value);
     const val = Number(e.target.value);
     if (e.target.value !== '' && !isNaN(val))
-      onSettingChange(index, 'meshXRay', Math.max(0, Math.min(100, Math.round(val))) / 100);
+      onSettingChange(layer.url, 'meshXRay', Math.max(0, Math.min(100, Math.round(val))) / 100);
   };
 
   // Radix's Slider always yields a single valid value in range, so unlike the typing handler
   // above there's no parsing/clamping to do here.
   const handleMeshXRaySliderChange = ([val]) => {
     setMeshXRayStr(String(val));
-    onSettingChange(index, 'meshXRay', val / 100);
+    onSettingChange(layer.url, 'meshXRay', val / 100);
   };
 
   // Blur-time commit: unlike the typing handler above, this always forces a valid
@@ -205,7 +205,7 @@ function SortableSettingsCard({
   const commitMeshXRay = (raw) => {
     const clamped = Math.max(0, Math.min(100, Math.round(Number(raw) || 0)));
     setMeshXRayStr(String(clamped));
-    onSettingChange(index, 'meshXRay', clamped / 100);
+    onSettingChange(layer.url, 'meshXRay', clamped / 100);
   };
 
   // Node/Edge sliders are only meaningful when this connectome actually has that data — e.g.
@@ -220,7 +220,7 @@ function SortableSettingsCard({
   const isElectrodeColorbarDisabled = settings.electrodeDisplayMode === 'none';
   useEffect(() => {
     if (isElectrodeColorbarDisabled && settings.showColorbar) {
-      onSettingChange(index, 'showColorbar', false);
+      onSettingChange(layer.url, 'showColorbar', false);
     }
   }, [isElectrodeColorbarDisabled]);
 
@@ -239,7 +239,7 @@ function SortableSettingsCard({
     const val = Number(e.target.value);
     if (e.target.value !== '' && !isNaN(val))
       onSettingChange(
-        index,
+        layer.url,
         'cal_min',
         Math.min(Math.max(0, Math.min(100, Math.round(val))) / 100, settings.cal_max)
       );
@@ -249,7 +249,7 @@ function SortableSettingsCard({
     const val = Number(e.target.value);
     if (e.target.value !== '' && !isNaN(val))
       onSettingChange(
-        index,
+        layer.url,
         'cal_max',
         Math.max(Math.max(0, Math.min(100, Math.round(val))) / 100, settings.cal_min)
       );
@@ -264,7 +264,7 @@ function SortableSettingsCard({
   const handleThresholdSliderChange = ([min, max]) => {
     setCalMinStr(String(min));
     setCalMaxStr(String(max));
-    onSettingChange(index, 'cal_range', [min / 100, max / 100]);
+    onSettingChange(layer.url, 'cal_range', [min / 100, max / 100]);
   };
 
   // Blur-time commit: forces a valid value and clamps against the sibling thumb, same as the
@@ -275,7 +275,7 @@ function SortableSettingsCard({
       settings.cal_max
     );
     setCalMinStr(String(Math.round(clamped * 100)));
-    onSettingChange(index, 'cal_min', clamped);
+    onSettingChange(layer.url, 'cal_min', clamped);
   };
   const commitCalMax = (raw) => {
     const clamped = Math.max(
@@ -283,7 +283,7 @@ function SortableSettingsCard({
       settings.cal_min
     );
     setCalMaxStr(String(Math.round(clamped * 100)));
-    onSettingChange(index, 'cal_max', clamped);
+    onSettingChange(layer.url, 'cal_max', clamped);
   };
 
   // Double click thumb to reset to default value handles
@@ -292,11 +292,11 @@ function SortableSettingsCard({
   const handleCalMaxThumbClick = useDoubleClickToDefault(commitCalMax, 100);
   const handleMeshXRayThumbClick = useDoubleClickToDefault(commitMeshXRay, DEFAULT_MESH_XRAY * 100); // commitMeshXRay takes a percentage
   const handleNodeScaleThumbClick = useDoubleClickToDefault(
-    (val) => onSettingChange(index, 'nodeScale', val),
+    (val) => onSettingChange(layer.url, 'nodeScale', val),
     DEFAULT_NODE_SCALE
   );
   const handleEdgeScaleThumbClick = useDoubleClickToDefault(
-    (val) => onSettingChange(index, 'edgeScale', val),
+    (val) => onSettingChange(layer.url, 'edgeScale', val),
     DEFAULT_EDGE_SCALE
   );
 
@@ -343,7 +343,7 @@ function SortableSettingsCard({
         {/* Visibility toggle */}
         <button
           type="button"
-          onClick={() => onSettingChange(index, 'visible', !settings.visible)}
+          onClick={() => onSettingChange(layer.url, 'visible', !settings.visible)}
           className="button button-icon shrink-0"
           aria-label={`${settings.visible ? 'Hide' : 'Show'} layer: ${label}`}
           title={`${settings.visible ? 'Hide' : 'Show'} layer: ${label}`}
@@ -485,7 +485,7 @@ function SortableSettingsCard({
                     step={NODE_SCALE_STEP}
                     value={[settings.nodeScale]}
                     disabled={!hasNodes}
-                    onValueChange={([val]) => onSettingChange(index, 'nodeScale', val)}
+                    onValueChange={([val]) => onSettingChange(layer.url, 'nodeScale', val)}
                   >
                     <Slider.Track className="relative h-1 grow rounded bg-border">
                       <Slider.Range className="absolute h-full rounded bg-primary" />
@@ -514,7 +514,7 @@ function SortableSettingsCard({
                     step={EDGE_SCALE_STEP}
                     value={[settings.edgeScale]}
                     disabled={!hasEdges}
-                    onValueChange={([val]) => onSettingChange(index, 'edgeScale', val)}
+                    onValueChange={([val]) => onSettingChange(layer.url, 'edgeScale', val)}
                   >
                     <Slider.Track className="relative h-1 grow rounded bg-border">
                       <Slider.Range className="absolute h-full rounded bg-primary" />
@@ -543,7 +543,9 @@ function SortableSettingsCard({
                 </span>
                 <select
                   value={settings.electrodeDisplayMode}
-                  onChange={(e) => onSettingChange(index, 'electrodeDisplayMode', e.target.value)}
+                  onChange={(e) =>
+                    onSettingChange(layer.url, 'electrodeDisplayMode', e.target.value)
+                  }
                   className="flex-1 min-w-0 bg-surface border border-border rounded px-2 py-0.5 text-xs text-heading cursor-pointer"
                   aria-label={`${label} electrodeDisplayMode`}
                 >
@@ -643,7 +645,7 @@ function SortableSettingsCard({
                 </span>
                 <select
                   value={settings.colormap}
-                  onChange={(e) => onSettingChange(index, 'colormap', e.target.value)}
+                  onChange={(e) => onSettingChange(layer.url, 'colormap', e.target.value)}
                   className="flex-1 min-w-0 bg-surface border border-border rounded px-2 py-0.5 text-xs text-heading cursor-pointer"
                   aria-label={`${label} colormap`}
                 >
@@ -665,7 +667,7 @@ function SortableSettingsCard({
                   <span className="text-foreground select-none pointer-events-none">Volume</span>
                   <ToggleSwitch
                     checked={settings.isEsiVolume}
-                    onChange={(value) => onSettingChange(index, 'isEsiVolume', value)}
+                    onChange={(value) => onSettingChange(layer.url, 'isEsiVolume', value)}
                     aria-label={`Show ${label} as volume`}
                     title="Switch this ESI layer between a 3D volume rendering and a connectome rendering"
                   />
@@ -681,7 +683,7 @@ function SortableSettingsCard({
                     <span className="text-foreground select-none pointer-events-none">Invert</span>
                     <ToggleSwitch
                       checked={settings.invert}
-                      onChange={(value) => onSettingChange(index, 'invert', value)}
+                      onChange={(value) => onSettingChange(layer.url, 'invert', value)}
                       aria-label={`Invert ${label} colormap`}
                       title="Flip the colormap direction, reversing which color represents high vs. low intensity"
                     />
@@ -699,7 +701,7 @@ function SortableSettingsCard({
                     <ToggleSwitch
                       checked={settings.showColorbar}
                       disabled={isElectrodeColorbarDisabled}
-                      onChange={(value) => onSettingChange(index, 'showColorbar', value)}
+                      onChange={(value) => onSettingChange(layer.url, 'showColorbar', value)}
                       aria-label={`Show ${label} colorbar`}
                       title="Show or hide the color scale legend for this layer"
                     />
@@ -712,7 +714,7 @@ function SortableSettingsCard({
                 <button
                   className="text-foreground hover:text-alert cursor-pointer"
                   type="button"
-                  onClick={() => onDeleteLayer(index)}
+                  onClick={() => onDeleteLayer(layer.url)}
                   aria-label={`Close layer: ${label}`}
                   title={`Close layer: ${label}`}
                 >
@@ -727,13 +729,9 @@ function SortableSettingsCard({
   );
 }
 
-export const ImagingControls = ({
-  layers,
-  layerSettings,
-  onSettingChange,
-  onReorder,
-  onDeleteLayer,
-}) => {
+// entries: NiiViewer's layer state entries ({ url, layer, settings }, see layerState.js), in
+// card order. onSettingChange(url, key, value) / onDeleteLayer(url) address a layer by url.
+export const ImagingControls = ({ entries, onSettingChange, onReorder, onDeleteLayer }) => {
   // Track the expanded card by URL so the expanded state survives reordering
   const [expandedUrl, setExpandedUrl] = useState(null); // only one card can be expanded at a time, so this is either a URL or null
 
@@ -741,12 +739,12 @@ export const ImagingControls = ({
     // onDragEnd fires when the user releases a drag; we forward it to onReorder (a callback prop from NiiViewer) so the parent can update layer order state and reload NiiVue
     <DragDropProvider onDragEnd={onReorder}>
       <div className="flex flex-col gap-1 py-1 px-1">
-        {layers.map((layer, index) => (
+        {entries.map(({ layer, settings }, index) => (
           <SortableSettingsCard
             key={layer.url}
             layer={layer}
             index={index}
-            settings={layerSettings[index]}
+            settings={settings}
             isExpanded={expandedUrl === layer.url}
             onToggleExpand={() => setExpandedUrl(expandedUrl === layer.url ? null : layer.url)}
             onSettingChange={onSettingChange}

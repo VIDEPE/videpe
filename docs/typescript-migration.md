@@ -23,9 +23,9 @@ Also:
 
 ## Phase 1: layer state (with the layer-state overhaul)
 
-The layer state is rebuilt as one url-keyed reducer (instead of the parallel `orderedLayers`/`layerSettings` arrays). These files are rewritten anyway, so they're converted as part of it.
+The layer state was rebuilt as one url-keyed reducer (instead of the parallel `orderedLayers`/`layerSettings` arrays) in plain JS. These files were rewritten for it, so they're the first to convert.
 
-- [ ] `src/state/layerState.ts` (new: state shape, action types, reducer)
+- [ ] `src/state/layerState.js` (state shape, action types, reducer)
 - [ ] `src/utils/NiiViewer.utils.js`
 - [ ] `src/hooks/useLayerLoader.js`
 - [ ] `src/hooks/useElectrodeConnectome.js`

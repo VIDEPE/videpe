@@ -1,6 +1,6 @@
 import { useRef, useEffect, useCallback } from 'react';
 import { isAnyColorbarActive, ELECTRODE_LAYER_URL } from '@/utils/NiiViewer.utils';
-import { selectEntry, selectLayerSettings, UPSERT_SENTINEL } from '@/state/layerState';
+import { selectEntry, selectLayerSettings, SYNC_GENERATED_LAYER } from '@/state/layerState';
 import { applyElectrodeDisplayMode } from '@/utils/eegTopographyUtils';
 import { EEG_NODE_POS_KEY, EEG_NODE_NEG_KEY } from '@/utils/eegColormaps';
 
@@ -18,7 +18,7 @@ import { EEG_NODE_POS_KEY, EEG_NODE_NEG_KEY } from '@/utils/eegColormaps';
  *   no-op until it's set.
  * @param {Object} params.layerState - NiiViewer's layer state (see layerState.js), read for
  *   this layer's own settings (by sentinel URL) and every layer's colorbar toggle.
- * @param {Function} params.dispatchLayers - layerState's dispatch, sent UPSERT_SENTINEL
+ * @param {Function} params.dispatchLayers - layerState's dispatch, sent SYNC_GENERATED_LAYER
  *   whenever `electrodeLayer` changes.
  * @returns {Object}
  *   - `electrodeMeshRef` — the current mesh in the scene, or null. Read-only outside this
@@ -65,7 +65,7 @@ export function useElectrodeConnectome({ electrodeLayer, nvRef, layerState, disp
     // existing card's settings on a data refresh. Re-runs on every layerState change, so a card
     // dropped by something else comes back — a no-op (same state) when nothing differs.
     dispatchLayers({
-      type: UPSERT_SENTINEL,
+      type: SYNC_GENERATED_LAYER,
       url: ELECTRODE_LAYER_URL,
       layer: effectiveElectrodeLayer,
     });

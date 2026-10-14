@@ -1,8 +1,15 @@
-import { StrictMode, useState } from 'react';
+import { StrictMode, useReducer } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useElectrodeConnectome } from '@/hooks/useElectrodeConnectome';
 import { ELECTRODE_LAYER_URL } from '@/utils/NiiViewer.utils';
+import {
+  layerReducer,
+  initLayerState,
+  selectOrderedLayers,
+  selectLayerSettings,
+  UPDATE_SETTINGS,
+} from '@/state/layerState';
 import { EEG_NODE_POS_KEY, EEG_NODE_NEG_KEY } from '@/utils/eegColormaps';
 
 // This hook is otherwise only exercised indirectly through NiiViewer.test.jsx's
@@ -42,53 +49,46 @@ function makeNv() {
   return nv;
 }
 
-// Wraps useElectrodeConnectome with the orderedLayers/layerSettings state it expects its
-// caller to own, mirroring how NiiViewer itself supplies them. Both start empty — a settings
-// entry only exists once the hook's own merge effect creates one (via getInitialLayerSettings),
+// Wraps useElectrodeConnectome with the layer state it expects its caller to own, using the
+// real reducer — mirroring how NiiViewer itself supplies it. It starts empty — a settings entry
+// only exists once the hook's own merge effect creates one (the reducer seeds its defaults),
 // same as in the real app; tests that need a specific electrodeDisplayMode drive it afterward
-// via the returned setLayerSettings, mirroring NiiViewer's handleSettingChange.
+// via updateElectrodeSettings below, mirroring NiiViewer's handleSettingChange.
 function useHarness({ electrodeLayer, nvRef }) {
-  const [orderedLayers, setOrderedLayers] = useState([]);
-  const [layerSettings, setLayerSettings] = useState([]);
-  const hookResult = useElectrodeConnectome({
-    electrodeLayer,
-    nvRef,
-    orderedLayers,
-    layerSettings,
-    setOrderedLayers,
-    setLayerSettings,
-  });
-  return { orderedLayers, layerSettings, setOrderedLayers, setLayerSettings, ...hookResult };
+  const [layerState, dispatchLayers] = useReducer(layerReducer, [], initLayerState);
+  const hookResult = useElectrodeConnectome({ electrodeLayer, nvRef, layerState, dispatchLayers });
+  return {
+    layerState,
+    dispatchLayers,
+    orderedLayers: selectOrderedLayers(layerState),
+    layerSettings: selectLayerSettings(layerState),
+    ...hookResult,
+  };
 }
 
-// Changes the Electrodes layer's electrodeDisplayMode the same way NiiViewer's
-// handleSettingChange does — by updating the settings entry already merged in by the hook.
-function setDisplayMode(result, mode) {
+// Changes settings on the Electrodes card the same way NiiViewer's handleSettingChange does —
+// an UPDATE_SETTINGS on the entry already merged in by the hook.
+function updateElectrodeSettings(result, patch) {
   act(() => {
-    result.current.setLayerSettings((prev) =>
-      prev.map((s) => (s.url === ELECTRODE_LAYER_URL ? { ...s, electrodeDisplayMode: mode } : s))
-    );
+    result.current.dispatchLayers({ type: UPDATE_SETTINGS, url: ELECTRODE_LAYER_URL, patch });
   });
+}
+
+// Changes the Electrodes layer's electrodeDisplayMode (the Electrode Display dropdown).
+function setDisplayMode(result, mode) {
+  updateElectrodeSettings(result, { electrodeDisplayMode: mode });
 }
 
 // Changes the Electrodes layer's showColorbar the same way ImagingControls's Colorbar
 // ToggleSwitch does.
 function setShowColorbar(result, value) {
-  act(() => {
-    result.current.setLayerSettings((prev) =>
-      prev.map((s) => (s.url === ELECTRODE_LAYER_URL ? { ...s, showColorbar: value } : s))
-    );
-  });
+  updateElectrodeSettings(result, { showColorbar: value });
 }
 
 // Changes the Electrodes layer's visible flag the same way ImagingControls's eye-icon
 // button (hide/show layer) does.
 function setVisible(result, value) {
-  act(() => {
-    result.current.setLayerSettings((prev) =>
-      prev.map((s) => (s.url === ELECTRODE_LAYER_URL ? { ...s, visible: value } : s))
-    );
-  });
+  updateElectrodeSettings(result, { visible: value });
 }
 
 describe('useElectrodeConnectome', () => {
@@ -107,7 +107,7 @@ describe('useElectrodeConnectome', () => {
     expect(nv.addMesh).not.toHaveBeenCalled();
   });
 
-  it('merges the layer into orderedLayers/layerSettings by the electrode sentinel url', () => {
+  it('merges the layer into the layer state by the electrode sentinel url', () => {
     const electrodeLayer = makeElectrodeLayer();
     const { result } = renderHook((props) => useHarness(props), {
       initialProps: { electrodeLayer, nvRef },
@@ -201,11 +201,7 @@ describe('useElectrodeConnectome', () => {
       });
       nv.loadConnectomeAsMesh.mockClear();
 
-      act(() => {
-        result.current.setLayerSettings((prev) =>
-          prev.map((s) => (s.url === ELECTRODE_LAYER_URL ? { ...s, nodeScale: 8 } : s))
-        );
-      });
+      updateElectrodeSettings(result, { nodeScale: 8 });
 
       expect(nv.loadConnectomeAsMesh).not.toHaveBeenCalled();
     });
