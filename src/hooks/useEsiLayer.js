@@ -1,14 +1,11 @@
 import { useRef, useEffect, useCallback } from 'react';
 import {
-  getInitialLayerSettings,
-  getCurrentMeshXRay,
-  makeLayerMergeUpdater,
-  makeSettingsMergeUpdater,
   getCalBounds,
   fractionToCalValue,
   isImageVolumeLayer,
   ESI_LAYER_URL,
 } from '@/utils/NiiViewer.utils';
+import { selectEntry, UPSERT_SENTINEL } from '@/state/layerState';
 import { EEG_NODE_POS_KEY } from '@/utils/eegColormaps';
 
 /**
