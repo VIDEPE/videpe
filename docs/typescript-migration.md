@@ -25,7 +25,7 @@ Also:
 
 The layer state was rebuilt as one url-keyed reducer (instead of the parallel `orderedLayers`/`layerSettings` arrays) in plain JS. These files were rewritten for it, so they're the first to convert.
 
-- [ ] `src/state/layerState.js` (state shape, action types, reducer)
+- [ ] `src/state/layerState.js` (state shape, action types, reducer). Define a `LayerAction` union type (one member per action type, with its payload), so `dispatchLayers` calls are checked and autocompleted. It replaces the payload comments next to the action-type constants.
 - [ ] `src/utils/NiiViewer.utils.js`
 - [ ] `src/hooks/useLayerLoader.js`
 - [ ] `src/hooks/useElectrodeConnectome.js`

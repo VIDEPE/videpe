@@ -241,9 +241,13 @@ export const NiiViewer = ({
   clickedEegChannelPos, // {pos: {x,y,z}, clickId} The location of the clicked Eeg Channel the niiviewer cursor should move to
 }) => {
   // ─── State ─────────────────────────────────────────────────────────────────
-  // Every layer (the `layers` prop's files, files dropped here, the electrode connectome, the ESI
-  // layer) together with its own settings, in display order — changed only through
-  // dispatchLayers, see layerState.js for the actions and the invariants they keep.
+  // layerState holds every layer (the `layers` prop's files, files dropped here, the electrode
+  // connectome, the ESI layer) with its own settings, in display order. It changes only through
+  // dispatchLayers(action): useReducer then runs the reducer on the latest state, stores the
+  // result and re-renders (see layerState.js for the actions and the invariants they keep).
+  //   layerReducer   — computes the next state from the current state and an action
+  //   layers         — the starting input: the `layers` prop's file layers
+  //   initLayerState — turns that input into the first state (called once, on the first render)
   const [layerState, dispatchLayers] = useReducer(layerReducer, layers, initLayerState);
   // The layers alone, in display order — for positional reads (the drag-reorder event's indices,
   // has-content checks). Derived from the one state, so it can't get out of step with it.
