@@ -1,19 +1,16 @@
 import { useRef, useEffect, useCallback } from 'react';
 import {
-  getInitialLayerSettings,
-  getCurrentMeshXRay,
-  makeLayerMergeUpdater,
-  makeSettingsMergeUpdater,
   getCalBounds,
   fractionToCalValue,
   isImageVolumeLayer,
   ESI_LAYER_URL,
 } from '@/utils/NiiViewer.utils';
+import { selectEntry, SYNC_GENERATED_LAYER } from '@/state/layerState';
 import { EEG_NODE_POS_KEY } from '@/utils/eegColormaps';
 
 /**
- * Merges the ESI (Electrical Source Imaging) source-power layer into orderedLayers/
- * layerSettings by its sentinel URL, and builds/rebuilds/removes the NiiVue object
+ * Merges the ESI (Electrical Source Imaging) source-power layer into NiiViewer's layer state
+ * by its sentinel URL, and builds/rebuilds/removes the NiiVue object
  * representing it whenever its data or the Connectome/Volume toggle changes. Same
  * merge-then-rebuild pattern as useElectrodeConnectome, but branches between two NiiVue
  * object kinds — a connectome mesh or an NVImage volume — depending on `isEsiVolumeMode`.
@@ -27,14 +24,11 @@ import { EEG_NODE_POS_KEY } from '@/utils/eegColormaps';
  *   NVImage), false to render `esiLayer.sourcePowerConnectomes` (a connectome mesh).
  * @param {React.RefObject} params.nvRef - the shared, long-lived NiiVue instance ref; both
  *   effects no-op until it's set.
- * @param {Array} params.orderedLayers - the full ordered layer list, read to find this layer's
- *   existing settings (by sentinel URL) when rebuilding.
- * @param {Array} params.layerSettings - the parallel per-layer settings array, read for the
- *   same reason, and for the user's chosen cal_min/cal_max fractions.
- * @param {Function} params.setOrderedLayers - React setState for `orderedLayers`; called with
- *   a merge-updater function each time the active ESI representation changes.
- * @param {Function} params.setLayerSettings - React setState for `layerSettings`; called with
- *   a merge-updater function each time the active ESI representation changes.
+ * @param {Object} params.layerState - NiiViewer's layer state (see layerState.js), read for
+ *   this layer's own settings (by sentinel URL, incl. the user's cal_min/cal_max fractions) and
+ *   for how many other image volumes have to land in nv.volumes first.
+ * @param {Function} params.dispatchLayers - layerState's dispatch, sent SYNC_GENERATED_LAYER
+ *   each time the active ESI representation changes.
  * @returns {Object}
  *   - `esiMeshRef` (RefObject) — the current ESI connectome mesh in the scene (connectome
  *     mode), or null — read-only from outside this hook; needed by the caller's own
@@ -49,15 +43,7 @@ import { EEG_NODE_POS_KEY } from '@/utils/eegColormaps';
  *     clearEsiVolume so the merge effect stops resurrecting the just-deleted card until esiLayer
  *     actually changes upstream.
  */
-export function useEsiLayer({
-  esiLayer,
-  isEsiVolumeMode,
-  nvRef,
-  orderedLayers,
-  layerSettings,
-  setOrderedLayers,
-  setLayerSettings,
-}) {
+export function useEsiLayer({ esiLayer, isEsiVolumeMode, nvRef, layerState, dispatchLayers }) {
   const esiMeshRef = useRef(null); // current ESI connectome mesh in the scene (connectome mode)
   const esiVolumeRef = useRef(null); // current ESI NVImage volume in the scene (volume mode) — mutually exclusive with esiMeshRef
   const lastEsiLayerRef = useRef(null); // guards against rebuilding on unrelated re-renders — tracks whichever of the two is active
@@ -83,8 +69,8 @@ export function useEsiLayer({
     dismissedEsiLayerRef.current = lastEsiLayerRef.current;
   }, []);
 
-  // Merges the separately-tracked esiLayer prop into orderedLayers/layerSettings — same
-  // pattern as the electrodeLayer merge effect, keyed on ESI_LAYER_URL.
+  // Merges the separately-tracked esiLayer prop into the layer state — same pattern as the
+  // electrodeLayer merge effect, keyed on ESI_LAYER_URL.
   useEffect(() => {
     const activeEsiLayer = esiLayer
       ? isEsiVolumeMode
@@ -95,18 +81,11 @@ export function useEsiLayer({
     const effectiveEsiLayer =
       activeEsiLayer && activeEsiLayer === dismissedEsiLayerRef.current ? null : activeEsiLayer;
 
-    // Add/replace/remove the ESI entry in orderedLayers to match effectiveEsiLayer
-    setOrderedLayers(makeLayerMergeUpdater(effectiveEsiLayer, ESI_LAYER_URL));
-    // Add/remove its settings entry (visible/opacity/isEsiVolume/etc.); leaves an existing entry untouched
-    setLayerSettings(
-      makeSettingsMergeUpdater(
-        effectiveEsiLayer,
-        ESI_LAYER_URL,
-        isEsiVolumeMode,
-        getCurrentMeshXRay(orderedLayers, layerSettings)
-      )
-    );
-  }, [esiLayer, isEsiVolumeMode, orderedLayers, layerSettings, setOrderedLayers, setLayerSettings]);
+    // Add/replace/remove the ESI card to match effectiveEsiLayer. A new card gets fresh defaults
+    // from the reducer (in the last chosen mode); an existing card keeps its settings. Re-runs on
+    // every layerState change — a no-op (same state) when nothing differs.
+    dispatchLayers({ type: SYNC_GENERATED_LAYER, url: ESI_LAYER_URL, layer: effectiveEsiLayer });
+  }, [esiLayer, isEsiVolumeMode, layerState, dispatchLayers]);
 
   // Builds/rebuilds/removes the ESI source-power mesh (connectome mode) or NVImage volume
   // (volume mode) whenever esiLayer's data or the Connectome/Volume toggle changes. Same
@@ -156,30 +135,26 @@ export function useEsiLayer({
     }
 
     if (activeEsiLayer.kind !== 'connectome') {
-      // If other image volumes (e.g. the MRI) are known in orderedLayers but still loading
+      // If other image volumes (e.g. the MRI) are known in the layer state but still loading
       // (useLayerLoader), don't add the ESI volume yet — it could win the race for
       // nv.volumes[0], NiiVue's base volume, and leave the scene resampled onto ESI's coarse
       // grid ("squares") until manually reordered. Checked before lastEsiLayerRef updates
       // below, so this effect retries once the MRI finishes loading.
-      const expectedVolumesAheadOfEsi = orderedLayers.filter(
-        (l) => isImageVolumeLayer(l) && l.url !== ESI_LAYER_URL
+      const expectedVolumesAheadOfEsi = layerState.entries.filter(
+        (entry) => isImageVolumeLayer(entry.layer) && entry.url !== ESI_LAYER_URL
       ).length;
       if (nv.volumes.length < expectedVolumesAheadOfEsi) return;
     }
 
-    lastEsiLayerRef.current = activeEsiLayer; // remember what this rebuild is based on
+    // Apply whatever opacity/visibility is set on this layer's card (preserved across data
+    // refreshes by the sync effect above), looked up by url. On first appearance the card isn't
+    // in layerState yet (the sync effect has only just dispatched it) — wait for it: this effect
+    // re-runs once it's there, so the layer is always built from the card's own settings, never
+    // from separate defaults. Checked before lastEsiLayerRef updates below, so it retries.
+    const settings = selectEntry(layerState, ESI_LAYER_URL)?.settings;
+    if (!settings) return;
 
-    // Apply whatever opacity/visibility is already set for this layer (preserved across
-    // data refreshes by the sync effect above); fall back to the default on first appearance.
-    const existingIndex = orderedLayers.findIndex((l) => l.url === ESI_LAYER_URL);
-    const settings =
-      layerSettings[existingIndex] ?? // existing settings, preserved across this rebuild
-      getInitialLayerSettings(
-        [activeEsiLayer],
-        orderedLayers.length,
-        isEsiVolumeMode,
-        getCurrentMeshXRay(orderedLayers, layerSettings)
-      )[0]; // fresh defaults on first appearance — same args as the merge effect's, so the two match
+    lastEsiLayerRef.current = activeEsiLayer; // remember what this rebuild is based on
 
     if (activeEsiLayer.kind === 'connectome') {
       // Connectome mode — drop any leftover volume from a previous volume-mode rebuild first.
@@ -278,7 +253,7 @@ export function useEsiLayer({
         })
         .catch((err) => console.error('ESI volume failed to load', err));
     }
-  }, [esiLayer, isEsiVolumeMode, orderedLayers, layerSettings, nvRef]);
+  }, [esiLayer, isEsiVolumeMode, layerState, nvRef]);
 
   return { esiMeshRef, esiVolumeRef, clearEsiMesh, clearEsiVolume, dismissEsiLayer };
 }

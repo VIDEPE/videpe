@@ -20,12 +20,17 @@ const makeSettings = (overrides = {}) => ({
   ...overrides,
 });
 
+// Pairs each layer with the given settings into the entry shape ImagingControls receives from
+// NiiViewer ({ url, layer, settings }, see layerState.js) — the test picks the settings; unlike
+// layerState's own makeEntries, no defaults are involved.
+const toEntries = (layers, settings) =>
+  layers.map((layer, i) => ({ url: layer.url, layer, settings: settings[i] }));
+
 // Helper to render the component with default props and allow overrides
 const renderControls = (layers, settings, onSettingChange = vi.fn(), onDeleteLayer = vi.fn()) =>
   render(
     <ImagingControls
-      layers={layers}
-      layerSettings={settings}
+      entries={toEntries(layers, settings)}
       onSettingChange={onSettingChange}
       onDeleteLayer={onDeleteLayer}
     />
@@ -77,7 +82,7 @@ describe('ImagingControls', () => {
       const onSettingChange = vi.fn();
       renderControls([makeVolume('MRI', '/mri.nii')], [makeSettings()], onSettingChange);
       await userEvent.click(screen.getByRole('button', { name: /hide.*mri/i }));
-      expect(onSettingChange).toHaveBeenCalledWith(0, 'visible', false);
+      expect(onSettingChange).toHaveBeenCalledWith('/mri.nii', 'visible', false);
     });
 
     it('calls onSettingChange with visible=true when clicking Show', async () => {
@@ -88,7 +93,7 @@ describe('ImagingControls', () => {
         onSettingChange
       );
       await userEvent.click(screen.getByRole('button', { name: /show.*mri/i }));
-      expect(onSettingChange).toHaveBeenCalledWith(0, 'visible', true);
+      expect(onSettingChange).toHaveBeenCalledWith('/mri.nii', 'visible', true);
     });
   });
 
@@ -179,20 +184,20 @@ describe('ImagingControls', () => {
       const slider = screen.getByLabelText('MRI opacity slider');
       slider.focus();
       fireEvent.keyDown(slider, { key: 'ArrowRight' });
-      expect(onSettingChange).toHaveBeenCalledWith(0, 'opacity', 0.51);
+      expect(onSettingChange).toHaveBeenCalledWith('/MRI.nii', 'opacity', 0.51);
     });
 
     it('opacity number input change calls onSettingChange with rounded 0–1 value', async () => {
       const { onSettingChange } = await setup('MRI', makeSettings({ opacity: 1.0 }));
       fireEvent.change(screen.getByLabelText('MRI opacity'), { target: { value: '75' } });
-      expect(onSettingChange).toHaveBeenCalledWith(0, 'opacity', 0.75);
+      expect(onSettingChange).toHaveBeenCalledWith('/MRI.nii', 'opacity', 0.75);
     });
 
     it('opacity number input clamps to 0–100 on blur', async () => {
       const { onSettingChange } = await setup('MRI', makeSettings({ opacity: 0.5 }));
       fireEvent.change(screen.getByLabelText('MRI opacity'), { target: { value: '150' } });
       fireEvent.blur(screen.getByLabelText('MRI opacity'));
-      expect(onSettingChange).toHaveBeenLastCalledWith(0, 'opacity', 1);
+      expect(onSettingChange).toHaveBeenLastCalledWith('/MRI.nii', 'opacity', 1);
     });
 
     it('opacity slider arrow-key change updates the number input display', async () => {
@@ -211,7 +216,7 @@ describe('ImagingControls', () => {
     it('colormap select change calls onSettingChange', async () => {
       const { onSettingChange } = await setup('MRI', makeSettings({ colormap: 'gray' }));
       await userEvent.selectOptions(screen.getByLabelText('MRI colormap'), 'magma');
-      expect(onSettingChange).toHaveBeenCalledWith(0, 'colormap', 'magma');
+      expect(onSettingChange).toHaveBeenCalledWith('/MRI.nii', 'colormap', 'magma');
     });
 
     it('invert toggle reflects current invert state', async () => {
@@ -225,13 +230,13 @@ describe('ImagingControls', () => {
     it('invert toggle click calls onSettingChange with toggled value', async () => {
       const { onSettingChange } = await setup('MRI', makeSettings({ invert: false }));
       await userEvent.click(screen.getByRole('switch', { name: /invert.*mri/i }));
-      expect(onSettingChange).toHaveBeenCalledWith(0, 'invert', true);
+      expect(onSettingChange).toHaveBeenCalledWith('/MRI.nii', 'invert', true);
     });
 
     it('colorbar toggle click calls onSettingChange with toggled value', async () => {
       const { onSettingChange } = await setup('MRI', makeSettings({ showColorbar: false }));
       await userEvent.click(screen.getByRole('switch', { name: /mri.*colorbar/i }));
-      expect(onSettingChange).toHaveBeenCalledWith(0, 'showColorbar', true);
+      expect(onSettingChange).toHaveBeenCalledWith('/MRI.nii', 'showColorbar', true);
     });
 
     it('the delete volume button is rendered', async () => {
@@ -242,10 +247,10 @@ describe('ImagingControls', () => {
     it('delete volume button calls onDeleteVolume', async () => {
       const { onDeleteVolume } = await setup('MRI', makeSettings());
       await userEvent.click(screen.getByRole('button', { name: /close/i }));
-      expect(onDeleteVolume).toHaveBeenCalledWith(0);
+      expect(onDeleteVolume).toHaveBeenCalledWith('/MRI.nii');
     });
 
-    it('delete volume button in settingsCard 1, calls onDeleteVolume with 1 and not with 0', async () => {
+    it("delete volume button in the 2nd card calls onDeleteVolume with that card's url, not the 1st's", async () => {
       // Mock onDeleteVolume
       const onDeleteVolume = vi.fn();
 
@@ -257,12 +262,13 @@ describe('ImagingControls', () => {
         onDeleteVolume
       );
 
-      // click expand on the 2nd (=> index = 1 )
+      // click expand on the 2nd (the PET card)
       await userEvent.click(screen.getByRole('button', { name: /expand.*pet/i }));
       // click the delete volume button
       await userEvent.click(screen.getByRole('button', { name: /close.*pet/i }));
-      // expect onDeleteVolume to be called with index 1
-      expect(onDeleteVolume).toHaveBeenCalledWith(1);
+      // expect onDeleteVolume to be called with the PET card's url, not the MRI card's
+      expect(onDeleteVolume).toHaveBeenCalledWith('/pet.nii');
+      expect(onDeleteVolume).not.toHaveBeenCalledWith('/mri.nii');
     });
   });
 
@@ -292,7 +298,7 @@ describe('ImagingControls', () => {
       const minThumb = screen.getByLabelText('MRI Threshold minimum slider');
       minThumb.focus();
       fireEvent.keyDown(minThumb, { key: 'ArrowRight' });
-      expect(onSettingChange).toHaveBeenCalledWith(0, 'cal_range', [0.21, 1]);
+      expect(onSettingChange).toHaveBeenCalledWith('/mri.nii', 'cal_range', [0.21, 1]);
     });
 
     it('max slider arrow-key change calls onSettingChange once with both fractions as a cal_range pair', async () => {
@@ -300,32 +306,32 @@ describe('ImagingControls', () => {
       const maxThumb = screen.getByLabelText('MRI Threshold maximum slider');
       maxThumb.focus();
       fireEvent.keyDown(maxThumb, { key: 'ArrowLeft' });
-      expect(onSettingChange).toHaveBeenCalledWith(0, 'cal_range', [0, 0.69]);
+      expect(onSettingChange).toHaveBeenCalledWith('/mri.nii', 'cal_range', [0, 0.69]);
     });
 
     it('max number input change calls onSettingChange with a 0-1 fraction', async () => {
       const { onSettingChange } = await setup(makeSettings({ cal_min: 0, cal_max: 1 }));
       fireEvent.change(screen.getByLabelText('MRI Threshold maximum'), { target: { value: '70' } });
-      expect(onSettingChange).toHaveBeenCalledWith(0, 'cal_max', 0.7);
+      expect(onSettingChange).toHaveBeenCalledWith('/mri.nii', 'cal_max', 0.7);
     });
 
     it('min number input clamps to the current cal_max rather than exceeding it', async () => {
       const { onSettingChange } = await setup(makeSettings({ cal_min: 0.3, cal_max: 0.5 }));
       fireEvent.change(screen.getByLabelText('MRI Threshold minimum'), { target: { value: '80' } });
-      expect(onSettingChange).toHaveBeenCalledWith(0, 'cal_min', 0.5);
+      expect(onSettingChange).toHaveBeenCalledWith('/mri.nii', 'cal_min', 0.5);
     });
 
     it('max number input clamps to the current cal_min rather than going below it', async () => {
       const { onSettingChange } = await setup(makeSettings({ cal_min: 0.4, cal_max: 0.7 }));
       fireEvent.change(screen.getByLabelText('MRI Threshold maximum'), { target: { value: '10' } });
-      expect(onSettingChange).toHaveBeenCalledWith(0, 'cal_max', 0.4);
+      expect(onSettingChange).toHaveBeenCalledWith('/mri.nii', 'cal_max', 0.4);
     });
 
     it('min number input blur clamps to the current cal_max', async () => {
       const { onSettingChange } = await setup(makeSettings({ cal_min: 0.3, cal_max: 0.5 }));
       fireEvent.change(screen.getByLabelText('MRI Threshold minimum'), { target: { value: '90' } });
       fireEvent.blur(screen.getByLabelText('MRI Threshold minimum'));
-      expect(onSettingChange).toHaveBeenLastCalledWith(0, 'cal_min', 0.5);
+      expect(onSettingChange).toHaveBeenLastCalledWith('/mri.nii', 'cal_min', 0.5);
     });
 
     it('the min thumb cannot be moved past the current cal_max (Radix prevents thumbs crossing)', async () => {
@@ -500,7 +506,7 @@ describe('ImagingControls', () => {
       const slider = screen.getByLabelText('Intracranial - Electrodes meshXRay slider');
       slider.focus();
       fireEvent.keyDown(slider, { key: 'ArrowRight' });
-      expect(onSettingChange).toHaveBeenCalledWith(0, 'meshXRay', 0.51);
+      expect(onSettingChange).toHaveBeenCalledWith('__intracranial-electrodes__', 'meshXRay', 0.51);
     });
 
     it('number input change calls onSettingChange with rounded 0-1 value', async () => {
@@ -508,7 +514,7 @@ describe('ImagingControls', () => {
       fireEvent.change(screen.getByLabelText('Intracranial - Electrodes meshXRay'), {
         target: { value: '75' },
       });
-      expect(onSettingChange).toHaveBeenCalledWith(0, 'meshXRay', 0.75);
+      expect(onSettingChange).toHaveBeenCalledWith('__intracranial-electrodes__', 'meshXRay', 0.75);
     });
 
     it('number input clamps to 0-100 on blur', async () => {
@@ -517,7 +523,11 @@ describe('ImagingControls', () => {
         target: { value: '150' },
       });
       fireEvent.blur(screen.getByLabelText('Intracranial - Electrodes meshXRay'));
-      expect(onSettingChange).toHaveBeenLastCalledWith(0, 'meshXRay', 1);
+      expect(onSettingChange).toHaveBeenLastCalledWith(
+        '__intracranial-electrodes__',
+        'meshXRay',
+        1
+      );
     });
 
     it('does not render for an image-volume layer, which shows Opacity instead (regression)', async () => {
@@ -593,12 +603,16 @@ describe('ImagingControls', () => {
       const nodeSlider = screen.getByLabelText('Intracranial - Electrodes node size slider');
       nodeSlider.focus();
       fireEvent.keyDown(nodeSlider, { key: 'ArrowRight' });
-      expect(onSettingChange).toHaveBeenCalledWith(0, 'nodeScale', 4.1);
+      expect(onSettingChange).toHaveBeenCalledWith('__intracranial-electrodes__', 'nodeScale', 4.1);
 
       const edgeSlider = screen.getByLabelText('Intracranial - Electrodes edge size slider');
       edgeSlider.focus();
       fireEvent.keyDown(edgeSlider, { key: 'ArrowRight' });
-      expect(onSettingChange).toHaveBeenCalledWith(0, 'edgeScale', 0.55);
+      expect(onSettingChange).toHaveBeenCalledWith(
+        '__intracranial-electrodes__',
+        'edgeScale',
+        0.55
+      );
     });
 
     it('cannot be dragged down to 0 — NiiVue drops the whole mesh render at nodeScale/edgeScale 0', async () => {
@@ -613,15 +627,27 @@ describe('ImagingControls', () => {
       nodeSlider.focus();
       fireEvent.keyDown(nodeSlider, { key: 'Home' });
       expect(nodeSlider).toHaveAttribute('aria-valuemin', '0.1');
-      expect(onSettingChange).toHaveBeenCalledWith(0, 'nodeScale', 0.1);
-      expect(onSettingChange).not.toHaveBeenCalledWith(0, 'nodeScale', 0);
+      expect(onSettingChange).toHaveBeenCalledWith('__intracranial-electrodes__', 'nodeScale', 0.1);
+      expect(onSettingChange).not.toHaveBeenCalledWith(
+        '__intracranial-electrodes__',
+        'nodeScale',
+        0
+      );
 
       const edgeSlider = screen.getByLabelText('Intracranial - Electrodes edge size slider');
       edgeSlider.focus();
       fireEvent.keyDown(edgeSlider, { key: 'Home' });
       expect(edgeSlider).toHaveAttribute('aria-valuemin', '0.05');
-      expect(onSettingChange).toHaveBeenCalledWith(0, 'edgeScale', 0.05);
-      expect(onSettingChange).not.toHaveBeenCalledWith(0, 'edgeScale', 0);
+      expect(onSettingChange).toHaveBeenCalledWith(
+        '__intracranial-electrodes__',
+        'edgeScale',
+        0.05
+      );
+      expect(onSettingChange).not.toHaveBeenCalledWith(
+        '__intracranial-electrodes__',
+        'edgeScale',
+        0
+      );
     });
 
     it('disables the Node slider when the connectome has no nodes', async () => {
@@ -701,7 +727,7 @@ describe('ImagingControls', () => {
       );
       await userEvent.click(screen.getByRole('button', { name: /expand.*mri/i }));
       doubleClick(screen.getByLabelText('MRI opacity slider'));
-      expect(onSettingChange).toHaveBeenCalledWith(0, 'opacity', 1);
+      expect(onSettingChange).toHaveBeenCalledWith('/mri.nii', 'opacity', 1);
     });
 
     it("resets a normal volume's min threshold to 0%", async () => {
@@ -713,7 +739,7 @@ describe('ImagingControls', () => {
       );
       await userEvent.click(screen.getByRole('button', { name: /expand.*mri/i }));
       doubleClick(screen.getByLabelText('MRI Threshold minimum slider'));
-      expect(onSettingChange).toHaveBeenCalledWith(0, 'cal_min', 0);
+      expect(onSettingChange).toHaveBeenCalledWith('/mri.nii', 'cal_min', 0);
     });
 
     it("resets the ESI layer's min threshold to 1% (0.01), not 0% — its shader needs a positive floor to render thresholding", async () => {
@@ -727,7 +753,7 @@ describe('ImagingControls', () => {
         screen.getByRole('button', { name: /expand.*electrical source imaging/i })
       );
       doubleClick(screen.getByLabelText('Electrical Source Imaging Threshold minimum slider'));
-      expect(onSettingChange).toHaveBeenCalledWith(0, 'cal_min', 0.01);
+      expect(onSettingChange).toHaveBeenCalledWith('__esi-source-power__', 'cal_min', 0.01);
     });
 
     it('resets max threshold to 100% (1.0)', async () => {
@@ -739,7 +765,7 @@ describe('ImagingControls', () => {
       );
       await userEvent.click(screen.getByRole('button', { name: /expand.*mri/i }));
       doubleClick(screen.getByLabelText('MRI Threshold maximum slider'));
-      expect(onSettingChange).toHaveBeenCalledWith(0, 'cal_max', 1);
+      expect(onSettingChange).toHaveBeenCalledWith('/mri.nii', 'cal_max', 1);
     });
 
     it('resets Mesh Xray to DEFAULT_MESH_XRAY (0.75)', async () => {
@@ -749,7 +775,11 @@ describe('ImagingControls', () => {
         screen.getByRole('button', { name: /expand.*intracranial - electrodes/i })
       );
       doubleClick(screen.getByLabelText('Intracranial - Electrodes meshXRay slider'));
-      expect(onSettingChange).toHaveBeenCalledWith(0, 'meshXRay', DEFAULT_MESH_XRAY);
+      expect(onSettingChange).toHaveBeenCalledWith(
+        '__intracranial-electrodes__',
+        'meshXRay',
+        DEFAULT_MESH_XRAY
+      );
     });
 
     it('resets Node Size to DEFAULT_NODE_SCALE (4)', async () => {
@@ -759,7 +789,7 @@ describe('ImagingControls', () => {
         screen.getByRole('button', { name: /expand.*intracranial - electrodes/i })
       );
       doubleClick(screen.getByLabelText('Intracranial - Electrodes node size slider'));
-      expect(onSettingChange).toHaveBeenCalledWith(0, 'nodeScale', 4);
+      expect(onSettingChange).toHaveBeenCalledWith('__intracranial-electrodes__', 'nodeScale', 4);
     });
 
     it('resets Edge Size to DEFAULT_EDGE_SCALE (0.5)', async () => {
@@ -769,7 +799,7 @@ describe('ImagingControls', () => {
         screen.getByRole('button', { name: /expand.*intracranial - electrodes/i })
       );
       doubleClick(screen.getByLabelText('Intracranial - Electrodes edge size slider'));
-      expect(onSettingChange).toHaveBeenCalledWith(0, 'edgeScale', 0.5);
+      expect(onSettingChange).toHaveBeenCalledWith('__intracranial-electrodes__', 'edgeScale', 0.5);
     });
 
     it('does not reset on a single click', async () => {
@@ -842,7 +872,11 @@ describe('ImagingControls', () => {
         makeSettings({ electrodeDisplayMode: 'none' })
       );
       await userEvent.selectOptions(screen.getByLabelText(/electrodeDisplayMode/i), 'spike_count');
-      expect(onSettingChange).toHaveBeenCalledWith(0, 'electrodeDisplayMode', 'spike_count');
+      expect(onSettingChange).toHaveBeenCalledWith(
+        '__electrodes__',
+        'electrodeDisplayMode',
+        'spike_count'
+      );
     });
 
     it('does not render for a non-connectome layer', async () => {
@@ -863,15 +897,21 @@ describe('ImagingControls', () => {
 
         rerender(
           <ImagingControls
-            layers={[makeElectrodeLayer({ hasVoltageSnapshot: true })]}
-            layerSettings={[makeSettings({ electrodeDisplayMode: 'none' })]}
+            entries={toEntries(
+              [makeElectrodeLayer({ hasVoltageSnapshot: true })],
+              [makeSettings({ electrodeDisplayMode: 'none' })]
+            )}
             onSettingChange={onSettingChange}
             onDeleteLayer={vi.fn()}
           />
         );
 
         expect(onSettingChange).toHaveBeenCalledTimes(1);
-        expect(onSettingChange).toHaveBeenCalledWith(0, 'electrodeDisplayMode', 'voltage');
+        expect(onSettingChange).toHaveBeenCalledWith(
+          '__electrodes__',
+          'electrodeDisplayMode',
+          'voltage'
+        );
       });
 
       it('does not fire when a layer already has a snapshot on its very first render', () => {
@@ -900,10 +940,10 @@ describe('ImagingControls', () => {
         // arriving (a new electrodeLayer object, still hasVoltageSnapshot: true).
         rerender(
           <ImagingControls
-            layers={[
-              makeElectrodeLayer({ hasVoltageSnapshot: true, availableMetrics: ['spike_count'] }),
-            ]}
-            layerSettings={[makeSettings({ electrodeDisplayMode: 'spike_count' })]}
+            entries={toEntries(
+              [makeElectrodeLayer({ hasVoltageSnapshot: true, availableMetrics: ['spike_count'] })],
+              [makeSettings({ electrodeDisplayMode: 'spike_count' })]
+            )}
             onSettingChange={onSettingChange}
             onDeleteLayer={vi.fn()}
           />
@@ -961,7 +1001,7 @@ describe('ImagingControls', () => {
         makeSettings({ electrodeDisplayMode: 'voltage', showColorbar: false })
       );
       await userEvent.click(screen.getByRole('switch', { name: /colorbar/i }));
-      expect(onSettingChange).toHaveBeenCalledWith(0, 'showColorbar', true);
+      expect(onSettingChange).toHaveBeenCalledWith('__electrodes__', 'showColorbar', true);
     });
 
     it('does nothing when clicked while disabled', async () => {
@@ -981,7 +1021,7 @@ describe('ImagingControls', () => {
           makeSettings({ electrodeDisplayMode: 'none', showColorbar: true }),
           onSettingChange
         );
-        expect(onSettingChange).toHaveBeenCalledWith(0, 'showColorbar', false);
+        expect(onSettingChange).toHaveBeenCalledWith('__electrodes__', 'showColorbar', false);
       });
 
       it('resets when the mode transitions to None while showColorbar was on', () => {
@@ -995,14 +1035,16 @@ describe('ImagingControls', () => {
 
         rerender(
           <ImagingControls
-            layers={[makeElectrodeLayer()]}
-            layerSettings={[makeSettings({ electrodeDisplayMode: 'none', showColorbar: true })]}
+            entries={toEntries(
+              [makeElectrodeLayer()],
+              [makeSettings({ electrodeDisplayMode: 'none', showColorbar: true })]
+            )}
             onSettingChange={onSettingChange}
             onDeleteLayer={vi.fn()}
           />
         );
 
-        expect(onSettingChange).toHaveBeenCalledWith(0, 'showColorbar', false);
+        expect(onSettingChange).toHaveBeenCalledWith('__electrodes__', 'showColorbar', false);
       });
 
       it('does not fire when the mode is None and showColorbar is already off', async () => {

@@ -2336,6 +2336,68 @@ describe('NiiViewer', () => {
       expect(call.nodeMaxColor).toBe(42);
     });
 
+    // Regression test for "the Electrodes layer disappears and the 3D render goes black when an
+    // ESI volume is generated": generating ESI also delivers a new voltage snapshot, so the
+    // Electrodes card's auto-select-to-Voltage effect calls handleSettingChange in the same burst
+    // of renders that merges the ESI layer in and re-sorts it above the (pinned-to-bottom)
+    // connectome. handleSettingChange's settings commit is deferred to the next animation frame —
+    // if it lands as an array built before that re-sort, layerSettings ends up crossed with
+    // orderedLayers, the electrode hook reads the ESI layer's settings (electrodeDisplayMode
+    // undefined), every node gets size 0, and NiiVue fails to build the empty mesh.
+    it('keeps the electrode settings aligned when a display-mode change is still pending as the ESI volume is merged and re-sorted', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const nv = nvRef.current;
+      const mriLayers = [{ type: 'MRI', url: '/mri.nii' }];
+      // metrics: {} so a misread display mode yields size-0 nodes (the real symptom) rather
+      // than a TypeError from applyElectrodeDisplayMode's metric lookup.
+      const nodes = [
+        { name: 'B1', x: 0, y: 0, z: 0, colorValue: 1, sizeValue: 1, metrics: {} },
+        { name: 'B2', x: 1, y: 0, z: 0, colorValue: 1, sizeValue: 1, metrics: {} },
+      ];
+      const { rerender } = render(
+        <NiiViewer
+          nvRef={nvRef}
+          layers={mriLayers}
+          electrodeLayer={makeIntracranialLayer({ hasVoltageSnapshot: false, nodes })}
+        />
+      );
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      // Hold rAF callbacks back instead of running them immediately (this suite's default), so
+      // handleSettingChange's deferred commit only lands after the renders below have settled —
+      // the same ordering a real browser frame produces.
+      const pendingFrames = [];
+      vi.stubGlobal('requestAnimationFrame', (cb) => {
+        pendingFrames.push(cb);
+        return pendingFrames.length;
+      });
+
+      // New snapshot (triggers the auto-select to Voltage) and the ESI volume, arriving together.
+      rerender(
+        <NiiViewer
+          nvRef={nvRef}
+          layers={mriLayers}
+          electrodeLayer={makeIntracranialLayer({ hasVoltageSnapshot: true, calMax: 42, nodes })}
+          esiLayer={makeEsiLayer()}
+        />
+      );
+      await waitFor(() => expect(nv.addVolumesFromUrl).toHaveBeenCalled());
+
+      nv.loadConnectomeAsMesh.mockClear();
+      act(() => {
+        while (pendingFrames.length) pendingFrames.shift()();
+      });
+
+      // The pending Voltage selection must land on the Electrodes layer — so its rebuild uses
+      // calMax as nodeMaxColor and keeps every node visible, instead of rebuilding empty.
+      const electrodeCall = nv.loadConnectomeAsMesh.mock.calls
+        .map(([json]) => json)
+        .findLast((json) => json.name === 'Electrodes');
+      expect(electrodeCall.nodeMaxColor).toBe(42);
+      expect(electrodeCall.nodes.every((node) => node.sizeValue > 0)).toBe(true);
+    });
+
     it('does not rebuild the mesh when an unrelated setting (nodeScale) changes', async () => {
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
