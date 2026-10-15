@@ -94,12 +94,13 @@ export function useShanoirData({
         signal.throwIfAborted();
         setShanoirEegName(eegDataset?.name ?? null);
 
-        // Display toast of datasets that have been skipped
+        // Display toast of datasets that have been skipped, one bulleted line per dataset
+        // (react-hot-toast keeps the line breaks)
         if (skippedDatasets.length > 0) {
           toast(
-            `Skipped the following datasets: ${skippedDatasets
-              .map((d) => `${d.name} (${d.reason})`)
-              .join(', ')}`,
+            `Skipped the following datasets:\n${skippedDatasets
+              .map((d) => `- ${d.name} (${d.reason})`)
+              .join('\n')}`,
             {
               icon: '⚠️',
             }

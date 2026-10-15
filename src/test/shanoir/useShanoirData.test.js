@@ -122,12 +122,17 @@ describe('useShanoirData', () => {
     expect(setLayers).toHaveBeenCalledWith(LAYERS);
   });
 
-  it('lists the skipped datasets in a warning toast', async () => {
+  it('lists the skipped datasets in a warning toast, one bulleted line each', async () => {
     fetchShanoirExamination.mockResolvedValue(
       examination({
         skippedDatasets: [
-          { id: 2, name: 'second run', type: 'Eeg', reason: 'only the first EEG is loaded' },
-          { id: 3, name: 'CT scan', type: 'Ct', reason: 'unsupported type' },
+          { id: 2, name: 'second run', type: 'EEG', reason: 'additional EEG recording' },
+          {
+            id: 3,
+            name: 'report',
+            type: 'Measurement',
+            reason: 'unsupported dataset type: Measurement',
+          },
         ],
       })
     );
@@ -135,7 +140,9 @@ describe('useShanoirData', () => {
     await waitFor(() => expect(hook.result.current.isShanoirLoading).toBe(false));
 
     expect(toast).toHaveBeenCalledWith(
-      expect.stringMatching(/second run \(only the first EEG is loaded\).*CT scan/),
+      'Skipped the following datasets:\n' +
+        '- second run (additional EEG recording)\n' +
+        '- report (unsupported dataset type: Measurement)',
       expect.anything()
     );
   });

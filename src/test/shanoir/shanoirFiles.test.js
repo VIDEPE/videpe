@@ -4,6 +4,8 @@ import {
   selectEegIntakeFiles,
   selectImagingFiles,
   selectExtraDataFileNames,
+  hasEegRecording,
+  listFileExtensions,
 } from '@/shanoir/shanoirFiles';
 
 const file = (name) => new File(['x'], name);
@@ -33,6 +35,31 @@ describe('classifyDataset', () => {
       expect(classifyDataset({ type: type?.toLowerCase() })).toBeNull(); // check lowercase variant and ? to make sure undefined does not throw error
     }
   );
+});
+
+describe('hasEegRecording', () => {
+  it('is true when the files include a recording VIDEPE can read', () => {
+    expect(hasEegRecording([file('rec.vhdr'), file('rec.eeg')])).toBe(true);
+  });
+
+  it('is false for electrode positions or an inverse solution without a recording', () => {
+    expect(hasEegRecording([file('sub-01_electrodes.tsv'), file('inv.mat')])).toBe(false);
+  });
+
+  it('is false for a recording format VIDEPE cannot read', () => {
+    expect(hasEegRecording([file('rec.edf')])).toBe(false);
+  });
+});
+
+describe('listFileExtensions', () => {
+  it('lists each extension once, lowercased, in the order the files come in', () => {
+    const files = [file('rec.EDF'), file('rec.json'), file('other.edf')];
+    expect(listFileExtensions(files)).toEqual(['.edf', '.json']);
+  });
+
+  it('leaves out files without an extension, including paths with a dot in a folder name', () => {
+    expect(listFileExtensions([file('README'), file('v1.2/IM0001')])).toEqual([]);
+  });
 });
 
 describe('selectEegIntakeFiles', () => {
