@@ -82,7 +82,7 @@ export function createShanoirClient({ apiBase, getAccessToken, fetchImpl = fetch
       return response.json();
     },
 
-    // Metadata of every dataset in the examination (id, name, type: 'Eeg', 'Mr', …),
+    // Metadata of every dataset in the examination (id, name, type: 'EEG', 'MR', …),
     // used to decide what to download — no data files yet.
     async listExaminationDatasets(examinationId, signal) {
       const response = await get(

@@ -4,7 +4,7 @@ import { EEG_FORMAT_EXTENSIONS, INV_SOLUTIONS_EXTENSIONS } from '@/loaders/eegFo
 
 // Shanoir dataset types (DatasetDTO.type) VIDEPE's neuroimaging viewer can show.
 // Their downloads (format=nii) contain NIfTI volumes or meshes, which filesToLayers handles.
-const IMAGING_DATASET_TYPES = ['Mr', 'Pet', 'Spect', 'Ct', 'Segmentation', 'Mesh'];
+const IMAGING_DATASET_TYPES = ['MR', 'PET', 'SPECT', 'CT', 'SEGMENTATION', 'MESH'];
 
 // Image files the neuroimaging viewer opens from a Shanoir imaging download: NIfTI volumes
 // (what format=nii returns), FreeSurfer MGH/MGZ volumes and GIFTI surface meshes. Anything
@@ -30,8 +30,9 @@ const baseName = (path) => path.split(/[\\/]/).pop();
  *   can't show it.
  */
 export function classifyDataset(dataset) {
-  if (dataset?.type === 'Eeg') return 'eeg';
-  if (IMAGING_DATASET_TYPES.includes(dataset?.type)) return 'imaging';
+  const type = dataset?.type?.toUpperCase(); // force dataset type to uppercase to make the check case-independent
+  if (type === 'EEG') return 'eeg';
+  if (IMAGING_DATASET_TYPES.includes(type)) return 'imaging';
   return null;
 }
 

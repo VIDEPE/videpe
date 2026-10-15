@@ -12,12 +12,16 @@ const names = (files) => files.map((f) => f.name);
 describe('classifyDataset', () => {
   it('classifies EEG datasets', () => {
     expect(classifyDataset({ type: 'Eeg' })).toBe('eeg');
+    expect(classifyDataset({ type: 'EEG' })).toBe('eeg'); // check uppercase variant
+    expect(classifyDataset({ type: 'eeg' })).toBe('eeg'); // check lowercase variant
   });
 
   it.each(['Mr', 'Pet', 'Spect', 'Ct', 'Segmentation', 'Mesh'])(
     'classifies %s datasets as imaging',
     (type) => {
       expect(classifyDataset({ type })).toBe('imaging');
+      expect(classifyDataset({ type: type.toUpperCase() })).toBe('imaging'); // check uppercase variant
+      expect(classifyDataset({ type: type.toLowerCase() })).toBe('imaging'); // check lowercase variant
     }
   );
 
@@ -25,6 +29,8 @@ describe('classifyDataset', () => {
     'leaves %s datasets unsupported',
     (type) => {
       expect(classifyDataset({ type })).toBeNull();
+      expect(classifyDataset({ type: type?.toUpperCase() })).toBeNull(); // check uppercase variant and ? to make sure undefined does not throw error
+      expect(classifyDataset({ type: type?.toLowerCase() })).toBeNull(); // check lowercase variant and ? to make sure undefined does not throw error
     }
   );
 });
