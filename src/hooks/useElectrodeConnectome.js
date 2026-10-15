@@ -1,18 +1,12 @@
 import { useRef, useEffect, useCallback } from 'react';
-import {
-  getInitialLayerSettings,
-  getCurrentMeshXRay,
-  makeLayerMergeUpdater,
-  makeSettingsMergeUpdater,
-  isAnyColorbarActive,
-  ELECTRODE_LAYER_URL,
-} from '@/utils/NiiViewer.utils';
+import { isAnyColorbarActive, ELECTRODE_LAYER_URL } from '@/utils/NiiViewer.utils';
+import { selectEntry, selectLayerSettings, SYNC_GENERATED_LAYER } from '@/state/layerState';
 import { applyElectrodeDisplayMode } from '@/utils/eegTopographyUtils';
 import { EEG_NODE_POS_KEY, EEG_NODE_NEG_KEY } from '@/utils/eegColormaps';
 
 /**
  * Keeps the Electrodes connectome layer in sync with `electrodeLayer`: merges it into the
- * ImagingControls card list (orderedLayers/layerSettings), and builds/rebuilds/removes the
+ * ImagingControls card list (NiiViewer's layer state), and builds/rebuilds/removes the
  * actual NiiVue mesh whenever its data changes. Rebuilt wholesale rather than mutated in
  * place — mirrors how EegTopoViewer rebuilds its own mesh on every topoTimepoint click.
  *
@@ -22,12 +16,10 @@ import { EEG_NODE_POS_KEY, EEG_NODE_NEG_KEY } from '@/utils/eegColormaps';
  *   never resets other layers' settings.
  * @param {React.RefObject} params.nvRef - the shared NiiVue instance ref; both effects
  *   no-op until it's set.
- * @param {Array} params.orderedLayers - full ordered layer list, read to find this layer's
- *   existing settings by sentinel URL.
- * @param {Array} params.layerSettings - the parallel per-layer settings array.
- * @param {Function} params.setOrderedLayers
- * @param {Function} params.setLayerSettings - React setters, each called with a
- *   merge-updater whenever `electrodeLayer` changes.
+ * @param {Object} params.layerState - NiiViewer's layer state (see layerState.js), read for
+ *   this layer's own settings (by sentinel URL) and every layer's colorbar toggle.
+ * @param {Function} params.dispatchLayers - layerState's dispatch, sent SYNC_GENERATED_LAYER
+ *   whenever `electrodeLayer` changes.
  * @returns {Object}
  *   - `electrodeMeshRef` — the current mesh in the scene, or null. Read-only outside this
  *     hook; NiiViewer's handleSettingChange uses it to mutate mesh properties directly
@@ -37,14 +29,7 @@ import { EEG_NODE_POS_KEY, EEG_NODE_NEG_KEY } from '@/utils/eegColormaps';
  *   - `dismissElectrodeLayer` — call from handleDeleteLayer so the card-sync effect stops
  *     resurrecting the just-deleted card until a genuinely new `electrodeLayer` arrives.
  */
-export function useElectrodeConnectome({
-  electrodeLayer,
-  nvRef,
-  orderedLayers,
-  layerSettings,
-  setOrderedLayers,
-  setLayerSettings,
-}) {
+export function useElectrodeConnectome({ electrodeLayer, nvRef, layerState, dispatchLayers }) {
   // ─── Refs ───────────────────────────────────────────────────────────────────
   const electrodeMeshRef = useRef(null); // mesh currently in the scene, if any
   const colorbarOnlyMeshRef = useRef(null); // colorbar-only mesh currently in the scene, if any (see below)
@@ -75,21 +60,16 @@ export function useElectrodeConnectome({
         ? null
         : electrodeLayer;
 
-    // Add/update/remove only the Electrodes card, leaving every other layer untouched.
-    // getCurrentMeshXRay carries over the scene's current value, so a reappearing card
-    // doesn't reset that shared setting.
-    setOrderedLayers(makeLayerMergeUpdater(effectiveElectrodeLayer, ELECTRODE_LAYER_URL));
-    setLayerSettings(
-      makeSettingsMergeUpdater(
-        effectiveElectrodeLayer,
-        ELECTRODE_LAYER_URL,
-        undefined,
-        getCurrentMeshXRay(orderedLayers, layerSettings)
-      )
-    );
-    // Two separate setState calls, not nested — nesting doubled the settings entry under
-    // StrictMode's double-invoke, misaligning the arrays and crashing handleNiiFiles.
-  }, [electrodeLayer, orderedLayers, layerSettings, setOrderedLayers, setLayerSettings]);
+    // Add/update/remove only the Electrodes card, leaving every other layer untouched. The
+    // reducer seeds a new card's defaults (joining the scene's current meshXRay) and keeps an
+    // existing card's settings on a data refresh. Re-runs on every layerState change, so a card
+    // dropped by something else comes back — a no-op (same state) when nothing differs.
+    dispatchLayers({
+      type: SYNC_GENERATED_LAYER,
+      url: ELECTRODE_LAYER_URL,
+      layer: effectiveElectrodeLayer,
+    });
+  }, [electrodeLayer, layerState, dispatchLayers]);
 
   // ─── Effect: build/rebuild/remove the NiiVue mesh ───────────────────────────
   useEffect(() => {
@@ -118,19 +98,13 @@ export function useElectrodeConnectome({
     }
 
     // — Resolve this layer's settings —
-    // Existing card settings when present (preserved across data refreshes), else freshly
-    // defaulted — the connectome's first appearance runs before layerSettings has caught up.
+    // Looked up by url. On first appearance the card isn't in layerState yet (the merge effect
+    // above has only just dispatched it) — wait for it: this effect re-runs once it's there,
+    // so the mesh is always built from the card's own settings, never from separate defaults.
     // Resolved before the guard below (its electrodeDisplayMode feeds that comparison) and
     // before the mesh (nodeScale/edgeScale seed it rather than resetting).
-    const existingIndex = orderedLayers.findIndex((l) => l.url === ELECTRODE_LAYER_URL);
-    const settings =
-      layerSettings[existingIndex] ??
-      getInitialLayerSettings(
-        [electrodeLayer],
-        orderedLayers.length,
-        undefined,
-        getCurrentMeshXRay(orderedLayers, layerSettings)
-      )[0];
+    const settings = selectEntry(layerState, ELECTRODE_LAYER_URL)?.settings;
+    if (!settings) return;
     const electrodeDisplayMode = settings.electrodeDisplayMode;
     const showColorbar = settings.showColorbar;
     const visible = settings.visible;
@@ -192,8 +166,8 @@ export function useElectrodeConnectome({
     });
 
     mesh.opacity = settings.visible ? settings.opacity : 0; // 0 = hidden, same convention as image volumes
-    // meshXRay is scene-global, and NiiVue's default (0) doesn't match this app's (1) — apply
-    // it on build, or the card's slider reads 100% while the mesh renders opaque.
+    // meshXRay is scene-global, and NiiVue's default (0) doesn't match this app's (DEFAULT_MESH_XRAY) — apply
+    // it on build, or the card's slider reads 75% while the mesh renders opaque.
     nv.opts.meshXRay = settings.meshXRay;
 
     nv.addMesh(mesh);
@@ -230,9 +204,9 @@ export function useElectrodeConnectome({
     // all — it has to reflect every layer's own showColorbar (and visible — see
     // isAnyColorbarActive), not just this connectome's, since a volume elsewhere in the scene
     // may also have its own colorbar toggled on.
-    nv.opts.isColorbar = isAnyColorbarActive(layerSettings);
+    nv.opts.isColorbar = isAnyColorbarActive(selectLayerSettings(layerState));
     nv.updateGLVolume();
-  }, [electrodeLayer, orderedLayers, layerSettings, nvRef]);
+  }, [electrodeLayer, layerState, nvRef]);
 
   return {
     electrodeMeshRef,

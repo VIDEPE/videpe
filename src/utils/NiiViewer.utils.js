@@ -48,21 +48,31 @@ export const isImageVolumeLayer = (layer) => layer.kind !== 'connectome' && laye
 export const DEFAULT_NODE_SCALE = 4;
 export const DEFAULT_EDGE_SCALE = 0.5;
 
+// Mesh X-ray default — the starting value for a scene's first mesh/connectome. Exported for the
+// same reason as the scale defaults above: ImagingControls' double-click reset uses it.
+export const DEFAULT_MESH_XRAY = 0.75;
+
 // Returns default display settings, one per layer. Settings are keyed by the layer's url
 // (not array position, which shifts as layers are added/reordered). startIndex is where
 // `layers` starts among all loaded layers, so only the very first layer overall gets full
-// opacity. currentMeshXRay seeds the meshXRay field: pass 1 for a scene's first mesh/
-// connectome, or getCurrentMeshXRay(...) when appending to an already-populated scene.
+// opacity. currentMeshXRay seeds the meshXRay field: DEFAULT_MESH_XRAY for a scene's first mesh/
+// connectome, or the scene's current value when appending to an already-populated scene.
+// Called only by layerState.js, the one place layer defaults are created.
 export const getInitialLayerSettings = (
   layers,
   startIndex = 0,
   isEsiVolumeMode,
-  currentMeshXRay = 1
+  currentMeshXRay = DEFAULT_MESH_XRAY
 ) =>
   layers.map((layer, index) => ({
     url: layer.url, // identifier to link this settings entry to its layer, since array position can shift
     visible: true, // eye-toggle state — hidden layers get their opacity forced to 0 downstream
-    opacity: startIndex + index === 0 ? 1.0 : 0.6, // first loaded layer is fully opaque, others slightly transparent by default
+    opacity:
+      startIndex + index === 0
+        ? 1.0 // first loaded layer is fully opaque, others slightly transparent by default
+        : isEsiVolumeMode
+          ? 0.9 // Esi Volumes are more opaque than other layers
+          : 0.6,
     meshXRay: currentMeshXRay, // shared across all mesh/connectome layers
     nodeScale: DEFAULT_NODE_SCALE, // connectome-only — radius multiplier for node spheres, per-layer (unlike meshXRay)
     edgeScale: DEFAULT_EDGE_SCALE, // connectome-only — radius multiplier for edge tubes, per-layer (unlike meshXRay)
@@ -80,16 +90,6 @@ export const getInitialLayerSettings = (
     cal_max: 1,
     ...(layer.url === ELECTRODE_LAYER_URL ? { electrodeDisplayMode: 'none' } : {}), // Electrodes layer's display-mode dropdown
   }));
-
-// Finds the meshXRay value already active in the scene, from any existing mesh/connectome
-// layer's settings (they're always kept in sync with each other and with nv.opts.meshXRay —
-// see handleSettingChange's meshXRay special-case in NiiViewer.jsx). Pass the result into
-// getInitialLayerSettings when appending a new mesh/connectome layer, so it joins at the
-// current value instead of resetting the scene back to the default.
-export function getCurrentMeshXRay(layers, layerSettings) {
-  const index = layers.findIndex((layer) => !isImageVolumeLayer(layer));
-  return index === -1 ? 1 : layerSettings[index].meshXRay;
-}
 
 // Detects imaging modality from a filename using BIDS suffix first, then keyword fallback.
 // Returns { type, subtype } where type is 'MRI', 'PET', 'SPECT', or nameWithoutExtension for unknowns.
@@ -292,8 +292,8 @@ export async function syncMeshesAndApplySettings(nv, meshLayers, meshLayerSettin
     const setting = meshLayerSettings[index];
     mesh.opacity = setting.visible ? setting.opacity : 0;
     // nv.opts.meshXRay is a scene-global NiiVue option, not a per-mesh property, and NiiVue's
-    // own default (0) doesn't match this app's default (1, see getInitialLayerSettings) — apply
-    // it here on load, or the card's slider would show 100% while the mesh actually renders
+    // own default (0) doesn't match this app's default (DEFAULT_MESH_XRAY, see getInitialLayerSettings) — apply
+    // it here on load, or the card's slider would show the default while the mesh actually renders
     // opaque until the user drags the slider once.
     nv.opts.meshXRay = setting.meshXRay;
   });
@@ -306,69 +306,6 @@ const nameWithoutExtension = (filename) => {
   const dotIndex = filename.indexOf('.');
   return dotIndex === -1 ? filename : filename.slice(0, dotIndex);
 };
-
-// Pure updater functions for merging a connectome layer into orderedLayers/layerSettings
-// by its sentinel URL. Used by both the intracranial and ESI connectome hooks. Five possible
-// cases, based on whether `layer` is present and whether an entry already exists at `sentinelUrl`:
-//   no layer   + not present  → no-op
-//   no layer   + present      → remove it
-//   has layer  + not present  → append it
-//   has layer  + present, same object      → no-op (data unchanged)
-//   has layer  + present, different object → replace it in place
-export function makeLayerMergeUpdater(layer, sentinelUrl) {
-  return (prevLayers) => {
-    const existingIndex = prevLayers.findIndex((l) => l.url === sentinelUrl);
-    const alreadyPresent = existingIndex !== -1;
-
-    if (!layer) {
-      // Nothing to show — remove the existing entry, or leave the array as-is if there wasn't one.
-      return alreadyPresent ? prevLayers.filter((_, i) => i !== existingIndex) : prevLayers;
-    }
-
-    if (!alreadyPresent) {
-      // First appearance — append as a new layer.
-      return [...prevLayers, layer];
-    }
-
-    if (prevLayers[existingIndex] === layer) {
-      // Same object reference — data hasn't changed, avoid an unnecessary update.
-      return prevLayers;
-    }
-
-    // Data changed — replace the existing entry in place, preserving its position.
-    const next = prevLayers.slice();
-    next[existingIndex] = layer;
-    return next;
-  };
-}
-
-// Same merge-by-sentinel-URL logic as makeLayerMergeUpdater, but for the parallel layerSettings
-// array — kept as a separate function since "present" here means "has a settings entry", and a
-// data-only refresh (layer present in both) must leave the user's existing settings untouched
-// rather than overwrite them.
-export function makeSettingsMergeUpdater(layer, sentinelUrl, isEsiVolumeMode, currentMeshXRay) {
-  return (prevSettings) => {
-    const existingIndex = prevSettings.findIndex((s) => s.url === sentinelUrl);
-    const alreadyPresent = existingIndex !== -1;
-
-    if (!layer) {
-      // Nothing to show — remove its settings entry, or leave the array as-is if there wasn't one.
-      return alreadyPresent ? prevSettings.filter((_, i) => i !== existingIndex) : prevSettings;
-    }
-
-    if (alreadyPresent) {
-      // Already has a settings entry — a data-only refresh (e.g. new sourcePowers) never touches
-      // user-chosen settings like opacity/visibility, so leave it untouched.
-      return prevSettings;
-    }
-
-    // First appearance — seed default settings for it.
-    return [
-      ...prevSettings,
-      ...getInitialLayerSettings([layer], prevSettings.length, isEsiVolumeMode, currentMeshXRay),
-    ];
-  };
-}
 
 // A DICOM series is many files (one per slice) representing a single volume, not one file per
 // layer like every other supported format, so dropped .dcm files are pulled out and converted
@@ -455,9 +392,11 @@ export async function filesToLayers(files) {
 
 // Frees the blob: URLs backing dropped-file layers. Called right after nv loads a layer
 // (redundant by then) and defensively wherever a layer is discarded (failed load, deleted
-// card, unmount). Re-revoking is a harmless no-op; non-blob (sentinel/demo) URLs are skipped.
+// card, unmount). Re-revoking is a harmless no-op; non-blob (sentinel/demo) URLs are skipped,
+// as are non-string ones — the ESI volume is loaded with its raw NIfTI bytes as its `url`.
 export function revokeLayerUrls(layers) {
   for (const layer of layers) {
-    if (layer.url?.startsWith('blob:')) URL.revokeObjectURL(layer.url);
+    if (typeof layer.url === 'string' && layer.url.startsWith('blob:'))
+      URL.revokeObjectURL(layer.url);
   }
 }

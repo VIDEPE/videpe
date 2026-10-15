@@ -4,6 +4,8 @@ import {
   selectEegIntakeFiles,
   selectImagingFiles,
   selectExtraDataFileNames,
+  hasEegRecording,
+  listFileExtensions,
 } from './shanoirFiles';
 
 // Helper function to get readable name for a Shanoir dataset => used for user-facing messages.
@@ -25,6 +27,8 @@ const datasetLabel = (dataset) => ({
  *   are added to the EEG files.
  * - Imaging (MR, PET, …): every dataset is loaded; each becomes one or more layers.
  * - Anything else is not downloaded, and is reported back in `skippedDatasets`.
+ * - A downloaded dataset with no file VIDEPE can open (e.g. an EDF recording) is reported
+ *   back in `skippedDatasets` too, with the extensions it contained.
  *
  * Downloads run in parallel. Nothing is handed to the viewers here — the caller does that
  * once, with the complete sets (see useShanoirData).
@@ -39,7 +43,8 @@ const datasetLabel = (dataset) => ({
  *   imagingFiles: File[],
  *   skippedDatasets: { id: number, name: string, type: string, reason: string }[],
  * }>} the sorted files:
- *   - `eegDataset`: the EEG dataset that was loaded, or null if the examination has none.
+ *   - `eegDataset`: the EEG dataset that was loaded, or null if the examination has none (or
+ *     its recording is in a format VIDEPE can't read).
  *   - `eegFiles`: files for useEegFileIntake's handleEegFiles (recording, electrode
  *     positions, inverse solutions).
  *   - `imagingFiles`: files for filesToLayers (NIfTI/MGH volumes, GIFTI meshes).
@@ -74,7 +79,9 @@ export async function fetchShanoirExamination({ client, examinationId, signal })
       id: dataset.id,
       name: dataset.name ?? `dataset ${dataset.id}`,
       type: dataset.type,
-      reason: 'unsupported type',
+      // name the type as Shanoir sent it, so a type that should be supported but isn't
+      // recognised (e.g. a spelling mismatch) is visible to the user
+      reason: `unsupported dataset type: ${dataset.type ?? 'none'}`,
     }))
   );
 
@@ -99,12 +106,38 @@ export async function fetchShanoirExamination({ client, examinationId, signal })
     ),
   ]);
 
-  // bundle eegFiles and imagingFiles
-  const eegFiles = [...selectEegIntakeFiles(eegDatasetFiles), ...extraDataFiles];
-  const imagingFiles = selectImagingFiles(imagingDatasetFiles.flat()); // flat is needed to get single array instead of array of arrays
+  // A dataset of a supported type can still hold only files VIDEPE can't open (e.g. an EDF
+  // recording). Report it as skipped, listing what it contained, instead of loading nothing
+  // without telling the user.
+  const unsupportedFiles = (dataset, files) => {
+    const extensions = listFileExtensions(files);
+    return {
+      ...datasetLabel(dataset),
+      reason: `unsupported files${extensions.length > 0 ? `: ${extensions.join(', ')}` : ''}`,
+    };
+  };
+
+  // bundle eegFiles
+  // Without a recording there is nothing to show: electrode positions and inverse solutions
+  // (from the zip or the extra-data) only mean something alongside one.
+  const eegIntakeFiles = selectEegIntakeFiles(eegDatasetFiles);
+  const isEegLoadable = hasEegRecording(eegIntakeFiles);
+  if (eegDataset && !isEegLoadable) {
+    skippedDatasets.push(unsupportedFiles(eegDataset, eegDatasetFiles));
+  }
+  const eegFiles = isEegLoadable ? [...eegIntakeFiles, ...extraDataFiles] : [];
+
+  // bundle imagingFiles, selected per dataset so a dataset without image files can be reported
+  const imagingFilesPerDataset = imagingDatasetFiles.map(selectImagingFiles);
+  imagingDatasets.forEach((dataset, i) => {
+    if (imagingFilesPerDataset[i].length === 0) {
+      skippedDatasets.push(unsupportedFiles(dataset, imagingDatasetFiles[i]));
+    }
+  });
+  const imagingFiles = imagingFilesPerDataset.flat(); // flat is needed to get single array instead of array of arrays
 
   return {
-    eegDataset: eegDataset ? datasetLabel(eegDataset) : null,
+    eegDataset: isEegLoadable ? datasetLabel(eegDataset) : null,
     eegFiles: eegFiles,
     imagingFiles: imagingFiles,
     skippedDatasets,

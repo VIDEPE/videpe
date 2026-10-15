@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback, useEffect } from 'react';
+import { useRef, useState, useCallback, useEffect, useMemo, useReducer } from 'react';
 import { cn } from '../utils/utils';
 import { SLICE_TYPE } from '@niivue/niivue';
 import { move } from '@dnd-kit/helpers';
@@ -17,8 +17,6 @@ const SLICE_TYPE_OPTIONS = [
   { sliceType: SLICE_TYPE.RENDER, label: '3D', buttonLabel: '3D' },
 ];
 import {
-  getInitialLayerSettings,
-  getCurrentMeshXRay,
   filesToLayers,
   isImageVolumeLayer,
   getCalBounds,
@@ -31,6 +29,18 @@ import {
   ELECTRODE_LAYER_URL,
   applyColormap,
 } from '../utils/NiiViewer.utils';
+import {
+  layerReducer,
+  initLayerState,
+  selectOrderedLayers,
+  selectLayerSettings,
+  selectEntry,
+  selectNvVolumeIndex,
+  APPEND_FILE_LAYERS,
+  REMOVE_LAYERS,
+  REORDER,
+  UPDATE_SETTINGS,
+} from '@/state/layerState';
 import { ImagingControls } from './ImagingControls';
 import { FileDropZone } from '../components/FileDropZone';
 import { useCanvasAutoLayout } from '@/hooks/useCanvasAutoLayout';
@@ -46,13 +56,11 @@ import { useEsiLayer } from '@/hooks/useEsiLayer';
 export { syncVolumesAndApplySettings, syncMeshesAndApplySettings };
 
 // ─── handleSettingChange dispatch helpers ──────────────────────────────────────
-// Image volumes are the default case — mapped from their position in orderedLayers to their
-// index in nv.volumes by counting only the preceding image-volume entries (connectome and
-// mesh layers occupy a slot in orderedLayers but not in nv.volumes).
+// Image volumes are the default case — addressed by their index in nv.volumes (nvIndex, see
+// selectNvVolumeIndex: connectome and mesh layers have a card but no slot in nv.volumes).
 function applyVolumeSettingChange({
   layer,
-  layerIndex,
-  orderedLayers,
+  nvIndex,
   key,
   value,
   settings,
@@ -61,7 +69,6 @@ function applyVolumeSettingChange({
   opacityRafRef,
   thresholdRafRef,
 }) {
-  const nvIndex = orderedLayers.slice(0, layerIndex).filter(isImageVolumeLayer).length;
   const nvVolume = nv.volumes[nvIndex];
   if (!nvVolume) return;
 
@@ -234,8 +241,17 @@ export const NiiViewer = ({
   clickedEegChannelPos, // {pos: {x,y,z}, clickId} The location of the clicked Eeg Channel the niiviewer cursor should move to
 }) => {
   // ─── State ─────────────────────────────────────────────────────────────────
-  const [layerSettings, setLayerSettings] = useState(() => getInitialLayerSettings(layers));
-  const [orderedLayers, setOrderedLayers] = useState(layers); // mirrors `layers` + any merged connectome layers; user-reorderable
+  // layerState holds every layer (the `layers` prop's files, files dropped here, the electrode
+  // connectome, the ESI layer) with its own settings, in display order. It changes only through
+  // dispatchLayers(action): useReducer then runs the reducer on the latest state, stores the
+  // result and re-renders (see layerState.js for the actions and the invariants they keep).
+  //   layerReducer   — computes the next state from the current state and an action
+  //   layers         — the starting input: the `layers` prop's file layers
+  //   initLayerState — turns that input into the first state (called once, on the first render)
+  const [layerState, dispatchLayers] = useReducer(layerReducer, layers, initLayerState);
+  // The layers alone, in display order — for positional reads (the drag-reorder event's indices,
+  // has-content checks). Derived from the one state, so it can't get out of step with it.
+  const orderedLayers = useMemo(() => selectOrderedLayers(layerState), [layerState]);
   const [isLoading, setIsLoading] = useState(true);
   // Whether the load that just finished (or is about to start) ended in an error — isLoading
   // alone can't distinguish success from failure (it's just "in flight" vs "not"), so this is
@@ -247,25 +263,22 @@ export const NiiViewer = ({
   const [activeSliceType, setActiveSliceType] = useState(SLICE_TYPE.MULTIPLANAR);
   const [isRadiologicalConvention, setIsRadiologicalConvention] = useState(false);
   const [isClipPlaneOn, setIsClipPlaneOn] = useState(false);
-  // Connectome/Volume toggle for the ESI layer, split into two values, both read by the ESI
-  // effects below: isEsiVolumeMode normally just mirrors the layerSettings entry, but that entry
-  // briefly disappears whenever handleDeleteLayer deletes the ESI card — and falling back to a
-  // hardcoded `true` in that gap would look like the user just switched from Connectome to
-  // Volume mode. useEsiLayer reacts to that (fake) mode change by rebuilding the layer it was
-  // just asked to delete. lastEsiVolumeMode is what isEsiVolumeMode falls back to instead: the
-  // last mode the user actually chose (only handleSettingChange writes it, on the user's own
-  // 'isEsiVolume' toggle), which keeps the value stable across the deletion so useEsiLayer sees
-  // no change and leaves the deleted layer alone.
-  const [lastEsiVolumeMode, setLastEsiVolumeMode] = useState(true);
+  // Connectome/Volume toggle for the ESI layer, read by the ESI effects below. Normally it just
+  // mirrors the ESI entry's settings, but that entry disappears whenever handleDeleteLayer
+  // deletes the ESI card — and falling back to a hardcoded `true` in that gap would look like
+  // the user just switched from Connectome to Volume mode, making useEsiLayer rebuild the layer
+  // it was just asked to delete. layerState.lastEsiVolumeMode is the fallback instead: the last
+  // mode the user actually chose, which outlives the entry, so useEsiLayer sees no change.
   const isEsiVolumeMode =
-    layerSettings.find((s) => s.url === ESI_LAYER_URL)?.isEsiVolume ?? lastEsiVolumeMode;
+    selectEntry(layerState, ESI_LAYER_URL)?.settings.isEsiVolume ?? layerState.lastEsiVolumeMode;
 
   // ─── Refs ───────────────────────────────────────────────────────────────────
   const opacityRafRef = useRef(null); // rAF id — cancelled on each drag so only the latest value redraws
   const thresholdRafRef = useRef(null); // rAF id — cancelled on each drag so only the latest value redraws
   const meshXRayRafRef = useRef(null); // rAF id — cancelled on each drag so only the latest value redraws
   const nodeScaleRafRef = useRef(null); // rAF id — shared by nodeScale/edgeScale (only one slider can be dragged at a time), cancelled on each drag so only the latest value redraws
-  const settingsCommitRafRef = useRef(null); // rAF id — throttles the layerSettings React commit itself to once per frame, so it matches the once-per-frame GL redraw above instead of re-rendering the whole card list on every Radix onValueChange tick
+  const settingsCommitRafRef = useRef(null); // rAF id — throttles the settings React commit itself to once per frame, so it matches the once-per-frame GL redraw above instead of re-rendering the whole card list on every Radix onValueChange tick
+  const pendingSettingPatchesRef = useRef(new Map()); // url → settings patch waiting for that once-per-frame commit, merged per url
   const fileMeshesRef = useRef(new Map()); // url → NVMesh for surface meshes loaded from files; keyed by url since nv.meshes also holds connectome meshes
 
   // ─── Derived values ─────────────────────────────────────────────────────────
@@ -320,8 +333,8 @@ export const NiiViewer = ({
     layers,
     nvRef,
     fileMeshesRef,
-    setOrderedLayers,
-    setLayerSettings,
+    layerState,
+    dispatchLayers,
     setIsLoading,
     onViewReady,
     onLoadError: handleLayerLoadError,
@@ -330,20 +343,16 @@ export const NiiViewer = ({
   const { electrodeMeshRef, clearElectrodeMesh, dismissElectrodeLayer } = useElectrodeConnectome({
     electrodeLayer,
     nvRef,
-    orderedLayers,
-    layerSettings,
-    setOrderedLayers,
-    setLayerSettings,
+    layerState,
+    dispatchLayers,
   });
   // Merges the ESI source-power layer into the card list and builds/rebuilds its mesh or volume.
   const { esiMeshRef, clearEsiMesh, clearEsiVolume, dismissEsiLayer } = useEsiLayer({
     esiLayer,
     isEsiVolumeMode,
     nvRef,
-    orderedLayers,
-    layerSettings,
-    setOrderedLayers,
-    setLayerSettings,
+    layerState,
+    dispatchLayers,
   });
 
   // ─── Handlers ───────────────────────────────────────────────────────────────
@@ -373,58 +382,45 @@ export const NiiViewer = ({
     nv.setClipPlane(next ? [0, 180, 0] : [2, 0, 0]); // depth 2 is niivue's default "disabled" value
   };
 
-  // Applies a single ImagingControls setting change (opacity/colormap/threshold/etc.). Always
-  // updates React state first, then dispatches to the right nv-mutation helper by layer kind —
-  // volumes/meshes/connectomes each live in a different part of nv and support a different
-  // subset of settings (see the three apply*SettingChange helpers above).
+  // Applies a single ImagingControls setting change (opacity/colormap/threshold/etc.) to the
+  // layer at `url`: commits it to React state, then dispatches to the right nv-mutation helper by
+  // layer kind — volumes/meshes/connectomes each live in a different part of nv and support a
+  // different subset of settings (see the three apply*SettingChange helpers above).
   const handleSettingChange = useCallback(
-    (layerIndex, key, value) => {
+    (url, key, value) => {
       // 'cal_range' carries both fractions as a [min, max] pair in one call — the Threshold
-      // slider's drag updates cal_min and cal_max together, and firing two separate
-      // onSettingChange('cal_min', ...) / ('cal_max', ...) calls back-to-back would race: the
-      // second call's nextLayerSettings would still be built from the layerSettings closure
-      // captured before the first call's setLayerSettings took effect, silently discarding it.
-      const layerUpdate =
+      // slider's drag updates cal_min and cal_max together in a single patch.
+      const patch =
         key === 'cal_range' ? { cal_min: value[0], cal_max: value[1] } : { [key]: value };
+      // The settings as they'll be once this patch lands — the same reducer computes them, so
+      // what nv gets now matches what React commits below (including meshXRay being written
+      // onto every mesh/connectome, see UPDATE_SETTINGS in layerState.js).
+      const nextState = layerReducer(layerState, { type: UPDATE_SETTINGS, url, patch });
 
-      // nv.opts.meshXRay is one scene-global value, not per-layer, so unlike every other
-      // setting here, a meshXRay change has to be written onto every mesh/connectome layer's
-      // settings entry — not just the layer whose slider was dragged — or their cards would
-      // silently drift out of sync with each other.
-      let nextLayerSettings;
-      if (key === 'meshXRay') {
-        nextLayerSettings = layerSettings.map((layerSetting, index) => {
-          const isMeshOrConnectome = !isImageVolumeLayer(orderedLayers[index]);
-          return isMeshOrConnectome ? { ...layerSetting, meshXRay: value } : layerSetting;
+      // The React commit is throttled to once per animation frame, which matters for slider
+      // drags (opacity/threshold/meshXRay) that fire several times per frame. It only ever
+      // commits a url-keyed patch, merged per url and applied by the reducer to whatever the
+      // state is by then — never a whole settings array built now, which would overwrite any
+      // layer merged in or re-sorted before the frame fires (the electrode/ESI black-render bug).
+      const pending = pendingSettingPatchesRef.current;
+      pending.set(url, { ...pending.get(url), ...patch });
+      if (!settingsCommitRafRef.current) {
+        settingsCommitRafRef.current = requestAnimationFrame(() => {
+          settingsCommitRafRef.current = null;
+          const patches = pendingSettingPatchesRef.current;
+          pendingSettingPatchesRef.current = new Map();
+          patches.forEach((urlPatch, patchUrl) =>
+            dispatchLayers({ type: UPDATE_SETTINGS, url: patchUrl, patch: urlPatch })
+          );
         });
-      } else {
-        nextLayerSettings = layerSettings.map((layerSetting, index) =>
-          index === layerIndex ? { ...layerSetting, ...layerUpdate } : layerSetting
-        );
       }
-      // Throttled to once per animation frame — cancelling any pending commit and scheduling the
-      // latest one, same pattern as the GL redraw below. This matters for slider drags
-      // (opacity/threshold/meshXRay), which can call this several times per frame; it's a no-op
-      // cost for single-fire changes (visible/colormap/isEsiVolume/...) since those only ever
-      // call this once, so they still land on the very next frame either way.
-      if (settingsCommitRafRef.current) cancelAnimationFrame(settingsCommitRafRef.current);
-      settingsCommitRafRef.current = requestAnimationFrame(() => {
-        settingsCommitRafRef.current = null;
-        setLayerSettings(nextLayerSettings);
-      });
-      // Persisted independently of layerSettings so the Connectome/Volume toggle survives
-      // handleDeleteLayer wiping the ESI settings entry — see lastEsiVolumeMode's declaration.
-      // setLastEsiVolumeMode fires synchronously here (unlike the throttled setLayerSettings
-      // above), but that's safe: the `?? lastEsiVolumeMode` fallback above only ever kicks in
-      // when the ESI settings entry is entirely absent (deleted), not when it's merely one frame
-      // stale, so the two being on different schedules doesn't produce a wrong intermediate value.
-      if (key === 'isEsiVolume') setLastEsiVolumeMode(value);
 
       if (!nvRef.current) return;
       const nv = nvRef.current;
-      const layer = orderedLayers[layerIndex];
-      if (!layer) return;
-      const settings = nextLayerSettings[layerIndex]; // this layer's own settings, post-update
+      const entry = selectEntry(nextState, url);
+      if (!entry) return;
+      const { layer, settings } = entry; // this layer's own settings, post-update
+      const nextLayerSettings = selectLayerSettings(nextState);
 
       if (layer.kind === 'connectome') {
         applyConnectomeSettingChange({
@@ -452,8 +448,7 @@ export const NiiViewer = ({
       } else {
         applyVolumeSettingChange({
           layer,
-          layerIndex,
-          orderedLayers,
+          nvIndex: selectNvVolumeIndex(nextState, url),
           key,
           value,
           settings,
@@ -464,7 +459,7 @@ export const NiiViewer = ({
         });
       }
     },
-    [layerSettings, orderedLayers, nvRef, esiMeshRef, electrodeMeshRef]
+    [layerState, nvRef, esiMeshRef, electrodeMeshRef]
   );
 
   // Loads files dropped into this component's own drop zone, appending them alongside whatever's already loaded.
@@ -484,25 +479,19 @@ export const NiiViewer = ({
       requestAnimationFrame(() => setIsLoading(false));
       return;
     }
-    const allLayers = [...orderedLayers, ...newLayers];
-    // startIndex ensures new layers get 0.6 opacity rather than being treated as the first;
-    // getCurrentMeshXRay keeps a newly-dropped mesh in sync with the scene's existing
-    // meshXRay rather than resetting it back to the default (see that function's comment).
-    const newLayerSettings = getInitialLayerSettings(
-      newLayers,
-      orderedLayers.length,
-      undefined,
-      getCurrentMeshXRay(orderedLayers, layerSettings)
-    );
-    const allLayerSettings = [...layerSettings, ...newLayerSettings];
-    setOrderedLayers(allLayers);
-    setLayerSettings(allLayerSettings);
+    // Add the cards right away (the reducer seeds their defaults: not the first layer's full
+    // opacity, and the scene's current meshXRay), and load from the same resulting state.
+    const appendAction = { type: APPEND_FILE_LAYERS, layers: newLayers };
+    const nextState = layerReducer(layerState, appendAction);
+    dispatchLayers(appendAction);
     // Image volumes and surface meshes take separate NiiVue load paths (nv.loadVolumes vs
     // nv.addMeshesFromUrl); connectomes are handled by their own effects and excluded from both.
-    const imageLayers = allLayers.filter(isImageVolumeLayer);
-    const imageLayerSettings = allLayerSettings.filter((_, i) => isImageVolumeLayer(allLayers[i]));
-    const meshLayers = allLayers.filter((l) => l.kind === 'mesh');
-    const meshLayerSettings = allLayerSettings.filter((_, i) => allLayers[i].kind === 'mesh');
+    const imageEntries = nextState.entries.filter((entry) => isImageVolumeLayer(entry.layer));
+    const meshEntries = nextState.entries.filter((entry) => entry.layer.kind === 'mesh');
+    const imageLayers = imageEntries.map((entry) => entry.layer);
+    const imageLayerSettings = imageEntries.map((entry) => entry.settings);
+    const meshLayers = meshEntries.map((entry) => entry.layer);
+    const meshLayerSettings = meshEntries.map((entry) => entry.settings);
 
     // Load volumes and meshes independently (allSettled, not all) so one category failing
     // doesn't discard the other. Each NiiVue loader is all-or-nothing — it adds nothing to
@@ -531,8 +520,7 @@ export const NiiViewer = ({
       if (volumeResult.status === 'rejected') revokeLayerUrls(newLayers.filter(isImageVolumeLayer));
       if (meshResult.status === 'rejected')
         revokeLayerUrls(newLayers.filter((l) => l.kind === 'mesh'));
-      setOrderedLayers((prev) => prev.filter((l) => !failedUrls.has(l.url)));
-      setLayerSettings((prev) => prev.filter((s) => !failedUrls.has(s.url)));
+      dispatchLayers({ type: REMOVE_LAYERS, urls: [...failedUrls] });
       setHasLoadError(true); // suppresses useLoadingToast's success toast once setIsLoading(false) below fires
       // One toast per failed layer, named by file rather than by its opaque blob: url — mirrors
       // useLayerLoader's failure handling (see its comment) for the same reason: each NiiVue
@@ -556,7 +544,7 @@ export const NiiViewer = ({
     requestAnimationFrame(() => setIsLoading(false)); // wait one frame before clearing spinner
   };
 
-  // Reorders orderedLayers/layerSettings after a card drag, and moves the matching NVImage in nv if an image volume was moved.
+  // Reorders the cards after a drag, and moves the matching NVImage in nv if an image volume was moved.
   const handleReorder = useCallback(
     (event) => {
       if (!nvRef.current) return; // Guard clause — if NiiVue isn't initialized yet, we can't reorder
@@ -565,17 +553,10 @@ export const NiiViewer = ({
       const newUrls = move(urls, event); // Get the new order of URLs based on the drag event
       if (newUrls === urls) return; // no change (canceled or same position)
 
-      // Reorder the orderedLayers and layerSettings arrays to match the new order of URLs
-      const newOrderedLayers = newUrls.map((url) =>
-        orderedLayers.find((layer) => layer.url === url)
-      );
-      const newLayerSettings = newUrls.map((url) => {
-        const oldIndex = orderedLayers.findIndex((layer) => layer.url === url);
-        return layerSettings[oldIndex];
-      });
-
-      setOrderedLayers(newOrderedLayers);
-      setLayerSettings(newLayerSettings);
+      // Reorder the cards (each layer moves together with its settings)
+      const reorderAction = { type: REORDER, urls: newUrls };
+      const nextState = layerReducer(layerState, reorderAction);
+      dispatchLayers(reorderAction);
 
       // Connectome and mesh layers have no slot in nv.volumes at all, and reordering a mesh
       // relative to volumes has no rendering effect anyway (3D meshes vs. 2D slice
@@ -583,10 +564,8 @@ export const NiiViewer = ({
       // image volume was dragged.
       const movedLayer = orderedLayers[event.operation.source.initialIndex];
       if (movedLayer && isImageVolumeLayer(movedLayer)) {
-        const imagesBefore = orderedLayers.filter(isImageVolumeLayer);
-        const imagesAfter = newOrderedLayers.filter(isImageVolumeLayer);
-        const fromIndex = imagesBefore.indexOf(movedLayer);
-        const toIndex = imagesAfter.indexOf(movedLayer);
+        const fromIndex = selectNvVolumeIndex(layerState, movedLayer.url);
+        const toIndex = selectNvVolumeIndex(nextState, movedLayer.url);
         setIsLoading(true);
         nvRef.current.setVolume(nvRef.current.volumes[fromIndex], toIndex);
         nvRef.current.updateGLVolume();
@@ -594,15 +573,15 @@ export const NiiViewer = ({
         requestAnimationFrame(() => setIsLoading(false));
       }
     },
-    [orderedLayers, layerSettings, nvRef]
+    [orderedLayers, layerState, nvRef]
   );
 
   // Removes a layer's card and its underlying nv volume/mesh, dispatching by kind.
   const handleDeleteLayer = useCallback(
-    (index) => {
+    (url) => {
       if (!nvRef.current) return; // Guard clause — if NiiVue isn't initialized yet, we can't delete
       const nv = nvRef.current;
-      const layer = orderedLayers[index];
+      const layer = selectEntry(layerState, url)?.layer;
       // Defensive backstop — normally already revoked right after load; no-op for sentinel URLs.
       if (layer) revokeLayerUrls([layer]);
 
@@ -631,8 +610,7 @@ export const NiiViewer = ({
           fileMeshesRef.current.delete(layer.url);
         }
       } else {
-        const nvIndex = orderedLayers.slice(0, index).filter(isImageVolumeLayer).length;
-        nv.removeVolumeByIndex(nvIndex);
+        nv.removeVolumeByIndex(selectNvVolumeIndex(layerState, url));
         // The ESI volume (volume mode) is a non-connectome layer too — clear its ref so the
         // ESI build effect doesn't try to remove an already-gone NVImage on its next rebuild,
         // and dismiss it for the same reason as the connectome branch above.
@@ -641,12 +619,10 @@ export const NiiViewer = ({
           dismissEsiLayer();
         }
       }
-      setOrderedLayers(orderedLayers.filter((_, i) => i !== index));
-      setLayerSettings(layerSettings.filter((_, i) => i !== index));
+      dispatchLayers({ type: REMOVE_LAYERS, urls: [url] });
     },
     [
-      orderedLayers,
-      layerSettings,
+      layerState,
       nvRef,
       esiMeshRef,
       electrodeMeshRef,
@@ -700,32 +676,6 @@ export const NiiViewer = ({
     onHas3DExtentChange?.(orderedLayers.some((layer) => layer.kind !== 'connectome'));
   }, [orderedLayers, onHas3DExtentChange]);
 
-  // ─── Effects: card ordering ─────────────────────────────────────────────────
-
-  // Keep image volumes (reorderable) above meshes/connectomes (fixed) in the card list, so
-  // the fixed layers cluster at the bottom — they have no meaningful z-order in the 3D scene
-  // and aren't draggable, and grouping them out of the reorderable volumes makes that clear.
-  // Runs whenever orderedLayers changes (a mesh dropped, a connectome merged in, or the ESI
-  // layer flipping between volume/connectome kind) and re-sorts if needed. The partition is
-  // stable, so each group's relative order is preserved — critically, the image volumes keep
-  // their order, so the user's reordering and the image→nv.volumes index mapping both survive.
-  // Bails when already sorted so it doesn't loop.
-  useEffect(() => {
-    const order = orderedLayers.map((_, i) => i);
-    order.sort(
-      (a, b) =>
-        Number(!isImageVolumeLayer(orderedLayers[a])) -
-        Number(!isImageVolumeLayer(orderedLayers[b]))
-    );
-    if (order.every((originalIndex, i) => originalIndex === i)) return; // already volumes-first — bails before setState, so this only ever commits one corrective render per actual reorder, never loops
-    // orderedLayers is read positionally elsewhere (nv.volumes index mapping in
-    // handleSettingChange/handleDeleteLayer, the layer hooks), so it must be the committed
-    // source of truth — a derived-at-render sorted copy would desync from those index lookups.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setOrderedLayers(order.map((i) => orderedLayers[i]));
-    setLayerSettings((prev) => order.map((i) => prev[i]));
-  }, [orderedLayers]);
-
   // ─── Effects: Nii Vue interactions ─────────────────────────────────────────────────
 
   // move the main niivue canvas cursor to the position that is packed inside clickedEegChannelPos
@@ -744,8 +694,7 @@ export const NiiViewer = ({
       {/* Controls panel, with a compact drop zone below it for loading additional files while the NiiViewer is active */}
       <div className="flex flex-col">
         <ImagingControls
-          layers={orderedLayers}
-          layerSettings={layerSettings}
+          entries={layerState.entries}
           onSettingChange={handleSettingChange}
           onReorder={handleReorder}
           onDeleteLayer={handleDeleteLayer}

@@ -8,6 +8,7 @@ import {
   filesToLayers,
   ESI_LAYER_URL,
   ELECTRODE_LAYER_URL,
+  DEFAULT_MESH_XRAY,
 } from '@/utils/NiiViewer.utils';
 import {
   NiiViewer,
@@ -835,6 +836,13 @@ describe('NiiViewer', () => {
       expect(result[1].opacity).toBe(0.6);
     });
 
+    it('in ESI volume mode, a non-first layer defaults to 0.9 opacity, but the first layer stays fully opaque', () => {
+      const [first] = getInitialLayerSettings([{ url: ESI_LAYER_URL }], 0, true);
+      const [later] = getInitialLayerSettings([{ url: ESI_LAYER_URL }], 1, true);
+      expect(first.opacity).toBe(1.0);
+      expect(later.opacity).toBe(0.9);
+    });
+
     it('defaults electrodeDisplayMode to "none" for the Electrodes layer only', () => {
       const result = getInitialLayerSettings([
         { type: 'MRI' },
@@ -1294,10 +1302,10 @@ describe('NiiViewer', () => {
     };
 
     // Regression test: NiiVue's own default for nv.opts.meshXRay is 0, but this app's default
-    // settings value (see getInitialLayerSettings) is 1 — that default must be written onto
+    // settings value (DEFAULT_MESH_XRAY) differs — that default must be written onto
     // nv.opts.meshXRay as soon as a mesh/connectome is built, not only once the user drags the
     // slider (which is the only other place that write happened before this fix).
-    it('initializes nv.opts.meshXRay to the default settings value (1) as soon as a mesh/connectome loads, without needing a user interaction', async () => {
+    it('initializes nv.opts.meshXRay to DEFAULT_MESH_XRAY as soon as a mesh/connectome loads, without needing a user interaction', async () => {
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
       render(
@@ -1305,7 +1313,7 @@ describe('NiiViewer', () => {
       );
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
 
-      expect(nvRef.current.opts.meshXRay).toBe(1);
+      expect(nvRef.current.opts.meshXRay).toBe(DEFAULT_MESH_XRAY);
     });
 
     // meshXRay's nv-side write is throttled through requestAnimationFrame (one redraw per frame
@@ -1390,7 +1398,9 @@ describe('NiiViewer', () => {
       // Toggling one card's visibility is unrelated to meshXRay and shouldn't broadcast anything.
       await userEvent.click(screen.getByRole('button', { name: /hide.*mesh - cortex/i }));
 
-      expect(screen.getByLabelText('Electrodes - Intracranial EEG meshXRay')).toHaveValue(100);
+      expect(screen.getByLabelText('Electrodes - Intracranial EEG meshXRay')).toHaveValue(
+        DEFAULT_MESH_XRAY * 100
+      );
     });
   });
 
@@ -2324,6 +2334,68 @@ describe('NiiViewer', () => {
       const nv = nvRef.current;
       const call = nv.loadConnectomeAsMesh.mock.calls.at(-1)[0];
       expect(call.nodeMaxColor).toBe(42);
+    });
+
+    // Regression test for "the Electrodes layer disappears and the 3D render goes black when an
+    // ESI volume is generated": generating ESI also delivers a new voltage snapshot, so the
+    // Electrodes card's auto-select-to-Voltage effect calls handleSettingChange in the same burst
+    // of renders that merges the ESI layer in and re-sorts it above the (pinned-to-bottom)
+    // connectome. handleSettingChange's settings commit is deferred to the next animation frame —
+    // if it lands as an array built before that re-sort, layerSettings ends up crossed with
+    // orderedLayers, the electrode hook reads the ESI layer's settings (electrodeDisplayMode
+    // undefined), every node gets size 0, and NiiVue fails to build the empty mesh.
+    it('keeps the electrode settings aligned when a display-mode change is still pending as the ESI volume is merged and re-sorted', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const nv = nvRef.current;
+      const mriLayers = [{ type: 'MRI', url: '/mri.nii' }];
+      // metrics: {} so a misread display mode yields size-0 nodes (the real symptom) rather
+      // than a TypeError from applyElectrodeDisplayMode's metric lookup.
+      const nodes = [
+        { name: 'B1', x: 0, y: 0, z: 0, colorValue: 1, sizeValue: 1, metrics: {} },
+        { name: 'B2', x: 1, y: 0, z: 0, colorValue: 1, sizeValue: 1, metrics: {} },
+      ];
+      const { rerender } = render(
+        <NiiViewer
+          nvRef={nvRef}
+          layers={mriLayers}
+          electrodeLayer={makeIntracranialLayer({ hasVoltageSnapshot: false, nodes })}
+        />
+      );
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      // Hold rAF callbacks back instead of running them immediately (this suite's default), so
+      // handleSettingChange's deferred commit only lands after the renders below have settled —
+      // the same ordering a real browser frame produces.
+      const pendingFrames = [];
+      vi.stubGlobal('requestAnimationFrame', (cb) => {
+        pendingFrames.push(cb);
+        return pendingFrames.length;
+      });
+
+      // New snapshot (triggers the auto-select to Voltage) and the ESI volume, arriving together.
+      rerender(
+        <NiiViewer
+          nvRef={nvRef}
+          layers={mriLayers}
+          electrodeLayer={makeIntracranialLayer({ hasVoltageSnapshot: true, calMax: 42, nodes })}
+          esiLayer={makeEsiLayer()}
+        />
+      );
+      await waitFor(() => expect(nv.addVolumesFromUrl).toHaveBeenCalled());
+
+      nv.loadConnectomeAsMesh.mockClear();
+      act(() => {
+        while (pendingFrames.length) pendingFrames.shift()();
+      });
+
+      // The pending Voltage selection must land on the Electrodes layer — so its rebuild uses
+      // calMax as nodeMaxColor and keeps every node visible, instead of rebuilding empty.
+      const electrodeCall = nv.loadConnectomeAsMesh.mock.calls
+        .map(([json]) => json)
+        .findLast((json) => json.name === 'Electrodes');
+      expect(electrodeCall.nodeMaxColor).toBe(42);
+      expect(electrodeCall.nodes.every((node) => node.sizeValue > 0)).toBe(true);
     });
 
     it('does not rebuild the mesh when an unrelated setting (nodeScale) changes', async () => {

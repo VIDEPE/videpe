@@ -598,14 +598,15 @@ export const AboutPage = () => {
               secondaryLabel="LinkedIn"
             />
             <PersonCard
-              name="Dr. Nicolas Roehri"
-              orcid="0000-0002-6948-1055"
-              role="Principal Investigator"
-              affiliation="Department of Clinical Neuroscience - University of Geneva (UNIGE)"
-              url="https://neurocenter-unige.ch/research-groups/nicolas-roehri/"
+              name="Prof. Serge Vulliémoz, MD"
+              orcid="0000-0002-1877-8625"
+              role="Associate Professor"
+              affiliation={[
+                'EEG and Epilepsy Unit - Geneva University Hospitals (HUG)',
+                'Center for Biomedical Imaging (CIBM)',
+              ]}
+              url="https://neurocenter-unige.ch/research-groups/serge-vulliemoz/"
               urlLabel="Research group"
-              secondaryUrl="https://linkedin.com/in/nicolas-roehri-43526580"
-              secondaryLabel="LinkedIn"
             />
             <PersonCard
               name="Dr. Isotta Rigoni"
@@ -618,15 +619,14 @@ export const AboutPage = () => {
               secondaryLabel="LinkedIn"
             />
             <PersonCard
-              name="Prof. Serge Vulliémoz, MD"
-              orcid="0000-0002-1877-8625"
-              role="Associate Professor"
-              affiliation={[
-                'EEG and Epilepsy Unit - Geneva University Hospitals (HUG)',
-                'Center for Biomedical Imaging (CIBM)',
-              ]}
-              url="https://neurocenter-unige.ch/research-groups/serge-vulliemoz/"
+              name="Dr. Nicolas Roehri"
+              orcid="0000-0002-6948-1055"
+              role="Principal Investigator"
+              affiliation="Department of Clinical Neuroscience - University of Geneva (UNIGE)"
+              url="https://neurocenter-unige.ch/research-groups/nicolas-roehri/"
               urlLabel="Research group"
+              secondaryUrl="https://linkedin.com/in/nicolas-roehri-43526580"
+              secondaryLabel="LinkedIn"
             />
           </div>
         </Section>

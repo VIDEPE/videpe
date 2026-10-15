@@ -4,6 +4,8 @@ import {
   selectEegIntakeFiles,
   selectImagingFiles,
   selectExtraDataFileNames,
+  hasEegRecording,
+  listFileExtensions,
 } from '@/shanoir/shanoirFiles';
 
 const file = (name) => new File(['x'], name);
@@ -12,12 +14,16 @@ const names = (files) => files.map((f) => f.name);
 describe('classifyDataset', () => {
   it('classifies EEG datasets', () => {
     expect(classifyDataset({ type: 'Eeg' })).toBe('eeg');
+    expect(classifyDataset({ type: 'EEG' })).toBe('eeg'); // check uppercase variant
+    expect(classifyDataset({ type: 'eeg' })).toBe('eeg'); // check lowercase variant
   });
 
   it.each(['Mr', 'Pet', 'Spect', 'Ct', 'Segmentation', 'Mesh'])(
     'classifies %s datasets as imaging',
     (type) => {
       expect(classifyDataset({ type })).toBe('imaging');
+      expect(classifyDataset({ type: type.toUpperCase() })).toBe('imaging'); // check uppercase variant
+      expect(classifyDataset({ type: type.toLowerCase() })).toBe('imaging'); // check lowercase variant
     }
   );
 
@@ -25,8 +31,35 @@ describe('classifyDataset', () => {
     'leaves %s datasets unsupported',
     (type) => {
       expect(classifyDataset({ type })).toBeNull();
+      expect(classifyDataset({ type: type?.toUpperCase() })).toBeNull(); // check uppercase variant and ? to make sure undefined does not throw error
+      expect(classifyDataset({ type: type?.toLowerCase() })).toBeNull(); // check lowercase variant and ? to make sure undefined does not throw error
     }
   );
+});
+
+describe('hasEegRecording', () => {
+  it('is true when the files include a recording VIDEPE can read', () => {
+    expect(hasEegRecording([file('rec.vhdr'), file('rec.eeg')])).toBe(true);
+  });
+
+  it('is false for electrode positions or an inverse solution without a recording', () => {
+    expect(hasEegRecording([file('sub-01_electrodes.tsv'), file('inv.mat')])).toBe(false);
+  });
+
+  it('is false for a recording format VIDEPE cannot read', () => {
+    expect(hasEegRecording([file('rec.edf')])).toBe(false);
+  });
+});
+
+describe('listFileExtensions', () => {
+  it('lists each extension once, lowercased, in the order the files come in', () => {
+    const files = [file('rec.EDF'), file('rec.json'), file('other.edf')];
+    expect(listFileExtensions(files)).toEqual(['.edf', '.json']);
+  });
+
+  it('leaves out files without an extension, including paths with a dot in a folder name', () => {
+    expect(listFileExtensions([file('README'), file('v1.2/IM0001')])).toEqual([]);
+  });
 });
 
 describe('selectEegIntakeFiles', () => {
