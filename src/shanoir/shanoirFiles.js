@@ -53,6 +53,33 @@ export function selectEegIntakeFiles(files) {
 }
 
 /**
+ * Whether the files include an EEG recording VIDEPE can read. An EEG dataset without one (e.g.
+ * an EDF recording) has nothing to show, even if it holds electrode positions.
+ *
+ * @param {File[]} files
+ * @returns {boolean}
+ */
+export function hasEegRecording(files) {
+  return files.some((f) => isEegRecordingFile(f.name));
+}
+
+/**
+ * Lists the file extensions found in a dataset, to tell the user what a dataset VIDEPE
+ * couldn't load contained (e.g. ".edf").
+ *
+ * @param {File[]} files
+ * @returns {string[]} each extension once, lowercased and with its dot, in the order the files
+ *   come in. Files without an extension are left out.
+ */
+export function listFileExtensions(files) {
+  const extensions = files
+    .map((f) => baseName(f.name))
+    .filter((name) => name.includes('.'))
+    .map((name) => name.slice(name.lastIndexOf('.')).toLowerCase());
+  return [...new Set(extensions)]; // a Set keeps the first of each, in order
+}
+
+/**
  * Picks the image files (volumes and surface meshes) from an unzipped imaging dataset, for
  * filesToLayers. Conversion sidecars and other non-image files are dropped.
  *

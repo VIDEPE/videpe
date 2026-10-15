@@ -60,11 +60,14 @@ describe('fetchShanoirExamination', () => {
     ]);
   });
 
-  it('reports dataset types VIDEPE cannot show as skipped, without downloading them', async () => {
+  it('reports dataset types VIDEPE cannot show as skipped, naming the type, without downloading them', async () => {
+    // The type is named as Shanoir sent it, so a type VIDEPE should support but doesn't
+    // recognise (e.g. a spelling mismatch) shows up in the toast.
     const client = makeClient({
       datasets: [
         { id: 1, name: 'rest', type: 'Eeg' },
         { id: 9, name: 'report', type: 'Measurement' },
+        { id: 10, name: 'untyped' },
       ],
       zips: { 1: EEG_ZIP },
     });
@@ -72,7 +75,46 @@ describe('fetchShanoirExamination', () => {
 
     expect(client.downloadDatasetZip.mock.calls.map(([id]) => id)).toEqual([1]);
     expect(result.skippedDatasets).toEqual([
-      { id: 9, name: 'report', type: 'Measurement', reason: 'unsupported type' },
+      {
+        id: 9,
+        name: 'report',
+        type: 'Measurement',
+        reason: 'unsupported dataset type: Measurement',
+      },
+      { id: 10, name: 'untyped', type: undefined, reason: 'unsupported dataset type: none' },
+    ]);
+  });
+
+  it('reports an EEG dataset without a supported recording as skipped, and loads no EEG files', async () => {
+    // e.g. an EDF recording: the type is supported, the file format isn't. Its extra-data
+    // (electrode positions) only means something alongside a recording, so it's dropped too.
+    const client = makeClient({
+      datasets: [{ id: 1, name: 'rest', type: 'EEG' }],
+      zips: { 1: makeZip(['rec/rec.edf', 'rec/rec.json']) },
+      extraDataPaths: ['/data/exam-7/sub-01_electrodes.tsv'],
+    });
+    const result = await fetchShanoirExamination({ client, examinationId: 7 });
+
+    expect(result.eegDataset).toBeNull();
+    expect(result.eegFiles).toEqual([]);
+    expect(result.skippedDatasets).toEqual([
+      { id: 1, name: 'rest', type: 'EEG', reason: 'unsupported files: .edf, .json' },
+    ]);
+  });
+
+  it('reports an imaging dataset without supported image files as skipped, and still loads the others', async () => {
+    const client = makeClient({
+      datasets: [
+        { id: 2, name: 'T1', type: 'MR' },
+        { id: 3, name: 'old T2', type: 'MR' },
+      ],
+      zips: { 2: T1_ZIP, 3: makeZip(['anat/t2.img', 'anat/t2.hdr']) },
+    });
+    const result = await fetchShanoirExamination({ client, examinationId: 7 });
+
+    expect(names(result.imagingFiles)).toEqual(['sub-01_T1w.nii.gz']);
+    expect(result.skippedDatasets).toEqual([
+      { id: 3, name: 'old T2', type: 'MR', reason: 'unsupported files: .img, .hdr' },
     ]);
   });
 
