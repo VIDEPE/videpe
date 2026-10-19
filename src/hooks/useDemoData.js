@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
-import { loadBrainVisionEEG } from '../loaders/loadEEGBrainVision';
+import { loadEegBrainVision } from '../loaders/loadEegBrainVision';
 import { detectVolumeType } from '../utils/NiiViewer.utils';
 
 const DEMO_EEG = {
@@ -109,7 +109,7 @@ export function useDemoData({
       await toast.promise(
         (async () => {
           // Load and set EEG
-          const result = await loadBrainVisionEEG(base + DEMO_EEG.header, base + DEMO_EEG.data);
+          const result = await loadEegBrainVision(base + DEMO_EEG.header, base + DEMO_EEG.data);
           setEeg(result);
           // Load and set electrode positions and inverse solution, via the same handlers
           // file drops use, so they reach EegViewer/ESI exactly as a manual drop would.

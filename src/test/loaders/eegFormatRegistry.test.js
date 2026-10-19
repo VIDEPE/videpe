@@ -3,10 +3,15 @@ import {
   checkEegFiles,
   detectAndLoadEEG,
   EEG_FORMAT_EXTENSIONS,
+  ELEC_POS_EXTENSIONS,
 } from '@/loaders/eegFormatRegistry';
 
-vi.mock('@/loaders/loadEEGBrainVision', () => ({
-  loadBrainVisionEEG: vi.fn(),
+vi.mock('@/loaders/loadEegBrainVision', () => ({
+  loadEegBrainVision: vi.fn(),
+}));
+
+vi.mock('@/loaders/loadEegEdf', () => ({
+  loadEegEdf: vi.fn(),
 }));
 
 const makeFile = (name) => new File([''], name);
@@ -68,12 +73,21 @@ describe('checkEegFiles', () => {
     expect(result.complete).toBe(false);
     expect(result.warning).toBeTruthy();
   });
+
+  it('returns complete=true for a single .edf file (EDF needs no companion files)', () => {
+    const result = checkEegFiles([makeFile('sub01.EDF')]);
+    expect(result.formatName).toMatch(/EDF/);
+    expect(result.complete).toBe(true);
+    expect(result.missing).toHaveLength(0);
+    expect(result.warning).toBeNull();
+  });
 });
 
 describe('EEG_FORMAT_EXTENSIONS', () => {
-  it('lists the extensions recognized by supported EEG formats, e.g. BrainVision', () => {
+  it('lists the extensions recognized by supported EEG formats, e.g. BrainVision and EDF', () => {
     expect(EEG_FORMAT_EXTENSIONS).toContain('.vhdr');
     expect(EEG_FORMAT_EXTENSIONS).toContain('.eeg');
+    expect(EEG_FORMAT_EXTENSIONS).toContain('.edf');
   });
 
   it('does not include imaging or electrode-position/inverse-solution extensions', () => {
@@ -83,12 +97,18 @@ describe('EEG_FORMAT_EXTENSIONS', () => {
   });
 });
 
+describe('ELEC_POS_EXTENSIONS', () => {
+  it('does not include .edf — the intake routes these before format detection, so an EDF recording would never reach its loader', () => {
+    expect(ELEC_POS_EXTENSIONS).not.toContain('.edf');
+  });
+});
+
 describe('detectAndLoadEEG', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('calls loadBrainVisionEEG with the correct files for a complete BrainVision set', async () => {
-    const { loadBrainVisionEEG } = await import('@/loaders/loadEEGBrainVision');
-    loadBrainVisionEEG.mockResolvedValue({
+  it('calls loadEegBrainVision with the correct files for a complete BrainVision set', async () => {
+    const { loadEegBrainVision } = await import('@/loaders/loadEegBrainVision');
+    loadEegBrainVision.mockResolvedValue({
       channelNames: ['Ch1'],
       fs: 1,
       tMax: 1,
@@ -99,14 +119,26 @@ describe('detectAndLoadEEG', () => {
     const eeg = makeFile('sub01.eeg');
     await detectAndLoadEEG([vhdr, eeg]);
 
-    expect(loadBrainVisionEEG).toHaveBeenCalledOnce();
-    expect(loadBrainVisionEEG).toHaveBeenCalledWith(
+    expect(loadEegBrainVision).toHaveBeenCalledOnce();
+    expect(loadEegBrainVision).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'sub01.vhdr' }),
       expect.objectContaining({ name: 'sub01.eeg' })
     );
   });
 
+  it('calls loadEegEdf with the .edf file', async () => {
+    const { loadEegEdf } = await import('@/loaders/loadEegEdf');
+    const { loadEegBrainVision } = await import('@/loaders/loadEegBrainVision');
+    loadEegEdf.mockResolvedValue({ channelNames: ['Ch1'], fs: 1, tMax: 1, getChunk: vi.fn() });
+
+    await detectAndLoadEEG([makeFile('sub01.edf')]);
+
+    expect(loadEegEdf).toHaveBeenCalledOnce();
+    expect(loadEegEdf).toHaveBeenCalledWith(expect.objectContaining({ name: 'sub01.edf' }));
+    expect(loadEegBrainVision).not.toHaveBeenCalled();
+  });
+
   it('throws with a message listing supported formats for an unrecognized file set', () => {
-    expect(() => detectAndLoadEEG([makeFile('data.txt')])).toThrow(/BrainVision/i);
+    expect(() => detectAndLoadEEG([makeFile('data.txt')])).toThrow(/BrainVision.*EDF/i);
   });
 });

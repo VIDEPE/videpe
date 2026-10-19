@@ -125,7 +125,7 @@ const CHANNEL_DATA = [
 
 // Minimal recording provider whose getChunk demultiplexes TIMESTAMPS/CHANNEL_DATA for
 // the requested range — mirrors the { channelNames, fs, tMax, getChunk } shape returned
-// by loadBrainVisionEEG.
+// by loadEegBrainVision.
 const makeProvider = (tMax = TMAX) => ({
   channelNames,
   fs: 1,

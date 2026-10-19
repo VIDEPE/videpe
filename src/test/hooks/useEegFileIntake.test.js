@@ -53,6 +53,13 @@ describe('useEegFileIntake › handleEegFiles result', () => {
     expect(setEeg).toHaveBeenCalledWith(PARSED_EEG);
   });
 
+  it('resolves to true and sets the recording when a single EDF file is dropped', async () => {
+    const { drop, setEeg } = setup();
+    expect(await drop(file('rec.edf'))).toBe(true);
+    expect(detectAndLoadEEG).toHaveBeenCalledWith([expect.objectContaining({ name: 'rec.edf' })]);
+    expect(setEeg).toHaveBeenCalledWith(PARSED_EEG);
+  });
+
   it('resolves to true when the set is completed by a second drop', async () => {
     const { hook, drop, setEeg } = setup();
     expect(await drop(file('rec.vhdr'))).toBe(false); // incomplete: held as pending

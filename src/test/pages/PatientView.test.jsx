@@ -13,7 +13,7 @@ const renderPatientView = () =>
 import toast from 'react-hot-toast';
 import { Niivue } from '@niivue/niivue';
 import { dicomLoader } from '@niivue/dicom-loader';
-import { loadBrainVisionEEG } from '@/loaders/loadEEGBrainVision';
+import { loadEegBrainVision } from '@/loaders/loadEegBrainVision';
 import { checkEegFiles, detectAndLoadEEG } from '@/loaders/eegFormatRegistry';
 import { parseInverseSolutionFieldtrip } from '@/loaders/parseInverseSolutionFieldtrip';
 import { electricalSourceImaging } from '@/utils/electricalSourceImagingUtils';
@@ -34,8 +34,8 @@ vi.mock('react-hot-toast', () => {
   return { default: toastFn };
 });
 
-vi.mock('@/loaders/loadEEGBrainVision', () => ({
-  loadBrainVisionEEG: vi
+vi.mock('@/loaders/loadEegBrainVision', () => ({
+  loadEegBrainVision: vi
     .fn()
     .mockResolvedValue({ channelNames: ['Ch1'], fs: 1, tMax: 1, getChunk: vi.fn() }),
 }));
@@ -677,7 +677,7 @@ describe('PatientView — demo loading', () => {
     // Swallow the rejection like the real toast.promise does, so it doesn't leak as an unhandled rejection
     toast.promise.mockImplementationOnce((p) => p.catch(() => {}));
 
-    loadBrainVisionEEG.mockRejectedValueOnce(new Error('Network error'));
+    loadEegBrainVision.mockRejectedValueOnce(new Error('Network error'));
     renderPatientView();
     fireEvent.click(screen.getByRole('button', { name: /load demo/i }));
 

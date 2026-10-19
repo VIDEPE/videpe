@@ -3,7 +3,7 @@ import { yieldToMain } from '@/utils/yieldToMain';
 // BrainVision EEG files come in two parts: a text header (.vhdr) and a binary data file (.eeg).
 // The .eeg file is raw, uncompressed, multiplexed IEEE_FLOAT_32 data (4 bytes per channel
 // per sample-time), so an arbitrary time range maps directly to an arbitrary byte range —
-// this lets loadBrainVisionEEG avoid reading the whole file for multi-hour recordings.
+// this lets loadEegBrainVision avoid reading the whole file for multi-hour recordings.
 const BYTES_PER_SAMPLE = 4; // sizeof(IEEE_FLOAT_32); existing assumption, BinaryFormat is not parsed
 
 // The demux pauses briefly once it has worked DEMUX_FRAME_BUDGET_MS without a break, so the
@@ -121,7 +121,7 @@ async function demuxFloat32(float32, nChannels, nSamples, sampleOffset, fs, sign
  *     stops at its next check and rejects with an AbortError.
  * @throws {Error} when the header lacks NumberOfChannels/SamplingInterval, or a URL fetch fails.
  */
-export async function loadBrainVisionEEG(header, data) {
+export async function loadEegBrainVision(header, data) {
   // extract header text from .vhdr file and parse it to get requirements for reading the binary file
   const headerText = await readText(header);
   const { nChannels, samplingInterval, channelNames } = parseVhdr(headerText);
