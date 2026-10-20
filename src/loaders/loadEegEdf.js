@@ -1,3 +1,5 @@
+import { createFrameBudget } from '@/utils/frameBudget';
+
 // EDF File layout:
 // ┌──────────────────────────────┐
 // │ Fixed header      256 bytes  │  recording-wide info
@@ -20,6 +22,9 @@
 // 3. Each channel can have its own sampling rate, through its own samplesPerRecord. => If that's the case it is rejected
 
 const HEADER_SIZE = 256; // bytes
+const BYTES_PER_SAMPLE = 2; // EDF uses int16 => 2 bytes per sample
+// EDF+ stores events as text in a signal with this label => it is skipped for now until VIDEPE accepts annotations
+const ANNOTATIONS_LABEL = 'EDF Annotations';
 
 // EDF headre has a fixed size (256 bytes) and is plain ASCII text
 // each field has a fixed width and is padded with spaces
@@ -51,7 +56,6 @@ const headerFields = [
 // units:    [uV      ][uV      ][uV      ]...    8 bytes each
 // physMin, physMax, digMin, digMax, ...
 // samplesPerRecord: [256 ][256 ][256 ]...
-
 const signalFields = [
   ['label', 16],
   ['transducer', 80],
@@ -74,23 +78,107 @@ async function readText(file, start, end) {
   return latin1.decode(bytes);
 }
 
+/**
+ * Splits EDF header text into its fixed-width fields, one object per signal.
+ *
+ * EDF stores headers field by field, not signal by signal: for each field, the value of every
+ * signal in turn (all labels, then all transducers, ...). The fixed header has the same layout
+ * with a single "signal", so it's parsed with ns = 1.
+ *
+ * @param {string} text - the header bytes, decoded as latin-1 (so character index = byte offset).
+ * @param {Array<[string, number]>} fields - [fieldName, width in bytes] pairs, in file
+ *   order (e.g. headerFields or signalFields).
+ * @param {number} [ns=1] - number of signals the text holds.
+ * @returns {Object[]} one object per signal, mapping each field name to its value with the space
+ *   padding trimmed, e.g. [{ label: 'Fp1', unit: 'uV', ... }, { label: 'Fp2', ... }]. Values
+ *   are strings — numeric fields still need converting.
+ */
+function parseEdfHeader(text, fields, ns = 1) {
+  // preallocate header: an array with length ns and each entry is an empty object
+  const header = [];
+  for (let i = 0; i < ns; i++) header.push({});
+
+  let iByte = 0;
+  // loop over the fieldnames
+  for (const [fieldName, fieldLength] of fields) {
+    // loop over the signals, extract the text value and move iByte by fieldLength
+    for (let iSignal = 0; iSignal < ns; iSignal++) {
+      const value = text.slice(iByte, iByte + fieldLength);
+      header[iSignal][fieldName] = value.trim(); // trim padding from each field
+      iByte += fieldLength;
+    }
+  }
+  return header;
+}
+
+// Converts a numeric header field — some writers use a decimal comma (e.g. '0,5'), as MNE also handles
+const toNumber = (text) => Number(text.replace(',', '.'));
+
+async function demuxBuffer(
+  buffer,
+  signals,
+  nRecordsRead,
+  sampleOffset,
+  samplesPerRecord,
+  fs,
+  abortSignal
+) {
+  const int16Buffer = new Int16Array(buffer); // the stored values, 2 bytes each
+  const nSamples = nRecordsRead * samplesPerRecord; // samples per channel in this chunk
+
+  // Absolute timestamps: the chunk starts at the first sample of its first record
+  const timestamps = new Float32Array(nSamples);
+  for (let iSample = 0; iSample < nSamples; iSample++)
+    timestamps[iSample] = (sampleOffset + iSample) / fs;
+
+  // Allocate separate arrays for each data channeln (i.e. without annotation)
+  const nDataChannels = signals.filter((s) => s.label !== ANNOTATIONS_LABEL).length;
+  const channels = Array.from({ length: nDataChannels }, () => new Float32Array(nSamples));
+
+  // initialise frame budget that allows for UI update pauses while loading the buffer
+  const pauseIfOverBudget = createFrameBudget();
+
+  let iSample = 0; // position in int16Buffer — walks through the buffer in file order
+  // Walk through each record's signals in file order, so every value is read sequentially
+  for (let iRecord = 0; iRecord < nRecordsRead; iRecord++) {
+    let iChannel = 0; // output channel - only counts data channels
+    for (const signal of signals) {
+      if (signal.label !== ANNOTATIONS_LABEL) {
+        // a data channel: its samplesPerRecord equals the shared one (checked at load time),
+        // so copy its samples for this record to their place in the output
+        channels[iChannel].set(
+          int16Buffer.subarray(iSample, iSample + samplesPerRecord),
+          iRecord * samplesPerRecord
+        );
+        iChannel++;
+      }
+
+      // step over this signal in the buffer — annotations can have their own samplesPerRecord,
+      // so use the signal's own count (annotations are stepped over like this as nothing is copied)
+      iSample += toNumber(signal.samplesPerRecord);
+    }
+
+    // after each record (and only if there are records left):
+    // pause if this burst has used up its time budget
+    if (iRecord + 1 < nRecordsRead) await pauseIfOverBudget(abortSignal);
+  }
+
+  return { timestamps, channels };
+}
+
 // Data records
 // record 0: [Fp1 × 256][Fp2 × 256][Cz × 256]
 // record 1: [Fp1 × 256][Fp2 × 256][Cz × 256]
 
 // TODO: have toast reject EDF+D (discontinuous edf), where records are not necessarily back to back in time
-// TODO: signal label 'EDF Annotations' holds events and should be skipped
-// TODO: The header's record count is sometimes -1 or wrong. MNE counts the records from the file size instead
 
 /**
- * Loads an EDF recording's metadata and returns a chunk-loading provider. Works for
- * both demo (URL) and user-upload (File) sources.
+ * Loads an EDF recording's metadata and returns a chunk-loading provider. Takes a File only —
+ * demo recordings are fetched and wrapped as Files by useDemoData first.
  *
- * `tMax` is derived from the data source's byte size without reading its content: for a
- * `File` that's synchronous (`File.size`); a URL's data is fetched once and cached (demo
- * recordings are small, so an eager fetch is cheap).
+ * `tMax` is derived from the file's byte size (`File.size`) without reading its content.
  *
- * @param {string|File} data - the .eeg binary data, as a URL or a File.
+ * @param {File} file - the .edf file.
  * @returns {Promise<{
  *   channelNames: string[],
  *   fs: number,
@@ -102,78 +190,106 @@ async function readText(file, start, end) {
  *   - `fs`: sampling frequency in Hz.
  *   - `tMax`: total recording duration in seconds.
  *   - `getChunk(startTime, endTime, signal)`: loads one time range (in seconds, clamped to
- *     [0, tMax]). Resolves to `channels[i]`, the samples of channel i, and `timestamps`,
- *     absolute times in seconds (so `timestamps[0]` is the chunk's real start time). The
- *     optional `signal` (from an AbortController) cancels the request: once aborted, getChunk
- *     stops at its next check and rejects with an AbortError.
+ *     [0, tMax]). Returns the whole records covering that range, so the result can start and
+ *     end up to one record outside it — callers locate samples through `timestamps`, not the
+ *     requested range. Resolves to `channels[i]`, the samples of channel i, and `timestamps`,
+ *     absolute times in seconds (so `timestamps[0]` is the chunk's real start time: the start
+ *     of its first record). The optional `signal` (from an AbortController) cancels the
+ *     request: once aborted, getChunk stops at its next check and rejects with an AbortError.
+ *
+ *     Limitation: with very long records (e.g. a single record for the whole recording), every
+ *     chunk is the whole file, which bypasses useEegBuffer's MAX_BUFFER_BYTES cap. Typical EDF
+ *     records are 1 s, where the extra is negligible.
  * @throws {Error} when the header lacks NumberOfChannels/SamplingInterval, or a URL fetch fails.
  */
 export async function loadEegEdf(file) {
   // fixed header: recording-wide fields, always 256 bytes
   const headerText = await readText(file, 0, HEADER_SIZE);
-  let header = {};
-  let iByte = 0;
-  let iField = 0;
-  while (iField < headerFields.length) {
-    const fieldName = headerFields[iField][0];
-    const fieldLength = headerFields[iField][1];
-    const text = headerText.slice(iByte, iByte + fieldLength);
-    header[fieldName] = text.trim(); // trim padding from each field
-    iField++;
-    iByte += fieldLength;
+  const header = parseEdfHeader(headerText, headerFields)[0]; // destructure header as it only contains 1 element
+  const nChannels = toNumber(header.ns); // convert str value to numeric
+  if (!(nChannels > 0)) {
+    throw new Error('EDF: Could not parse channel count');
   }
+  // header.nRecords can be unreliable can be -1 if it's unknown, more reliable to calculate
+  const headerBytes = HEADER_SIZE + nChannels * HEADER_SIZE; // nr of bytes in the headers (=eader+signal)
+  if (Number(header.headerBytes) !== headerBytes)
+    throw new Error('EDF: invalid header (header size does not match the number of signals)');
+  if (file.size < headerBytes) throw new Error('EDF: file is too small to hold its header');
 
-  // signal headers: 256 bytes per signal, so the size depends on ns
-  const signalText = await readText(file, HEADER_SIZE, HEADER_SIZE + header.ns * HEADER_SIZE);
+  // signal headers: 256 bytes per signal, so the size depends on nChannels (header.ns)
+  const signalText = await readText(file, HEADER_SIZE, headerBytes);
+  const signals = parseEdfHeader(signalText, signalFields, nChannels);
 
-  if (nChannels === 0 || samplingInterval === 0) {
-    throw new Error('Could not parse channel count or sampling interval from header');
+  // drop the annotation channel as VIDEPE can't use it now
+  const dataSignals = signals.filter((s) => s.label !== ANNOTATIONS_LABEL);
+  if (dataSignals.length === 0) throw new Error('EDF: the file holds no signal channels');
+
+  // replace ',' with '.'to adjust for locale (Number('0,5') => NaN
+  // and like MNE: 0 (or unreadable) → 1 s
+  const recordDuration = toNumber(header.recordDuration) || 1;
+
+  // The provider has a single fs, so all data channels must share one sampling rate
+  // => throw error if they don't
+  if (signals.some((s) => !(toNumber(s.samplesPerRecord) > 0)))
+    throw new Error('EDF: invalid samples per record');
+  const rates = new Set(dataSignals.map((s) => toNumber(s.samplesPerRecord)));
+  if (rates.size > 1) {
+    const ratesHz = [...rates].map((rate) => `${rate / recordDuration} Hz`).join(', ');
+    throw new Error(
+      `EDF: channels have different sampling rates (${ratesHz}), which VIDEPE doesn't support yet`
+    );
   }
+  const [samplesPerRecord] = rates; // the single rate left after the check above
+  const fs = samplesPerRecord / recordDuration; // sampling frequency (Hz)
 
-  const fs = signal.samplesPerRecord / header.ns; // sampling frequency (Hz)
-  const bytesPerSampleTime = nChannels * BYTES_PER_SAMPLE;
+  const channelNames = dataSignals.map((s) => s.label);
 
-  // For File sources, size is available without reading content. For URL sources,
-  // eagerly fetch + cache the buffer once so subsequent getChunk calls are in-memory slices.
-  let cachedBuffer = null;
-  let dataByteLength;
-  if (data instanceof File) {
-    dataByteLength = data.size;
-  } else {
-    const r = await fetch(data);
-    if (!r.ok) throw new Error(`Failed to fetch ${data}: ${r.statusText}`);
-    cachedBuffer = await r.arrayBuffer();
-    dataByteLength = cachedBuffer.byteLength;
-  }
+  // sum all samplesPerRecord for all signals and multiple by BYTES_PER_SAMPLE (because int16)
+  // important to include annotations (=> use signals not dataSignals) as they are still in the file
+  const recordBytes =
+    signals.reduce((sum, s) => sum + toNumber(s.samplesPerRecord), 0) * BYTES_PER_SAMPLE;
 
-  const nSamples = Math.floor(dataByteLength / bytesPerSampleTime);
-  const tMax = nSamples / fs;
+  const dataByteLength = file.size - headerBytes; // number of bytes only the data portion has (including the )
+
+  const nRecords = Math.floor(dataByteLength / recordBytes);
+  const tMax = nRecords * header.recordDuration;
 
   // getChunk is the core of this loader:
   // it maps a requested time range to a byte range, reads that chunk of data.
   // The returned timestamps are absolute (not relative to the chunk) so they can be compared across chunks.
-  const getChunk = async (startTime, endTime, signal) => {
-    signal?.throwIfAborted(); // already cancelled before it started
+  const getChunk = async (startTime, endTime, abortSignal) => {
+    abortSignal?.throwIfAborted(); // already cancelled before it started
+
     // Clamp requested times to recording duration, convert to sample indices, then byte offsets.
     const clampedStart = Math.max(0, Math.min(startTime, tMax));
     const clampedEnd = Math.max(0, Math.min(endTime, tMax));
     const startSample = Math.floor(clampedStart * fs);
-    const endSample = Math.min(nSamples, Math.ceil(clampedEnd * fs));
+    const endSample = Math.min(nRecords, Math.ceil(clampedEnd * fs));
 
-    const byteStart = startSample * bytesPerSampleTime;
-    const byteEnd = endSample * bytesPerSampleTime;
+    // Get which records are needed for the buffer slice
+    const firstRecord = Math.floor(startSample / samplesPerRecord);
+    const endRecord = Math.ceil(endSample / samplesPerRecord);
+    const nRecordsRead = endRecord - firstRecord;
 
-    // URL source: slice the already-fetched ArrayBuffer in memory (sync).
-    // File source: read only the requested byte range from disk via File.slice (async).
-    const buffer =
-      cachedBuffer !== null
-        ? cachedBuffer.slice(byteStart, byteEnd)
-        : await data.slice(byteStart, byteEnd).arrayBuffer();
-    signal?.throwIfAborted(); // cancelled while the file was being read
+    // Get byte start and end points for the buffer slice
+    const byteStart = headerBytes + firstRecord * recordBytes;
+    const byteEnd = headerBytes + endRecord * recordBytes;
 
-    // Demux the multiplexed float32 samples into separate channel arrays.
-    const float32 = new Float32Array(buffer);
-    return demuxFloat32(float32, nChannels, endSample - startSample, startSample, fs, signal);
+    // Read only the whole records covering the requested range from disk via File.slice (async)
+    const buffer = await file.slice(byteStart, byteEnd).arrayBuffer();
+    abortSignal?.throwIfAborted(); // cancelled while the file was being read
+
+    // Demux channel records into separate channel arrays.
+    // output: one array per data channel, plus absolute timestamps
+    return demuxBuffer(
+      buffer,
+      signals,
+      nRecordsRead,
+      startSample,
+      samplesPerRecord,
+      fs,
+      abortSignal
+    );
   };
 
   return { channelNames, fs, tMax, getChunk };

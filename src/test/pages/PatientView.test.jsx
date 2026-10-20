@@ -13,7 +13,6 @@ const renderPatientView = () =>
 import toast from 'react-hot-toast';
 import { Niivue } from '@niivue/niivue';
 import { dicomLoader } from '@niivue/dicom-loader';
-import { loadEegBrainVision } from '@/loaders/loadEegBrainVision';
 import { checkEegFiles, detectAndLoadEEG } from '@/loaders/eegFormatRegistry';
 import { parseInverseSolutionFieldtrip } from '@/loaders/parseInverseSolutionFieldtrip';
 import { electricalSourceImaging } from '@/utils/electricalSourceImagingUtils';
@@ -33,12 +32,6 @@ vi.mock('react-hot-toast', () => {
   toastFn.dismiss = vi.fn();
   return { default: toastFn };
 });
-
-vi.mock('@/loaders/loadEegBrainVision', () => ({
-  loadEegBrainVision: vi
-    .fn()
-    .mockResolvedValue({ channelNames: ['Ch1'], fs: 1, tMax: 1, getChunk: vi.fn() }),
-}));
 
 vi.mock('@/loaders/eegFormatRegistry', async (importOriginal) => {
   const actual = await importOriginal();
@@ -607,8 +600,14 @@ describe('PatientView — demo loading', () => {
       missing: null,
       warning: null,
     });
-    // Demo electrode positions/inverse solution are fetched by URL and wrapped as Files —
-    // stub fetch so that path exercises the same parsers a manual file drop would.
+    detectAndLoadEEG.mockResolvedValue({
+      channelNames: ['Ch1'],
+      fs: 1,
+      tMax: 1,
+      getChunk: vi.fn(),
+    });
+    // Demo files are fetched by URL and wrapped as Files — stub fetch so that path
+    // exercises the same loaders/parsers a manual file drop would.
     global.fetch = vi.fn((url) =>
       Promise.resolve({
         ok: true,
@@ -618,6 +617,19 @@ describe('PatientView — demo loading', () => {
           ),
       })
     );
+  });
+
+  it('loads the demo recording as Files through detectAndLoadEEG, like a file drop', async () => {
+    renderPatientView();
+    fireEvent.click(screen.getByRole('button', { name: /load demo/i }));
+
+    await waitFor(() => expect(detectAndLoadEEG).toHaveBeenCalled());
+    const files = detectAndLoadEEG.mock.lastCall[0];
+    expect(files.every((f) => f instanceof File)).toBe(true);
+    expect(files.map((f) => f.name)).toEqual([
+      'sub-synth_task-rest_desc-spkavgall_eeg.vhdr',
+      'sub-synth_task-rest_desc-spkavgall_eeg.eeg',
+    ]);
   });
 
   it('loads demo electrode positions and inverse solution, forwarding them to EegViewer', async () => {
@@ -677,7 +689,7 @@ describe('PatientView — demo loading', () => {
     // Swallow the rejection like the real toast.promise does, so it doesn't leak as an unhandled rejection
     toast.promise.mockImplementationOnce((p) => p.catch(() => {}));
 
-    loadEegBrainVision.mockRejectedValueOnce(new Error('Network error'));
+    detectAndLoadEEG.mockRejectedValueOnce(new Error('Network error'));
     renderPatientView();
     fireEvent.click(screen.getByRole('button', { name: /load demo/i }));
 

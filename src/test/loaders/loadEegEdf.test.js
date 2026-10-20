@@ -168,11 +168,22 @@ describe('loadEegEdf — header', () => {
   });
 
   it('rejects a file whose header size does not match its number of signals', async () => {
-    await expect(loadEegEdf(twoChannels({ headerBytes: 512 }))).rejects.toThrow(/EDF/);
+    // 2 signals → the real header is 256 * (2 + 1) = 768 bytes
+    await expect(loadEegEdf(twoChannels({ headerBytes: 512 }))).rejects.toThrow(
+      /EDF:.*header size/i
+    );
   });
 
   it('rejects a file too small to hold an EDF header', async () => {
-    await expect(loadEegEdf(new File(['not an edf'], 'bad.edf'))).rejects.toThrow(/EDF/);
+    await expect(loadEegEdf(new File(['not an edf'], 'bad.edf'))).rejects.toThrow(
+      /EDF:.*too small/i
+    );
+  });
+
+  it('rejects a file cut off before the end of its signal headers', async () => {
+    // a valid fixed header (256 bytes) announcing 2 signals, but only part of their 512 header bytes
+    const truncated = new File([twoChannels().slice(0, 300)], 'truncated.edf');
+    await expect(loadEegEdf(truncated)).rejects.toThrow(/EDF:.*too small/i);
   });
 
   it('rejects a file that holds only the annotations signal', async () => {
@@ -242,13 +253,17 @@ describe('loadEegEdf — getChunk', () => {
     expect(Array.from(channels[1])).toEqual([-1, -2, -3, -4, -5, -6]);
   });
 
-  it('extracts a chunk crossing a record boundary, with absolute timestamps', async () => {
-    const provider = await loadEegEdf(twoChannels());
-    // samples 2..3: the last of record 0 and the first of record 1
-    const { timestamps, channels } = await provider.getChunk(2 / FS, 4 / FS);
-    expect(Array.from(timestamps)).toEqual(f32([2 / FS, 3 / FS]));
-    expect(Array.from(channels[0])).toEqual([3, 4]);
-    expect(Array.from(channels[1])).toEqual([-3, -4]);
+  it('returns the whole records covering the requested range, with absolute timestamps', async () => {
+    // 4 records of 1 s with 2 samples each (2 Hz): record r holds values 2r and 2r + 1
+    const file = makeEdf({
+      signals: [{ label: 'Cz', samplesPerRecord: 2, values: [0, 1, 2, 3, 4, 5, 6, 7] }],
+    });
+    const provider = await loadEegEdf(file);
+    // 1.5 s – 2.5 s starts in the middle of record 1 and ends in the middle of record 2
+    const { timestamps, channels } = await provider.getChunk(1.5, 2.5);
+    // so records 1 and 2 come back whole (1 s – 3 s), and records 0 and 3 not at all
+    expect(Array.from(timestamps)).toEqual(f32([1, 1.5, 2, 2.5]));
+    expect(Array.from(channels[0])).toEqual([2, 3, 4, 5]);
   });
 
   it('decodes channels correctly when an annotations signal sits between them in each record', async () => {

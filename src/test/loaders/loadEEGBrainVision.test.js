@@ -34,65 +34,66 @@ function makeEegBuffer(values = [1, 4, 2, 5, 3, 6]) {
   return buf;
 }
 
-function mockFetch(vhdr = VHDR, buffer = makeEegBuffer()) {
-  vi.stubGlobal(
-    'fetch',
-    vi
-      .fn()
-      .mockResolvedValueOnce({ ok: true, text: () => Promise.resolve(vhdr) })
-      .mockResolvedValueOnce({ ok: true, arrayBuffer: () => Promise.resolve(buffer) })
-  );
+// A .vhdr header File and its .eeg data File (default: 2 channels, 3 samples)
+function makeFiles(vhdr = VHDR, values = undefined) {
+  const headerFile = new File([vhdr], 'test.vhdr', { type: 'text/plain' });
+  const dataFile = new File([makeEegBuffer(values)], 'test.eeg');
+  return [headerFile, dataFile];
 }
-
-afterEach(() => vi.unstubAllGlobals());
 
 describe('loadEegBrainVision — header parsing', () => {
   it('returns the correct channel names', async () => {
-    mockFetch();
-    const { channelNames } = await loadEegBrainVision('h.vhdr', 'd.eeg');
+    const { channelNames } = await loadEegBrainVision(...makeFiles());
     expect(channelNames).toEqual(['Fp1', 'Fp2']);
   });
 
   it('ignores comment lines starting with ;', async () => {
-    mockFetch();
-    const { channelNames } = await loadEegBrainVision('h.vhdr', 'd.eeg');
+    const { channelNames } = await loadEegBrainVision(...makeFiles());
     expect(channelNames).toHaveLength(2);
   });
 
   it('throws when NumberOfChannels is absent', async () => {
     const bad = VHDR.replace('NumberOfChannels=2\n', '');
-    mockFetch(bad);
-    await expect(loadEegBrainVision('h.vhdr', 'd.eeg')).rejects.toThrow();
+    await expect(loadEegBrainVision(...makeFiles(bad))).rejects.toThrow(
+      /^BrainVision: .*NumberOfChannels/
+    );
+  });
+
+  it('throws when NumberOfChannels is not a number', async () => {
+    const bad = VHDR.replace('NumberOfChannels=2', 'NumberOfChannels=two');
+    await expect(loadEegBrainVision(...makeFiles(bad))).rejects.toThrow(
+      /^BrainVision: .*NumberOfChannels/
+    );
   });
 
   it('throws when SamplingInterval is absent', async () => {
     const bad = VHDR.replace('SamplingInterval=5000\n', '');
-    mockFetch(bad);
-    await expect(loadEegBrainVision('h.vhdr', 'd.eeg')).rejects.toThrow();
+    await expect(loadEegBrainVision(...makeFiles(bad))).rejects.toThrow(
+      /^BrainVision: .*SamplingInterval/
+    );
+  });
+
+  it('throws when SamplingInterval is not a number', async () => {
+    const bad = VHDR.replace('SamplingInterval=5000', 'SamplingInterval=fast');
+    await expect(loadEegBrainVision(...makeFiles(bad))).rejects.toThrow(
+      /^BrainVision: .*SamplingInterval/
+    );
   });
 });
 
 describe('loadEegBrainVision — metadata', () => {
   it('returns fs derived from SamplingInterval', async () => {
-    mockFetch();
-    const { fs } = await loadEegBrainVision('h.vhdr', 'd.eeg');
+    const { fs } = await loadEegBrainVision(...makeFiles());
     expect(fs).toBe(FS);
   });
 
-  it('returns tMax = nSamples / fs, derived from the File size (File sources)', async () => {
-    const headerFile = new File([VHDR], 'test.vhdr', { type: 'text/plain' });
-    const dataFile = new File([makeEegBuffer()], 'test.eeg'); // 24 bytes, 2ch * 4 bytes = 3 samples
-    const { tMax } = await loadEegBrainVision(headerFile, dataFile);
+  it('returns tMax = nSamples / fs, derived from the File size', async () => {
+    // data: 24 bytes, 2ch * 4 bytes = 3 samples
+    const { tMax } = await loadEegBrainVision(...makeFiles());
     expect(tMax).toBeCloseTo(3 / FS, 6);
   });
 
-  it('returns tMax = nSamples / fs, derived from the fetched buffer size (URL sources)', async () => {
-    mockFetch();
-    const { tMax } = await loadEegBrainVision('h.vhdr', 'd.eeg');
-    expect(tMax).toBeCloseTo(3 / FS, 6);
-  });
-
-  it('does not read the data file content for File sources before getChunk is called', async () => {
+  it('does not read the data file content before getChunk is called', async () => {
     const headerFile = new File([VHDR], 'test.vhdr', { type: 'text/plain' });
     const dataFile = new File([makeEegBuffer()], 'test.eeg');
     const arrayBufferSpy = vi.spyOn(dataFile, 'arrayBuffer');
@@ -101,7 +102,7 @@ describe('loadEegBrainVision — metadata', () => {
   });
 });
 
-describe('loadEegBrainVision — getChunk (File sources)', () => {
+describe('loadEegBrainVision — getChunk', () => {
   const setup = (values) => {
     const headerFile = new File([VHDR], 'test.vhdr', { type: 'text/plain' });
     const dataFile = new File([makeEegBuffer(values)], 'test.eeg');
@@ -233,42 +234,5 @@ describe('loadEegBrainVision — getChunk (large chunks and cancelling)', () => 
     const chunkPromise = provider.getChunk(0, provider.tMax, controller.signal);
     controller.abort();
     await expect(chunkPromise).rejects.toMatchObject({ name: 'AbortError' });
-  });
-});
-
-describe('loadEegBrainVision — getChunk (URL sources)', () => {
-  it('demultiplexes the requested range correctly', async () => {
-    mockFetch();
-    const provider = await loadEegBrainVision('h.vhdr', 'd.eeg');
-    const { timestamps, channels } = await provider.getChunk(1 / FS, 3 / FS);
-    expect(Array.from(timestamps)).toEqual(f32([1 / FS, 2 / FS]));
-    expect(Array.from(channels[0])).toEqual([2, 3]);
-    expect(Array.from(channels[1])).toEqual([5, 6]);
-  });
-
-  it('serves chunks from a single cached fetch (no extra requests per getChunk call)', async () => {
-    mockFetch();
-    const provider = await loadEegBrainVision('h.vhdr', 'd.eeg');
-    await provider.getChunk(0, 1 / FS);
-    await provider.getChunk(1 / FS, 2 / FS);
-    expect(fetch).toHaveBeenCalledTimes(2); // header + data, once each
-  });
-});
-
-describe('loadEegBrainVision — fetch errors', () => {
-  it('throws when the header request fails', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, statusText: 'Not Found' }));
-    await expect(loadEegBrainVision('missing.vhdr', 'd.eeg')).rejects.toThrow('Not Found');
-  });
-
-  it('throws when the data request fails', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi
-        .fn()
-        .mockResolvedValueOnce({ ok: true, text: () => Promise.resolve(VHDR) })
-        .mockResolvedValueOnce({ ok: false, statusText: 'Not Found' })
-    );
-    await expect(loadEegBrainVision('h.vhdr', 'missing.eeg')).rejects.toThrow('Not Found');
   });
 });
