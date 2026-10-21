@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, act, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import userEvent from '@testing-library/user-event';
@@ -608,16 +608,22 @@ describe('PatientView — demo loading', () => {
     });
     // Demo files are fetched by URL and wrapped as Files — stub fetch so that path
     // exercises the same loaders/parsers a manual file drop would.
-    global.fetch = vi.fn((url) =>
-      Promise.resolve({
-        ok: true,
-        blob: () =>
-          Promise.resolve(
-            new Blob([url.endsWith('.tsv') ? MINIMAL_TSV : 'irrelevant — mat parser is mocked'])
-          ),
-      })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url) =>
+        Promise.resolve({
+          ok: true,
+          blob: () =>
+            Promise.resolve(
+              new Blob([url.endsWith('.tsv') ? MINIMAL_TSV : 'irrelevant — mat parser is mocked'])
+            ),
+        })
+      )
     );
   });
+
+  // put the real fetch back, so the stub doesn't leak into tests outside this block
+  afterEach(() => vi.unstubAllGlobals());
 
   it('loads the demo recording as Files through detectAndLoadEEG, like a file drop', async () => {
     renderPatientView();
