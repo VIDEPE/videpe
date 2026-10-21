@@ -25,8 +25,10 @@ const field = (value, width) => String(value).padEnd(width, ' ').slice(0, width)
  * @param {number} [options.headerRecords] - record count written in the header (defaults to
  *   the real count; -1 means "unknown").
  * @param {number} [options.headerBytes] - header size written in the header (defaults to the real size).
+ * @param {string} [options.reserved='EDF+C'] - the reserved field: '' (plain EDF), 'EDF+C'
+ *   (continuous) or 'EDF+D' (discontinuous).
  */
-function makeEdf({ signals, recordDuration = 1, headerRecords, headerBytes }) {
+function makeEdf({ signals, recordDuration = 1, headerRecords, headerBytes, reserved = 'EDF+C' }) {
   const nRecords = signals[0].values.length / signals[0].samplesPerRecord;
   const realHeaderBytes = 256 * (signals.length + 1);
   const withDefaults = signals.map((s) => ({
@@ -45,7 +47,7 @@ function makeEdf({ signals, recordDuration = 1, headerRecords, headerBytes }) {
     field('01.01.24', 8) +
     field('00.00.00', 8) +
     field(headerBytes ?? realHeaderBytes, 8) +
-    field('EDF+C', 44) +
+    field(reserved, 44) +
     field(headerRecords ?? nRecords, 8) +
     field(recordDuration, 8) +
     field(signals.length, 4);
@@ -191,6 +193,18 @@ describe('loadEegEdf — header', () => {
       signals: [{ label: 'EDF Annotations', samplesPerRecord: 2, values: [0, 0] }],
     });
     await expect(loadEegEdf(file)).rejects.toThrow(/no signal channels/i);
+  });
+
+  it('rejects a discontinuous (EDF+D) recording — its records can have gaps between them', async () => {
+    await expect(loadEegEdf(twoChannels({ reserved: 'EDF+D' }))).rejects.toThrow(/^EDF: .*EDF\+D/);
+  });
+
+  it.each([
+    ['plain EDF', ''],
+    ['EDF+C', 'EDF+C'],
+  ])('loads a continuous recording (%s)', async (_, reserved) => {
+    const { channelNames } = await loadEegEdf(twoChannels({ reserved }));
+    expect(channelNames).toEqual(['Fp1', 'Fp2']);
   });
 });
 

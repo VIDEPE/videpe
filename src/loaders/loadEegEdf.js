@@ -37,7 +37,7 @@ const MICROVOLTS_PER_UNIT = {
   v: 1e6,
 };
 
-// EDF headre has a fixed size (256 bytes) and is plain ASCII text
+// EDF header has a fixed size (256 bytes) and is plain ASCII text
 // each field has a fixed width and is padded with spaces
 // - 8 bytes: version of this data format
 // - 80 bytes: local patient identification
@@ -100,12 +100,12 @@ const toNumber = (text) => Number(text.replace(',', '.'));
  * with a single "signal", so it's parsed with ns = 1.
  *
  * @param {string} text - the header bytes, decoded as latin-1 (so character index = byte offset).
- * @param {Array<[string, number]>} fields - [fieldName, width in bytes] pairs, in file
- *   order (e.g. headerFields or signalFields).
+ * @param {Array<[string, number, 'number'|'string']>} fields - [fieldName, width in bytes,
+ *   fieldType] triples, in file order (e.g. headerFields or signalFields).
  * @param {number} [ns=1] - number of signals the text holds.
  * @returns {Object[]} one object per signal, mapping each field name to its value with the space
  *   padding trimmed, e.g. [{ label: 'Fp1', unit: 'uV', ... }, { label: 'Fp2', ... }]. Values
- *   are strings — numeric fields still need converting.
+ *   are changed to numbers if requested in the field's fieldType (a decimal comma is accepted).
  */
 function parseEdfHeader(text, fields, ns = 1) {
   // preallocate header: an array with length ns and each entry is an empty object
@@ -119,13 +119,14 @@ function parseEdfHeader(text, fields, ns = 1) {
     for (let iSignal = 0; iSignal < ns; iSignal++) {
       const value = text.slice(iByte, iByte + fieldLength);
 
-      let cleanedValue = null;
+      let cleanedValue;
       if (fieldType === 'number') {
         cleanedValue = toNumber(value.trim());
       } else if (fieldType === 'string') {
         cleanedValue = value.trim();
       } else {
-        throw new Error(`fields value is either 'number' or 'string', not ${fieldType}`);
+        // only reachable through a mistake in headerFields/signalFields, never through the file
+        throw new Error(`EDF: unknown field type '${fieldType}' (expected 'number' or 'string')`);
       }
 
       header[iSignal][fieldName] = cleanedValue;
@@ -167,7 +168,7 @@ async function demuxBuffer(
   for (let iSample = 0; iSample < nChunkSamples; iSample++)
     timestamps[iSample] = (firstSample + iSample) / fs;
 
-  // Allocate separate arrays for each data channeln (i.e. without annotation)
+  // Allocate separate arrays for each data channel (i.e. without annotation)
   const nDataChannels = signals.filter((s) => s.label !== ANNOTATIONS_LABEL).length;
   const channels = Array.from({ length: nDataChannels }, () => new Float32Array(nChunkSamples));
 
@@ -208,8 +209,6 @@ async function demuxBuffer(
 // record 0: [Fp1 × 256][Fp2 × 256][Cz × 256]
 // record 1: [Fp1 × 256][Fp2 × 256][Cz × 256]
 
-// TODO: have toast reject EDF+D (discontinuous edf), where records are not necessarily back to back in time
-
 /**
  * Loads an EDF recording's metadata and returns a chunk-loading provider. Takes a File only —
  * demo recordings are fetched and wrapped as Files by useDemoData first.
@@ -224,7 +223,7 @@ async function demuxBuffer(
  *   getChunk: (startTime: number, endTime: number, signal?: AbortSignal) =>
  *     Promise<{ timestamps: Float32Array, channels: Float32Array[] }>
  * }>} the provider:
- *   - `channelNames`: channel labels in file order.
+ *   - `channelNames`: channel labels in file order, without the EDF+ annotations signal.
  *   - `fs`: sampling frequency in Hz.
  *   - `tMax`: total recording duration in seconds.
  *   - `getChunk(startTime, endTime, signal)`: loads one time range (in seconds, clamped to
@@ -238,7 +237,9 @@ async function demuxBuffer(
  *     Limitation: with very long records (e.g. a single record for the whole recording), every
  *     chunk is the whole file, which bypasses useEegBuffer's MAX_BUFFER_BYTES cap. Typical EDF
  *     records are 1 s, where the extra is negligible.
- * @throws {Error} when the header lacks NumberOfChannels/SamplingInterval, or a URL fetch fails.
+ * @throws {Error} when the file isn't a valid EDF (too small, an unreadable number of signals or
+ *   samples per record, or a header that doesn't match its number of signals), holds no signal
+ *   channels, is a discontinuous EDF+D recording, or its channels have different sampling rates.
  */
 export async function loadEegEdf(file) {
   // file size guard to contain at least a header and 1 signal section (each HEADER_SIZE long)
@@ -248,20 +249,29 @@ export async function loadEegEdf(file) {
 
   // fixed header: recording-wide fields, always 256 bytes
   const headerText = await readText(file, 0, HEADER_SIZE);
-  const header = parseEdfHeader(headerText, headerFields)[0]; // destructure header as it only contains 1 element
-  const nChannels = header.ns;
-  if (!(nChannels > 0)) {
+  const header = parseEdfHeader(headerText, headerFields)[0]; // take first element as header only contains 1 element
+  const nSignals = header.ns;
+  if (!(nSignals > 0)) {
     throw new Error('EDF: could not parse channel count');
   }
-  // header.nRecords can be unreliable can be -1 if it's unknown, more reliable to calculate
-  const headerBytes = HEADER_SIZE + nChannels * HEADER_SIZE; // nr of bytes in the headers (=eader+signal)
+
+  const headerBytes = HEADER_SIZE + nSignals * HEADER_SIZE; // nr of bytes in the headers (=header+signal)
   if (header.headerBytes !== headerBytes)
     throw new Error('EDF: invalid header (header size does not match the number of signals)');
   if (file.size < headerBytes) throw new Error('EDF: file is too small to hold its header');
 
-  // signal headers: 256 bytes per signal, so the size depends on nChannels (header.ns)
+  // EDF+D (discontinuous) records can have gaps between them: each record's real start time is
+  // stored in the annotations signal. VIDEPE assumes back-to-back records (sample / fs), so it
+  // would show the data on the wrong time axis — reject it instead (MNE reads it as continuous).
+  if (header.reserved.startsWith('EDF+D')) {
+    throw new Error(
+      "EDF: discontinuous recordings (EDF+D) can have gaps between records, which VIDEPE doesn't support yet"
+    );
+  }
+
+  // signal headers: 256 bytes per signal, so the size depends on nSignals (header.ns)
   const signalText = await readText(file, HEADER_SIZE, headerBytes);
-  const signals = parseEdfHeader(signalText, signalFields, nChannels);
+  const signals = parseEdfHeader(signalText, signalFields, nSignals);
 
   // drop the annotation channel as VIDEPE can't use it now
   const dataSignals = signals.filter((s) => s.label !== ANNOTATIONS_LABEL);
@@ -300,11 +310,14 @@ export async function loadEegEdf(file) {
   // not per chunk
   const scales = dataSignals.map((signal) => computeScale(signal));
 
-  // sum all samplesPerRecord for all signals and multiple by BYTES_PER_SAMPLE (because int16)
+  // sum all samplesPerRecord for all signals and multiply by BYTES_PER_SAMPLE (because int16)
   // important to include annotations (=> use signals not dataSignals) as they are still in the file
   const recordBytes = signals.reduce((sum, s) => sum + s.samplesPerRecord, 0) * BYTES_PER_SAMPLE;
 
-  const dataByteLength = file.size - headerBytes; // number of bytes only the data portion has (including the )
+  const dataByteLength = file.size - headerBytes; // number of bytes in the data records (all signals, annotations included)
+
+  // header.nRecords is unreliable (it can be -1 if unknown, or wrong for a truncated file) —
+  // like MNE, count the whole records the file actually holds
 
   const nRecords = Math.floor(dataByteLength / recordBytes);
   const nSamples = nRecords * samplesPerRecord;
