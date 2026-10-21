@@ -858,11 +858,35 @@ describe('PatientView — electrode position files', () => {
     expect(eegDropZoneProps.accepted_formats).toContain('.tsv');
   });
 
+  it('lists every supported EEG recording format in the initial EEG dropzone, e.g. EDF', () => {
+    renderPatientView();
+    const eegDropZoneProps = FileDropZone.mock.calls.find(([p]) => p.label === 'Drop EEG files')[0];
+    // one row per recording format (from the registry), then electrode positions and inverse solution
+    expect(eegDropZoneProps.description).toEqual(
+      expect.arrayContaining([
+        { label: expect.stringMatching(/BrainVision/), value: '.vhdr + .eeg' },
+        { label: expect.stringMatching(/EDF/), value: '.edf' },
+        { label: 'Electrode Positions:', value: expect.stringContaining('.elc') },
+        { label: 'Inverse Solution:', value: expect.stringContaining('.mat') },
+      ])
+    );
+  });
+
+  it('accepts every supported EEG recording format at the initial EEG dropzone, e.g. .edf', () => {
+    // the file picker only shows accepted extensions, so a missing one can't be selected by clicking
+    renderPatientView();
+    const eegDropZoneProps = FileDropZone.mock.calls.find(([p]) => p.label === 'Drop EEG files')[0];
+    for (const ext of ['.vhdr', '.eeg', '.edf']) {
+      expect(eegDropZoneProps.accepted_formats.split(',')).toContain(ext);
+    }
+  });
+
   it('mentions electrode positions and inverse solution files in the initial dropzone description', () => {
     renderPatientView();
     const eegDropZoneProps = FileDropZone.mock.calls.find(([p]) => p.label === 'Drop EEG files')[0];
-    expect(eegDropZoneProps.description).toMatch(/electrode positions/i);
-    expect(eegDropZoneProps.description).toMatch(/inverse solution/i);
+    const rowLabels = eegDropZoneProps.description.map((row) => row.label).join(' ');
+    expect(rowLabels).toMatch(/electrode positions/i);
+    expect(rowLabels).toMatch(/inverse solution/i);
   });
 
   it('routes a dropped .tsv file to electrode position parsing instead of EEG accumulation', async () => {

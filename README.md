@@ -84,7 +84,7 @@ Hit **Load Demo** to instantly load a synthetic EEG recording, electrode positio
 
 | Modality            | Formats                                                             |
 | ------------------- | ------------------------------------------------------------------- |
-| EEG                 | BrainVision (`.vhdr` + `.eeg`)                                      |
+| EEG                 | BrainVision (`.vhdr` + `.eeg`), EDF/EDF+ (`.edf`)                   |
 | Electrode positions | `.elc`, `.tsv`                                                      |
 | Volumes             | NIfTI (`.nii`, `.nii.gz`), MGH/MGZ, GIFTI, PLY, OBJ, DICOM (`.dcm`) |
 

@@ -502,7 +502,8 @@ export const AboutPage = () => {
                 >
                   <li>
                     <strong>EEG</strong> — BrainVision (<code>.vhdr</code> + <code>.eeg</code>),
-                    dropped together or one at a time
+                    dropped together or one at a time, or EDF/EDF+ (<code>.edf</code>, continuous
+                    recordings with one sampling rate for all channels)
                   </li>
                   <li>
                     <strong>Volumes</strong> — NIfTI, MGH/MGZ, GIFTI, PLY, OBJ, DICOM

@@ -19,7 +19,7 @@ const baseName = (filename) => filename.slice(0, filename.lastIndexOf('.'));
 //   { channelNames, fs, tMax, getChunk }
 const EEG_FORMATS = [
   {
-    name: 'BrainVision',
+    name: 'BrainVision Core Data Format (BVCDF)',
     extensions: ['.vhdr', '.eeg'],
     partialDetect: (files) =>
       files.some((f) => {
@@ -75,6 +75,19 @@ const EEG_FORMATS = [
 // as pending, rather than relying solely on partialDetect after the fact.
 export const EEG_FORMAT_EXTENSIONS = EEG_FORMATS.flatMap((f) => f.extensions);
 
+// Every supported EEG format's name and extensions, e.g. { name: 'BrainVision', extensions:
+// ['.vhdr', '.eeg'] } — for telling the user what VIDEPE can load (dropzone, messages), so a new
+// format above shows up there automatically.
+export const SUPPORTED_EEG_FORMATS = EEG_FORMATS.map(({ name, extensions }) => ({
+  name,
+  extensions,
+}));
+
+// The same as one line of text, e.g. 'BrainVision (.vhdr + .eeg), …' — for error messages
+export const SUPPORTED_EEG_FORMATS_TEXT = SUPPORTED_EEG_FORMATS.map(
+  (f) => `${f.name} (${f.extensions.join(' + ')})`
+).join(', ');
+
 /**
  * Checks files against all known formats, including partial matches, so the EEG intake can
  * hold an incomplete set as pending and tell the user which files are still missing. The
@@ -110,8 +123,7 @@ export function detectAndLoadEEG(files) {
   const format = EEG_FORMATS.find((f) => f.validate(files).complete);
   // if no format matches, throw an error listing the supported formats
   if (!format) {
-    const supported = EEG_FORMATS.map((f) => `${f.name} (${f.extensions.join(' + ')})`).join(', ');
-    throw new Error(`Unrecognized EEG format. Supported: ${supported}`);
+    throw new Error(`Unrecognized EEG format. Supported: ${SUPPORTED_EEG_FORMATS_TEXT}`);
   }
   // if a format is found, use its load function to load the data
   return format.load(files);

@@ -27,7 +27,7 @@ const datasetLabel = (dataset) => ({
  *   are added to the EEG files.
  * - Imaging (MR, PET, …): every dataset is loaded; each becomes one or more layers.
  * - Anything else is not downloaded, and is reported back in `skippedDatasets`.
- * - A downloaded dataset with no file VIDEPE can open (e.g. an EDF recording) is reported
+ * - A downloaded dataset with no file VIDEPE can open (e.g. an EEGLAB recording) is reported
  *   back in `skippedDatasets` too, with the extensions it contained.
  *
  * Downloads run in parallel. Nothing is handed to the viewers here — the caller does that
@@ -106,7 +106,7 @@ export async function fetchShanoirExamination({ client, examinationId, signal })
     ),
   ]);
 
-  // A dataset of a supported type can still hold only files VIDEPE can't open (e.g. an EDF
+  // A dataset of a supported type can still hold only files VIDEPE can't open (e.g. an EEGLAB
   // recording). Report it as skipped, listing what it contained, instead of loading nothing
   // without telling the user.
   const unsupportedFiles = (dataset, files) => {

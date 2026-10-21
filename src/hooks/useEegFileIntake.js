@@ -6,6 +6,7 @@ import {
   ELEC_POS_EXTENSIONS,
   INV_SOLUTIONS_EXTENSIONS,
   EEG_FORMAT_EXTENSIONS,
+  SUPPORTED_EEG_FORMATS_TEXT,
 } from '../loaders/eegFormatRegistry';
 import { parseElectrodePositionFile } from '../loaders/parseElectrodePositionFile';
 import { findDuplicateChannelNames } from '../utils/eegTopographyUtils';
@@ -202,7 +203,7 @@ export function useEegFileIntake({ setEeg, setIsLoading, onInverseSolutionFile }
         // No recognized format at all
         setPendingEegFiles([]);
         setEegHint(null);
-        toast.error(`Unrecognized EEG format.\nSupported: BrainVision (.vhdr + .eeg)`);
+        toast.error(`Unrecognized EEG format.\nSupported: ${SUPPORTED_EEG_FORMATS_TEXT}`);
       }
       return isEegSet;
     },

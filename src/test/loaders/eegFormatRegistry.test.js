@@ -4,6 +4,8 @@ import {
   detectAndLoadEEG,
   EEG_FORMAT_EXTENSIONS,
   ELEC_POS_EXTENSIONS,
+  SUPPORTED_EEG_FORMATS,
+  SUPPORTED_EEG_FORMATS_TEXT,
 } from '@/loaders/eegFormatRegistry';
 
 vi.mock('@/loaders/loadEegBrainVision', () => ({
@@ -34,7 +36,7 @@ describe('checkEegFiles', () => {
 
   it('detects a partial BrainVision match with only .vhdr', () => {
     const result = checkEegFiles([makeFile('sub01.vhdr')]);
-    expect(result.formatName).toBe('BrainVision');
+    expect(result.formatName).toMatch(/BrainVision/);
     expect(result.complete).toBe(false);
     expect(result.missing).toContain('.eeg');
     expect(result.warning).toBeNull();
@@ -42,7 +44,7 @@ describe('checkEegFiles', () => {
 
   it('detects a partial BrainVision match with only .eeg', () => {
     const result = checkEegFiles([makeFile('sub01.eeg')]);
-    expect(result.formatName).toBe('BrainVision');
+    expect(result.formatName).toMatch(/BrainVision/);
     expect(result.complete).toBe(false);
     expect(result.missing).toContain('.vhdr');
     expect(result.warning).toBeNull();
@@ -64,7 +66,7 @@ describe('checkEegFiles', () => {
 
   it('is case-insensitive for file extensions', () => {
     const result = checkEegFiles([makeFile('sub01.VHDR'), makeFile('sub01.EEG')]);
-    expect(result.formatName).toBe('BrainVision');
+    expect(result.formatName).toMatch(/BrainVision/);
     expect(result.complete).toBe(true);
   });
 
@@ -94,6 +96,26 @@ describe('EEG_FORMAT_EXTENSIONS', () => {
     expect(EEG_FORMAT_EXTENSIONS).not.toContain('.nii');
     expect(EEG_FORMAT_EXTENSIONS).not.toContain('.elc');
     expect(EEG_FORMAT_EXTENSIONS).not.toContain('.mat');
+  });
+});
+
+describe('SUPPORTED_EEG_FORMATS', () => {
+  it('lists every supported EEG format with its name and extensions', () => {
+    expect(SUPPORTED_EEG_FORMATS).toContainEqual({
+      name: expect.stringMatching(/BrainVision/),
+      extensions: ['.vhdr', '.eeg'],
+    });
+    expect(SUPPORTED_EEG_FORMATS).toContainEqual({
+      name: expect.stringMatching(/EDF/),
+      extensions: ['.edf'],
+    });
+  });
+});
+
+describe('SUPPORTED_EEG_FORMATS_TEXT', () => {
+  it('names every supported EEG format with its extensions', () => {
+    expect(SUPPORTED_EEG_FORMATS_TEXT).toMatch(/BrainVision.*\(\.vhdr \+ \.eeg\)/);
+    expect(SUPPORTED_EEG_FORMATS_TEXT).toMatch(/EDF.*\(\.edf\)/);
   });
 });
 
