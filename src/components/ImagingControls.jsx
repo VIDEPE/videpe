@@ -62,6 +62,8 @@ const COLORMAP_OPTIONS = [
   { value: 'mako', label: 'Mako' },
   { value: 'rocket', label: 'Rocket' },
   { value: 'turbo', label: 'Turbo' },
+  { value: 'ct_skull', label: 'CT Skull' },
+  { value: 'ct_head', label: 'CT Head' },
   { value: 'random', label: 'Random (NiiVue preset)' },
   { value: 'randomised', label: 'Random (reshuffled each time)' },
 ];

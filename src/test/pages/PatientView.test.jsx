@@ -665,7 +665,7 @@ describe('PatientView — demo loading', () => {
     });
 
     const layers = NiiViewer.mock.lastCall[0].layers;
-    expect(layers[0]).toMatchObject({ type: 'MRI', subtype: 'sub-synth_T1w' });
+    expect(layers[0]).toMatchObject({ type: 'ANAT', subtype: 'sub-synth_T1w' });
     expect(layers[1]).toMatchObject({ type: 'sub-synth_label-WM_dseg', subtype: null });
     expect(layers[2]).toMatchObject({ type: 'sub-synth_label-CSF_dseg', subtype: null });
   });
@@ -716,7 +716,7 @@ describe('PatientView — imaging file-type detection', () => {
     });
   });
 
-  it('passes type MRI to NiiViewer for a BIDS T1w file', async () => {
+  it('passes type ANAT to NiiViewer for a BIDS T1w file', async () => {
     renderPatientView();
 
     await act(async () => {
@@ -724,7 +724,7 @@ describe('PatientView — imaging file-type detection', () => {
     });
 
     expect(NiiViewer.mock.lastCall[0].layers).toHaveLength(1);
-    expect(NiiViewer.mock.lastCall[0].layers[0].type).toBe('MRI');
+    expect(NiiViewer.mock.lastCall[0].layers[0].type).toBe('ANAT');
   });
 
   it('passes subtype as nameWithoutExtension to NiiViewer for a BIDS T1w file', async () => {
@@ -777,7 +777,7 @@ describe('PatientView — imaging file-type detection', () => {
 
     expect(dicomLoader).toHaveBeenCalledTimes(1); // one call for the whole series, not per-file
     expect(NiiViewer.mock.lastCall[0].layers).toHaveLength(1);
-    expect(NiiViewer.mock.lastCall[0].layers[0].type).toBe('MRI');
+    expect(NiiViewer.mock.lastCall[0].layers[0].type).toBe('ANAT');
   });
 
   it('accepts .dcm at the imaging dropzone', () => {
