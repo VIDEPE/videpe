@@ -277,11 +277,21 @@ export async function loadEegEdf(file) {
     throw new Error('EDF: invalid samples per record');
   const rates = new Set(dataSignals.map((s) => s.samplesPerRecord));
   if (rates.size > 1) {
-    const ratesHz = [...rates].map((rate) => `${rate / recordDuration} Hz`).join(', ');
+    const MAX_LISTED_LABELS = 3; // keeps the toast short for recordings with many channels
+    const ratesHz = [...rates]
+      .map((rate) => {
+        const labels = dataSignals.filter((s) => s.samplesPerRecord === rate).map((s) => s.label);
+        const listed = labels.slice(0, MAX_LISTED_LABELS).join(', ');
+        const more =
+          labels.length > MAX_LISTED_LABELS ? ` +${labels.length - MAX_LISTED_LABELS} more` : '';
+        return `${rate / recordDuration} Hz: ${listed}${more}`;
+      })
+      .join('; ');
     throw new Error(
       `EDF: channels have different sampling rates (${ratesHz}), which VIDEPE doesn't support yet`
     );
   }
+
   const [samplesPerRecord] = rates; // the single rate left after the check above
   const fs = samplesPerRecord / recordDuration; // sampling frequency (Hz)
 
