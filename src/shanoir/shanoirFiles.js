@@ -54,7 +54,7 @@ export function selectEegIntakeFiles(files) {
 
 /**
  * Whether the files include an EEG recording VIDEPE can read. An EEG dataset without one (e.g.
- * an EDF recording) has nothing to show, even if it holds electrode positions.
+ * an EEGLAB recording) has nothing to show, even if it holds electrode positions.
  *
  * @param {File[]} files
  * @returns {boolean}
@@ -65,7 +65,7 @@ export function hasEegRecording(files) {
 
 /**
  * Lists the file extensions found in a dataset, to tell the user what a dataset VIDEPE
- * couldn't load contained (e.g. ".edf").
+ * couldn't load contained (e.g. ".set").
  *
  * @param {File[]} files
  * @returns {string[]} each extension once, lowercased and with its dot, in the order the files

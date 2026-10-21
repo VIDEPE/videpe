@@ -58,7 +58,7 @@ The layer state was rebuilt as one url-keyed reducer (instead of the parallel `o
 
 - [ ] `src/loaders/eegBuffer.js`
 - [ ] `src/loaders/eegFormatRegistry.js`
-- [ ] `src/loaders/loadEEGBrainVision.js`
+- [ ] `src/loaders/loadEegBrainVision.js`
 - [ ] `src/loaders/parseElectrodePositionElc.js`
 - [ ] `src/loaders/parseElectrodePositionFile.js`
 - [ ] `src/loaders/parseElectrodePositionTsv.js`

@@ -53,6 +53,47 @@ describe('useEegFileIntake › handleEegFiles result', () => {
     expect(setEeg).toHaveBeenCalledWith(PARSED_EEG);
   });
 
+  it('resolves to true and sets the recording when a single EDF file is dropped', async () => {
+    const { drop, setEeg } = setup();
+    expect(await drop(file('rec.edf'))).toBe(true);
+    expect(detectAndLoadEEG).toHaveBeenCalledWith([expect.objectContaining({ name: 'rec.edf' })]);
+    expect(setEeg).toHaveBeenCalledWith(PARSED_EEG);
+  });
+
+  it('clears pending files of another format when a new recording is dropped, and says so', async () => {
+    const toast = (await import('react-hot-toast')).default;
+    const { hook, drop, setEeg } = setup();
+    expect(await drop(file('rec.vhdr'))).toBe(false); // incomplete BrainVision: held as pending
+
+    // the newest drop wins: the pending .vhdr can't be part of an EDF recording
+    expect(await drop(file('rec.edf'))).toBe(true);
+    expect(detectAndLoadEEG).toHaveBeenCalledWith([expect.objectContaining({ name: 'rec.edf' })]);
+    expect(setEeg).toHaveBeenCalledWith(PARSED_EEG);
+    expect(hook.result.current.pendingEegFiles).toEqual([]);
+    expect(toast).toHaveBeenCalledWith(expect.stringContaining('rec.vhdr'), expect.anything());
+  });
+
+  it('ignores the recording files of a drop that mixes formats, and says so', async () => {
+    const toast = (await import('react-hot-toast')).default;
+    const { hook, drop, setEeg } = setup();
+    expect(await drop(file('rec.vhdr'))).toBe(false); // held as pending
+
+    // .eeg + .edf in one drop: it's unclear which recording is meant
+    expect(await drop(file('rec.eeg'), file('other.edf'))).toBe(false);
+    expect(detectAndLoadEEG).not.toHaveBeenCalled();
+    expect(setEeg).not.toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/one recording at a time/i));
+    // the earlier pending file is left as it was
+    expect(hook.result.current.pendingEegFiles.map((f) => f.name)).toEqual(['rec.vhdr']);
+  });
+
+  it('still handles electrode positions in a drop whose recording files mix formats', async () => {
+    const { hook, drop } = setup();
+    const tsv = 'name\tx\ty\tz\nFp1\t-29\t84\t-7\n';
+    await drop(file('rec.vhdr'), file('rec.edf'), file('sub-01_electrodes.tsv', tsv));
+    expect(hook.result.current.customElectrodes).toHaveLength(1);
+  });
+
   it('resolves to true when the set is completed by a second drop', async () => {
     const { hook, drop, setEeg } = setup();
     expect(await drop(file('rec.vhdr'))).toBe(false); // incomplete: held as pending
