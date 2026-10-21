@@ -75,6 +75,18 @@ const EEG_FORMATS = [
 // as pending, rather than relying solely on partialDetect after the fact.
 export const EEG_FORMAT_EXTENSIONS = EEG_FORMATS.flatMap((f) => f.extensions);
 
+/**
+ * Names the EEG format a file belongs to, by its extension — e.g. to tell whether files dropped
+ * at different times can belong to the same recording.
+ *
+ * @param {string} fileName - e.g. 'sub01.vhdr' (case-insensitive).
+ * @returns {string|null} the format's name, or null if no supported format uses that extension.
+ */
+export function getEegFormatName(fileName) {
+  const name = fileName.toLowerCase();
+  return EEG_FORMATS.find((f) => f.extensions.some((ext) => name.endsWith(ext)))?.name ?? null;
+}
+
 // Every supported EEG format's name and extensions, e.g. { name: 'BrainVision', extensions:
 // ['.vhdr', '.eeg'] } — for telling the user what VIDEPE can load (dropzone, messages), so a new
 // format above shows up there automatically.

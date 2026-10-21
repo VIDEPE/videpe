@@ -7,6 +7,7 @@ import {
   INV_SOLUTIONS_EXTENSIONS,
   EEG_FORMAT_EXTENSIONS,
   SUPPORTED_EEG_FORMATS_TEXT,
+  getEegFormatName,
 } from '../loaders/eegFormatRegistry';
 import { parseElectrodePositionFile } from '../loaders/parseElectrodePositionFile';
 import { findDuplicateChannelNames } from '../utils/eegTopographyUtils';
@@ -94,7 +95,9 @@ export function useEegFileIntake({ setEeg, setIsLoading, onInverseSolutionFile }
    * files (this batch plus whatever was already pending from an earlier drop) complete
    * a format, the recording is parsed and loaded; if only part of a format is present,
    * the files are held as "pending" so a later drop can complete them; unrecognized
-   * files are rejected with a toast.
+   * files are rejected with a toast. Pending files always belong to one format: a drop of
+   * another format clears them (the newest drop wins), and a drop that itself mixes formats
+   * has its recording files ignored — both with a toast.
    *
    * @param {FileList|File[]} newFiles - the files from this single drop/selection. Not
    *   the full accumulated set — that's tracked internally via `pendingEegFiles`.
@@ -155,8 +158,32 @@ export function useEegFileIntake({ setEeg, setIsLoading, onInverseSolutionFile }
 
       if (eegFiles.length === 0) return isEegSet; // pure electrode-position/inv-filter/unsupported drop — nothing else to do
 
-      // Merge pending with new files
-      const merged = [...pendingEegFiles, ...eegFiles];
+      // All files of one recording belong to the same format. A drop with files of several
+      // formats (e.g. .vhdr + .edf) is ambiguous — which recording is meant? — so its recording
+      // files are ignored (electrode positions/inverse solutions above are still handled).
+      const dropFormats = new Set(eegFiles.map((f) => getEegFormatName(f.name)));
+      if (dropFormats.size > 1) {
+        toast.error(
+          `Can't combine ${[...dropFormats].join(' and ')} files in one drop.\nDrop one recording at a time.`
+        );
+        return isEegSet;
+      }
+
+      // Pending files of another format can never complete this recording: the newest drop
+      // wins, so clear them (and say so) instead of mixing both formats in one pending list
+      const [dropFormat] = dropFormats;
+      const otherFormatFiles = pendingEegFiles.filter(
+        (f) => getEegFormatName(f.name) !== dropFormat
+      );
+      if (otherFormatFiles.length > 0) {
+        toast(
+          `Cleared ${otherFormatFiles.map((f) => f.name).join(', ')}: can't be combined with a ${dropFormat} recording.`,
+          { icon: '⚠️' }
+        );
+      }
+
+      // Merge (the still compatible) pending files with the new files
+      const merged = [...pendingEegFiles.filter((f) => !otherFormatFiles.includes(f)), ...eegFiles];
       // Then keep only the last file for each extension by creating a map of extension to file.
       // This way, if a user drops a new .vhdr file, it will replace the previous .vhdr in the pending state, while still keeping any .eeg file that was dropped before.
       const byExtension = new Map();

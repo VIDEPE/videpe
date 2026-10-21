@@ -4,6 +4,7 @@ import {
   detectAndLoadEEG,
   EEG_FORMAT_EXTENSIONS,
   ELEC_POS_EXTENSIONS,
+  getEegFormatName,
   SUPPORTED_EEG_FORMATS,
   SUPPORTED_EEG_FORMATS_TEXT,
 } from '@/loaders/eegFormatRegistry';
@@ -96,6 +97,18 @@ describe('EEG_FORMAT_EXTENSIONS', () => {
     expect(EEG_FORMAT_EXTENSIONS).not.toContain('.nii');
     expect(EEG_FORMAT_EXTENSIONS).not.toContain('.elc');
     expect(EEG_FORMAT_EXTENSIONS).not.toContain('.mat');
+  });
+});
+
+describe('getEegFormatName', () => {
+  it('names the format a file belongs to, by its extension (case-insensitive)', () => {
+    expect(getEegFormatName('sub01.vhdr')).toMatch(/BrainVision/);
+    expect(getEegFormatName('sub01.EEG')).toMatch(/BrainVision/);
+    expect(getEegFormatName('sub01.edf')).toMatch(/EDF/);
+  });
+
+  it('returns null for a file that belongs to no EEG format', () => {
+    expect(getEegFormatName('sub01_electrodes.tsv')).toBeNull();
   });
 });
 
