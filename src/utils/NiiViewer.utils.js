@@ -1,6 +1,6 @@
 import { isMeshExt, isDicomExtension } from '@niivue/niivue';
 
-const MRI_BIDS_SUFFIXES = new Set([
+const ANAT_BIDS_SUFFIXES = new Set([
   'T1w',
   'T2w',
   'FLAIR',
@@ -23,7 +23,8 @@ const MRI_BIDS_SUFFIXES = new Set([
 // Single source of truth for type → default colormap mapping.
 export const TYPE_COLORMAP_DEFAULTS = {
   MRI: 'gray',
-  PET: 'viridis',
+  PET: 'jet',
+  CT: 'ct_skull',
   SPECT: 'magma',
   'Electrical Source Imaging': 'inferno',
 };
@@ -102,15 +103,19 @@ export const detectVolumeType = (filename) => {
   const lower = filename.toLowerCase();
 
   // Pass 1: BIDS suffix (case-sensitive) — all use nameWithoutExtension as subtype for consistency
-  if (MRI_BIDS_SUFFIXES.has(lastSegment)) return { type: 'MRI', subtype: nameWithoutExtension };
+  if (ANAT_BIDS_SUFFIXES.has(lastSegment)) return { type: 'ANAT', subtype: nameWithoutExtension };
   if (lastSegment === 'pet') return { type: 'PET', subtype: nameWithoutExtension };
   if (lastSegment === 'spect') return { type: 'SPECT', subtype: nameWithoutExtension };
-
+  if (lastSegment === 'ct') return { type: 'CT', subtype: nameWithoutExtension };
+  if (lastSegment === 'bold') return { type: 'FUNC', subtype: nameWithoutExtension };
+	
   // Pass 2: keyword fallback (case-insensitive, for non-BIDS filenames) — use nameWithoutExtension as subtype so files are distinguishable in the UI
-  if (/t1|t2|flair|mri|mprage|bravo/.test(lower))
-    return { type: 'MRI', subtype: nameWithoutExtension };
+  if (/t1|t2|flair|mri|mprage|mp2rage|bravo/.test(lower))
+    return { type: 'ANAT', subtype: nameWithoutExtension };
   if (/pet|fdg/.test(lower)) return { type: 'PET', subtype: nameWithoutExtension };
   if (/spect|siscom/.test(lower)) return { type: 'SPECT', subtype: nameWithoutExtension };
+  if (/ct|os|bones/.test(lower)) return { type: 'CT', subtype: nameWithoutExtension };
+  if (/func|epi|bold/.test(lower)) return { type: 'FUNC', subtype: nameWithoutExtension };
 
   return { type: nameWithoutExtension, subtype: null };
 };
