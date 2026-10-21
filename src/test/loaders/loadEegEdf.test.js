@@ -260,6 +260,7 @@ describe('loadEegEdf — getChunk', () => {
     });
     const provider = await loadEegEdf(file);
     // 1.5 s – 2.5 s starts in the middle of record 1 and ends in the middle of record 2
+    // getChunk should return complete records => return record 1 and 2
     const { timestamps, channels } = await provider.getChunk(1.5, 2.5);
     // so records 1 and 2 come back whole (1 s – 3 s), and records 0 and 3 not at all
     expect(Array.from(timestamps)).toEqual(f32([1, 1.5, 2, 2.5]));
