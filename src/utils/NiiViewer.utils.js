@@ -23,7 +23,7 @@ const ANAT_BIDS_SUFFIXES = new Set([
 // Single source of truth for type → default colormap mapping.
 export const TYPE_COLORMAP_DEFAULTS = {
   MRI: 'gray',
-  PET: 'jet',
+  PET: 'turbo',
   CT: 'ct_skull',
   SPECT: 'magma',
   'Electrical Source Imaging': 'inferno',

@@ -810,7 +810,7 @@ describe('NiiViewer', () => {
     it('derives colormap from volume type via TYPE_COLORMAP_DEFAULTS', () => {
       const result = getInitialLayerSettings([{ type: 'ANAT' }, { type: 'PET' }, { type: 'SPECT' }, { type: 'CT' }]);
       expect(result[0].colormap).toBe('gray');
-      expect(result[1].colormap).toBe('jet');
+      expect(result[1].colormap).toBe('turbo');
       expect(result[2].colormap).toBe('magma');
 	  expect(result[3].colormap).toBe('ct_skull');
     });
