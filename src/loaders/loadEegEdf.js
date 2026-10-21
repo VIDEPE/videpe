@@ -26,6 +26,17 @@ const BYTES_PER_SAMPLE = 2; // EDF uses int16 => 2 bytes per sample
 // EDF+ stores events as text in a signal with this label => it is skipped for now until VIDEPE accepts annotations
 const ANNOTATIONS_LABEL = 'EDF Annotations';
 
+// Factor converting each voltage unit (lowercased) to µV, the unit VIDEPE plots in. Signals in
+// any other unit (e.g. '%', 'bpm', or none) are not voltages and are kept in their own unit.
+const MICROVOLTS_PER_UNIT = {
+  nv: 1e-3,
+  uv: 1,
+  µv: 1, // micro sign (µ, as written in latin-1)
+  μv: 1, // Greek mu (μ)
+  mv: 1e3,
+  v: 1e6,
+};
+
 // EDF headre has a fixed size (256 bytes) and is plain ASCII text
 // each field has a fixed width and is padded with spaces
 // - 8 bytes: version of this data format
@@ -124,9 +135,23 @@ function parseEdfHeader(text, fields, ns = 1) {
   return header;
 }
 
+// Gain and offset that turn a stored integer into its physical value in µV (or in its own unit,
+// for non-voltage signals): physical = stored × gain + offset.
+// Same calibration as MNE: cal = physical range / digital range, offset = physicalMin − digitalMin × cal.
+// i.e. how many uV is one step of the stored number
+function computeScale({ physicalMin, physicalMax, digitalMin, digitalMax, unit }) {
+  // a zero or unreadable range would divide by zero (or give NaN) — like MNE, use 1 instead
+  const validRange = (range) => (Number.isFinite(range) && range !== 0 ? range : 1);
+  const cal = validRange(physicalMax - physicalMin) / validRange(digitalMax - digitalMin);
+  const offset = physicalMin - digitalMin * cal;
+  const unitFactor = MICROVOLTS_PER_UNIT[unit.toLowerCase()] ?? 1; // unknown unit: keep as-is
+  return { gain: cal * unitFactor, offset: offset * unitFactor };
+}
+
 async function demuxBuffer(
   buffer,
   signals,
+  scales,
   nRecordsRead,
   firstRecord,
   samplesPerRecord,
@@ -156,11 +181,13 @@ async function demuxBuffer(
     for (const signal of signals) {
       if (signal.label !== ANNOTATIONS_LABEL) {
         // a data channel: its samplesPerRecord equals the shared one (checked at load time),
-        // so copy its samples for this record to their place in the output
-        channels[iChannel].set(
-          int16Buffer.subarray(iSample, iSample + samplesPerRecord),
-          iRecord * samplesPerRecord
-        );
+        // so convert its samples for this record to µV and write them to their place in the output
+        const { gain, offset } = scales[iChannel];
+        const output = channels[iChannel];
+        const outputStart = iRecord * samplesPerRecord;
+        for (let i = 0; i < samplesPerRecord; i++) {
+          output[outputStart + i] = int16Buffer[iSample + i] * gain + offset;
+        }
         iChannel++;
       }
 
@@ -216,7 +243,7 @@ async function demuxBuffer(
 export async function loadEegEdf(file) {
   // file size guard to contain at least a header and 1 signal section (each HEADER_SIZE long)
   if (file.size < 2 * HEADER_SIZE) {
-    throw new Error('EDF: file size too small tp be a valid .edf');
+    throw new Error('EDF: file size too small to be a valid .edf');
   }
 
   // fixed header: recording-wide fields, always 256 bytes
@@ -259,6 +286,9 @@ export async function loadEegEdf(file) {
   const fs = samplesPerRecord / recordDuration; // sampling frequency (Hz)
 
   const channelNames = dataSignals.map((s) => s.label);
+  // gain and offset per data channel, to convert stored integers to µV — computed once per file,
+  // not per chunk
+  const scales = dataSignals.map((signal) => computeScale(signal));
 
   // sum all samplesPerRecord for all signals and multiple by BYTES_PER_SAMPLE (because int16)
   // important to include annotations (=> use signals not dataSignals) as they are still in the file
@@ -300,6 +330,7 @@ export async function loadEegEdf(file) {
     return demuxBuffer(
       buffer,
       signals,
+      scales,
       nRecordsRead,
       firstRecord,
       samplesPerRecord,
