@@ -1,26 +1,14 @@
-import { yieldToMain } from '@/utils/yieldToMain';
+import { createFrameBudget } from '@/utils/frameBudget';
 
 // BrainVision EEG files come in two parts: a text header (.vhdr) and a binary data file (.eeg).
 // The .eeg file is raw, uncompressed, multiplexed IEEE_FLOAT_32 data (4 bytes per channel
 // per sample-time), so an arbitrary time range maps directly to an arbitrary byte range —
-// this lets loadBrainVisionEEG avoid reading the whole file for multi-hour recordings.
+// this lets loadEegBrainVision avoid reading the whole file for multi-hour recordings.
 const BYTES_PER_SAMPLE = 4; // sizeof(IEEE_FLOAT_32); existing assumption, BinaryFormat is not parsed
 
-// The demux pauses briefly once it has worked DEMUX_FRAME_BUDGET_MS without a break, so the
-// browser can redraw and respond to clicks. Without these pauses, a large file/large buffer reload
-// would run as one uninterrupted block and freeze the app until all channels are demuxed.
-// A time budget (rather than a fixed number of time points) adapts to the channel count and
-// machine speed: 8ms keeps each block comfortably under one frame (~16ms).
-const DEMUX_FRAME_BUDGET_MS = 8;
-// Time points between clock checks — checking after every single one would waste time
+// Time points between frame-budget checks (see createFrameBudget) — checking after every single
+// one would waste time
 const DEMUX_CLOCK_CHECK_INTERVAL = 1000;
-
-async function readText(source) {
-  if (source instanceof File) return source.text();
-  const r = await fetch(source);
-  if (!r.ok) throw new Error(`Failed to fetch ${source}: ${r.statusText}`);
-  return r.text();
-}
 
 function parseVhdr(text) {
   const channelNames = []; // ordered labels parsed from [Channel Infos], e.g. ['Fp1', 'Fp2', ...]
@@ -62,8 +50,8 @@ function parseVhdr(text) {
 // `sampleOffset` is the absolute sample index of float32[0], used to compute absolute timestamps
 // so the returned timestamps[0] is the chunk's real start time (not 0).
 //
-// Runs in bursts of up to DEMUX_FRAME_BUDGET_MS, yielding to the browser between them (see
-// yieldToMain) so demuxing a large buffered chunk doesn't block the main thread in one shot.
+// Runs in bursts, pausing between them (see createFrameBudget) so demuxing a large buffered
+// chunk doesn't block the main thread in one shot.
 // If `signal` is aborted during a pause, stops and throws an AbortError instead of finishing
 // work whose result would be thrown away.
 async function demuxFloat32(float32, nChannels, nSamples, sampleOffset, fs, signal) {
@@ -73,7 +61,10 @@ async function demuxFloat32(float32, nChannels, nSamples, sampleOffset, fs, sign
 
   // Allocate separate arrays for each channel.
   const channels = Array.from({ length: nChannels }, () => new Float32Array(nSamples));
-  let burstStart = performance.now(); // when the current burst started, for the time budget
+
+  // initialise frame budget that allows for UI update pauses while loading the buffer
+  const pauseIfOverBudget = createFrameBudget();
+
   // Inner loop over channels keeps sequential reads on float32 (cache-friendly)
   for (let t = 0; t < nSamples; t++) {
     const offset = t * nChannels;
@@ -84,26 +75,20 @@ async function demuxFloat32(float32, nChannels, nSamples, sampleOffset, fs, sign
     // every DEMUX_CLOCK_CHECK_INTERVAL time points (and only if there's more to do):
     // pause if this burst has used up its time budget
     const isClockCheck = (t + 1) % DEMUX_CLOCK_CHECK_INTERVAL === 0 && t + 1 < nSamples;
-    if (isClockCheck && performance.now() - burstStart >= DEMUX_FRAME_BUDGET_MS) {
-      await yieldToMain(); // pause the function and let the browser handle whatever is waiting, then continue
-      signal?.throwIfAborted(); // a newer request may have replaced this one during the pause
-      burstStart = performance.now();
-    }
+    if (isClockCheck) await pauseIfOverBudget(signal);
   }
 
   return { timestamps, channels };
 }
 
 /**
- * Loads a BrainVision recording's metadata and returns a chunk-loading provider. Works for
- * both demo (URL) and user-upload (File) sources.
+ * Loads a BrainVision recording's metadata and returns a chunk-loading provider. Takes Files
+ * only — demo recordings are fetched and wrapped as Files by useDemoData first.
  *
- * `tMax` is derived from the data source's byte size without reading its content: for a
- * `File` that's synchronous (`File.size`); a URL's data is fetched once and cached (demo
- * recordings are small, so an eager fetch is cheap).
+ * `tMax` is derived from the data file's byte size (`File.size`) without reading its content.
  *
- * @param {string|File} header - the .vhdr header, as a URL or a File.
- * @param {string|File} data - the .eeg binary data, as a URL or a File.
+ * @param {File} headerFile - the .vhdr header.
+ * @param {File} dataFile - the .eeg binary data.
  * @returns {Promise<{
  *   channelNames: string[],
  *   fs: number,
@@ -119,33 +104,26 @@ async function demuxFloat32(float32, nChannels, nSamples, sampleOffset, fs, sign
  *     absolute times in seconds (so `timestamps[0]` is the chunk's real start time). The
  *     optional `signal` (from an AbortController) cancels the request: once aborted, getChunk
  *     stops at its next check and rejects with an AbortError.
- * @throws {Error} when the header lacks NumberOfChannels/SamplingInterval, or a URL fetch fails.
+ * @throws {Error} when the header's NumberOfChannels or SamplingInterval is missing or not a
+ *   positive number.
  */
-export async function loadBrainVisionEEG(header, data) {
+export async function loadEegBrainVision(headerFile, dataFile) {
   // extract header text from .vhdr file and parse it to get requirements for reading the binary file
-  const headerText = await readText(header);
+  const headerText = await headerFile.text();
   const { nChannels, samplingInterval, channelNames } = parseVhdr(headerText);
-  if (nChannels === 0 || samplingInterval === 0) {
-    throw new Error('Could not parse channel count or sampling interval from header');
+  // !(x > 0) also catches NaN, e.g. from an unreadable value like 'NumberOfChannels=two'
+  if (!(nChannels > 0)) {
+    throw new Error('BrainVision: could not parse NumberOfChannels from the header');
+  }
+  if (!(samplingInterval > 0)) {
+    throw new Error('BrainVision: could not parse SamplingInterval from the header');
   }
 
   const fs = 1_000_000 / samplingInterval; // SamplingInterval is in microseconds
   const bytesPerSampleTime = nChannels * BYTES_PER_SAMPLE;
 
-  // For File sources, size is available without reading content. For URL sources,
-  // eagerly fetch + cache the buffer once so subsequent getChunk calls are in-memory slices.
-  let cachedBuffer = null;
-  let dataByteLength;
-  if (data instanceof File) {
-    dataByteLength = data.size;
-  } else {
-    const r = await fetch(data);
-    if (!r.ok) throw new Error(`Failed to fetch ${data}: ${r.statusText}`);
-    cachedBuffer = await r.arrayBuffer();
-    dataByteLength = cachedBuffer.byteLength;
-  }
-
-  const nSamples = Math.floor(dataByteLength / bytesPerSampleTime);
+  // the file's size is available without reading its content
+  const nSamples = Math.floor(dataFile.size / bytesPerSampleTime);
   const tMax = nSamples / fs;
 
   // getChunk is the core of this loader:
@@ -162,12 +140,8 @@ export async function loadBrainVisionEEG(header, data) {
     const byteStart = startSample * bytesPerSampleTime;
     const byteEnd = endSample * bytesPerSampleTime;
 
-    // URL source: slice the already-fetched ArrayBuffer in memory (sync).
-    // File source: read only the requested byte range from disk via File.slice (async).
-    const buffer =
-      cachedBuffer !== null
-        ? cachedBuffer.slice(byteStart, byteEnd)
-        : await data.slice(byteStart, byteEnd).arrayBuffer();
+    // Read only the requested byte range from disk via File.slice (async)
+    const buffer = await dataFile.slice(byteStart, byteEnd).arrayBuffer();
     signal?.throwIfAborted(); // cancelled while the file was being read
 
     // Demux the multiplexed float32 samples into separate channel arrays.

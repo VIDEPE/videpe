@@ -6,7 +6,7 @@ export const FileDropZone = ({
   onFiles,
   accepted_formats,
   label,
-  description,
+  description, // a string, or { label, value }[] rows shown as two aligned columns
   pendingFiles,
   hint,
   className,
@@ -95,9 +95,21 @@ export const FileDropZone = ({
           {/* The label is the main instruction (e.g., "Drop EEG files").
               whitespace-pre-wrap lets callers use '\n' and '\t' while still wrapping long lines. */}
           <p className="text-sm font-medium text-foreground whitespace-pre-wrap">{label}</p>
-          {/* The description provides format details (e.g., "BrainVision: .vhdr + .eeg").
-              whitespace-pre-wrap lets callers use '\n' and '\t' while still wrapping long lines. */}
-          <p className="text-xs text-foreground/50 whitespace-pre-wrap">{description}</p>
+          {/* The description provides format details, either as text (e.g., "BrainVision: .vhdr + .eeg";
+              whitespace-pre-wrap lets callers use '\n' and '\t' while still wrapping long lines) or as
+              { label, value } rows, shown as two aligned columns: labels right-aligned, values left-aligned. */}
+          {Array.isArray(description) ? (
+            <dl className="grid grid-cols-[auto_auto] gap-x-3 text-xs text-foreground/50">
+              {description.map(({ label: rowLabel, value }) => (
+                <div key={rowLabel} className="contents">
+                  <dt className="text-right">{rowLabel}</dt>
+                  <dd className="text-left">{value}</dd>
+                </div>
+              ))}
+            </dl>
+          ) : (
+            <p className="text-xs text-foreground/50 whitespace-pre-wrap">{description}</p>
+          )}
           {/* If there are pending files that are not yet complete, show them here with a checkmark. */}
           {hasPending && (
             <div className="flex flex-col items-left gap-1">
