@@ -262,7 +262,7 @@ export function ijkIndexToFlatIndex(i, j, k, gridDimensions) {
   // flat index 0,1,2,...,dimI-1 steps through i alone (j=0,k=0); once i wraps, j increments;
   // once j wraps too, k increments. E.g. for gridDimensions=[2,2,2], the order is:
   // (0,0,0),(1,0,0),(0,1,0),(1,1,0),(0,0,1),(1,0,1),(0,1,1),(1,1,1) → flat indices 0..7
-  const [dimI, dimJ, dimK] = gridDimensions;
+  const [dimI, dimJ] = gridDimensions; // k is the slowest axis, so its size (dimK) never enters the formula
   const flatIndex = i + j * dimI + k * dimI * dimJ;
   return flatIndex;
 }
