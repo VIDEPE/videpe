@@ -13,6 +13,7 @@ import {
   matchChannelsToInverseSolution,
   matchVoltagesToInverseSolution,
   findSeegChannelsAmongNeeded,
+  detectInverseSolutionMethod,
 } from '@/utils/electricalSourceImagingUtils';
 import { ESI_LAYER_URL } from '@/utils/NiiViewer.utils';
 import { estimateGridSpacing } from '../../utils/electricalSourceImagingUtils';
@@ -641,6 +642,22 @@ describe('convertSourcePowersToConnectome', () => {
 
     expect(result.boundMax).toBe(1e-9);
   });
+
+  it('sets subtype to the given inverse solution method, shown after the type on the settings card', () => {
+    const result = convertSourcePowersToConnectome(
+      CONNECTOME_POSITIONS,
+      CONNECTOME_POWERS,
+      'eLORETA'
+    );
+
+    expect(result.subtype).toBe('eLORETA');
+  });
+
+  it('sets subtype to null when no inverse solution method is given', () => {
+    const result = convertSourcePowersToConnectome(CONNECTOME_POSITIONS, CONNECTOME_POWERS);
+
+    expect(result.subtype).toBeNull();
+  });
 });
 
 // ─── convertSourcePowersToVolume ─────────────────────────────────────────────
@@ -689,6 +706,110 @@ describe('convertSourcePowersToVolume', () => {
     );
 
     expect(result.name).toMatch(/\.nii$/);
+  });
+
+  it('sets subtype to the given inverse solution method, shown after the type on the settings card', () => {
+    const result = convertSourcePowersToVolume(
+      VOLUME_INDICES,
+      VOLUME_POWERS,
+      VOLUME_DIMENSIONS,
+      VOLUME_PIX_DIMS,
+      VOLUME_AFFINE,
+      'eLORETA'
+    );
+
+    expect(result.subtype).toBe('eLORETA');
+  });
+
+  it('sets subtype to null when no inverse solution method is given', () => {
+    const result = convertSourcePowersToVolume(
+      VOLUME_INDICES,
+      VOLUME_POWERS,
+      VOLUME_DIMENSIONS,
+      VOLUME_PIX_DIMS,
+      VOLUME_AFFINE
+    );
+
+    expect(result.subtype).toBeNull();
+  });
+});
+
+// ─── detectInverseSolutionMethod ─────────────────────────────────────────────
+
+describe('detectInverseSolutionMethod', () => {
+  it.each([
+    ['sub-01_meth-lcmv_inversefilters.mat', 'LCMV'],
+    ['sub-01_meth-mne_inversefilters.mat', 'MNE'],
+    ['sub-01_meth-wmne_inversefilters.mat', 'wMNE'],
+    ['sub-01_meth-eloreta_inversefilters.mat', 'eLORETA'],
+    ['sub-01_meth-loreta_inversefilters.mat', 'LORETA'],
+    ['sub-01_meth-sloreta_inversefilters.mat', 'sLORETA'],
+    ['sub-01_meth-dspm_inversefilters.mat', 'dSPM'],
+    ['sub-01_meth-laura_inversefilters.mat', 'LAURA'],
+  ])('detects the method in %s', (fileName, expected) => {
+    expect(detectInverseSolutionMethod(fileName)).toBe(expected);
+  });
+
+  it('matches case-insensitively', () => {
+    expect(detectInverseSolutionMethod('sub-01_eLORETA_inversefilters.mat')).toBe('eLORETA');
+    expect(detectInverseSolutionMethod('sub-01_LCMV_inversefilters.mat')).toBe('LCMV');
+  });
+
+  // Whole-token matching — a substring match would read 'wmne' as MNE and 'eloreta'/'sloreta'
+  // as LORETA, or find 'mne' inside an unrelated word.
+  it('does not mistake a method for another method that contains it', () => {
+    expect(detectInverseSolutionMethod('sub-01_wmne_inversefilters.mat')).toBe('wMNE');
+    expect(detectInverseSolutionMethod('sub-01_eloreta_inversefilters.mat')).toBe('eLORETA');
+    expect(detectInverseSolutionMethod('sub-01_sloreta_inversefilters.mat')).toBe('sLORETA');
+    expect(detectInverseSolutionMethod('sub-amnesia_inversefilters.mat')).toBeNull();
+  });
+
+  it('returns the method from the real sample filenames', () => {
+    expect(detectInverseSolutionMethod('sub-19_meth-eloreta_desc-nonorm_inversefilters.mat')).toBe(
+      'eLORETA'
+    );
+    expect(detectInverseSolutionMethod('sub-synth_desc-unitnoiselcmv_inversefilters.mat')).toBe(
+      'LCMV (unit-noise-gain)'
+    );
+  });
+
+  // LCMV's weight normalization (FieldTrip's cfg.lcmv.weightnorm) changes the power map
+  // considerably — unit-gain is depth-biased, the others compensate — so it's part of the label.
+  it.each([
+    ['unitnoisegainlcmv', 'unit-noise-gain'],
+    ['unitnoiselcmv', 'unit-noise-gain'],
+    ['arraygainlcmv', 'array-gain'],
+    ['arraylcmv', 'array-gain'],
+    ['unitgainlcmv', 'unit-gain'],
+    ['unitlcmv', 'unit-gain'],
+    ['nailcmv', 'NAI'],
+  ])('detects the LCMV weight normalization glued onto the method: %s', (token, normalization) => {
+    expect(detectInverseSolutionMethod(`sub-01_desc-${token}_inversefilters.mat`)).toBe(
+      `LCMV (${normalization})`
+    );
+  });
+
+  it('detects the LCMV weight normalization as its own filename token', () => {
+    expect(detectInverseSolutionMethod('sub-01_meth-lcmv_desc-arraygain_inversefilters.mat')).toBe(
+      'LCMV (array-gain)'
+    );
+  });
+
+  it('leaves LCMV unqualified when no known weight normalization is in the filename', () => {
+    // 'constructor' exists on Object.prototype — must not be read as a normalization
+    expect(
+      detectInverseSolutionMethod('sub-01_meth-lcmv_desc-constructor_inversefilters.mat')
+    ).toBe('LCMV');
+  });
+
+  it('ignores a weight normalization token when the method is not LCMV', () => {
+    expect(detectInverseSolutionMethod('sub-01_meth-mne_desc-unitnoise_inversefilters.mat')).toBe(
+      'MNE'
+    );
+  });
+
+  it('returns null when no known method is in the filename', () => {
+    expect(detectInverseSolutionMethod('sub-19_inversefilters.mat')).toBeNull();
   });
 });
 
@@ -906,6 +1027,15 @@ describe('electricalSourceImaging', () => {
     expect(result.sourcePowerVolume.boundMax).toBe(25);
     expect(result.sourcePowerVolume.bytes).toBeInstanceOf(Uint8Array);
     expect(result.sourcePowerVolume.bytes).toHaveLength(360);
+  });
+
+  it("labels both representations with the inverse solution's method as subtype", () => {
+    const model = { ...MINIMAL_MODEL, inverseSolutionMethod: 'eLORETA' };
+
+    const result = electricalSourceImaging(model, SCALP_SNAPSHOT);
+
+    expect(result.sourcePowerConnectomes.subtype).toBe('eLORETA');
+    expect(result.sourcePowerVolume.subtype).toBe('eLORETA');
   });
 
   it('builds each representation lazily, only when accessed, and caches the result', () => {

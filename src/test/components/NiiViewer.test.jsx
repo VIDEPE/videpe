@@ -550,7 +550,10 @@ describe('detectVolumeType', () => {
     });
 
     it('detects T1w in .nii.gz (compressed) as ANAT — extension must not interfere', () => {
-      expect(detectVolumeType('sub-01_T1w.nii.gz')).toEqual({ type: 'ANAT', subtype: 'sub-01_T1w' });
+      expect(detectVolumeType('sub-01_T1w.nii.gz')).toEqual({
+        type: 'ANAT',
+        subtype: 'sub-01_T1w',
+      });
     });
 
     it('detects T2w as ANAT with nameWithoutExtension as subtype', () => {
@@ -796,23 +799,36 @@ describe('NiiViewer', () => {
 
   describe('getInitialLayerSettings', () => {
     it('starts all layers visible', () => {
-      const result = getInitialLayerSettings([{ type: 'ANAT' }, { type: 'PET' }, { type: 'SPECT' }]);
+      const result = getInitialLayerSettings([
+        { type: 'ANAT' },
+        { type: 'PET' },
+        { type: 'SPECT' },
+      ]);
       expect(result.every((layer) => layer.visible)).toBe(true);
     });
 
     it('first layer is fully opaque, subsequent layers default to 0.6', () => {
-      const result = getInitialLayerSettings([{ type: 'ANAT' }, { type: 'PET' }, { type: 'SPECT' }]);
+      const result = getInitialLayerSettings([
+        { type: 'ANAT' },
+        { type: 'PET' },
+        { type: 'SPECT' },
+      ]);
       expect(result[0].opacity).toBe(1.0);
       expect(result[1].opacity).toBe(0.6);
       expect(result[2].opacity).toBe(0.6);
     });
 
     it('derives colormap from volume type via TYPE_COLORMAP_DEFAULTS', () => {
-      const result = getInitialLayerSettings([{ type: 'ANAT' }, { type: 'PET' }, { type: 'SPECT' }, { type: 'CT' }]);
+      const result = getInitialLayerSettings([
+        { type: 'ANAT' },
+        { type: 'PET' },
+        { type: 'SPECT' },
+        { type: 'CT' },
+      ]);
       expect(result[0].colormap).toBe('gray');
       expect(result[1].colormap).toBe('turbo');
       expect(result[2].colormap).toBe('magma');
-	  expect(result[3].colormap).toBe('ct_skull');
+      expect(result[3].colormap).toBe('ct_skull');
     });
 
     it('defaults colormap to gray for unknown types', () => {
@@ -1094,7 +1110,9 @@ describe('NiiViewer', () => {
     it('calls nv.setColormap when the colormap setting changes', async () => {
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
-      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'ANAT', url: '/mri.nii', id: 'mri-id' }]} />);
+      render(
+        <NiiViewer nvRef={nvRef} layers={[{ type: 'ANAT', url: '/mri.nii', id: 'mri-id' }]} />
+      );
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
 
       // Expand the MRI card and change the colormap
@@ -1109,7 +1127,9 @@ describe('NiiViewer', () => {
     it('reapplies the user-chosen cal_min/cal_max after a colormap change, since NiiVue setColormap triggers its own cal auto-scan internally', async () => {
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
-      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'ANAT', url: '/mri.nii', id: 'mri-id' }]} />);
+      render(
+        <NiiViewer nvRef={nvRef} layers={[{ type: 'ANAT', url: '/mri.nii', id: 'mri-id' }]} />
+      );
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
 
       const nv = nvRef.current;
@@ -1122,7 +1142,9 @@ describe('NiiViewer', () => {
       });
 
       await userEvent.click(screen.getByRole('button', { name: /expand.*anat/i }));
-      fireEvent.change(screen.getByLabelText('ANAT Threshold minimum'), { target: { value: '40' } });
+      fireEvent.change(screen.getByLabelText('ANAT Threshold minimum'), {
+        target: { value: '40' },
+      });
       // mockClear() resets a vi.fn() mock's recorded call history (call count, arguments) back to empty
       // wiping out the record of the updateGLVolume() that changing the colormap triggered internally.
       // This allows expect(nv.updateGLVolume).toHaveBeenCalled()  to only reflects a updateGLVolume that
