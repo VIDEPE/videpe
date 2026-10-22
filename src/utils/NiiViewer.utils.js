@@ -108,7 +108,7 @@ export const detectVolumeType = (filename) => {
   if (lastSegment === 'spect') return { type: 'SPECT', subtype: nameWithoutExtension };
   if (lastSegment === 'ct') return { type: 'CT', subtype: nameWithoutExtension };
   if (lastSegment === 'bold') return { type: 'FUNC', subtype: nameWithoutExtension };
-	
+
   // Pass 2: keyword fallback (case-insensitive, for non-BIDS filenames) — use nameWithoutExtension as subtype so files are distinguishable in the UI
   if (/t1|t2|flair|mri|mprage|mp2rage|bravo/.test(lower))
     return { type: 'ANAT', subtype: nameWithoutExtension };
