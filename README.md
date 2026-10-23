@@ -1,6 +1,6 @@
 # VIDEPE
 
-![Version](https://img.shields.io/badge/version-0.20.0-blue)
+![Version](https://img.shields.io/badge/version-0.21.0-blue)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23312820.svg)](https://doi.org/10.5281/zenodo.23312820)
 
 **V**isualization & **I**ntegration of **D**ata for **E**pilepsy **P**resurgical **E**valuation
@@ -27,7 +27,7 @@ This mode only exists on a Shanoir deployment, which serves VIDEPE from its own 
 
 High-performance multichannel viewer built on [uPlot](https://github.com/leeoniya/uplot), optimised for long recordings and high channel count.
 
-- Accepts BrainVision format EEG recordings
+- Accepts BrainVision and EDF/EDF+ format EEG recordings
 - Stack/unstack EEG — overlay all visible channels on a single plot to spot cross-channel patterns
 - Click a channel label to move the neuroimaging crosshair to its electrode — bipolar rows jump to the midpoint between their two electrodes
 - **Controls:**
