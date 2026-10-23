@@ -1,0 +1,23 @@
+name: Main source branch check
+
+# PRs into main may only come from develop (releases) or hotfix/* branches (urgent fixes).
+# Branch protection on main requires this check, so a PR from any other branch can't be merged.
+
+on:
+  pull_request:
+    branches:
+      - main
+    types: [opened, reopened, synchronize, edited] # 'edited' re-runs it when someone changes a PR's base branch to main
+
+jobs:
+  check-source:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Only allow develop or hotfix/* → main
+        # The repository check stops a fork's branch that happens to be named develop or hotfix/* from passing
+        if: >-
+          github.event.pull_request.head.repo.full_name != github.repository ||
+          (github.head_ref != 'develop' && !startsWith(github.head_ref, 'hotfix/'))
+        run: |
+          echo "::error::PRs into main must come from develop or a hotfix/* branch (this one is from ${{ github.head_ref }})."
+          exit 1
