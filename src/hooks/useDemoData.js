@@ -10,7 +10,7 @@ const DEMO_EEG = {
     'demo_data/sub-synth_task-rest_desc-spkavgall_eeg.eeg',
   ],
   elec_pos: 'demo_data/sub-synth_electrodes.tsv',
-  invers_solution: 'demo_data/sub-synth_desc-unitnoiselcmv_inversefilters.mat',
+  invers_solution: 'demo_data/sub-synth_desc-eloreta_inversefilters.mat',
 };
 
 const DEMO_LAYERS = [
@@ -20,8 +20,8 @@ const DEMO_LAYERS = [
     ...detectVolumeType('sub-synth_label-WM_dseg.nii.gz'),
   },
   {
-    url: 'demo_data/sub-synth_label-CSF_dseg.nii.gz',
-    ...detectVolumeType('sub-synth_label-CSF_dseg.nii.gz'),
+    url: 'demo_data/sub-synth_atlas-L2018_res-scale1_dseg.nii.gz',
+    ...detectVolumeType('sub-synth_atlas-L2018_res-scale1_dseg.nii.gz'),
   },
 ];
 

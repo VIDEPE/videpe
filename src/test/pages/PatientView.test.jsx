@@ -647,7 +647,7 @@ describe('PatientView — demo loading', () => {
     });
     expect(screen.getByTestId('eeg-custom-filename')).toHaveTextContent('sub-synth_electrodes');
     expect(parseInverseSolutionFieldtrip).toHaveBeenCalledWith(
-      expect.objectContaining({ name: 'sub-synth_desc-unitnoiselcmv_inversefilters.mat' })
+      expect.objectContaining({ name: 'sub-synth_desc-eloreta_inversefilters.mat' })
     );
   });
 
@@ -667,7 +667,7 @@ describe('PatientView — demo loading', () => {
     const layers = NiiViewer.mock.lastCall[0].layers;
     expect(layers[0]).toMatchObject({ type: 'ANAT', subtype: 'sub-synth_T1w' });
     expect(layers[1]).toMatchObject({ type: 'DSEG', subtype: 'sub-synth_label-WM_dseg' });
-    expect(layers[2]).toMatchObject({ type: 'DSEG', subtype: 'sub-synth_label-CSF_dseg' });
+    expect(layers[2]).toMatchObject({ type: 'DSEG', subtype: 'sub-synth_atlas-L2018_res-scale1_dseg' });
   });
 
   it('renders both EegViewer and NiiViewer once demo data is loaded', async () => {
