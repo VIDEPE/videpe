@@ -592,6 +592,20 @@ describe('detectVolumeType', () => {
       // BIDS suffix 'pet' is lowercase; 'PET' does not match BIDS but keyword fallback catches it
       expect(detectVolumeType('scan_PET.nii')).toEqual({ type: 'PET', subtype: 'scan_PET' });
     });
+
+    it('detects dseg suffix as DSEG with nameWithoutExtension as subtype', () => {
+      expect(detectVolumeType('sub-synth_label-WM_dseg.nii.gz')).toEqual({
+        type: 'DSEG',
+        subtype: 'sub-synth_label-WM_dseg',
+      });
+    });
+
+    it('detects dseg suffix as DSEG when preceded by atlas/res entities', () => {
+      expect(detectVolumeType('sub-synth_atlas-L2018_res-scale1_dseg.nii.gz')).toEqual({
+        type: 'DSEG',
+        subtype: 'sub-synth_atlas-L2018_res-scale1_dseg',
+      });
+    });
   });
 
   describe('keyword fallback for non-BIDS filenames', () => {
@@ -612,6 +626,53 @@ describe('detectVolumeType', () => {
 
     it('detects mprage keyword as MRI with nameWithoutExtension as subtype', () => {
       expect(detectVolumeType('mprage.nii.gz')).toEqual({ type: 'ANAT', subtype: 'mprage' });
+    });
+
+    it('detects FreeSurfer aparc+aseg as DSEG', () => {
+      expect(detectVolumeType('aparc+aseg.nii.gz')).toEqual({
+        type: 'DSEG',
+        subtype: 'aparc+aseg',
+      });
+    });
+
+    it('detects parcels keyword as DSEG', () => {
+      expect(detectVolumeType('Schaefer2018_400Parcels_7Networks.nii.gz')).toEqual({
+        type: 'DSEG',
+        subtype: 'Schaefer2018_400Parcels_7Networks',
+      });
+    });
+
+    it('detects labels keyword as DSEG', () => {
+      expect(detectVolumeType('brain_labels.nii')).toEqual({
+        type: 'DSEG',
+        subtype: 'brain_labels',
+      });
+    });
+
+    it('detects FreeSurfer aseg as a standalone token as DSEG', () => {
+      expect(detectVolumeType('aseg.nii.gz')).toEqual({ type: 'DSEG', subtype: 'aseg' });
+    });
+
+    it('detects seg as a standalone token as DSEG', () => {
+      expect(detectVolumeType('tissue_seg.nii')).toEqual({ type: 'DSEG', subtype: 'tissue_seg' });
+    });
+
+    it('does not match seg inside joined words (phase + GRE)', () => {
+      expect(detectVolumeType('phaseGRE.nii')).toEqual({ type: 'phaseGRE', subtype: null });
+    });
+
+    it('checks DSEG keywords before modality keywords — atlas wins over t1', () => {
+      expect(detectVolumeType('atlas_in_t1_space.nii')).toEqual({
+        type: 'DSEG',
+        subtype: 'atlas_in_t1_space',
+      });
+    });
+
+    it('checks DSEG keywords before modality keywords — atlas wins over the broad CT "os" match', () => {
+      expect(detectVolumeType('postop_atlas.nii')).toEqual({
+        type: 'DSEG',
+        subtype: 'postop_atlas',
+      });
     });
   });
 
@@ -829,6 +890,28 @@ describe('NiiViewer', () => {
       expect(result[1].colormap).toBe('turbo');
       expect(result[2].colormap).toBe('magma');
       expect(result[3].colormap).toBe('ct_skull');
+    });
+
+    it('defaults DSEG colormap to randomised', () => {
+      const result = getInitialLayerSettings([
+        { type: 'DSEG', subtype: 'sub-synth_atlas-L2018_res-scale1_dseg' },
+      ]);
+      expect(result[0].colormap).toBe('randomised');
+    });
+
+    it('defaults white matter DSEG layers to gray so the mask renders plain white', () => {
+      const result = getInitialLayerSettings([
+        { type: 'DSEG', subtype: 'sub-synth_label-WM_dseg' },
+        { type: 'DSEG', subtype: 'wm_seg' },
+        { type: 'DSEG', subtype: 'white_matter_labels' },
+        { type: 'DSEG', subtype: 'WhiteMatter_seg' },
+      ]);
+      expect(result.map((layer) => layer.colormap)).toEqual(['gray', 'gray', 'gray', 'gray']);
+    });
+
+    it('keeps the DSEG colormap for wm inside a longer word (FreeSurfer wmparc has many labels)', () => {
+      const result = getInitialLayerSettings([{ type: 'DSEG', subtype: 'wmparc' }]);
+      expect(result[0].colormap).toBe('randomised');
     });
 
     it('defaults colormap to gray for unknown types', () => {
