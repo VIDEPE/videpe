@@ -545,31 +545,34 @@ describe('syncMeshesAndApplySettings', () => {
 
 describe('detectVolumeType', () => {
   describe('BIDS suffix detection', () => {
-    it('detects T1w in .nii as MRI with nameWithoutExtension as subtype', () => {
-      expect(detectVolumeType('sub-01_T1w.nii')).toEqual({ type: 'MRI', subtype: 'sub-01_T1w' });
+    it('detects T1w in .nii as ANAT with nameWithoutExtension as subtype', () => {
+      expect(detectVolumeType('sub-01_T1w.nii')).toEqual({ type: 'ANAT', subtype: 'sub-01_T1w' });
     });
 
-    it('detects T1w in .nii.gz (compressed) as MRI — extension must not interfere', () => {
-      expect(detectVolumeType('sub-01_T1w.nii.gz')).toEqual({ type: 'MRI', subtype: 'sub-01_T1w' });
+    it('detects T1w in .nii.gz (compressed) as ANAT — extension must not interfere', () => {
+      expect(detectVolumeType('sub-01_T1w.nii.gz')).toEqual({
+        type: 'ANAT',
+        subtype: 'sub-01_T1w',
+      });
     });
 
-    it('detects T2w as MRI with nameWithoutExtension as subtype', () => {
+    it('detects T2w as ANAT with nameWithoutExtension as subtype', () => {
       expect(detectVolumeType('sub-01_ses-01_T2w.nii.gz')).toEqual({
-        type: 'MRI',
+        type: 'ANAT',
         subtype: 'sub-01_ses-01_T2w',
       });
     });
 
-    it('detects FLAIR as MRI with nameWithoutExtension as subtype', () => {
+    it('detects FLAIR as ANAT with nameWithoutExtension as subtype', () => {
       expect(detectVolumeType('sub-01_FLAIR.nii.gz')).toEqual({
-        type: 'MRI',
+        type: 'ANAT',
         subtype: 'sub-01_FLAIR',
       });
     });
 
-    it('detects T2star as MRI with nameWithoutExtension as subtype', () => {
+    it('detects T2star as ANAT with nameWithoutExtension as subtype', () => {
       expect(detectVolumeType('sub-01_T2star.nii.gz')).toEqual({
-        type: 'MRI',
+        type: 'ANAT',
         subtype: 'sub-01_T2star',
       });
     });
@@ -589,11 +592,25 @@ describe('detectVolumeType', () => {
       // BIDS suffix 'pet' is lowercase; 'PET' does not match BIDS but keyword fallback catches it
       expect(detectVolumeType('scan_PET.nii')).toEqual({ type: 'PET', subtype: 'scan_PET' });
     });
+
+    it('detects dseg suffix as DSEG with nameWithoutExtension as subtype', () => {
+      expect(detectVolumeType('sub-synth_label-WM_dseg.nii.gz')).toEqual({
+        type: 'DSEG',
+        subtype: 'sub-synth_label-WM_dseg',
+      });
+    });
+
+    it('detects dseg suffix as DSEG when preceded by atlas/res entities', () => {
+      expect(detectVolumeType('sub-synth_atlas-L2018_res-scale1_dseg.nii.gz')).toEqual({
+        type: 'DSEG',
+        subtype: 'sub-synth_atlas-L2018_res-scale1_dseg',
+      });
+    });
   });
 
   describe('keyword fallback for non-BIDS filenames', () => {
     it('detects t1 keyword as MRI with nameWithoutExtension as subtype', () => {
-      expect(detectVolumeType('my_t1_scan.nii')).toEqual({ type: 'MRI', subtype: 'my_t1_scan' });
+      expect(detectVolumeType('my_t1_scan.nii')).toEqual({ type: 'ANAT', subtype: 'my_t1_scan' });
     });
 
     it('detects fdg keyword as PET with nameWithoutExtension as subtype', () => {
@@ -608,7 +625,54 @@ describe('detectVolumeType', () => {
     });
 
     it('detects mprage keyword as MRI with nameWithoutExtension as subtype', () => {
-      expect(detectVolumeType('mprage.nii.gz')).toEqual({ type: 'MRI', subtype: 'mprage' });
+      expect(detectVolumeType('mprage.nii.gz')).toEqual({ type: 'ANAT', subtype: 'mprage' });
+    });
+
+    it('detects FreeSurfer aparc+aseg as DSEG', () => {
+      expect(detectVolumeType('aparc+aseg.nii.gz')).toEqual({
+        type: 'DSEG',
+        subtype: 'aparc+aseg',
+      });
+    });
+
+    it('detects parcels keyword as DSEG', () => {
+      expect(detectVolumeType('Schaefer2018_400Parcels_7Networks.nii.gz')).toEqual({
+        type: 'DSEG',
+        subtype: 'Schaefer2018_400Parcels_7Networks',
+      });
+    });
+
+    it('detects labels keyword as DSEG', () => {
+      expect(detectVolumeType('brain_labels.nii')).toEqual({
+        type: 'DSEG',
+        subtype: 'brain_labels',
+      });
+    });
+
+    it('detects FreeSurfer aseg as a standalone token as DSEG', () => {
+      expect(detectVolumeType('aseg.nii.gz')).toEqual({ type: 'DSEG', subtype: 'aseg' });
+    });
+
+    it('detects seg as a standalone token as DSEG', () => {
+      expect(detectVolumeType('tissue_seg.nii')).toEqual({ type: 'DSEG', subtype: 'tissue_seg' });
+    });
+
+    it('does not match seg inside joined words (phase + GRE)', () => {
+      expect(detectVolumeType('phaseGRE.nii')).toEqual({ type: 'phaseGRE', subtype: null });
+    });
+
+    it('checks DSEG keywords before modality keywords — atlas wins over t1', () => {
+      expect(detectVolumeType('atlas_in_t1_space.nii')).toEqual({
+        type: 'DSEG',
+        subtype: 'atlas_in_t1_space',
+      });
+    });
+
+    it('checks DSEG keywords before modality keywords — atlas wins over the broad CT "os" match', () => {
+      expect(detectVolumeType('postop_atlas.nii')).toEqual({
+        type: 'DSEG',
+        subtype: 'postop_atlas',
+      });
     });
   });
 
@@ -669,7 +733,7 @@ describe('filesToLayers', () => {
   it('does not tag a NIfTI file as a mesh layer', async () => {
     const [layer] = await filesToLayers([makeFile('brain_T1w.nii.gz')]);
     expect(layer.kind).toBeUndefined();
-    expect(layer.type).toBe('MRI');
+    expect(layer.type).toBe('ANAT');
   });
 
   it('handles a mix of image volumes and mesh files in the same drop', async () => {
@@ -688,7 +752,7 @@ describe('filesToLayers', () => {
     expect(layers).toHaveLength(1);
     expect(layers[0].kind).toBeUndefined(); // image volume, not a mesh
     expect(layers[0].name).toBe('brain_T1w.nii');
-    expect(layers[0].type).toBe('MRI');
+    expect(layers[0].type).toBe('ANAT');
     expect(layers[0].url).toMatch(/^blob:/);
   });
 
@@ -796,22 +860,58 @@ describe('NiiViewer', () => {
 
   describe('getInitialLayerSettings', () => {
     it('starts all layers visible', () => {
-      const result = getInitialLayerSettings([{ type: 'MRI' }, { type: 'PET' }, { type: 'SPECT' }]);
+      const result = getInitialLayerSettings([
+        { type: 'ANAT' },
+        { type: 'PET' },
+        { type: 'SPECT' },
+      ]);
       expect(result.every((layer) => layer.visible)).toBe(true);
     });
 
     it('first layer is fully opaque, subsequent layers default to 0.6', () => {
-      const result = getInitialLayerSettings([{ type: 'MRI' }, { type: 'PET' }, { type: 'SPECT' }]);
+      const result = getInitialLayerSettings([
+        { type: 'ANAT' },
+        { type: 'PET' },
+        { type: 'SPECT' },
+      ]);
       expect(result[0].opacity).toBe(1.0);
       expect(result[1].opacity).toBe(0.6);
       expect(result[2].opacity).toBe(0.6);
     });
 
     it('derives colormap from volume type via TYPE_COLORMAP_DEFAULTS', () => {
-      const result = getInitialLayerSettings([{ type: 'MRI' }, { type: 'PET' }, { type: 'SPECT' }]);
+      const result = getInitialLayerSettings([
+        { type: 'ANAT' },
+        { type: 'PET' },
+        { type: 'SPECT' },
+        { type: 'CT' },
+      ]);
       expect(result[0].colormap).toBe('gray');
-      expect(result[1].colormap).toBe('viridis');
+      expect(result[1].colormap).toBe('turbo');
       expect(result[2].colormap).toBe('magma');
+      expect(result[3].colormap).toBe('ct_skull');
+    });
+
+    it('defaults DSEG colormap to randomised', () => {
+      const result = getInitialLayerSettings([
+        { type: 'DSEG', subtype: 'sub-synth_atlas-L2018_res-scale1_dseg' },
+      ]);
+      expect(result[0].colormap).toBe('randomised');
+    });
+
+    it('defaults white matter DSEG layers to gray so the mask renders plain white', () => {
+      const result = getInitialLayerSettings([
+        { type: 'DSEG', subtype: 'sub-synth_label-WM_dseg' },
+        { type: 'DSEG', subtype: 'wm_seg' },
+        { type: 'DSEG', subtype: 'white_matter_labels' },
+        { type: 'DSEG', subtype: 'WhiteMatter_seg' },
+      ]);
+      expect(result.map((layer) => layer.colormap)).toEqual(['gray', 'gray', 'gray', 'gray']);
+    });
+
+    it('keeps the DSEG colormap for wm inside a longer word (FreeSurfer wmparc has many labels)', () => {
+      const result = getInitialLayerSettings([{ type: 'DSEG', subtype: 'wmparc' }]);
+      expect(result[0].colormap).toBe('randomised');
     });
 
     it('defaults colormap to gray for unknown types', () => {
@@ -825,7 +925,7 @@ describe('NiiViewer', () => {
     });
 
     it('defaults invert and showColorbar to false', () => {
-      const result = getInitialLayerSettings([{ type: 'MRI' }]);
+      const result = getInitialLayerSettings([{ type: 'ANAT' }]);
       expect(result[0].invert).toBe(false);
       expect(result[0].showColorbar).toBe(false);
     });
@@ -845,7 +945,7 @@ describe('NiiViewer', () => {
 
     it('defaults electrodeDisplayMode to "none" for the Electrodes layer only', () => {
       const result = getInitialLayerSettings([
-        { type: 'MRI' },
+        { type: 'ANAT' },
         { url: ELECTRODE_LAYER_URL, type: 'Electrodes' },
       ]);
       expect(result[0].electrodeDisplayMode).toBeUndefined(); // not the Electrodes layer
@@ -858,13 +958,13 @@ describe('NiiViewer', () => {
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
       const volumes = [
-        { type: 'MRI', url: '/mri.nii' },
+        { type: 'ANAT', url: '/mri.nii' },
         { type: 'PET', url: '/pet.nii' },
         { type: 'SPECT', url: '/spect.nii' },
       ];
       render(<NiiViewer nvRef={nvRef} layers={volumes} />);
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
-      expect(screen.getByText('MRI')).toBeInTheDocument();
+      expect(screen.getByText('ANAT')).toBeInTheDocument();
       expect(screen.getByText('PET')).toBeInTheDocument();
       expect(screen.getByText('SPECT')).toBeInTheDocument();
     });
@@ -893,14 +993,14 @@ describe('NiiViewer', () => {
       });
       const nvRef = { current: new Niivue() };
 
-      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'MRI', url: '/mri.nii' }]} />);
+      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'ANAT', url: '/mri.nii' }]} />);
       expect(screen.getByTestId('loading-spinner')).toBeInTheDocument();
     });
 
     it('hides the loading spinner once volumes have loaded', async () => {
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
-      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'MRI', url: '/mri.nii' }]} />);
+      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'ANAT', url: '/mri.nii' }]} />);
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
     });
 
@@ -928,7 +1028,7 @@ describe('NiiViewer', () => {
 
       const nvRef = { current: new Niivue() };
       const { default: toast } = await import('react-hot-toast');
-      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'MRI', url: '/mri.nii' }]} />);
+      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'ANAT', url: '/mri.nii' }]} />);
 
       await waitFor(() =>
         expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/failed to load image/i))
@@ -959,13 +1059,13 @@ describe('NiiViewer', () => {
 
       const nvRef = { current: new Niivue() };
       const { default: toast } = await import('react-hot-toast');
-      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'MRI', url: '/mri.nii' }]} />);
+      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'ANAT', url: '/mri.nii' }]} />);
 
       await waitFor(() =>
         expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/failed to load image/i))
       );
       // The card must not linger for a volume that never actually loaded.
-      expect(screen.queryByText('MRI')).not.toBeInTheDocument();
+      expect(screen.queryByText('ANAT')).not.toBeInTheDocument();
     });
 
     it("calls onLoadError with the failed layer's url when a layer passed via the layers prop fails to load", async () => {
@@ -995,7 +1095,7 @@ describe('NiiViewer', () => {
       render(
         <NiiViewer
           nvRef={nvRef}
-          layers={[{ type: 'MRI', url: '/mri.nii' }]}
+          layers={[{ type: 'ANAT', url: '/mri.nii' }]}
           onLoadError={onLoadError}
         />
       );
@@ -1027,7 +1127,7 @@ describe('NiiViewer', () => {
 
       const revokeSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
       const nvRef = { current: new Niivue() };
-      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'MRI', url: 'blob:mri' }]} />);
+      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'ANAT', url: 'blob:mri' }]} />);
 
       await waitFor(() => expect(revokeSpy).toHaveBeenCalledWith('blob:mri'));
       revokeSpy.mockRestore();
@@ -1040,7 +1140,7 @@ describe('NiiViewer', () => {
       const { default: toast } = await import('react-hot-toast');
       toast.success.mockClear();
 
-      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'MRI', url: '/mri.nii' }]} />);
+      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'ANAT', url: '/mri.nii' }]} />);
 
       await waitFor(() => expect(toast.error).toHaveBeenCalled());
       expect(toast.success).not.toHaveBeenCalled();
@@ -1056,7 +1156,7 @@ describe('NiiViewer', () => {
       render(
         <NiiViewer
           nvRef={nvRef}
-          layers={[{ type: 'MRI', url: '/mri.nii', name: 'sub-01_T1w.nii' }]}
+          layers={[{ type: 'ANAT', url: '/mri.nii', name: 'sub-01_T1w.nii' }]}
         />
       );
 
@@ -1079,7 +1179,7 @@ describe('NiiViewer', () => {
         <NiiViewer
           nvRef={nvRef}
           layers={[
-            { type: 'MRI', url: '/mri.nii', name: 'sub-01_T1w.nii' },
+            { type: 'ANAT', url: '/mri.nii', name: 'sub-01_T1w.nii' },
             { kind: 'mesh', url: '/cortex.gii', name: 'cortex.gii' },
           ]}
         />
@@ -1093,12 +1193,14 @@ describe('NiiViewer', () => {
     it('calls nv.setColormap when the colormap setting changes', async () => {
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
-      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'MRI', url: '/mri.nii', id: 'mri-id' }]} />);
+      render(
+        <NiiViewer nvRef={nvRef} layers={[{ type: 'ANAT', url: '/mri.nii', id: 'mri-id' }]} />
+      );
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
 
       // Expand the MRI card and change the colormap
-      await userEvent.click(screen.getByRole('button', { name: /expand.*mri/i }));
-      await userEvent.selectOptions(screen.getByLabelText('MRI colormap'), 'magma');
+      await userEvent.click(screen.getByRole('button', { name: /expand.*anat/i }));
+      await userEvent.selectOptions(screen.getByLabelText('ANAT colormap'), 'magma');
 
       const nv = nvRef.current;
       // toHaveBeenLastCalledWith isolates the handleSettingChange call from the initial syncVolumesAndApplySettings call
@@ -1108,7 +1210,9 @@ describe('NiiViewer', () => {
     it('reapplies the user-chosen cal_min/cal_max after a colormap change, since NiiVue setColormap triggers its own cal auto-scan internally', async () => {
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
-      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'MRI', url: '/mri.nii', id: 'mri-id' }]} />);
+      render(
+        <NiiViewer nvRef={nvRef} layers={[{ type: 'ANAT', url: '/mri.nii', id: 'mri-id' }]} />
+      );
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
 
       const nv = nvRef.current;
@@ -1120,15 +1224,17 @@ describe('NiiViewer', () => {
         nvVolume.cal_max = 1;
       });
 
-      await userEvent.click(screen.getByRole('button', { name: /expand.*mri/i }));
-      fireEvent.change(screen.getByLabelText('MRI Threshold minimum'), { target: { value: '40' } });
+      await userEvent.click(screen.getByRole('button', { name: /expand.*anat/i }));
+      fireEvent.change(screen.getByLabelText('ANAT Threshold minimum'), {
+        target: { value: '40' },
+      });
       // mockClear() resets a vi.fn() mock's recorded call history (call count, arguments) back to empty
       // wiping out the record of the updateGLVolume() that changing the colormap triggered internally.
       // This allows expect(nv.updateGLVolume).toHaveBeenCalled()  to only reflects a updateGLVolume that
       // has been run again AFTER the colormap and cal_min/max changes.
       nv.updateGLVolume.mockClear();
 
-      await userEvent.selectOptions(screen.getByLabelText('MRI colormap'), 'magma');
+      await userEvent.selectOptions(screen.getByLabelText('ANAT colormap'), 'magma');
 
       // The user's own threshold (40%) must survive setColormap's reset...
       expect(nvVolume.cal_min).toBeCloseTo(0.4);
@@ -1166,7 +1272,7 @@ describe('NiiViewer', () => {
     const setup = async () => {
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
-      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'MRI', url: '/mri.nii' }]} />);
+      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'ANAT', url: '/mri.nii' }]} />);
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
       const nv = nvRef.current;
       nv.setMultiplanarLayout.mockClear();
@@ -1194,7 +1300,7 @@ describe('NiiViewer', () => {
     const setup = async () => {
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
-      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'MRI', url: '/mri.nii' }]} />);
+      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'ANAT', url: '/mri.nii' }]} />);
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
       const nv = nvRef.current;
       // Clear calls from initial load so assertions only count post-load interactions
@@ -1205,22 +1311,22 @@ describe('NiiViewer', () => {
 
     it('calls nv.setOpacity with 0 when hiding a visible volume', async () => {
       const nv = await setup();
-      await userEvent.click(screen.getByRole('button', { name: /hide.*mri/i }));
+      await userEvent.click(screen.getByRole('button', { name: /hide.*anat/i }));
       expect(nv.setOpacity).toHaveBeenCalledWith(0, 0);
     });
 
     it('sets colormapInvert on the NVImage and calls updateGLVolume when invert is toggled', async () => {
       const nv = await setup();
-      await userEvent.click(screen.getByRole('button', { name: /expand.*mri/i }));
-      await userEvent.click(screen.getByRole('switch', { name: /invert.*mri/i }));
+      await userEvent.click(screen.getByRole('button', { name: /expand.*anat/i }));
+      await userEvent.click(screen.getByRole('switch', { name: /invert.*anat/i }));
       expect(nv.volumes[0].colormapInvert).toBe(true);
       expect(nv.updateGLVolume).toHaveBeenCalledOnce();
     });
 
     it('sets colorbarVisible on the NVImage and calls updateGLVolume when colorbar is toggled', async () => {
       const nv = await setup();
-      await userEvent.click(screen.getByRole('button', { name: /expand.*mri/i }));
-      await userEvent.click(screen.getByRole('switch', { name: /mri.*colorbar/i }));
+      await userEvent.click(screen.getByRole('button', { name: /expand.*anat/i }));
+      await userEvent.click(screen.getByRole('switch', { name: /anat.*colorbar/i }));
       expect(nv.volumes[0].colorbarVisible).toBe(true);
       expect(nv.updateGLVolume).toHaveBeenCalledOnce();
     });
@@ -1232,11 +1338,11 @@ describe('NiiViewer', () => {
       // in useElectrodeConnectome.js.
       const turnOnColorbarThenHide = async () => {
         const nv = await setup();
-        await userEvent.click(screen.getByRole('button', { name: /expand.*mri/i }));
-        await userEvent.click(screen.getByRole('switch', { name: /mri.*colorbar/i }));
+        await userEvent.click(screen.getByRole('button', { name: /expand.*anat/i }));
+        await userEvent.click(screen.getByRole('switch', { name: /anat.*colorbar/i }));
         expect(nv.volumes[0].colorbarVisible).toBe(true);
 
-        await userEvent.click(screen.getByRole('button', { name: /hide.*mri/i }));
+        await userEvent.click(screen.getByRole('button', { name: /hide.*anat/i }));
         return nv;
       };
 
@@ -1244,7 +1350,7 @@ describe('NiiViewer', () => {
         const nv = await turnOnColorbarThenHide();
         expect(nv.volumes[0].colorbarVisible).toBe(false);
         // The toggle's own state survives — it's still checked, just suppressed while hidden.
-        expect(screen.getByRole('switch', { name: /mri.*colorbar/i })).toHaveAttribute(
+        expect(screen.getByRole('switch', { name: /anat.*colorbar/i })).toHaveAttribute(
           'aria-checked',
           'true'
         );
@@ -1258,7 +1364,7 @@ describe('NiiViewer', () => {
       it('brings the colorbar back automatically when shown again, without re-toggling showColorbar', async () => {
         const nv = await turnOnColorbarThenHide();
 
-        await userEvent.click(screen.getByRole('button', { name: /show.*mri/i }));
+        await userEvent.click(screen.getByRole('button', { name: /show.*anat/i }));
 
         expect(nv.volumes[0].colorbarVisible).toBe(true);
         expect(nv.opts.isColorbar).toBe(true);
@@ -1271,18 +1377,18 @@ describe('NiiViewer', () => {
       // whole suite (see the top of this describe('NiiViewer', ...) block).
       it("calls nv.setOpacity with the new value when a visible volume's opacity changes", async () => {
         const nv = await setup();
-        await userEvent.click(screen.getByRole('button', { name: /expand.*mri/i }));
-        fireEvent.change(screen.getByLabelText('MRI opacity'), { target: { value: '55' } });
+        await userEvent.click(screen.getByRole('button', { name: /expand.*anat/i }));
+        fireEvent.change(screen.getByLabelText('ANAT opacity'), { target: { value: '55' } });
         expect(nv.setOpacity).toHaveBeenCalledWith(0, 0.55);
       });
 
       it('sets nvVolume.cal_min/cal_max from the dragged threshold and calls updateGLVolume', async () => {
         const nv = await setup();
-        await userEvent.click(screen.getByRole('button', { name: /expand.*mri/i }));
-        fireEvent.change(screen.getByLabelText('MRI Threshold minimum'), {
+        await userEvent.click(screen.getByRole('button', { name: /expand.*anat/i }));
+        fireEvent.change(screen.getByLabelText('ANAT Threshold minimum'), {
           target: { value: '30' },
         });
-        fireEvent.change(screen.getByLabelText('MRI Threshold maximum'), {
+        fireEvent.change(screen.getByLabelText('ANAT Threshold maximum'), {
           target: { value: '80' },
         });
         expect(nv.volumes[0].cal_min).toBeCloseTo(0.3);
@@ -1409,7 +1515,7 @@ describe('NiiViewer', () => {
     const setup = async () => {
       const { Niivue, SLICE_TYPE } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
-      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'MRI', url: '/mri.nii' }]} />);
+      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'ANAT', url: '/mri.nii' }]} />);
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
       const nv = nvRef.current;
       // Clear calls from initial load so assertions only count post-load interactions
@@ -1491,7 +1597,7 @@ describe('NiiViewer', () => {
       const { rerender } = render(<NiiViewer nvRef={nvRef} layers={[]} />);
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
 
-      rerender(<NiiViewer nvRef={nvRef} layers={[{ type: 'MRI', url: '/mri.nii' }]} />);
+      rerender(<NiiViewer nvRef={nvRef} layers={[{ type: 'ANAT', url: '/mri.nii' }]} />);
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
 
       expect(screen.getByRole('button', { name: 'Axial view' })).not.toBeDisabled();
@@ -1501,7 +1607,7 @@ describe('NiiViewer', () => {
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
       const { rerender } = render(
-        <NiiViewer nvRef={nvRef} layers={[{ type: 'MRI', url: '/mri.nii' }]} />
+        <NiiViewer nvRef={nvRef} layers={[{ type: 'ANAT', url: '/mri.nii' }]} />
       );
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
 
@@ -1540,7 +1646,7 @@ describe('NiiViewer', () => {
     it('explicitly syncs nv to the current slice type once an image volume is present, instead of leaving nv at whatever it was last set to', async () => {
       const { Niivue, SLICE_TYPE } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
-      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'MRI', url: '/mri.nii' }]} />);
+      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'ANAT', url: '/mri.nii' }]} />);
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
 
       // Without this explicit sync, a fresh mount with a volume already present would
@@ -1555,7 +1661,7 @@ describe('NiiViewer', () => {
     it('does not give a newly-appended volume full opacity when other volumes are already loaded', async () => {
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
-      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'MRI', url: '/mri.nii' }]} />);
+      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'ANAT', url: '/mri.nii' }]} />);
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
 
       const input = document.querySelector('input[type="file"]');
@@ -1618,7 +1724,7 @@ describe('NiiViewer', () => {
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
       const { default: toast } = await import('react-hot-toast');
-      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'MRI', url: '/mri.nii' }]} />);
+      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'ANAT', url: '/mri.nii' }]} />);
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
 
       // The append path uses addVolumesFromUrl (nv already has a volume) — reject that.
@@ -1631,7 +1737,7 @@ describe('NiiViewer', () => {
         expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/failed to load/i))
       );
       // The pre-existing MRI card survives; only the failed file's card is dropped.
-      expect(screen.getByText('MRI')).toBeInTheDocument();
+      expect(screen.getByText('ANAT')).toBeInTheDocument();
       expect(screen.queryByText('notes')).not.toBeInTheDocument();
     });
 
@@ -1741,7 +1847,7 @@ describe('NiiViewer', () => {
         <NiiViewer
           nvRef={nvRef}
           layers={[
-            { type: 'MRI', url: '/mri.nii' },
+            { type: 'ANAT', url: '/mri.nii' },
             { type: 'PET', url: '/pet.nii' },
           ]}
         />
@@ -1758,9 +1864,9 @@ describe('NiiViewer', () => {
       const nv = await setup();
 
       // click expand settings on the first volume (=> index = 0 )
-      await userEvent.click(screen.getByRole('button', { name: /expand.*mri/i }));
+      await userEvent.click(screen.getByRole('button', { name: /expand.*anat/i }));
       // click the delete volume button
-      await userEvent.click(screen.getByRole('button', { name: /close.*mri/i }));
+      await userEvent.click(screen.getByRole('button', { name: /close.*anat/i }));
       // expect to only have 1 volume left
       expect(nv.volumes.length).toBe(1);
       // expect the remaining volume to have the right url
@@ -1771,11 +1877,11 @@ describe('NiiViewer', () => {
       const nv = await setup();
 
       // click expand settings on the first volume (=> index = 0 )
-      await userEvent.click(screen.getByRole('button', { name: /expand.*mri/i }));
+      await userEvent.click(screen.getByRole('button', { name: /expand.*anat/i }));
       // click the delete volume button
-      await userEvent.click(screen.getByRole('button', { name: /close.*mri/i }));
+      await userEvent.click(screen.getByRole('button', { name: /close.*anat/i }));
       // expect the settings card to be removed
-      expect(screen.queryByText('MRI')).not.toBeInTheDocument();
+      expect(screen.queryByText('ANAT')).not.toBeInTheDocument();
       // expect the other settings card to still be there
       expect(screen.queryByText('PET')).toBeInTheDocument();
     });
@@ -1783,14 +1889,14 @@ describe('NiiViewer', () => {
     it('revokes the deleted volume blob url', async () => {
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
-      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'MRI', url: 'blob:mri' }]} />);
+      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'ANAT', url: 'blob:mri' }]} />);
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
 
       // Spy only from here — the initial load already revoked it once (see
       // syncVolumesAndApplySettings), this isolates the delete-time revoke.
       const revokeSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
-      await userEvent.click(screen.getByRole('button', { name: /expand.*mri/i }));
-      await userEvent.click(screen.getByRole('button', { name: /close.*mri/i }));
+      await userEvent.click(screen.getByRole('button', { name: /expand.*anat/i }));
+      await userEvent.click(screen.getByRole('button', { name: /close.*anat/i }));
 
       expect(revokeSpy).toHaveBeenCalledWith('blob:mri');
       revokeSpy.mockRestore();
@@ -1908,7 +2014,7 @@ describe('NiiViewer', () => {
         render(
           <NiiViewer
             nvRef={nvRef}
-            layers={[{ type: 'MRI', url: '/mri.nii' }]}
+            layers={[{ type: 'ANAT', url: '/mri.nii' }]}
             electrodeLayer={makeLayer()}
           />
         );
@@ -1918,7 +2024,7 @@ describe('NiiViewer', () => {
 
         // type and subtype render as separate text nodes (see "renders subtype with a dash
         // prefix" in ImagingControls.test.jsx for the same pattern), so query them separately.
-        expect(screen.getByText('MRI')).toBeInTheDocument();
+        expect(screen.getByText('ANAT')).toBeInTheDocument();
         expect(screen.getByText('Electrodes')).toBeInTheDocument();
         expect(screen.getByText(`- ${subtype}`)).toBeInTheDocument();
       }
@@ -1946,7 +2052,7 @@ describe('NiiViewer', () => {
     it('never passes the connectome through nv.loadVolumes', async () => {
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
-      const mriLayer = { type: 'MRI', url: '/mri.nii' };
+      const mriLayer = { type: 'ANAT', url: '/mri.nii' };
       render(
         <NiiViewer nvRef={nvRef} layers={[mriLayer]} electrodeLayer={makeIntracranialLayer()} />
       );
@@ -1964,14 +2070,14 @@ describe('NiiViewer', () => {
       // Held in a variable and reused across the rerender below — mirrors how PatientView's
       // own image-volumes state keeps the same array reference across EEG voltage updates;
       // only the separately-tracked electrodeLayer prop changes.
-      const mriLayers = [{ type: 'MRI', url: '/mri.nii' }];
+      const mriLayers = [{ type: 'ANAT', url: '/mri.nii' }];
       const { rerender } = render(
         <NiiViewer nvRef={nvRef} layers={mriLayers} electrodeLayer={makeIntracranialLayer()} />
       );
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
 
       // Customize the MRI volume's visibility before the connectome refreshes
-      await userEvent.click(screen.getByRole('button', { name: /hide.*mri/i }));
+      await userEvent.click(screen.getByRole('button', { name: /hide.*anat/i }));
 
       const nv = nvRef.current;
       nv.loadVolumes.mockClear();
@@ -1993,7 +2099,7 @@ describe('NiiViewer', () => {
       expect(nv.addMesh).toHaveBeenCalled(); // rebuilt with the new data
       expect(nv.loadVolumes).not.toHaveBeenCalled(); // images untouched, not re-loaded
       // MRI's visibility change survived the connectome refresh
-      expect(screen.getByRole('button', { name: /show.*mri/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /show.*anat/i })).toBeInTheDocument();
     });
 
     it('toggling the connectome card visibility sets mesh.opacity directly, not nv.setOpacity', async () => {
@@ -2002,7 +2108,7 @@ describe('NiiViewer', () => {
       render(
         <NiiViewer
           nvRef={nvRef}
-          layers={[{ type: 'MRI', url: '/mri.nii' }]}
+          layers={[{ type: 'ANAT', url: '/mri.nii' }]}
           electrodeLayer={makeIntracranialLayer()}
         />
       );
@@ -2090,7 +2196,7 @@ describe('NiiViewer', () => {
       render(
         <NiiViewer
           nvRef={nvRef}
-          layers={[{ type: 'MRI', url: '/mri.nii' }]}
+          layers={[{ type: 'ANAT', url: '/mri.nii' }]}
           electrodeLayer={makeIntracranialLayer()}
         />
       );
@@ -2120,7 +2226,7 @@ describe('NiiViewer', () => {
       render(
         <NiiViewer
           nvRef={nvRef}
-          layers={[{ type: 'MRI', url: '/mri.nii' }]}
+          layers={[{ type: 'ANAT', url: '/mri.nii' }]}
           electrodeLayer={makeIntracranialLayer()}
         />
       );
@@ -2142,7 +2248,7 @@ describe('NiiViewer', () => {
       const { unmount } = render(
         <NiiViewer
           nvRef={nvRef}
-          layers={[{ type: 'MRI', url: '/mri.nii' }]}
+          layers={[{ type: 'ANAT', url: '/mri.nii' }]}
           electrodeLayer={makeIntracranialLayer()}
         />
       );
@@ -2164,7 +2270,7 @@ describe('NiiViewer', () => {
       const { unmount } = render(
         <NiiViewer
           nvRef={nvRef}
-          layers={[{ type: 'MRI', url: 'blob:mri' }]}
+          layers={[{ type: 'ANAT', url: 'blob:mri' }]}
           electrodeLayer={makeIntracranialLayer()}
         />
       );
@@ -2183,7 +2289,7 @@ describe('NiiViewer', () => {
       const { rerender } = render(
         <NiiViewer
           nvRef={nvRef}
-          layers={[{ type: 'MRI', url: '/mri.nii' }]}
+          layers={[{ type: 'ANAT', url: '/mri.nii' }]}
           electrodeLayer={makeIntracranialLayer()}
         />
       );
@@ -2206,7 +2312,7 @@ describe('NiiViewer', () => {
       const { rerender } = render(
         <NiiViewer
           nvRef={nvRef}
-          layers={[{ type: 'MRI', url: 'blob:mri' }]}
+          layers={[{ type: 'ANAT', url: 'blob:mri' }]}
           electrodeLayer={makeIntracranialLayer()}
         />
       );
@@ -2225,18 +2331,18 @@ describe('NiiViewer', () => {
       const { rerender } = render(
         <NiiViewer
           nvRef={nvRef}
-          layers={[{ type: 'MRI', url: '/mri.nii' }]}
+          layers={[{ type: 'ANAT', url: '/mri.nii' }]}
           electrodeLayer={makeIntracranialLayer()}
         />
       );
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
-      expect(screen.getByText('MRI')).toBeInTheDocument();
+      expect(screen.getByText('ANAT')).toBeInTheDocument();
 
       // Same imaging-only reset as above — this time checking the rendered card list,
       // which previously kept showing the MRI card even after its volume was removed.
       rerender(<NiiViewer nvRef={nvRef} layers={[]} electrodeLayer={makeIntracranialLayer()} />);
 
-      expect(screen.queryByText('MRI')).not.toBeInTheDocument();
+      expect(screen.queryByText('ANAT')).not.toBeInTheDocument();
       expect(screen.getByText('Electrodes')).toBeInTheDocument();
     });
 
@@ -2348,7 +2454,7 @@ describe('NiiViewer', () => {
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
       const nv = nvRef.current;
-      const mriLayers = [{ type: 'MRI', url: '/mri.nii' }];
+      const mriLayers = [{ type: 'ANAT', url: '/mri.nii' }];
       // metrics: {} so a misread display mode yields size-0 nodes (the real symptom) rather
       // than a TypeError from applyElectrodeDisplayMode's metric lookup.
       const nodes = [
@@ -2450,7 +2556,7 @@ describe('NiiViewer', () => {
       render(
         <NiiViewer
           nvRef={nvRef}
-          layers={[{ type: 'MRI', url: '/mri.nii' }]}
+          layers={[{ type: 'ANAT', url: '/mri.nii' }]}
           electrodeLayer={makeIntracranialLayer()}
           onHas3DExtentChange={onHas3DExtentChange}
         />
@@ -2467,7 +2573,7 @@ describe('NiiViewer', () => {
       const { rerender } = render(
         <NiiViewer
           nvRef={nvRef}
-          layers={[{ type: 'MRI', url: '/mri.nii' }]}
+          layers={[{ type: 'ANAT', url: '/mri.nii' }]}
           electrodeLayer={makeIntracranialLayer()}
           onHas3DExtentChange={onHas3DExtentChange}
         />
@@ -2496,7 +2602,7 @@ describe('NiiViewer', () => {
       const { unmount } = render(
         <NiiViewer
           nvRef={nvRef}
-          layers={[{ type: 'MRI', url: '/mri.nii' }]}
+          layers={[{ type: 'ANAT', url: '/mri.nii' }]}
           onHas3DExtentChange={onHas3DExtentChange}
         />
       );
@@ -2581,7 +2687,7 @@ describe('NiiViewer', () => {
     it('never passes a mesh through nv.loadVolumes even when loaded alongside an image volume', async () => {
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
-      const mriLayer = { type: 'MRI', url: '/mri.nii' };
+      const mriLayer = { type: 'ANAT', url: '/mri.nii' };
       const meshLayer = {
         url: 'blob:cortex',
         name: 'cortex.gii',
@@ -2681,10 +2787,10 @@ describe('NiiViewer', () => {
         kind: 'mesh',
       };
       // Mesh listed first in the layers prop — it should still render below the MRI card.
-      render(<NiiViewer nvRef={nvRef} layers={[meshLayer, { type: 'MRI', url: '/mri.nii' }]} />);
+      render(<NiiViewer nvRef={nvRef} layers={[meshLayer, { type: 'ANAT', url: '/mri.nii' }]} />);
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
 
-      const mriLabel = screen.getByText('MRI');
+      const mriLabel = screen.getByText('ANAT');
       const meshLabel = screen.getByText('Mesh');
       // MRI must come before Mesh in DOM order (fixed layers sink to the bottom).
       expect(
@@ -2709,9 +2815,9 @@ describe('NiiViewer', () => {
       // pin-to-bottom normalization should lift it above the fixed mesh card.
       const input = document.querySelector('input[type="file"]');
       await userEvent.upload(input, new File(['data'], 'brain_T1w.nii.gz'));
-      await waitFor(() => expect(screen.getByText('MRI')).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByText('ANAT')).toBeInTheDocument());
 
-      const mriLabel = screen.getByText('MRI');
+      const mriLabel = screen.getByText('ANAT');
       const meshLabel = screen.getByText('Mesh');
       expect(
         mriLabel.compareDocumentPosition(meshLabel) & Node.DOCUMENT_POSITION_FOLLOWING
@@ -2724,13 +2830,13 @@ describe('NiiViewer', () => {
       render(
         <NiiViewer
           nvRef={nvRef}
-          layers={[{ type: 'MRI', url: '/mri.nii' }]}
+          layers={[{ type: 'ANAT', url: '/mri.nii' }]}
           electrodeLayer={makeIntracranialLayer()}
         />
       );
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
 
-      const mriLabel = screen.getByText('MRI');
+      const mriLabel = screen.getByText('ANAT');
       const connectomeLabel = screen.getByText('- Intracranial EEG');
       expect(
         mriLabel.compareDocumentPosition(connectomeLabel) & Node.DOCUMENT_POSITION_FOLLOWING
@@ -2757,7 +2863,7 @@ describe('NiiViewer', () => {
       // Render mri and esilayer
       const esiLayer = makeEsiLayer();
       render(
-        <NiiViewer nvRef={nvRef} layers={[{ type: 'MRI', url: '/mri.nii' }]} esiLayer={esiLayer} />
+        <NiiViewer nvRef={nvRef} layers={[{ type: 'ANAT', url: '/mri.nii' }]} esiLayer={esiLayer} />
       );
 
       expect(nv.loadConnectomeAsMesh).not.toHaveBeenCalled();

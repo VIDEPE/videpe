@@ -1,13 +1,16 @@
 import { useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
-import { loadBrainVisionEEG } from '../loaders/loadEEGBrainVision';
+import { detectAndLoadEEG } from '../loaders/eegFormatRegistry';
 import { detectVolumeType } from '../utils/NiiViewer.utils';
 
 const DEMO_EEG = {
-  header: 'demo_data/sub-synth_task-rest_desc-spkavgall_eeg.vhdr',
-  data: 'demo_data/sub-synth_task-rest_desc-spkavgall_eeg.eeg',
+  // the recording's files, in any supported EEG format (e.g. a single .edf works too)
+  recording: [
+    'demo_data/sub-synth_task-rest_desc-spkavgall_eeg.vhdr',
+    'demo_data/sub-synth_task-rest_desc-spkavgall_eeg.eeg',
+  ],
   elec_pos: 'demo_data/sub-synth_electrodes.tsv',
-  invers_solution: 'demo_data/sub-synth_desc-unitnoiselcmv_inversefilters.mat',
+  invers_solution: 'demo_data/sub-synth_desc-eloreta_inversefilters.mat',
 };
 
 const DEMO_LAYERS = [
@@ -17,14 +20,15 @@ const DEMO_LAYERS = [
     ...detectVolumeType('sub-synth_label-WM_dseg.nii.gz'),
   },
   {
-    url: 'demo_data/sub-synth_label-CSF_dseg.nii.gz',
-    ...detectVolumeType('sub-synth_label-CSF_dseg.nii.gz'),
+    url: 'demo_data/sub-synth_atlas-L2018_res-scale1_dseg.nii.gz',
+    ...detectVolumeType('sub-synth_atlas-L2018_res-scale1_dseg.nii.gz'),
   },
 ];
 
 /**
  * Fetches a demo file by URL and wraps it as a File, so demo loading can feed the same
- * parseElectrodePositionFile/parseInverseSolutionFieldtrip entry points used by file drops.
+ * detectAndLoadEEG/parseElectrodePositionFile/parseInverseSolutionFieldtrip entry points
+ * used by file drops.
  *
  * @param {string} url - path to the bundled demo file, relative to the public folder.
  * @returns {Promise<File>} the fetched bytes wrapped as a File, named after the URL's
@@ -108,8 +112,12 @@ export function useDemoData({
       const base = import.meta.env.BASE_URL; // base is the public folder in Vite, so demo_data is at `${base}demo_data/...`
       await toast.promise(
         (async () => {
-          // Load and set EEG
-          const result = await loadBrainVisionEEG(base + DEMO_EEG.header, base + DEMO_EEG.data);
+          // Load and set EEG — as Files through detectAndLoadEEG, like a file drop, so the
+          // loaders only ever need to read Files (and the demo can be in any supported format)
+          const recordingFiles = await Promise.all(
+            DEMO_EEG.recording.map((path) => fetchAsFile(base + path))
+          );
+          const result = await detectAndLoadEEG(recordingFiles);
           setEeg(result);
           // Load and set electrode positions and inverse solution, via the same handlers
           // file drops use, so they reach EegViewer/ESI exactly as a manual drop would.

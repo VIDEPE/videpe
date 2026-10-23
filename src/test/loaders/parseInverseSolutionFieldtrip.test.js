@@ -96,6 +96,27 @@ describe('parseInverseSolutionFieldtrip', () => {
     expect(result.sourceFilters).toBeUndefined();
   });
 
+  it('detects the inverse solution method from the filename', async () => {
+    readmat.mockReturnValue(FIXTURE);
+    const file = new File(
+      ['irrelevant — read() is mocked'],
+      'sub-19_meth-eloreta_desc-nonorm_inversefilters.mat'
+    );
+
+    const result = await parseInverseSolutionFieldtrip(file);
+
+    expect(result.inverseSolutionMethod).toBe('eLORETA');
+  });
+
+  it('sets inverseSolutionMethod to null when the filename names no known method', async () => {
+    readmat.mockReturnValue(FIXTURE);
+    const file = new File(['irrelevant — read() is mocked'], 'mocked_file_inversefilters.mat');
+
+    const result = await parseInverseSolutionFieldtrip(file);
+
+    expect(result.inverseSolutionMethod).toBeNull();
+  });
+
   it('does not include raw sourceFilters in the return — replaced by flatSourceFilters', async () => {
     readmat.mockReturnValue(FIXTURE);
     const file = new File(['irrelevant — read() is mocked'], 'mocked_file_inversefilters.mat');

@@ -1,4 +1,5 @@
-import { loadBrainVisionEEG } from './loadEEGBrainVision';
+import { loadEegBrainVision } from './loadEegBrainVision';
+import { loadEegEdf } from './loadEegEdf';
 
 // This module defines supported EEG formats and provides a function to detect and load them.
 
@@ -18,7 +19,7 @@ const baseName = (filename) => filename.slice(0, filename.lastIndexOf('.'));
 //   { channelNames, fs, tMax, getChunk }
 const EEG_FORMATS = [
   {
-    name: 'BrainVision',
+    name: 'BrainVision Core Data Format (BVCDF)',
     extensions: ['.vhdr', '.eeg'],
     partialDetect: (files) =>
       files.some((f) => {
@@ -36,13 +37,34 @@ const EEG_FORMATS = [
           : null;
       return { complete: missing.length === 0 && !warning, missing, warning };
     },
-    // load assumes validation has passed and both .vhdr and .eeg files are present, finds them, and loads the data using loadBrainVisionEEG
+    // load assumes validation has passed and both .vhdr and .eeg files are present, finds them, and loads the data using loadEegBrainVision
     load: (files) => {
       const header = files.find((f) => f.name.toLowerCase().endsWith('.vhdr'));
       const data = files.find((f) => f.name.toLowerCase().endsWith('.eeg'));
       if (!header) throw new Error('BrainVision: missing .vhdr header file');
       if (!data) throw new Error('BrainVision: missing .eeg data file');
-      return loadBrainVisionEEG(header, data);
+      return loadEegBrainVision(header, data);
+    },
+  },
+  {
+    name: 'European Data Format (EDF)',
+    extensions: ['.edf'],
+    partialDetect: (files) =>
+      files.some((f) => {
+        const name = f.name.toLowerCase();
+        return name.endsWith('.edf');
+      }),
+    validate: (files) => {
+      const edf = files.find((f) => f.name.toLowerCase().endsWith('.edf'));
+      const missing = [...(!edf ? ['.edf'] : [])];
+      const warning = null; // no relevant warning cause edf requires only 1 file
+      return { complete: missing.length === 0 && !warning, missing, warning };
+    },
+    // load assumes validation has passed and the .edf file is present, finds it, and loads the data using loadEegEdf
+    load: (files) => {
+      const edf = files.find((f) => f.name.toLowerCase().endsWith('.edf'));
+      if (!edf) throw new Error('EDF: missing .edf data file');
+      return loadEegEdf(edf);
     },
   },
   // Future EEG formats: add an entry here.
@@ -53,8 +75,43 @@ const EEG_FORMATS = [
 // as pending, rather than relying solely on partialDetect after the fact.
 export const EEG_FORMAT_EXTENSIONS = EEG_FORMATS.flatMap((f) => f.extensions);
 
-// Checks files against all known formats, including partial matches.
-// Returns { formatName, complete, missing[], warning } — formatName is null if unrecognized.
+/**
+ * Names the EEG format a file belongs to, by its extension — e.g. to tell whether files dropped
+ * at different times can belong to the same recording.
+ *
+ * @param {string} fileName - e.g. 'sub01.vhdr' (case-insensitive).
+ * @returns {string|null} the format's name, or null if no supported format uses that extension.
+ */
+export function getEegFormatName(fileName) {
+  const name = fileName.toLowerCase();
+  return EEG_FORMATS.find((f) => f.extensions.some((ext) => name.endsWith(ext)))?.name ?? null;
+}
+
+// Every supported EEG format's name and extensions, e.g. { name: 'BrainVision', extensions:
+// ['.vhdr', '.eeg'] } — for telling the user what VIDEPE can load (dropzone, messages), so a new
+// format above shows up there automatically.
+export const SUPPORTED_EEG_FORMATS = EEG_FORMATS.map(({ name, extensions }) => ({
+  name,
+  extensions,
+}));
+
+// The same as one line of text, e.g. 'BrainVision (.vhdr + .eeg), …' — for error messages
+export const SUPPORTED_EEG_FORMATS_TEXT = SUPPORTED_EEG_FORMATS.map(
+  (f) => `${f.name} (${f.extensions.join(' + ')})`
+).join(', ');
+
+/**
+ * Checks files against all known formats, including partial matches, so the EEG intake can
+ * hold an incomplete set as pending and tell the user which files are still missing. The
+ * first format whose partialDetect matches is validated; later formats are not tried.
+ *
+ * @param {File[]} files - the files dropped or accumulated so far.
+ * @returns {{ formatName: string|null, complete: boolean, missing: string[]|null, warning: string|null }}
+ *   formatName is null (and missing/warning are null) if no format recognizes any of the files.
+ *   complete is true only when all required files are present and no warning was raised.
+ *   missing lists the extensions still needed (e.g. ['.eeg']).
+ *   warning describes a problem that blocks loading even when no files are missing (e.g. a base-name mismatch).
+ */
 export function checkEegFiles(files) {
   const format = EEG_FORMATS.find((f) => f.partialDetect(files));
   if (!format) return { formatName: null, complete: false, missing: null, warning: null };
@@ -62,13 +119,23 @@ export function checkEegFiles(files) {
   return { formatName: format.name, complete, missing, warning };
 }
 
+/**
+ * Loads an EEG recording with the first format whose validate() reports a complete file set.
+ * Call checkEegFiles first if you need to tell the user what's missing; this function only
+ * reports that no format matched.
+ *
+ * @param {File[]} files - the recording's files (e.g. a BrainVision .vhdr + .eeg pair).
+ * @returns {Promise<{ channelNames: string[], fs: number, tMax: number, getChunk: Function }>}
+ *   the recording provider returned by the matching format's load().
+ * @throws {Error} synchronously if no format has a complete file set; the message lists the
+ *   supported formats and their extensions.
+ */
 export function detectAndLoadEEG(files) {
   // find the first format that has all required files present
   const format = EEG_FORMATS.find((f) => f.validate(files).complete);
   // if no format matches, throw an error listing the supported formats
   if (!format) {
-    const supported = EEG_FORMATS.map((f) => `${f.name} (${f.extensions.join(' + ')})`).join(', ');
-    throw new Error(`Unrecognized EEG format. Supported: ${supported}`);
+    throw new Error(`Unrecognized EEG format. Supported: ${SUPPORTED_EEG_FORMATS_TEXT}`);
   }
   // if a format is found, use its load function to load the data
   return format.load(files);

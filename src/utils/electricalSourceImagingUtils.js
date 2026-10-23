@@ -9,7 +9,6 @@ import {
   dotProduct,
   crossProduct,
   vectorLength,
-  matrixLinSolve,
   matrixTrans,
   matrixInverse,
   matrixMul,
@@ -263,7 +262,7 @@ export function ijkIndexToFlatIndex(i, j, k, gridDimensions) {
   // flat index 0,1,2,...,dimI-1 steps through i alone (j=0,k=0); once i wraps, j increments;
   // once j wraps too, k increments. E.g. for gridDimensions=[2,2,2], the order is:
   // (0,0,0),(1,0,0),(0,1,0),(1,1,0),(0,0,1),(1,0,1),(0,1,1),(1,1,1) → flat indices 0..7
-  const [dimI, dimJ, dimK] = gridDimensions;
+  const [dimI, dimJ] = gridDimensions; // k is the slowest axis, so its size (dimK) never enters the formula
   const flatIndex = i + j * dimI + k * dimI * dimJ;
   return flatIndex;
 }
@@ -294,7 +293,13 @@ export function buildSourceVolumeGrid(sourceVolumeIndices, sourcePowers, gridDim
 // boundMin/boundMax are the outer limits of this layer's Threshold slider, not literal
 // cal_min/cal_max values — NiiViewer resolves a user-chosen 0-1 fraction against them (see
 // getCalBounds) before applying anything to NiiVue's node/edge color range.
-export function convertSourcePowersToConnectome(insideSourcePositions, sourcePowers) {
+// subtype is the inverse solution method (see detectInverseSolutionMethod), shown after the
+// type on the layer's settings card — null when the filename didn't name a known method.
+export function convertSourcePowersToConnectome(
+  insideSourcePositions,
+  sourcePowers,
+  subtype = null
+) {
   let boundMax = 1e-9;
   for (let i = 0; i < sourcePowers.length; i++) {
     if (sourcePowers[i] > boundMax) boundMax = sourcePowers[i];
@@ -316,6 +321,7 @@ export function convertSourcePowersToConnectome(insideSourcePositions, sourcePow
     url: ESI_LAYER_URL,
     name: 'ESI Source Power',
     type: 'Electrical Source Imaging',
+    subtype,
     kind: 'connectome',
     nodes,
     edges: [],
@@ -327,12 +333,14 @@ export function convertSourcePowersToConnectome(insideSourcePositions, sourcePow
 // Build NIfTI volume power heatmap output
 // takes gridDimensions, pixDims, affine, and sourceVolumeIndices pre-computed during parse time
 // it just (re)computes the sourceVolumeGrid with the latest sourcePowers and creates an NVImage
+// subtype: the inverse solution method — same as convertSourcePowersToConnectome above
 export function convertSourcePowersToVolume(
   sourceVolumeIndices,
   sourcePowers,
   gridDimensions,
   pixDims,
-  affine
+  affine,
+  subtype = null
 ) {
   // First build the source volume grid with the (updated) sourcePower values
   const sourceVolumeGrid = buildSourceVolumeGrid(sourceVolumeIndices, sourcePowers, gridDimensions);
@@ -365,11 +373,82 @@ export function convertSourcePowersToVolume(
     bytes: niftyArray,
     name: 'ESI Source Power.nii', // '.nii' extension required! => NiiVue infers file type from this extension — a bare name crashes addVolumesFromUrl
     type: 'Electrical Source Imaging',
+    subtype,
     kind: 'volume',
     edges: [],
     boundMin,
     boundMax,
   };
+}
+
+// ─── Inverse solution method ──────────────────────────────────────────────────
+//
+// The inverse_filters struct doesn't record which method built it, so the method is read
+// from the filename instead — e.g. 'sub-19_meth-eloreta_desc-nonorm_inversefilters.mat' or
+// 'sub-synth_desc-unitnoiselcmv_inversefilters.mat'.
+
+// LCMV weight normalizations (FieldTrip's cfg.lcmv.weightnorm), by how they're spelled in a
+// filename. Worth showing: unit-gain (no normalization) LCMV power is strongly depth-biased,
+// the others compensate for that — so two "LCMV" files can give visibly different maps.
+// A Map rather than an object literal, so a token like 'constructor' can't hit Object.prototype.
+const LCMV_WEIGHT_NORMALIZATIONS = new Map([
+  ['unitnoisegain', 'unit-noise-gain'],
+  ['unitnoise', 'unit-noise-gain'],
+  ['arraygain', 'array-gain'],
+  ['array', 'array-gain'],
+  ['unitgain', 'unit-gain'],
+  ['unit', 'unit-gain'],
+  ['nai', 'NAI'],
+]);
+
+// LCMV, optionally with its weight normalization glued on in front (e.g. 'unitnoiselcmv')
+const LCMV_TOKEN_PATTERN = new RegExp(
+  `^(${[...LCMV_WEIGHT_NORMALIZATIONS.keys()].join('|')})?lcmv$`
+);
+
+// All other methods. Each pattern must match a whole filename token, so 'mne' never matches
+// inside 'wmne', 'loreta' never inside 'eloreta'/'sloreta', and so on — which also means the
+// order of this list doesn't matter.
+const INVERSE_SOLUTION_METHODS = [
+  [/^mne$/, 'MNE'],
+  [/^wmne$/, 'wMNE'],
+  [/^dspm$/, 'dSPM'],
+  [/^loreta$/, 'LORETA'],
+  [/^eloreta$/, 'eLORETA'],
+  [/^sloreta$/, 'sLORETA'],
+  [/^laura$/, 'LAURA'],
+];
+
+/**
+ * Detects the inverse solution method from an inverse-solution filename — used as the ESI
+ * layer's subtype on its settings card. Case-insensitive, and matched against whole
+ * filename tokens (split on anything that isn't a letter or digit), not substrings.
+ *
+ * @param {string} fileName - e.g. 'sub-19_meth-eloreta_desc-nonorm_inversefilters.mat'
+ * @returns {string|null} a display label (e.g. 'eLORETA', or 'LCMV (unit-noise-gain)' when
+ *   an LCMV weight normalization is also in the filename), or null when no known method is
+ *   found. The first matching token wins.
+ */
+export function detectInverseSolutionMethod(fileName) {
+  // 'sub-19_meth-eloreta_desc-nonorm_inversefilters.mat'
+  //   → ['sub', '19', 'meth', 'eloreta', 'desc', 'nonorm', 'inversefilters', 'mat']
+  const tokens = fileName.toLowerCase().split(/[^a-z0-9]+/);
+
+  for (const token of tokens) {
+    const lcmvMatch = token.match(LCMV_TOKEN_PATTERN);
+    if (lcmvMatch) {
+      // The normalization is either glued onto 'lcmv' (e.g. 'unitnoiselcmv'), or its own
+      // token elsewhere in the filename (e.g. 'meth-lcmv_desc-unitnoise').
+      const normalizationKey =
+        lcmvMatch[1] ?? tokens.find((t) => LCMV_WEIGHT_NORMALIZATIONS.has(t));
+      const normalization = LCMV_WEIGHT_NORMALIZATIONS.get(normalizationKey);
+      return normalization ? `LCMV (${normalization})` : 'LCMV';
+    }
+
+    const method = INVERSE_SOLUTION_METHODS.find(([pattern]) => pattern.test(token));
+    if (method) return method[1];
+  }
+  return null;
 }
 
 // Builds a normalized-name → recording-channel-index lookup, reusing the same
@@ -486,7 +565,7 @@ export function matchVoltagesToInverseSolution(
 // so this function only performs the fast per-click matrix multiply.
 //
 // @param {object} inverseSolution - parsed inverse filter model from parseInverseSolutionFieldtrip:
-//   { format, flatSourceFilters, insideSourcePositions, nInsideSources, nChannels, inverseSolutionChannelNames, ... }
+//   { format, inverseSolutionMethod, flatSourceFilters, insideSourcePositions, nInsideSources, nChannels, inverseSolutionChannelNames, ... }
 // @param {object} channelSnapshot - per-click EEG state lifted from EegViewer:
 //   { isIntracranial: boolean, channelNames: string[], channelTypes: Array, voltages: number[] }
 // @returns {{ maxSourcePowerLocation: number[], sourcePowerConnectomes: object, sourcePowerVolume: object }|null|[]}
@@ -513,6 +592,7 @@ export function electricalSourceImaging(inverseSolution, channelSnapshot) {
       pixDims,
       affine,
       inverseSolutionChannelNames,
+      inverseSolutionMethod = null, // e.g. 'eLORETA' — the ESI layer's subtype (see detectInverseSolutionMethod)
     } = inverseSolution;
 
     // ESI inverse filters are computed from scalp EEG models — applying them to a channel
@@ -570,7 +650,8 @@ export function electricalSourceImaging(inverseSolution, channelSnapshot) {
       get sourcePowerConnectomes() {
         return (cachedConnectomes ??= convertSourcePowersToConnectome(
           insideSourcePositions,
-          sourcePowers
+          sourcePowers,
+          inverseSolutionMethod
         ));
       },
       // Source Powers visualised as volume
@@ -580,7 +661,8 @@ export function electricalSourceImaging(inverseSolution, channelSnapshot) {
           sourcePowers,
           gridDimensions,
           pixDims,
-          affine
+          affine,
+          inverseSolutionMethod
         ));
       },
     };

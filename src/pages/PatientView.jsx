@@ -13,6 +13,12 @@ import { FileDropZone } from '../components/FileDropZone';
 // Utils
 import { filesToLayers } from '../utils/NiiViewer.utils';
 import { buildElectrodeLayer } from '../utils/eegTopographyUtils';
+import {
+  EEG_FORMAT_EXTENSIONS,
+  ELEC_POS_EXTENSIONS,
+  INV_SOLUTIONS_EXTENSIONS,
+  SUPPORTED_EEG_FORMATS,
+} from '../loaders/eegFormatRegistry';
 // Hooks
 import { useEegFileIntake } from '../hooks/useEegFileIntake';
 import { useElectricalSourceImaging } from '../hooks/useElectricalSourceImaging';
@@ -24,6 +30,25 @@ import { useShanoirData } from '../shanoir/useShanoirData';
 // consistent, and both header bars the same height (TrafficLightButtons are 16px tall).
 const PANEL_TITLE_CLASS = 'h-7 flex items-center text-xl font-medium leading-none text-header';
 const PANEL_SUBTITLE_CLASS = 'text-xs font-medium text-foreground pl-2';
+
+// Everything the initial EEG dropzone handles: recordings, electrode positions and inverse
+// solutions. Built from the registry, so the file picker never falls behind a newly added format.
+const EEG_DROPZONE_ACCEPTED_FORMATS = [
+  ...EEG_FORMAT_EXTENSIONS,
+  ...ELEC_POS_EXTENSIONS,
+  ...INV_SOLUTIONS_EXTENSIONS,
+].join(',');
+
+// What the initial EEG dropzone lists: one row per recording format (from the registry, so a new
+// format is listed automatically), then electrode positions and inverse solutions
+const EEG_DROPZONE_DESCRIPTION = [
+  ...SUPPORTED_EEG_FORMATS.map((format) => ({
+    label: `${format.name}:`,
+    value: format.extensions.join(' + '),
+  })),
+  { label: 'Electrode Positions:', value: '.elc + .tsv' },
+  { label: 'Inverse Solution:', value: '.mat (FieldTrip)' },
+];
 
 export const PatientView = () => {
   // Prevent default browser drag-and-drop behavior (e.g., opening files in a new tab)
@@ -384,11 +409,9 @@ export const PatientView = () => {
             <div className="h-full p-2">
               <FileDropZone
                 onFiles={handleEegFiles}
-                accepted_formats=".vhdr,.eeg,.elc,.tsv,.mat"
+                accepted_formats={EEG_DROPZONE_ACCEPTED_FORMATS}
                 label={'Drop EEG files'}
-                description={
-                  '\tBrainVision EEG:\t\t\t.vhdr + .eeg\nElectrode Positions:\t\t.elc + .tsv\n\t\tInverse Solution:\t\t\t.mat (FieldTrip)'
-                }
+                description={EEG_DROPZONE_DESCRIPTION}
                 // Registered electrode-position/inverse-solution files ride along in the same checkmark list as pending EEG files.
                 pendingFiles={[
                   ...pendingEegFiles.map((f) => ({ name: `EEG Recording: ${f.name}` })),

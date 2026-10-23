@@ -27,6 +27,20 @@ describe('FileDropZone — rendering', () => {
     expect(screen.getByText('BrainVision: .vhdr + .eeg')).toBeInTheDocument();
   });
 
+  it('renders description rows as label/value pairs, so they line up in two columns', () => {
+    renderZone({
+      description: [
+        { label: 'BrainVision:', value: '.vhdr + .eeg' },
+        { label: 'EDF:', value: '.edf' },
+      ],
+    });
+    // a description list: labels as terms (<dt>), values as their descriptions (<dd>)
+    expect(screen.getByText('BrainVision:').tagName).toBe('DT');
+    expect(screen.getByText('.vhdr + .eeg').tagName).toBe('DD');
+    expect(screen.getByText('EDF:').tagName).toBe('DT');
+    expect(screen.getByText('.edf').tagName).toBe('DD');
+  });
+
   it('renders the drag-and-drop instruction', () => {
     renderZone();
     expect(screen.getByText(/drag & drop/i)).toBeInTheDocument();

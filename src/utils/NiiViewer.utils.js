@@ -1,6 +1,6 @@
 import { isMeshExt, isDicomExtension } from '@niivue/niivue';
 
-const MRI_BIDS_SUFFIXES = new Set([
+const ANAT_BIDS_SUFFIXES = new Set([
   'T1w',
   'T2w',
   'FLAIR',
@@ -23,9 +23,23 @@ const MRI_BIDS_SUFFIXES = new Set([
 // Single source of truth for type → default colormap mapping.
 export const TYPE_COLORMAP_DEFAULTS = {
   MRI: 'gray',
-  PET: 'viridis',
+  PET: 'turbo',
+  CT: 'ct_skull',
   SPECT: 'magma',
   'Electrical Source Imaging': 'inferno',
+  DSEG: 'randomised',
+};
+
+// White matter segmentations are usually a single-label mask, which looks cleaner as plain white
+// than as one random color. 'wm' only matches as a standalone token (e.g. 'label-WM', 'wm_seg'),
+// so multi-label files like FreeSurfer's 'wmparc' keep the DSEG colormap.
+const WHITE_MATTER_PATTERN = /(^|[^a-z])wm([^a-z]|$)|white[^a-z]?matter/;
+
+// Default colormap for a layer: by type, with white matter DSEG layers overridden to gray.
+const getDefaultColormap = (layer) => {
+  if (layer.type === 'DSEG' && WHITE_MATTER_PATTERN.test(layer.subtype?.toLowerCase() ?? ''))
+    return 'gray';
+  return TYPE_COLORMAP_DEFAULTS[layer.type] ?? 'gray';
 };
 
 // Every other layer is identified by its file's blob: URL.
@@ -76,7 +90,7 @@ export const getInitialLayerSettings = (
     meshXRay: currentMeshXRay, // shared across all mesh/connectome layers
     nodeScale: DEFAULT_NODE_SCALE, // connectome-only — radius multiplier for node spheres, per-layer (unlike meshXRay)
     edgeScale: DEFAULT_EDGE_SCALE, // connectome-only — radius multiplier for edge tubes, per-layer (unlike meshXRay)
-    colormap: TYPE_COLORMAP_DEFAULTS[layer.type] ?? 'gray', // NiiVue colormap key, defaulted by modality
+    colormap: getDefaultColormap(layer), // NiiVue colormap key, defaulted by modality
     invert: false, // flips the colormap direction (dark-to-light vs light-to-dark)
     showColorbar: false, // whether this layer's colorbar legend is drawn on the canvas
     ...(layer.url === ESI_LAYER_URL ? { isEsiVolume: isEsiVolumeMode } : {}), // ESI layer's Connectome/Volume mode toggle
@@ -102,15 +116,23 @@ export const detectVolumeType = (filename) => {
   const lower = filename.toLowerCase();
 
   // Pass 1: BIDS suffix (case-sensitive) — all use nameWithoutExtension as subtype for consistency
-  if (MRI_BIDS_SUFFIXES.has(lastSegment)) return { type: 'MRI', subtype: nameWithoutExtension };
+  if (ANAT_BIDS_SUFFIXES.has(lastSegment)) return { type: 'ANAT', subtype: nameWithoutExtension };
   if (lastSegment === 'pet') return { type: 'PET', subtype: nameWithoutExtension };
   if (lastSegment === 'spect') return { type: 'SPECT', subtype: nameWithoutExtension };
+  if (lastSegment === 'ct') return { type: 'CT', subtype: nameWithoutExtension };
+  if (lastSegment === 'bold') return { type: 'FUNC', subtype: nameWithoutExtension };
+  if (lastSegment === 'dseg') return { type: 'DSEG', subtype: nameWithoutExtension };
 
   // Pass 2: keyword fallback (case-insensitive, for non-BIDS filenames) — use nameWithoutExtension as subtype so files are distinguishable in the UI
-  if (/t1|t2|flair|mri|mprage|bravo/.test(lower))
-    return { type: 'MRI', subtype: nameWithoutExtension };
+  // Bare 'seg'/'aseg' only match as standalone tokens, so joined words like 'phaseGRE' (ph-aseg-re) don't trigger it
+  if (/atlas|dseg|segm|parc|label|(^|[^a-z])a?seg([^a-z]|$)/.test(lower))
+    return { type: 'DSEG', subtype: nameWithoutExtension }; // do DSEG one first as dseg is often addtional to other keywords ,e.g. t1 and should overrule those
+  if (/t1|t2|flair|mri|mprage|mp2rage|bravo/.test(lower))
+    return { type: 'ANAT', subtype: nameWithoutExtension };
   if (/pet|fdg/.test(lower)) return { type: 'PET', subtype: nameWithoutExtension };
   if (/spect|siscom/.test(lower)) return { type: 'SPECT', subtype: nameWithoutExtension };
+  if (/ct|os|bones/.test(lower)) return { type: 'CT', subtype: nameWithoutExtension };
+  if (/func|epi|bold/.test(lower)) return { type: 'FUNC', subtype: nameWithoutExtension };
 
   return { type: nameWithoutExtension, subtype: null };
 };
