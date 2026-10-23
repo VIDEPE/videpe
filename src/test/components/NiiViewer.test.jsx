@@ -550,7 +550,10 @@ describe('detectVolumeType', () => {
     });
 
     it('detects T1w in .nii.gz (compressed) as ANAT — extension must not interfere', () => {
-      expect(detectVolumeType('sub-01_T1w.nii.gz')).toEqual({ type: 'ANAT', subtype: 'sub-01_T1w' });
+      expect(detectVolumeType('sub-01_T1w.nii.gz')).toEqual({
+        type: 'ANAT',
+        subtype: 'sub-01_T1w',
+      });
     });
 
     it('detects T2w as ANAT with nameWithoutExtension as subtype', () => {
@@ -589,6 +592,20 @@ describe('detectVolumeType', () => {
       // BIDS suffix 'pet' is lowercase; 'PET' does not match BIDS but keyword fallback catches it
       expect(detectVolumeType('scan_PET.nii')).toEqual({ type: 'PET', subtype: 'scan_PET' });
     });
+
+    it('detects dseg suffix as DSEG with nameWithoutExtension as subtype', () => {
+      expect(detectVolumeType('sub-synth_label-WM_dseg.nii.gz')).toEqual({
+        type: 'DSEG',
+        subtype: 'sub-synth_label-WM_dseg',
+      });
+    });
+
+    it('detects dseg suffix as DSEG when preceded by atlas/res entities', () => {
+      expect(detectVolumeType('sub-synth_atlas-L2018_res-scale1_dseg.nii.gz')).toEqual({
+        type: 'DSEG',
+        subtype: 'sub-synth_atlas-L2018_res-scale1_dseg',
+      });
+    });
   });
 
   describe('keyword fallback for non-BIDS filenames', () => {
@@ -609,6 +626,53 @@ describe('detectVolumeType', () => {
 
     it('detects mprage keyword as MRI with nameWithoutExtension as subtype', () => {
       expect(detectVolumeType('mprage.nii.gz')).toEqual({ type: 'ANAT', subtype: 'mprage' });
+    });
+
+    it('detects FreeSurfer aparc+aseg as DSEG', () => {
+      expect(detectVolumeType('aparc+aseg.nii.gz')).toEqual({
+        type: 'DSEG',
+        subtype: 'aparc+aseg',
+      });
+    });
+
+    it('detects parcels keyword as DSEG', () => {
+      expect(detectVolumeType('Schaefer2018_400Parcels_7Networks.nii.gz')).toEqual({
+        type: 'DSEG',
+        subtype: 'Schaefer2018_400Parcels_7Networks',
+      });
+    });
+
+    it('detects labels keyword as DSEG', () => {
+      expect(detectVolumeType('brain_labels.nii')).toEqual({
+        type: 'DSEG',
+        subtype: 'brain_labels',
+      });
+    });
+
+    it('detects FreeSurfer aseg as a standalone token as DSEG', () => {
+      expect(detectVolumeType('aseg.nii.gz')).toEqual({ type: 'DSEG', subtype: 'aseg' });
+    });
+
+    it('detects seg as a standalone token as DSEG', () => {
+      expect(detectVolumeType('tissue_seg.nii')).toEqual({ type: 'DSEG', subtype: 'tissue_seg' });
+    });
+
+    it('does not match seg inside joined words (phase + GRE)', () => {
+      expect(detectVolumeType('phaseGRE.nii')).toEqual({ type: 'phaseGRE', subtype: null });
+    });
+
+    it('checks DSEG keywords before modality keywords — atlas wins over t1', () => {
+      expect(detectVolumeType('atlas_in_t1_space.nii')).toEqual({
+        type: 'DSEG',
+        subtype: 'atlas_in_t1_space',
+      });
+    });
+
+    it('checks DSEG keywords before modality keywords — atlas wins over the broad CT "os" match', () => {
+      expect(detectVolumeType('postop_atlas.nii')).toEqual({
+        type: 'DSEG',
+        subtype: 'postop_atlas',
+      });
     });
   });
 
@@ -796,23 +860,58 @@ describe('NiiViewer', () => {
 
   describe('getInitialLayerSettings', () => {
     it('starts all layers visible', () => {
-      const result = getInitialLayerSettings([{ type: 'ANAT' }, { type: 'PET' }, { type: 'SPECT' }]);
+      const result = getInitialLayerSettings([
+        { type: 'ANAT' },
+        { type: 'PET' },
+        { type: 'SPECT' },
+      ]);
       expect(result.every((layer) => layer.visible)).toBe(true);
     });
 
     it('first layer is fully opaque, subsequent layers default to 0.6', () => {
-      const result = getInitialLayerSettings([{ type: 'ANAT' }, { type: 'PET' }, { type: 'SPECT' }]);
+      const result = getInitialLayerSettings([
+        { type: 'ANAT' },
+        { type: 'PET' },
+        { type: 'SPECT' },
+      ]);
       expect(result[0].opacity).toBe(1.0);
       expect(result[1].opacity).toBe(0.6);
       expect(result[2].opacity).toBe(0.6);
     });
 
     it('derives colormap from volume type via TYPE_COLORMAP_DEFAULTS', () => {
-      const result = getInitialLayerSettings([{ type: 'ANAT' }, { type: 'PET' }, { type: 'SPECT' }, { type: 'CT' }]);
+      const result = getInitialLayerSettings([
+        { type: 'ANAT' },
+        { type: 'PET' },
+        { type: 'SPECT' },
+        { type: 'CT' },
+      ]);
       expect(result[0].colormap).toBe('gray');
       expect(result[1].colormap).toBe('turbo');
       expect(result[2].colormap).toBe('magma');
-	  expect(result[3].colormap).toBe('ct_skull');
+      expect(result[3].colormap).toBe('ct_skull');
+    });
+
+    it('defaults DSEG colormap to randomised', () => {
+      const result = getInitialLayerSettings([
+        { type: 'DSEG', subtype: 'sub-synth_atlas-L2018_res-scale1_dseg' },
+      ]);
+      expect(result[0].colormap).toBe('randomised');
+    });
+
+    it('defaults white matter DSEG layers to gray so the mask renders plain white', () => {
+      const result = getInitialLayerSettings([
+        { type: 'DSEG', subtype: 'sub-synth_label-WM_dseg' },
+        { type: 'DSEG', subtype: 'wm_seg' },
+        { type: 'DSEG', subtype: 'white_matter_labels' },
+        { type: 'DSEG', subtype: 'WhiteMatter_seg' },
+      ]);
+      expect(result.map((layer) => layer.colormap)).toEqual(['gray', 'gray', 'gray', 'gray']);
+    });
+
+    it('keeps the DSEG colormap for wm inside a longer word (FreeSurfer wmparc has many labels)', () => {
+      const result = getInitialLayerSettings([{ type: 'DSEG', subtype: 'wmparc' }]);
+      expect(result[0].colormap).toBe('randomised');
     });
 
     it('defaults colormap to gray for unknown types', () => {
@@ -1094,7 +1193,9 @@ describe('NiiViewer', () => {
     it('calls nv.setColormap when the colormap setting changes', async () => {
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
-      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'ANAT', url: '/mri.nii', id: 'mri-id' }]} />);
+      render(
+        <NiiViewer nvRef={nvRef} layers={[{ type: 'ANAT', url: '/mri.nii', id: 'mri-id' }]} />
+      );
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
 
       // Expand the MRI card and change the colormap
@@ -1109,7 +1210,9 @@ describe('NiiViewer', () => {
     it('reapplies the user-chosen cal_min/cal_max after a colormap change, since NiiVue setColormap triggers its own cal auto-scan internally', async () => {
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
-      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'ANAT', url: '/mri.nii', id: 'mri-id' }]} />);
+      render(
+        <NiiViewer nvRef={nvRef} layers={[{ type: 'ANAT', url: '/mri.nii', id: 'mri-id' }]} />
+      );
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
 
       const nv = nvRef.current;
@@ -1122,7 +1225,9 @@ describe('NiiViewer', () => {
       });
 
       await userEvent.click(screen.getByRole('button', { name: /expand.*anat/i }));
-      fireEvent.change(screen.getByLabelText('ANAT Threshold minimum'), { target: { value: '40' } });
+      fireEvent.change(screen.getByLabelText('ANAT Threshold minimum'), {
+        target: { value: '40' },
+      });
       // mockClear() resets a vi.fn() mock's recorded call history (call count, arguments) back to empty
       // wiping out the record of the updateGLVolume() that changing the colormap triggered internally.
       // This allows expect(nv.updateGLVolume).toHaveBeenCalled()  to only reflects a updateGLVolume that
