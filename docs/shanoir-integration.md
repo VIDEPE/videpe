@@ -180,7 +180,7 @@ and a **View in VIDEPE** button next to the existing **View** button in the exam
 
 ## Checking the integration
 
-1. Import a BrainVision EEG and an MR into one examination. Optionally attach a BIDS `*_electrodes.tsv` (and an inverse solution `.mat`) to the examination as extra data.
+1. Import a BrainVision or EDF EEG and an MR into one examination. Optionally attach a BIDS `*_electrodes.tsv` (and an inverse solution `.mat`) to the examination as extra data.
 2. Click **View in VIDEPE** while logged in to Shanoir. The new tab should open directly on VIDEPE's patient view without a password prompt, with the EEG and the MR loaded (and electrode positions, if attached).
 3. The browser console should show no CSP violations.
 4. Reloading the VIDEPE tab should sign in again (through SSO) and reload the same examination.

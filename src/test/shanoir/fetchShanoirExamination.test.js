@@ -86,11 +86,11 @@ describe('fetchShanoirExamination', () => {
   });
 
   it('reports an EEG dataset without a supported recording as skipped, and loads no EEG files', async () => {
-    // e.g. an EDF recording: the type is supported, the file format isn't. Its extra-data
+    // e.g. an EEGLAB recording: the type is supported, the file format isn't. Its extra-data
     // (electrode positions) only means something alongside a recording, so it's dropped too.
     const client = makeClient({
       datasets: [{ id: 1, name: 'rest', type: 'EEG' }],
-      zips: { 1: makeZip(['rec/rec.edf', 'rec/rec.json']) },
+      zips: { 1: makeZip(['rec/rec.set', 'rec/rec.json']) },
       extraDataPaths: ['/data/exam-7/sub-01_electrodes.tsv'],
     });
     const result = await fetchShanoirExamination({ client, examinationId: 7 });
@@ -98,7 +98,7 @@ describe('fetchShanoirExamination', () => {
     expect(result.eegDataset).toBeNull();
     expect(result.eegFiles).toEqual([]);
     expect(result.skippedDatasets).toEqual([
-      { id: 1, name: 'rest', type: 'EEG', reason: 'unsupported files: .edf, .json' },
+      { id: 1, name: 'rest', type: 'EEG', reason: 'unsupported files: .set, .json' },
     ]);
   });
 

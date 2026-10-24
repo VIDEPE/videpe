@@ -3,6 +3,7 @@ import {
   findSourceGridBasis,
   mapPositionsToGridIndices,
   buildAffineMatrix,
+  detectInverseSolutionMethod,
 } from '@/utils/electricalSourceImagingUtils';
 import { vectorLength } from '@/utils/arrayAndMatrixMathUtils';
 import { findDuplicateChannelNames } from '@/utils/eegTopographyUtils';
@@ -124,6 +125,8 @@ export const parseInverseSolutionFieldtrip = async (file) => {
   // flatSourceFilters replaces it for computation, avoiding a duplicate ~20MB allocation.
   return {
     format: 'FieldTrip',
+    // e.g. 'eLORETA', or null — read from the filename, since inverse_filters doesn't record it
+    inverseSolutionMethod: detectInverseSolutionMethod(file.name),
     sourcePositions,
     insideMask,
     inverseSolutionChannelNames,

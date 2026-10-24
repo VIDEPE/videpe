@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, act, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import userEvent from '@testing-library/user-event';
@@ -13,7 +13,6 @@ const renderPatientView = () =>
 import toast from 'react-hot-toast';
 import { Niivue } from '@niivue/niivue';
 import { dicomLoader } from '@niivue/dicom-loader';
-import { loadBrainVisionEEG } from '@/loaders/loadEEGBrainVision';
 import { checkEegFiles, detectAndLoadEEG } from '@/loaders/eegFormatRegistry';
 import { parseInverseSolutionFieldtrip } from '@/loaders/parseInverseSolutionFieldtrip';
 import { electricalSourceImaging } from '@/utils/electricalSourceImagingUtils';
@@ -33,12 +32,6 @@ vi.mock('react-hot-toast', () => {
   toastFn.dismiss = vi.fn();
   return { default: toastFn };
 });
-
-vi.mock('@/loaders/loadEEGBrainVision', () => ({
-  loadBrainVisionEEG: vi
-    .fn()
-    .mockResolvedValue({ channelNames: ['Ch1'], fs: 1, tMax: 1, getChunk: vi.fn() }),
-}));
 
 vi.mock('@/loaders/eegFormatRegistry', async (importOriginal) => {
   const actual = await importOriginal();
@@ -607,17 +600,42 @@ describe('PatientView — demo loading', () => {
       missing: null,
       warning: null,
     });
-    // Demo electrode positions/inverse solution are fetched by URL and wrapped as Files —
-    // stub fetch so that path exercises the same parsers a manual file drop would.
-    global.fetch = vi.fn((url) =>
-      Promise.resolve({
-        ok: true,
-        blob: () =>
-          Promise.resolve(
-            new Blob([url.endsWith('.tsv') ? MINIMAL_TSV : 'irrelevant — mat parser is mocked'])
-          ),
-      })
+    detectAndLoadEEG.mockResolvedValue({
+      channelNames: ['Ch1'],
+      fs: 1,
+      tMax: 1,
+      getChunk: vi.fn(),
+    });
+    // Demo files are fetched by URL and wrapped as Files — stub fetch so that path
+    // exercises the same loaders/parsers a manual file drop would.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url) =>
+        Promise.resolve({
+          ok: true,
+          blob: () =>
+            Promise.resolve(
+              new Blob([url.endsWith('.tsv') ? MINIMAL_TSV : 'irrelevant — mat parser is mocked'])
+            ),
+        })
+      )
     );
+  });
+
+  // put the real fetch back, so the stub doesn't leak into tests outside this block
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('loads the demo recording as Files through detectAndLoadEEG, like a file drop', async () => {
+    renderPatientView();
+    fireEvent.click(screen.getByRole('button', { name: /load demo/i }));
+
+    await waitFor(() => expect(detectAndLoadEEG).toHaveBeenCalled());
+    const files = detectAndLoadEEG.mock.lastCall[0];
+    expect(files.every((f) => f instanceof File)).toBe(true);
+    expect(files.map((f) => f.name)).toEqual([
+      'sub-synth_task-rest_desc-spkavgall_eeg.vhdr',
+      'sub-synth_task-rest_desc-spkavgall_eeg.eeg',
+    ]);
   });
 
   it('loads demo electrode positions and inverse solution, forwarding them to EegViewer', async () => {
@@ -629,7 +647,7 @@ describe('PatientView — demo loading', () => {
     });
     expect(screen.getByTestId('eeg-custom-filename')).toHaveTextContent('sub-synth_electrodes');
     expect(parseInverseSolutionFieldtrip).toHaveBeenCalledWith(
-      expect.objectContaining({ name: 'sub-synth_desc-unitnoiselcmv_inversefilters.mat' })
+      expect.objectContaining({ name: 'sub-synth_desc-eloreta_inversefilters.mat' })
     );
   });
 
@@ -647,9 +665,12 @@ describe('PatientView — demo loading', () => {
     });
 
     const layers = NiiViewer.mock.lastCall[0].layers;
-    expect(layers[0]).toMatchObject({ type: 'MRI', subtype: 'sub-synth_T1w' });
-    expect(layers[1]).toMatchObject({ type: 'sub-synth_label-WM_dseg', subtype: null });
-    expect(layers[2]).toMatchObject({ type: 'sub-synth_label-CSF_dseg', subtype: null });
+    expect(layers[0]).toMatchObject({ type: 'ANAT', subtype: 'sub-synth_T1w' });
+    expect(layers[1]).toMatchObject({ type: 'DSEG', subtype: 'sub-synth_label-WM_dseg' });
+    expect(layers[2]).toMatchObject({
+      type: 'DSEG',
+      subtype: 'sub-synth_atlas-L2018_res-scale1_dseg',
+    });
   });
 
   it('renders both EegViewer and NiiViewer once demo data is loaded', async () => {
@@ -677,7 +698,7 @@ describe('PatientView — demo loading', () => {
     // Swallow the rejection like the real toast.promise does, so it doesn't leak as an unhandled rejection
     toast.promise.mockImplementationOnce((p) => p.catch(() => {}));
 
-    loadBrainVisionEEG.mockRejectedValueOnce(new Error('Network error'));
+    detectAndLoadEEG.mockRejectedValueOnce(new Error('Network error'));
     renderPatientView();
     fireEvent.click(screen.getByRole('button', { name: /load demo/i }));
 
@@ -698,7 +719,7 @@ describe('PatientView — imaging file-type detection', () => {
     });
   });
 
-  it('passes type MRI to NiiViewer for a BIDS T1w file', async () => {
+  it('passes type ANAT to NiiViewer for a BIDS T1w file', async () => {
     renderPatientView();
 
     await act(async () => {
@@ -706,7 +727,7 @@ describe('PatientView — imaging file-type detection', () => {
     });
 
     expect(NiiViewer.mock.lastCall[0].layers).toHaveLength(1);
-    expect(NiiViewer.mock.lastCall[0].layers[0].type).toBe('MRI');
+    expect(NiiViewer.mock.lastCall[0].layers[0].type).toBe('ANAT');
   });
 
   it('passes subtype as nameWithoutExtension to NiiViewer for a BIDS T1w file', async () => {
@@ -759,7 +780,7 @@ describe('PatientView — imaging file-type detection', () => {
 
     expect(dicomLoader).toHaveBeenCalledTimes(1); // one call for the whole series, not per-file
     expect(NiiViewer.mock.lastCall[0].layers).toHaveLength(1);
-    expect(NiiViewer.mock.lastCall[0].layers[0].type).toBe('MRI');
+    expect(NiiViewer.mock.lastCall[0].layers[0].type).toBe('ANAT');
   });
 
   it('accepts .dcm at the imaging dropzone', () => {
@@ -846,11 +867,35 @@ describe('PatientView — electrode position files', () => {
     expect(eegDropZoneProps.accepted_formats).toContain('.tsv');
   });
 
+  it('lists every supported EEG recording format in the initial EEG dropzone, e.g. EDF', () => {
+    renderPatientView();
+    const eegDropZoneProps = FileDropZone.mock.calls.find(([p]) => p.label === 'Drop EEG files')[0];
+    // one row per recording format (from the registry), then electrode positions and inverse solution
+    expect(eegDropZoneProps.description).toEqual(
+      expect.arrayContaining([
+        { label: expect.stringMatching(/BrainVision/), value: '.vhdr + .eeg' },
+        { label: expect.stringMatching(/EDF/), value: '.edf' },
+        { label: 'Electrode Positions:', value: expect.stringContaining('.elc') },
+        { label: 'Inverse Solution:', value: expect.stringContaining('.mat') },
+      ])
+    );
+  });
+
+  it('accepts every supported EEG recording format at the initial EEG dropzone, e.g. .edf', () => {
+    // the file picker only shows accepted extensions, so a missing one can't be selected by clicking
+    renderPatientView();
+    const eegDropZoneProps = FileDropZone.mock.calls.find(([p]) => p.label === 'Drop EEG files')[0];
+    for (const ext of ['.vhdr', '.eeg', '.edf']) {
+      expect(eegDropZoneProps.accepted_formats.split(',')).toContain(ext);
+    }
+  });
+
   it('mentions electrode positions and inverse solution files in the initial dropzone description', () => {
     renderPatientView();
     const eegDropZoneProps = FileDropZone.mock.calls.find(([p]) => p.label === 'Drop EEG files')[0];
-    expect(eegDropZoneProps.description).toMatch(/electrode positions/i);
-    expect(eegDropZoneProps.description).toMatch(/inverse solution/i);
+    const rowLabels = eegDropZoneProps.description.map((row) => row.label).join(' ');
+    expect(rowLabels).toMatch(/electrode positions/i);
+    expect(rowLabels).toMatch(/inverse solution/i);
   });
 
   it('routes a dropped .tsv file to electrode position parsing instead of EEG accumulation', async () => {

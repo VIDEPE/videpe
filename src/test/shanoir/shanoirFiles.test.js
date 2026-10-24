@@ -40,6 +40,7 @@ describe('classifyDataset', () => {
 describe('hasEegRecording', () => {
   it('is true when the files include a recording VIDEPE can read', () => {
     expect(hasEegRecording([file('rec.vhdr'), file('rec.eeg')])).toBe(true);
+    expect(hasEegRecording([file('rec.edf')])).toBe(true);
   });
 
   it('is false for electrode positions or an inverse solution without a recording', () => {
@@ -47,7 +48,7 @@ describe('hasEegRecording', () => {
   });
 
   it('is false for a recording format VIDEPE cannot read', () => {
-    expect(hasEegRecording([file('rec.edf')])).toBe(false);
+    expect(hasEegRecording([file('rec.set')])).toBe(false); // EEGLAB
   });
 });
 
