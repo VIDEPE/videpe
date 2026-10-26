@@ -10,6 +10,9 @@ import { ShanoirSessionContext } from '@/shanoir/ShanoirSessionContext';
 import { ShanoirErrorPage, ShanoirSignInPage } from '@/shanoir/ShanoirLaunchPages';
 import { createShanoirClient } from '@/shanoir/shanoirClient';
 
+import { getHostAppConfig } from '@/hostApp/hostAppConfig.js';
+import { resolveHostAppLaunch } from '@/hostApp/hostAppLaunch.js';
+
 const root = createRoot(document.getElementById('root'));
 
 // Starts the app, launching from Shanoir first when configured. The Shanoir chain:
