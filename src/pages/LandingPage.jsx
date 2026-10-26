@@ -160,10 +160,13 @@ export const LandingPage = () => {
           <BrainCircuit size={220} strokeWidth={1} style={{ stroke: 'var(--c-primary)' }} />
           <h1 className="!mb-0 !text-6xl tracking-widest">VIDEPE</h1>
           <p className="text-lg text-foreground/60 tracking-wide text-center">
-            Unifying Brain Data for Epilepsy Surgery
+            <span className="font-bold">V</span>isualization & <span className="font-bold">I</span>
+            ntegration of <span className="font-bold">D</span>ata for{' '}
+            <span className="font-bold">E</span>pilepsy <span className="font-bold">P</span>
+            resurgical <span className="font-bold">E</span>valuation
           </p>
-          <span className="text-xs text-foreground/40 border border-border/60 rounded-full px-2 py-0.5 mt-1">
-            In Development
+          <span className="text-xl text-foreground/40 border border-border/60 rounded-full px-2 py-0.5 mt-1">
+            In Development - Research Use Only
           </span>
         </div>
         {/* Features grid with icons, labels and descriptions */}

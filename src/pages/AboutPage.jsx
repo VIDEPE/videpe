@@ -8,6 +8,7 @@
   Columns2,
   FlaskConical,
   TabletSmartphone,
+  TriangleAlert,
   ShieldCheck,
   ArrowLeft,
   CodeXml,
@@ -180,8 +181,31 @@ export const AboutPage = () => {
             some functionality may be incomplete or subject to revision.
           </p>
         </Section>
-
-        <hr className="mb-10" />
+		
+		<hr className="mb-10" />
+		
+		<Section title="Disclaimer">
+          <div className="flex flex-col gap-4">
+            <div
+              id="disclaimer-RUO"
+              className="flex gap-3 p-4 rounded-lg border"
+              style={{ borderColor: 'var(--c-alert)', background: 'var(--c-surface)' }}
+            >
+              <TriangleAlert
+                size={22}
+                className="shrink-0 mt-0.5"
+                style={{ color: 'var(--c-alert)' }}
+              />
+              <div>
+                <p className="font-semibold text-heading">Research Use Only: </p>
+                <p className="text-sm mt-1" style={{ color: 'var(--c-foreground)' }}>
+                  VIDEPE is a research software tool intended exclusively for scientific research and investigational purposes. It is not a medical device and has not been certified or approved for clinical use. VIDEPE is not intended to be used for medical diagnosis, treatment decisions, : patient management. The software is provided “AS IS”, without warranties of any kind, express or implied, including but not limited to warranties of accuracy, reliability, fitness for a particular purpose, or clinical suitability. The developers and institutions involved in its development accept no liability for any direct or indirect damages arising from its use. All clinical decisions must be made independently by qualified healthcare professionals using validated clinical tools and procedures.
+                  step.
+                </p>
+              </div>
+            </div>
+		  </div>
+		</Section>
 
         <Section title="Features">
           <div className="flex flex-col gap-4">
@@ -286,7 +310,7 @@ export const AboutPage = () => {
                   </li>
                   <li>
                     <strong>Electrode positions</strong> — fsaverage_1005 (FreeSurfer) by default,
-                    or load your own <code>.elc</code> or <code>.tsv</code> file
+                    or load your own <code>.elc</code> (EEGLAB) or <code>*_electrodes.tsv</code> (BIDS specificaitons) file
                   </li>
                   <li>
                     <strong>Channel to anatomy</strong> — click a channel label to move the
@@ -460,7 +484,7 @@ export const AboutPage = () => {
                     render in the neuroimaging viewer, synced to the selected timepoint
                   </li>
                   <li>
-                    <strong>Custom positions</strong> — load <code>.elc</code> or <code>.tsv</code>{' '}
+                    <strong>Custom positions</strong> — load <code>.elc</code> (EEGLAB) or <code>*_electrodes.tsv</code> (BIDS specificaitons){' '}
                     files
                   </li>
                   <li>
