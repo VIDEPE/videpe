@@ -310,7 +310,7 @@ export const AboutPage = () => {
                   </li>
                   <li>
                     <strong>Electrode positions</strong> — fsaverage_1005 (FreeSurfer) by default,
-                    or load your own <code>.elc</code> (EEGLAB) or <code>*_electrodes.tsv</code> (BIDS specificaitons) file
+                    or load your own <code>.elc</code> or <code>*_electrodes.tsv</code> (BIDS specifications) file
                   </li>
                   <li>
                     <strong>Channel to anatomy</strong> — click a channel label to move the
@@ -484,7 +484,7 @@ export const AboutPage = () => {
                     render in the neuroimaging viewer, synced to the selected timepoint
                   </li>
                   <li>
-                    <strong>Custom positions</strong> — load <code>.elc</code> (EEGLAB) or <code>*_electrodes.tsv</code> (BIDS specificaitons){' '}
+                    <strong>Custom positions</strong> — load <code>.elc</code> or <code>*_electrodes.tsv</code> (BIDS specifications){' '}
                     files
                   </li>
                   <li>
