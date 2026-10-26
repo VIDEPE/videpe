@@ -45,13 +45,13 @@ High-performance multichannel viewer built on [uPlot](https://github.com/leeoniy
   - Import montage files in AnyWave (XML) or Cartool (plain-text) format — auto-detected from file content — and export back out as AnyWave XML (filter settings included).
 
 - EEG topography — a resizable panel showing a 3D voltage map at the selected time point using [NiiVue](https://niivue.com/) mesh rendering
-  - Load custom positions via `.elc` or `.tsv` file (Uses fsaverage_1005 (FreeSurfer) electrode positions by default)
+  - Load custom positions via `.elc` or `*_electrodes.tsv` (BIDS specifications) file (Uses fsaverage_1005 (FreeSurfer) electrode positions by default)
   - 3D rotation is synchronised with the neuroimaging viewer — rotate one and the other follows
   - Matrix electrode overview to spot outliers
 
 - **Intracranial (SEEG) support** — SEEG channels are auto-detected from channel naming
   - Custom channel type setting as EEG/SEEG will toggle VIDEPE options accordingly and changes rendering style of the 3D electrodes configuration in the neuroimaging viewer
-  - Colour/size the 3D electrode connectome nodes by any custom metric read from extra `.tsv` columns, not just voltage
+  - Colour/size the 3D electrode connectome nodes by any custom metric read from extra `*_electrodes.tsv` columns, not just voltage
 - **Electrical Source Imaging** — load an inverse solution (currently only FieldTrip `*_inversefilters.mat`), enable ESI, and click the EEG plot to see the source power at that time point.
   - Rendered as either a 3D volumetric heatmap or a connectome
   - The crosshair jumps to the source with the highest power on every click
@@ -85,7 +85,7 @@ Hit **Load Demo** to instantly load a synthetic EEG recording, electrode positio
 | Modality            | Formats                                                             |
 | ------------------- | ------------------------------------------------------------------- |
 | EEG                 | BrainVision (`.vhdr` + `.eeg`), EDF/EDF+ (`.edf`)                   |
-| Electrode positions | `.elc`, `.tsv`                                                      |
+| Electrode positions | `.elc`, `*_electrodes.tsv`                                                      |
 | Volumes             | NIfTI (`.nii`, `.nii.gz`), MGH/MGZ, GIFTI, PLY, OBJ, DICOM (`.dcm`) |
 
 ## Tech stack
