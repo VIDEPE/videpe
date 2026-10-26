@@ -11,6 +11,10 @@ A web-based viewer for EEG and neuroimaging data (MRI, PET, SPECT), developed at
 
 > **Note:** VIDEPE is currently under active development. Features and interfaces may change, and some functionality may be incomplete or subject to revision.
 
+## Disclaimer: Research Use Only
+
+VIDEPE is a research software tool intended exclusively for scientific research and investigational purposes. It is not a medical device and has not been certified or approved for clinical use. VIDEPE is not intended to be used for medical diagnosis, treatment decisions, : patient management. The software is provided “AS IS”, without warranties of any kind, express or implied, including but not limited to warranties of accuracy, reliability, fitness for a particular purpose, or clinical suitability. The developers and institutions involved in its development accept no liability for any direct or indirect damages arising from its use. All clinical decisions must be made independently by qualified healthcare professionals using validated clinical tools and procedures.
+
 ## Privacy-first: 100% local processing
 
 All data processing happens entirely in your browser. No files are ever uploaded to a server, sent to a third party, or stored outside your own machine. This makes VIDEPE safe to use with sensitive medical data — including identifiable patient recordings — without any institutional data-sharing agreement or de-identification step.
