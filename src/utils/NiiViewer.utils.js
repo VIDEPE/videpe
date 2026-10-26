@@ -422,3 +422,13 @@ export function revokeLayerUrls(layers) {
       URL.revokeObjectURL(layer.url);
   }
 }
+
+// NiiVue Azimuth and Elevation that handle the position of the 3D view. 
+// It is computed based on the CrossHair position. The camera is position on the axis based
+// on the position of the CrossHair and (0,0,0).
+export function getAziElev(crossHairPos) {
+  const r = Math.sqrt(Math.pow(crossHairPos[0], 2) + Math.pow(crossHairPos[1], 2));
+  const azi = -180/Math.PI*Math.atan2(crossHairPos[1], crossHairPos[0]) - 90; // remove 90 because -y and -x used as axis
+  const elev = 180/Math.PI*Math.atan2(crossHairPos[2], r)
+  return [azi, elev]
+}
