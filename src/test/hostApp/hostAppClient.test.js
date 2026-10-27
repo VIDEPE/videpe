@@ -35,11 +35,29 @@ describe('createHostAppClient', () => {
   describe('getSession', () => {
     it('asks the host app for the session with the launch token, and returns its files', async () => {
       const { client, fetchImpl } = makeClient(okJson(SESSION));
-      expect(await client.getSession()).toEqual(FILES);
+      expect(await client.getSession()).toEqual({ title: null, files: FILES });
       expect(fetchImpl).toHaveBeenCalledWith(
         '/api/session',
         expect.objectContaining({ headers: { Authorization: `Bearer ${TOKEN}` } })
       );
+    });
+
+    // The optional title: what the host app calls this launch (e.g. a patient code), shown
+    // next to the app's name in the header
+    it('returns the session title, trimmed', async () => {
+      const { client } = makeClient(okJson({ ...SESSION, title: '  Patient 012 – rest ' }));
+      expect((await client.getSession()).title).toBe('Patient 012 – rest');
+    });
+
+    // A bad title isn't worth rejecting the session over: it's only a label, so it's ignored
+    it.each([
+      ['empty', ''],
+      ['only spaces', '   '],
+      ['a number', 42],
+      ['an object', { text: 'x' }],
+    ])('ignores a title that is %s', async (_label, title) => {
+      const { client } = makeClient(okJson({ ...SESSION, title }));
+      expect(await client.getSession()).toEqual({ title: null, files: FILES });
     });
 
     it('passes the abort signal through to fetch', async () => {

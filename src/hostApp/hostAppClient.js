@@ -34,14 +34,15 @@ function describeHttpError(response, what, appName) {
  * @param {typeof fetch} [params.fetchImpl=fetch] - fetch implementation function to make HTTP requests,
  *  default the browser's default 'fetch' is used. This way tests can swap in fake vi.fn() instead of real fetch.
  * @returns {{
- *   getSession: (signal?: AbortSignal) => Promise<{ name: string, url: string }[]>,
- *   downLoadFile: (file: { name: string, url: string }, signal?: AbortSignal) => Promise<File>,
+ *   getSession: (signal?: AbortSignal) => Promise<{ title: string|null, files: { name: string, url: string }[] }>,
+ *   downloadFile: (file: { name: string, url: string }, signal?: AbortSignal) => Promise<File>,
  * }} the client:
- *   - `getSession`: the checked list of files to open, each with its name and its cleaned-up
- *     same-origin url. Rejects when the host app uses another contract version than 1, or
- *     sends an invalid list (not a list, a file without a name or url, or a url that leads
- *     to another server) — a single bad file rejects the whole list.
- *   - `downLoadFile`: one file from that list, downloaded as a File named after it.
+ *   - `getSession`: the launch's title (trimmed, or null when the host app sends none or an
+ *     invalid one) and the checked list of files to open, each with its name and its
+ *     cleaned-up same-origin url. Rejects when the host app uses another contract version
+ *     than 1, or sends an invalid list (not a list, a file without a name or url, or a url
+ *     that leads to another server) — a single bad file rejects the whole list.
+ *   - `downloadFile`: one file from that list, downloaded as a File named after it.
  *   Every method rejects with a readable Error on a non-2xx response, and with an AbortError
  *   once `signal` is aborted.
  */
@@ -78,8 +79,9 @@ export function createHostAppClient({ apiBase, token, appName, fetchImpl = fetch
   return {
     // Asks the host app which files the user picked to open in VIDEPE. The answer is only a
     // list: each file's name and the address to download it from (with downloadFile below),
-    // plus the version of the host-app contract the host app follows. Example answer:
-    //   { version: 1, files: [{ name: 'rec.vhdr', url: '/api/files/0' }, …] }
+    // plus the version of the host-app contract the host app follows, and optionally a title
+    // for this launch. Example answer:
+    //   { version: 1, title: 'Patient 012', files: [{ name: 'rec.vhdr', url: '/api/files/0' }, …] }
     async getSession(signal) {
       const response = await get(`${apiBase}/session`, 'the list of files to open', signal);
       // read the answer: response.json() throws (a SyntaxError) when the body isn't JSON at
@@ -115,7 +117,12 @@ export function createHostAppClient({ apiBase, token, appName, fetchImpl = fetch
         if (problem) throw invalidList(`the url of ${which} (${file.name}) is ${problem}`);
         return { name: file.name, url: path }; // the checked, cleaned-up url
       });
-      return files;
+
+      // The optional title: what the host app calls this launch (e.g. a patient code), shown
+      // next to its name. Only a label, so a missing or bad one is ignored, not an error.
+      const title = isNonEmptyString(session.title) ? session.title.trim() : null;
+
+      return { title, files };
     },
 
     // Downloads one file from the session's list (`{ name, url }`, as returned by getSession),
