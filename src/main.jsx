@@ -93,6 +93,9 @@ async function start() {
 function startHostApp() {
   // Host-app settings from app-config.js (API path, app name); null on GitHub Pages
   const config = getHostAppConfig();
+  // Host-app mode off (e.g. GitHub Pages, or a Shanoir deployment): stop before anything else,
+  // so the tab's sessionStorage isn't even touched
+  if (!config) return false;
 
   let launch;
   try {

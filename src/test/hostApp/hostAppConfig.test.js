@@ -19,6 +19,20 @@ describe('getHostAppConfig', () => {
     expect(getHostAppConfig({ hostApp: null })).toBeNull();
   });
 
+  it('returns null, without a warning, for a config that leaves the hostApp section out', () => {
+    // e.g. Shanoir's deployment, which only writes its own section: left out means switched off
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const shanoirOnly = {
+      shanoir: {
+        authority: 'https://shanoir.example/auth/realms/shanoir-ng',
+        clientId: 'videpe',
+        apiBase: '/shanoir-ng/datasets',
+      },
+    };
+    expect(getHostAppConfig(shanoirOnly)).toBeNull();
+    expect(warn).not.toHaveBeenCalled();
+  });
+
   it('returns the validated config', () => {
     expect(getHostAppConfig({ hostApp: VALID_HOSTAPP })).toEqual(VALID_HOSTAPP);
   });
