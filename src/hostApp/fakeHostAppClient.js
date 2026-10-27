@@ -12,6 +12,11 @@ const SESSION = {
     'sub-synth_electrodes.tsv',
     'sub-synth_desc-eloreta_inversefilters.mat',
     'sub-synth_T1w.nii.gz',
+    'sub-synth_label-WM_dseg.nii.gz',
+    'sub-synth_atlas-L2018_res-scale1_dseg.nii.gz',
+    // Unsupported file, like fakeShanoirClient's dummy dataset: also skipped before
+    // downloading, so it's never fetched (and doesn't exist)
+    'dummy.bak',
   ].map((name) => ({ name, url: BASE + name })),
 };
 
