@@ -11,7 +11,7 @@ import { isNonEmptyString, resolveSameOriginPath, isJsonObject } from '@/utils/c
 // Turns a failed response into an error message a user can act on.
 function describeHttpError(response, what, appName) {
   switch (response.status) {
-    case 401: // fall back to 403, they can share the same messsage as with the HostApp there is no real sign-in/permission.
+    case 401: // fall through to 403, they can share the same messsage as with the HostApp there is no real sign-in/permission.
     case 403:
       return `${appName} no longer accepts this launch (for example because it was closed or restarted). Click 'View in VIDEPE' in ${appName} again.`;
     case 404:
