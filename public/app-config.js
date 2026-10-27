@@ -30,8 +30,10 @@
 //     },
 //   };
 //
-// A deployment normally enables one of the two. If both are set, a Shanoir launch is tried
-// first, and the host-app launch only when VIDEPE isn't being launched from Shanoir.
+// A deployment normally enables one of the two, and only needs to write that section: a
+// section that's left out counts as switched off, like `null` (both are listed below only to
+// show which sections exist). If both are set, a Shanoir launch is tried first, and the
+// host-app launch only when VIDEPE isn't being launched from Shanoir.
 //
 // An invalid section (e.g. a placeholder that wasn't filled in, or a host-app apiBase on
 // another server) is ignored with a console warning, so VIDEPE then also starts as the
