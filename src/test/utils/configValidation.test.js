@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isNonEmptyString, resolveSameOriginPath } from '@/utils/configValidation';
+import { isJsonObject, isNonEmptyString, resolveSameOriginPath } from '@/utils/configValidation';
 
 describe('isNonEmptyString', () => {
   it.each(['a', ' a '])('accepts %j', (value) => {
@@ -9,6 +9,21 @@ describe('isNonEmptyString', () => {
   it.each(['', ' ', undefined, null, 42])('rejects %j', (value) => {
     expect(isNonEmptyString(value)).toBe(false);
   });
+});
+
+// What JSON.parse / response.json() can return: an object, a list, text, a number, a
+// boolean or null — only the first counts as an object here
+describe('isJsonObject', () => {
+  it.each([{}, { version: 1, files: [] }])('accepts the object %j', (value) => {
+    expect(isJsonObject(value)).toBe(true);
+  });
+
+  it.each([null, [], [{ name: 'rec.vhdr' }], 'text', 42, true, undefined])(
+    'rejects %j',
+    (value) => {
+      expect(isJsonObject(value)).toBe(false);
+    }
+  );
 });
 
 // jsdom's page address in the tests is http://localhost:3000/, so "same origin" means that server

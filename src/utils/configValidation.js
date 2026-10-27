@@ -49,3 +49,16 @@ export function resolveSameOriginPath(path) {
   // strip trailing slash(es) so paths can be appended
   return { path: resolved.pathname.replace(/\/+$/, ''), problem: null };
 }
+
+/**
+ * Checks if a value is a JSON object (`{ … }`) — e.g. what response.json() returned — and
+ * not one of the other things JSON can hold: a list, text, a number, a boolean or null.
+ *
+ * `typeof` rather than `instanceof Object`: typeof null is also 'object', hence the null
+ * check, and lists are objects too, hence the Array.isArray check.
+ *
+ * @param {unknown} data
+ * @returns {boolean}
+ */
+export const isJsonObject = (data) =>
+  typeof data === 'object' && data !== null && !Array.isArray(data);
