@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 // Components
 import { FullWidthLayout } from '../components/FullWidthLayout';
 import { ThemeToggle } from '../components/ThemeToggle';
+import { ResearchUseBadge } from '../components/VidepeLogo';
 import { EegViewer } from '../components/EegViewer';
 import { NiiViewer } from '../components/NiiViewer';
 import { SplitPane } from '../components/SplitPane';
@@ -25,6 +26,8 @@ import { useElectricalSourceImaging } from '../hooks/useElectricalSourceImaging'
 import { useDemoData } from '../hooks/useDemoData';
 import { useShanoirSession } from '../shanoir/ShanoirSessionContext';
 import { useShanoirData } from '../shanoir/useShanoirData';
+import { useHostAppSession } from '../hostApp/HostAppSessionContext';
+import { useHostAppData } from '../hostApp/useHostAppData';
 
 // Shared title styling — keeps "Neuroimaging" and the toggle's labels visually
 // consistent, and both header bars the same height (TrafficLightButtons are 16px tall).
@@ -63,15 +66,15 @@ export const PatientView = () => {
   }, []);
 
   const [eeg, setEeg] = useState(null); // recording provider: { channelNames, fs, tMax, getChunk }
-  const [shanoirEegName, setShanoirEegName] = useState(null); // name of the EEG dataset loaded from Shanoir, shown in the EEG panel header
+  const [eegSourceName, setEegSourceName] = useState(null); // name of the EEG recording loaded by a launching app (Shanoir: the dataset, host app: the file), shown in the EEG panel header
   const [layers, setLayers] = useState([]); // image volumes/meshes loaded from files
   // Whether NiiViewer holds layers dropped into its own internal dropzone — those never
   // touch `layers` above, so this prevents wrongly unmounting NiiViewer (and discarding
   // them) when e.g. a montage-editor channel-type edit clears electrodeLayer.
   const [niiHasOwnContent, setNiiHasOwnContent] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const eegReadyResolveRef = useRef(null); // set before demo/shanoir load; EegViewer calls it when charts are ready
-  const niiReadyResolveRef = useRef(null); // set before demo/shanoir load; NiiViewer calls it when volumes are ready
+  const eegReadyResolveRef = useRef(null); // set before demo/shanoir/host-app load; EegViewer calls it when charts are ready
+  const niiReadyResolveRef = useRef(null); // set before demo/shanoir/host-app load; NiiViewer calls it when volumes are ready
   const [maximizedPanel, setMaximizedPanel] = useState(null); // null | 'left' | 'right'
 
   // Live EEG/electrode state lifted out of EegViewer — drives the intracranial connectome
@@ -135,12 +138,28 @@ export const PatientView = () => {
   const { isShanoirLoading } = useShanoirData({
     handleEegFiles,
     setLayers,
-    setShanoirEegName,
+    setShanoirEegName: setEegSourceName,
     eegReadyResolveRef,
     niiReadyResolveRef,
     client: shanoirSession?.client, // the client, or undefined
     examinationId: shanoirSession?.examinationId, // the examinationId, or undefined
   });
+
+  const hostAppSession = useHostAppSession(); // null, or { client, appName }
+
+  const { isHostAppLoading, title: hostAppTitle } = useHostAppData({
+    client: hostAppSession?.client, // the client, or undefined
+    appName: hostAppSession?.appName,
+    handleEegFiles,
+    setLayers,
+    setEegName: setEegSourceName,
+    eegReadyResolveRef,
+    niiReadyResolveRef,
+  });
+
+  // Launched by another app (Shanoir or a host app), rather than opened directly: no Back or
+  // Load Demo, as leaving or resetting would discard the data the app handed over
+  const isLaunched = Boolean(shanoirSession || hostAppSession);
 
   // Build the electrode layer if the toggle is on.
   // If snapshot is empty it generates a white bulb connectome
@@ -251,7 +270,7 @@ export const PatientView = () => {
     setChannelSnapshot(null);
     setElectrodeRenderEnabled(false);
     setEsiEnabled(false);
-    setShanoirEegName(null);
+    setEegSourceName(null);
   };
 
   // SplitPane's right (Neuroimaging) panel reset button — clears only the imaging volumes
@@ -278,12 +297,14 @@ export const PatientView = () => {
       {/* Top bar: 3-column grid with equal side columns (1fr | auto | 1fr), so the title stays
           centered on the screen however wide the left/right content is */}
       <div className="shrink-0 grid grid-cols-[1fr_auto_1fr] items-start border-b border-border">
-        {/* Left column: Back + Load Demo (or, from Shanoir: About + Shanoir logo) in normal flow — top bar never scrolls so fixed isn't needed */}
+        {/* Left column: Back + Load Demo (or, when launched: About + where the data came from) in normal flow — top bar never scrolls so fixed isn't needed */}
         <div className="flex flex-col items-start gap-2 px-5 py-3 z-10">
-          {shanoirSession ? (
-            /* Launched from Shanoir: no Back (leaving the patient view would discard the loaded
-               examination), but the About page in a new tab. BASE_URL drops the launch URL's
-               ?examinationId, so that tab opens plain VIDEPE instead of signing in and loading again. */
+          {isLaunched ? (
+            /* Launched from Shanoir or a host app: no Back (leaving the patient view would discard
+               the loaded data), but the About page in a new tab. BASE_URL drops the launch URL's
+               ?examinationId, so that tab opens plain VIDEPE instead of signing in and loading again.
+               (A host-app token isn't in the URL any more, and a new tab doesn't get this tab's
+               sessionStorage, so that tab doesn't relaunch either.) */
             <a
               href={`${import.meta.env.BASE_URL}#/about`}
               target="_blank"
@@ -311,6 +332,15 @@ export const PatientView = () => {
                 Examination ID: {shanoirSession.examinationId}
               </span>
             </div>
+          ) : hostAppSession ? (
+            /* Launched from a host app: its name and the launch's title, as plain text — no
+               logo, as the Shanoir logo is reserved for the official Shanoir collaboration */
+            <div className="flex flex-col items-start gap-1 pt-2">
+              <span className="text-sm font-semibold text-foreground">
+                Opened from {hostAppSession.appName}
+              </span>
+              {hostAppTitle && <span className="text-xs text-foreground">{hostAppTitle}</span>}
+            </div>
           ) : (
             /* Normal VIDEPE: Load Demo / Reset button */
             <button
@@ -321,7 +351,7 @@ export const PatientView = () => {
                   ? handleReset
                   : handleLoadDemo
               }
-              disabled={isLoading || isShanoirLoading}
+              disabled={isLoading || isShanoirLoading || isHostAppLoading}
               title={
                 isDemoLoading
                   ? 'Loading demo data…'
@@ -348,9 +378,7 @@ export const PatientView = () => {
             <span className="font-bold">E</span>pilepsy <span className="font-bold">P</span>
             resurgical <span className="font-bold">E</span>valuation
           </p>
-          <span className="text-xs text-foreground/40 border border-border/60 rounded-full px-2 py-0.5">
-            In Development
-          </span>
+          <ResearchUseBadge />
         </div>
 
         {/* Right column: ThemeToggle rendered inline (not fixed) — top bar never scrolls so fixed isn't needed,
@@ -364,13 +392,13 @@ export const PatientView = () => {
         leftLabel={
           <span className={PANEL_TITLE_CLASS}>
             EEG
-            {eeg && shanoirEegName && (
+            {eeg && eegSourceName && (
               // truncate: long names end in "…" instead of pushing the header buttons away; the
               // full name shows on hover (pointer-events-auto, as SplitPane's header ignores the mouse)
               <span
                 className={`${PANEL_SUBTITLE_CLASS} truncate pointer-events-auto`}
-                title={shanoirEegName}
-              >{`- ${shanoirEegName}`}</span>
+                title={eegSourceName}
+              >{`- ${eegSourceName}`}</span>
             )}
           </span>
         }
