@@ -19,7 +19,7 @@ const IMAGING_EXTENSIONS = ['.nii', '.nii.gz', '.mgh', '.mgz', '.gii'];
 export const isElectrodePositionFile = (name) => /(\.elc|_electrodes\.tsv)$/i.test(name);
 export const isInverseSolutionFile = (name) =>
   INV_SOLUTIONS_EXTENSIONS.some((ext) => name.toLowerCase().endsWith(ext));
-const isEegRecordingFile = (name) =>
+export const isEegRecordingFile = (name) =>
   EEG_FORMAT_EXTENSIONS.some((ext) => name.toLowerCase().endsWith(ext));
 const isEegIntakeFile = (name) =>
   isEegRecordingFile(name) || isElectrodePositionFile(name) || isInverseSolutionFile(name);
@@ -84,8 +84,12 @@ export function selectImagingFiles(files) {
  * open them — the same choices selectEegIntakeFiles and selectImagingFiles make — and reports
  * the rest, so the user can be told what wasn't shown instead of it being dropped silently.
  *
- * @param {File[]} files
- * @returns {{ eegFiles: File[], imagingFiles: File[], skippedFiles: File[] }} every file in
+ * Only looks at each item's `name`, so it also sorts files before they're downloaded (e.g. a
+ * host app's `{ name, url }` entries), and the skipped ones never need downloading.
+ *
+ * @template {{ name: string }} T
+ * @param {T[]} files - Files, or anything else with a file name.
+ * @returns {{ eegFiles: T[], imagingFiles: T[], skippedFiles: T[] }} every file in
  *   exactly one group, each in the original order:
  *   - `eegFiles`: for the EEG intake (recording, electrode positions, inverse solutions).
  *   - `imagingFiles`: for filesToLayers (volumes and surface meshes).
