@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 // Components
 import { FullWidthLayout } from '../components/FullWidthLayout';
 import { ThemeToggle } from '../components/ThemeToggle';
+import { ResearchUseBadge } from '../components/VidepeLogo';
 import { EegViewer } from '../components/EegViewer';
 import { NiiViewer } from '../components/NiiViewer';
 import { SplitPane } from '../components/SplitPane';
@@ -348,9 +349,7 @@ export const PatientView = () => {
             <span className="font-bold">E</span>pilepsy <span className="font-bold">P</span>
             resurgical <span className="font-bold">E</span>valuation
           </p>
-          <span className="text-xs text-foreground/40 border border-border/60 rounded-full px-2 py-0.5">
-            In Development
-          </span>
+          <ResearchUseBadge />
         </div>
 
         {/* Right column: ThemeToggle rendered inline (not fixed) — top bar never scrolls so fixed isn't needed,
