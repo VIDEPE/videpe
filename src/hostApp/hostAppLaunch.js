@@ -97,3 +97,35 @@ export function resolveHostAppLaunch({ config, location, history, baseUrl, stora
 
   return { status: 'ready', token };
 }
+
+/**
+ * The tab's sessionStorage, for resolveHostAppLaunch to keep the token across a reload — or an
+ * in-memory stand-in when the browser blocks it (e.g. strict privacy settings). Then the
+ * launch still works; only a reload loses it (the user clicks "View in VIDEPE" again).
+ *
+ * Tried with a test write, because some browsers only throw once the storage is used, not
+ * when it's read.
+ *
+ * @param {() => Storage} [getStorage] - returns the storage to use; tests pass a stand-in.
+ * @returns {{ getItem: Function, setItem: Function, removeItem: Function }}
+ */
+export function getTabStorage(getStorage = () => window.sessionStorage) {
+  try {
+    const storage = getStorage();
+    storage.setItem(`${TOKEN_STORAGE_KEY}.test`, '1');
+    storage.removeItem(`${TOKEN_STORAGE_KEY}.test`);
+    return storage;
+  } catch {
+    // Same API as sessionStorage, kept in a Map for as long as the page is open
+    const items = new Map();
+    return {
+      getItem: (key) => (items.has(key) ? items.get(key) : null),
+      setItem: (key, value) => {
+        items.set(key, String(value));
+      },
+      removeItem: (key) => {
+        items.delete(key);
+      },
+    };
+  }
+}

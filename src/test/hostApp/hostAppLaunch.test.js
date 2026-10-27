@@ -1,5 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
-import { parseToken, resolveHostAppLaunch, TOKEN_STORAGE_KEY } from '@/hostApp/hostAppLaunch';
+import {
+  getTabStorage,
+  parseToken,
+  resolveHostAppLaunch,
+  TOKEN_STORAGE_KEY,
+} from '@/hostApp/hostAppLaunch';
 
 const CONFIG = {
   name: 'Host App',
@@ -172,6 +177,41 @@ describe('resolveHostAppLaunch', () => {
       storage,
     });
     expect(result).toEqual({ status: 'none' });
+    expect(storage.getItem(TOKEN_STORAGE_KEY)).toBeNull();
+  });
+});
+
+// Some browsers block sessionStorage (e.g. strict privacy settings): reading window.sessionStorage
+// then throws, or only using it does. The launch should still work then, just without
+// surviving a reload.
+describe('getTabStorage', () => {
+  it("returns the tab's sessionStorage when it works", () => {
+    expect(getTabStorage(() => window.sessionStorage)).toBe(window.sessionStorage);
+  });
+
+  it.each([
+    [
+      'reading it throws',
+      () => {
+        throw new DOMException('The operation is insecure.', 'SecurityError');
+      },
+    ],
+    [
+      'using it throws',
+      () => ({
+        getItem: () => null,
+        setItem: () => {
+          throw new DOMException('Quota exceeded', 'QuotaExceededError');
+        },
+        removeItem: () => {},
+      }),
+    ],
+  ])('falls back to a working in-memory store when %s', (_label, getStorage) => {
+    const storage = getTabStorage(getStorage);
+    expect(storage.getItem(TOKEN_STORAGE_KEY)).toBeNull();
+    storage.setItem(TOKEN_STORAGE_KEY, 'a'.repeat(32));
+    expect(storage.getItem(TOKEN_STORAGE_KEY)).toBe('a'.repeat(32));
+    storage.removeItem(TOKEN_STORAGE_KEY);
     expect(storage.getItem(TOKEN_STORAGE_KEY)).toBeNull();
   });
 });
