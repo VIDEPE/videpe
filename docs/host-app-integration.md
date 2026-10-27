@@ -33,13 +33,15 @@ VIDEPE and the API are served by the same server (same origin), so no CORS confi
 
 Serve the files of a VIDEPE build under the path `/videpe/`, which is where the build expects to be. Your app ships these files and serves them itself, from the same local server as its API.
 
-**Recommended: take the files from the published Docker image**, for a specific VIDEPE version, once, when you package your app. The image `ghcr.io/videpe/videpe:<version>` holds the built files in `/usr/share/nginx/html/videpe/`:
+**Recommended: take the files from the published Docker image**, for a specific VIDEPE version, once, when you package your app. The image `ghcr.io/videpe/videpe:<version>` holds the built files in `/usr/share/nginx/html/videpe/`. Use version 0.21.0 or later: earlier versions don't support host apps.
 
 ```sh
-docker create --name videpe ghcr.io/videpe/videpe:0.20.0
+docker create --platform linux/amd64 --name videpe ghcr.io/videpe/videpe:0.21.0
 docker cp videpe:/usr/share/nginx/html/videpe ./videpe-dist
 docker rm videpe
 ```
+
+Docker downloads the image the first time you run this. `--platform linux/amd64` is needed on computers with an ARM chip (e.g. a Mac with an Apple chip), as the image is only published for amd64; the files themselves work on any computer. `docker create` only prepares a container to copy from, without starting it, and `docker rm` removes it again.
 
 This gives you a published, tested version, and you don't need to build VIDEPE yourself. Only you need Docker, to extract the files: your app ships the `videpe-dist` folder, so its users don't need Docker. Don't run the image as a separate server next to your app: VIDEPE and your API must be served by the same server (see step 4).
 
