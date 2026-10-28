@@ -51,7 +51,7 @@ const FEATURES = [
     icon: ChartLine,
     label: 'EEG Viewer',
     description:
-      'Browse hour-long, multi-channel recordings and generate 3D topography maps for any selected timepoint.',
+      'Browse hour-long BrainVision, EDF or Micromed recordings, jump from a channel to its electrode on the MRI, and map any timepoint in 3D.',
     anchor: '#feature-eeg',
   },
   {
@@ -68,8 +68,8 @@ const FEATURES = [
       <>
         Curious?
         <br />
-        Try a full EEG (inc. electrode position & inverse solution) + MRI dataset in one click — no
-        files of your own needed.
+        Try the demo: an EEG with electrode positions and an inverse solution, plus an MRI with a
+        brain atlas, all in one click — no files of your own needed.
       </>
     ),
     anchor: '#feature-demo',
@@ -186,17 +186,21 @@ export const LandingPage = () => {
                     <Icon size={18} strokeWidth={1.5} style={{ stroke: 'var(--c-primary)' }} />
                     <span className="text-xs font-medium text-heading select-none">{label}</span>
                   </div>
+                  {/* Opens by animating its grid row from 0fr to 1fr: unlike a max-height, this
+                      opens to exactly the height of the content, so longer texts aren't cut off */}
                   <div
-                    className={`overflow-hidden transition-all duration-300 ease-out ${isExpanded ? 'max-h-40' : 'max-h-0 group-hover:max-h-40'}`}
+                    className={`grid transition-[grid-template-rows] duration-300 ease-out ${isExpanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr] group-hover:grid-rows-[1fr]'}`}
                   >
-                    <p className="pt-3 text-xs text-foreground">{description}</p>
-                    <Link
-                      to={`/about${anchor}`}
-                      onClick={(e) => e.stopPropagation()}
-                      className="inline-block mt-2 text-xs text-primary hover:underline"
-                    >
-                      Learn more →
-                    </Link>
+                    <div className="overflow-hidden">
+                      <p className="pt-3 text-xs text-foreground">{description}</p>
+                      <Link
+                        to={`/about${anchor}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="inline-block mt-2 text-xs text-primary hover:underline"
+                      >
+                        Learn more →
+                      </Link>
+                    </div>
                   </div>
                 </div>
               </div>
