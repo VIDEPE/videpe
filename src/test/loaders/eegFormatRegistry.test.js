@@ -17,6 +17,10 @@ vi.mock('@/loaders/loadEegEdf', () => ({
   loadEegEdf: vi.fn(),
 }));
 
+vi.mock('@/loaders/loadEegTrc', () => ({
+  loadEegTrc: vi.fn(),
+}));
+
 const makeFile = (name) => new File([''], name);
 
 describe('checkEegFiles', () => {
@@ -84,13 +88,22 @@ describe('checkEegFiles', () => {
     expect(result.missing).toHaveLength(0);
     expect(result.warning).toBeNull();
   });
+
+  it('returns complete=true for a single .trc file (Micromed TRC needs no companion files)', () => {
+    const result = checkEegFiles([makeFile('sub01.TRC')]);
+    expect(result.formatName).toMatch(/Micromed/);
+    expect(result.complete).toBe(true);
+    expect(result.missing).toHaveLength(0);
+    expect(result.warning).toBeNull();
+  });
 });
 
 describe('EEG_FORMAT_EXTENSIONS', () => {
-  it('lists the extensions recognized by supported EEG formats, e.g. BrainVision and EDF', () => {
+  it('lists the extensions recognized by supported EEG formats, e.g. BrainVision, EDF and Micromed TRC', () => {
     expect(EEG_FORMAT_EXTENSIONS).toContain('.vhdr');
     expect(EEG_FORMAT_EXTENSIONS).toContain('.eeg');
     expect(EEG_FORMAT_EXTENSIONS).toContain('.edf');
+    expect(EEG_FORMAT_EXTENSIONS).toContain('.trc');
   });
 
   it('does not include imaging or electrode-position/inverse-solution extensions', () => {
@@ -105,6 +118,7 @@ describe('getEegFormatName', () => {
     expect(getEegFormatName('sub01.vhdr')).toMatch(/BrainVision/);
     expect(getEegFormatName('sub01.EEG')).toMatch(/BrainVision/);
     expect(getEegFormatName('sub01.edf')).toMatch(/EDF/);
+    expect(getEegFormatName('sub01.TRC')).toMatch(/Micromed/);
   });
 
   it('returns null for a file that belongs to no EEG format', () => {
@@ -122,6 +136,10 @@ describe('SUPPORTED_EEG_FORMATS', () => {
       name: expect.stringMatching(/EDF/),
       extensions: ['.edf'],
     });
+    expect(SUPPORTED_EEG_FORMATS).toContainEqual({
+      name: expect.stringMatching(/Micromed/),
+      extensions: ['.trc'],
+    });
   });
 });
 
@@ -129,6 +147,7 @@ describe('SUPPORTED_EEG_FORMATS_TEXT', () => {
   it('names every supported EEG format with its extensions', () => {
     expect(SUPPORTED_EEG_FORMATS_TEXT).toMatch(/BrainVision.*\(\.vhdr \+ \.eeg\)/);
     expect(SUPPORTED_EEG_FORMATS_TEXT).toMatch(/EDF.*\(\.edf\)/);
+    expect(SUPPORTED_EEG_FORMATS_TEXT).toMatch(/Micromed.*\(\.trc\)/);
   });
 });
 
@@ -173,7 +192,19 @@ describe('detectAndLoadEEG', () => {
     expect(loadEegBrainVision).not.toHaveBeenCalled();
   });
 
+  it('calls loadEegTrc with the .trc file', async () => {
+    const { loadEegTrc } = await import('@/loaders/loadEegTrc');
+    const { loadEegEdf } = await import('@/loaders/loadEegEdf');
+    loadEegTrc.mockResolvedValue({ channelNames: ['Ch1'], fs: 1, tMax: 1, getChunk: vi.fn() });
+
+    await detectAndLoadEEG([makeFile('sub01.TRC')]);
+
+    expect(loadEegTrc).toHaveBeenCalledOnce();
+    expect(loadEegTrc).toHaveBeenCalledWith(expect.objectContaining({ name: 'sub01.TRC' }));
+    expect(loadEegEdf).not.toHaveBeenCalled();
+  });
+
   it('throws with a message listing supported formats for an unrecognized file set', () => {
-    expect(() => detectAndLoadEEG([makeFile('data.txt')])).toThrow(/BrainVision.*EDF/i);
+    expect(() => detectAndLoadEEG([makeFile('data.txt')])).toThrow(/BrainVision.*EDF.*Micromed/i);
   });
 });

@@ -5,10 +5,10 @@ import { ThemeToggle } from '../components/ThemeToggle';
 import { CenteredLayout } from '../components/CenteredLayout';
 import { Footer } from '../components/Footer';
 import { ScrollToTopButton } from '../components/ScrollToTopButton';
+import { VidepeLogo } from '../components/VidepeLogo';
 
 // Icons & Logos
 import {
-  BrainCircuit,
   Globe,
   BookMarked,
   BookOpenText,
@@ -156,19 +156,7 @@ export const LandingPage = () => {
       {/*Landing Page main body */}
       {/* Hero section with logo, title, subtitle and call to action button */}
       <section id="hero" className="flex flex-col items-center justify-center gap-10 px-5 py-10">
-        <div className="flex flex-col items-center gap-2 select-none pointer-events-none">
-          <BrainCircuit size={220} strokeWidth={1} style={{ stroke: 'var(--c-primary)' }} />
-          <h1 className="!mb-0 !text-6xl tracking-widest">VIDEPE</h1>
-          <p className="text-lg text-foreground/60 tracking-wide text-center">
-            <span className="font-bold">V</span>isualization & <span className="font-bold">I</span>
-            ntegration of <span className="font-bold">D</span>ata for{' '}
-            <span className="font-bold">E</span>pilepsy <span className="font-bold">P</span>
-            resurgical <span className="font-bold">E</span>valuation
-          </p>
-          <span className="text-xl text-foreground/40 border border-border/60 rounded-full px-2 py-0.5 mt-1">
-            In Development - Research Use Only
-          </span>
-        </div>
+        <VidepeLogo size="large" asHeading />
         {/* Features grid with icons, labels and descriptions */}
         <div
           ref={featuresRef}
