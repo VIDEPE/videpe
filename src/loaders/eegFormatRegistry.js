@@ -1,5 +1,6 @@
-import { loadEegBrainVision } from './loadEegBrainVision';
-import { loadEegEdf } from './loadEegEdf';
+import { loadEegBrainVision } from '@/loaders/loadEegBrainVision';
+import { loadEegEdf } from '@/loaders/loadEegEdf';
+import { loadEegTrc } from '@/loaders/loadEegTrc';
 
 // This module defines supported EEG formats and provides a function to detect and load them.
 
@@ -9,6 +10,30 @@ export const ELEC_POS_EXTENSIONS = ['.elc', '.tsv'];
 export const INV_SOLUTIONS_EXTENSIONS = ['.mat'];
 
 const baseName = (filename) => filename.slice(0, filename.lastIndexOf('.'));
+
+// Builds the format entry for a recording stored in one file (e.g. .edf, .trc): the file's
+// extension is the only thing that differs, so nothing has to be renamed per format
+function singleFileFormat({ name, extension, load }) {
+  const prefix = extension.slice(1).toUpperCase(); // '.trc' → 'TRC', for error messages
+  const findFile = (files) => files.find((f) => f.name.toLowerCase().endsWith(extension));
+
+  return {
+    name,
+    extensions: [extension],
+    partialDetect: (files) => Boolean(findFile(files)),
+    validate: (files) => {
+      const missing = findFile(files) ? [] : [extension];
+      const warning = null; // no relevant warning: a single file can't mismatch another one
+      return { complete: missing.length === 0, missing, warning };
+    },
+    // load assumes validation has passed and the file is present, finds it, and loads it
+    load: (files) => {
+      const file = findFile(files);
+      if (!file) throw new Error(`${prefix}: missing ${extension} data file`);
+      return load(file);
+    },
+  };
+}
 
 // EEG_FORMATS is an array of supported EEG formats. Each format has:
 // - name: a human-readable name for the format
@@ -46,27 +71,8 @@ const EEG_FORMATS = [
       return loadEegBrainVision(header, data);
     },
   },
-  {
-    name: 'European Data Format (EDF)',
-    extensions: ['.edf'],
-    partialDetect: (files) =>
-      files.some((f) => {
-        const name = f.name.toLowerCase();
-        return name.endsWith('.edf');
-      }),
-    validate: (files) => {
-      const edf = files.find((f) => f.name.toLowerCase().endsWith('.edf'));
-      const missing = [...(!edf ? ['.edf'] : [])];
-      const warning = null; // no relevant warning cause edf requires only 1 file
-      return { complete: missing.length === 0 && !warning, missing, warning };
-    },
-    // load assumes validation has passed and the .edf file is present, finds it, and loads the data using loadEegEdf
-    load: (files) => {
-      const edf = files.find((f) => f.name.toLowerCase().endsWith('.edf'));
-      if (!edf) throw new Error('EDF: missing .edf data file');
-      return loadEegEdf(edf);
-    },
-  },
+  singleFileFormat({ name: 'European Data Format (EDF)', extension: '.edf', load: loadEegEdf }),
+  singleFileFormat({ name: 'Micromed EEG Trace (TRC)', extension: '.trc', load: loadEegTrc }),
   // Future EEG formats: add an entry here.
 ];
 
