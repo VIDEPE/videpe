@@ -44,14 +44,14 @@ describe('getHostAppConfig', () => {
     expect(config.apiBase).toBe('/datasets');
   });
 
-  it.each(['apiBase'])('returns null and warns when %s is missing', (field) => {
+  it.each(['name', 'apiBase'])('returns null and warns when %s is missing', (field) => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const hostApp = { ...VALID_HOSTAPP, [field]: undefined };
     expect(getHostAppConfig({ hostApp })).toBeNull();
     expect(warn).toHaveBeenCalledWith(expect.stringContaining(field));
   });
 
-  // Every field × every blank value, as [field, value] rows: [['authority', ''], ['authority', ' '], …]
+  // Every field × every blank value, as [field, value] rows: [['name', ''], ['name', ' '], …]
   it.each(['name', 'apiBase'].flatMap((field) => ['', ' '].map((value) => [field, value])))(
     'returns null and warns when %s is %j',
     (field, value) => {
