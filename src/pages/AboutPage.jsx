@@ -8,6 +8,7 @@
   Columns2,
   FlaskConical,
   TabletSmartphone,
+  TriangleAlert,
   ShieldCheck,
   ArrowLeft,
   CodeXml,
@@ -183,6 +184,37 @@ export const AboutPage = () => {
 
         <hr className="mb-10" />
 
+        <Section title="Disclaimer">
+          <div className="flex flex-col gap-4">
+            <div
+              id="disclaimer-RUO"
+              className="flex gap-3 p-4 rounded-lg border"
+              style={{ borderColor: 'var(--c-alert)', background: 'var(--c-surface)' }}
+            >
+              <TriangleAlert
+                size={22}
+                className="shrink-0 mt-0.5"
+                style={{ color: 'var(--c-alert)' }}
+              />
+              <div>
+                <p className="font-semibold text-heading">Research Use Only: </p>
+                <p className="text-sm mt-1" style={{ color: 'var(--c-foreground)' }}>
+                  VIDEPE is a research software tool intended exclusively for scientific research
+                  and investigational purposes. It is not a medical device and has not been
+                  certified or approved for clinical use. VIDEPE is not intended to be used for
+                  medical diagnosis, treatment decisions, : patient management. The software is
+                  provided “AS IS”, without warranties of any kind, express or implied, including
+                  but not limited to warranties of accuracy, reliability, fitness for a particular
+                  purpose, or clinical suitability. The developers and institutions involved in its
+                  development accept no liability for any direct or indirect damages arising from
+                  its use. All clinical decisions must be made independently by qualified healthcare
+                  professionals using validated clinical tools and procedures. step.
+                </p>
+              </div>
+            </div>
+          </div>
+        </Section>
+
         <Section title="Features">
           <div className="flex flex-col gap-4">
             <div
@@ -216,10 +248,12 @@ export const AboutPage = () => {
               <div>
                 <p className="font-semibold text-heading">Built-in demo</p>
                 <p className="text-sm mt-1" style={{ color: 'var(--c-foreground)' }}>
-                  Want to explore VIDEPE before committing your own files?
+                  Want to explore VIDEPE but don't have files on hand?
                   <br />
                   Hit <strong>Load Demo</strong> on the patient view to instantly load a synthetic
-                  EEG recording alongside aligned MRI, PET, and SPECT volumes
+                  EEG recording with its electrode positions and an eLORETA inverse solution,
+                  alongside an aligned T1-weighted MRI, a white matter mask and the Lausanne 2018
+                  brain atlas
                   <br />— no upload, no account, no wait.
                 </p>
               </div>
@@ -286,7 +320,8 @@ export const AboutPage = () => {
                   </li>
                   <li>
                     <strong>Electrode positions</strong> — fsaverage_1005 (FreeSurfer) by default,
-                    or load your own <code>.elc</code> or <code>.tsv</code> file
+                    or load your own <code>.elc</code> or <code>*_electrodes.tsv</code> (BIDS
+                    specifications) file
                   </li>
                   <li>
                     <strong>Channel to anatomy</strong> — click a channel label to move the
@@ -460,8 +495,8 @@ export const AboutPage = () => {
                     render in the neuroimaging viewer, synced to the selected timepoint
                   </li>
                   <li>
-                    <strong>Custom positions</strong> — load <code>.elc</code> or <code>.tsv</code>{' '}
-                    files
+                    <strong>Custom positions</strong> — load <code>.elc</code> or{' '}
+                    <code>*_electrodes.tsv</code> (BIDS specifications) files
                   </li>
                   <li>
                     <strong>Custom metrics</strong> — colour/size connectome nodes by any extra{' '}
@@ -489,8 +524,7 @@ export const AboutPage = () => {
                 >
                   <li>
                     <strong>EEG</strong> — BrainVision (<code>.vhdr</code> + <code>.eeg</code>),
-                    dropped together or one at a time, or EDF/EDF+ (<code>.edf</code>, continuous
-                    recordings with one sampling rate for all channels)
+                    EDF/EDF+ (<code>.edf</code>), or Micromed TRC (<code>.trc</code>)
                   </li>
                   <li>
                     <strong>Volumes</strong> — NIfTI, MGH/MGZ, GIFTI, PLY, OBJ, DICOM

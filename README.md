@@ -1,6 +1,6 @@
 # VIDEPE
 
-![Version](https://img.shields.io/badge/version-0.21.0-blue)
+![Version](https://img.shields.io/badge/version-0.22.0-blue)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23312820.svg)](https://doi.org/10.5281/zenodo.23312820)
 
 **V**isualization & **I**ntegration of **D**ata for **E**pilepsy **P**resurgical **E**valuation
@@ -10,6 +10,10 @@ A web-based viewer for EEG and neuroimaging data (MRI, PET, SPECT), developed at
 **No installation needed** — just open [https://videpe.github.io/videpe](https://videpe.github.io/videpe/) in your browser and start exploring.
 
 > **Note:** VIDEPE is currently under active development. Features and interfaces may change, and some functionality may be incomplete or subject to revision.
+
+## Disclaimer: Research Use Only
+
+VIDEPE is a research software tool intended exclusively for scientific research and investigational purposes. It is not a medical device and has not been certified or approved for clinical use. VIDEPE is not intended to be used for medical diagnosis, treatment decisions, : patient management. The software is provided “AS IS”, without warranties of any kind, express or implied, including but not limited to warranties of accuracy, reliability, fitness for a particular purpose, or clinical suitability. The developers and institutions involved in its development accept no liability for any direct or indirect damages arising from its use. All clinical decisions must be made independently by qualified healthcare professionals using validated clinical tools and procedures.
 
 ## Privacy-first: 100% local processing
 
@@ -27,7 +31,7 @@ This mode only exists on a Shanoir deployment, which serves VIDEPE from its own 
 
 High-performance multichannel viewer built on [uPlot](https://github.com/leeoniya/uplot), optimised for long recordings and high channel count.
 
-- Accepts BrainVision and EDF/EDF+ format EEG recordings
+- Accepts BrainVision, EDF/EDF+ and Micromed TRC format EEG recordings
 - Stack/unstack EEG — overlay all visible channels on a single plot to spot cross-channel patterns
 - Click a channel label to move the neuroimaging crosshair to its electrode — bipolar rows jump to the midpoint between their two electrodes
 - **Controls:**
@@ -45,13 +49,13 @@ High-performance multichannel viewer built on [uPlot](https://github.com/leeoniy
   - Import montage files in AnyWave (XML) or Cartool (plain-text) format — auto-detected from file content — and export back out as AnyWave XML (filter settings included).
 
 - EEG topography — a resizable panel showing a 3D voltage map at the selected time point using [NiiVue](https://niivue.com/) mesh rendering
-  - Load custom positions via `.elc` or `.tsv` file (Uses fsaverage_1005 (FreeSurfer) electrode positions by default)
+  - Load custom positions via `.elc` or `*_electrodes.tsv` (BIDS specifications) file (Uses fsaverage_1005 (FreeSurfer) electrode positions by default)
   - 3D rotation is synchronised with the neuroimaging viewer — rotate one and the other follows
   - Matrix electrode overview to spot outliers
 
 - **Intracranial (SEEG) support** — SEEG channels are auto-detected from channel naming
   - Custom channel type setting as EEG/SEEG will toggle VIDEPE options accordingly and changes rendering style of the 3D electrodes configuration in the neuroimaging viewer
-  - Colour/size the 3D electrode connectome nodes by any custom metric read from extra `.tsv` columns, not just voltage
+  - Colour/size the 3D electrode connectome nodes by any custom metric read from extra `*_electrodes.tsv` columns, not just voltage
 - **Electrical Source Imaging** — load an inverse solution (currently only FieldTrip `*_inversefilters.mat`), enable ESI, and click the EEG plot to see the source power at that time point.
   - Rendered as either a 3D volumetric heatmap or a connectome
   - The crosshair jumps to the source with the highest power on every click
@@ -82,11 +86,11 @@ Hit **Load Demo** to instantly load a synthetic EEG recording, electrode positio
 
 ## Supported formats
 
-| Modality            | Formats                                                             |
-| ------------------- | ------------------------------------------------------------------- |
-| EEG                 | BrainVision (`.vhdr` + `.eeg`), EDF/EDF+ (`.edf`)                   |
-| Electrode positions | `.elc`, `.tsv`                                                      |
-| Volumes             | NIfTI (`.nii`, `.nii.gz`), MGH/MGZ, GIFTI, PLY, OBJ, DICOM (`.dcm`) |
+| Modality            | Formats                                                                  |
+| ------------------- | ------------------------------------------------------------------------ |
+| EEG                 | BrainVision (`.vhdr` + `.eeg`), EDF/EDF+ (`.edf`), Micromed TRC (`.trc`) |
+| Electrode positions | `.elc`, `*_electrodes.tsv`                                               |
+| Volumes             | NIfTI (`.nii`, `.nii.gz`), MGH/MGZ, GIFTI, PLY, OBJ, DICOM (`.dcm`)      |
 
 ## Tech stack
 

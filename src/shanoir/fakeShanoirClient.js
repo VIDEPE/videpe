@@ -14,9 +14,22 @@ const DATASETS = [
     ],
   },
   { id: 2, name: 'Shanoir T1W demo', type: 'MR', files: ['sub-synth_T1w.nii.gz'] },
+  // The demo segmentations, each its own dataset like in Shanoir
+  {
+    id: 4,
+    name: 'Shanoir white matter demo',
+    type: 'SEGMENTATION',
+    files: ['sub-synth_label-WM_dseg.nii.gz'],
+  },
+  {
+    id: 5,
+    name: 'Shanoir atlas demo',
+    type: 'SEGMENTATION',
+    files: ['sub-synth_atlas-L2018_res-scale1_dseg.nii.gz'],
+  },
   // Unsupported type: skipped before downloading, so its file is never fetched (and doesn't exist)
   { id: 3, name: 'Shanoir dummy demo', type: 'DUMMY', files: ['dummy.bak'] },
-  // more: WM/CSF segmentations, or a second Eeg / an unsupported type to trigger the "skipped" toast
+  // more: a second EEG dataset, to trigger the "additional EEG recording" reason in the "skipped" toast
 ];
 
 // a Promise that resolves after `ms` milliseconds, so it can be awaited
@@ -38,7 +51,7 @@ export function createFakeShanoirClient({ delayMs = 1000 } = {}) {
         id: examinationId,
         extraDataFilePathList: [
           'sub-synth_electrodes.tsv',
-          'sub-synth_desc-unitnoiselcmv_inversefilters.mat',
+          'sub-synth_desc-eloreta_inversefilters.mat',
         ],
       };
     },
