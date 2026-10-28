@@ -27,7 +27,7 @@ This mode only exists on a Shanoir deployment, which serves VIDEPE from its own 
 
 High-performance multichannel viewer built on [uPlot](https://github.com/leeoniya/uplot), optimised for long recordings and high channel count.
 
-- Accepts BrainVision and EDF/EDF+ format EEG recordings
+- Accepts BrainVision, EDF/EDF+ and Micromed TRC format EEG recordings
 - Stack/unstack EEG — overlay all visible channels on a single plot to spot cross-channel patterns
 - Click a channel label to move the neuroimaging crosshair to its electrode — bipolar rows jump to the midpoint between their two electrodes
 - **Controls:**
@@ -82,11 +82,11 @@ Hit **Load Demo** to instantly load a synthetic EEG recording, electrode positio
 
 ## Supported formats
 
-| Modality            | Formats                                                             |
-| ------------------- | ------------------------------------------------------------------- |
-| EEG                 | BrainVision (`.vhdr` + `.eeg`), EDF/EDF+ (`.edf`)                   |
-| Electrode positions | `.elc`, `.tsv`                                                      |
-| Volumes             | NIfTI (`.nii`, `.nii.gz`), MGH/MGZ, GIFTI, PLY, OBJ, DICOM (`.dcm`) |
+| Modality            | Formats                                                                  |
+| ------------------- | ------------------------------------------------------------------------ |
+| EEG                 | BrainVision (`.vhdr` + `.eeg`), EDF/EDF+ (`.edf`), Micromed TRC (`.trc`) |
+| Electrode positions | `.elc`, `.tsv`                                                           |
+| Volumes             | NIfTI (`.nii`, `.nii.gz`), MGH/MGZ, GIFTI, PLY, OBJ, DICOM (`.dcm`)      |
 
 ## Tech stack
 
