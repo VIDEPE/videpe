@@ -248,10 +248,12 @@ export const AboutPage = () => {
               <div>
                 <p className="font-semibold text-heading">Built-in demo</p>
                 <p className="text-sm mt-1" style={{ color: 'var(--c-foreground)' }}>
-                  Want to explore VIDEPE before committing your own files?
+                  Want to explore VIDEPE but don't have files on hand?
                   <br />
                   Hit <strong>Load Demo</strong> on the patient view to instantly load a synthetic
-                  EEG recording alongside aligned MRI, PET, and SPECT volumes
+                  EEG recording with its electrode positions and an eLORETA inverse solution,
+                  alongside an aligned T1-weighted MRI, a white matter mask and the Lausanne 2018
+                  brain atlas
                   <br />— no upload, no account, no wait.
                 </p>
               </div>
