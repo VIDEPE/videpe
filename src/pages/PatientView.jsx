@@ -206,6 +206,7 @@ export const PatientView = () => {
   if (nvRef_eegtopo.current === null) {
     nvRef_eegtopo.current = new Niivue({
       isOrientCube: true,
+      dragAndDropEnabled: false,
     });
   }
 
@@ -471,6 +472,7 @@ export const PatientView = () => {
               onElectrodeLayerDismissed={() => setElectrodeRenderEnabled(false)}
               onLoadError={handleLoadError}
               clickedEegChannelPos={clickedEegChannelPos}
+              nvTopoRef={nvRef_eegtopo}
             />
           ) : (
             <div className="h-full p-2">

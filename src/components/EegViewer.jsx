@@ -1066,7 +1066,7 @@ export const EegViewer = ({
                   <button
                     type="button"
                     className="button button-icon"
-                    onClick={() => updateVisibleChannelCount(visibleChannelCount + 1)}
+                    onClick={() => updateVisibleChannelCount(visibleChannelCount + 10)}
                     title="Show more channels"
                     disabled={eegIsStacked}
                   >
@@ -1088,7 +1088,7 @@ export const EegViewer = ({
                   <button
                     type="button"
                     className="button button-icon"
-                    onClick={() => updateVisibleChannelCount(visibleChannelCount - 1)}
+                    onClick={() => updateVisibleChannelCount(visibleChannelCount - 10)}
                     title="Show fewer channels"
                     disabled={eegIsStacked}
                   >
