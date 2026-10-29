@@ -2,7 +2,7 @@ import { useReducer } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor, act } from '@testing-library/react';
 import { useEsiLayer } from '@/hooks/useEsiLayer';
-import { ESI_LAYER_URL, DEFAULT_MESH_XRAY } from '@/utils/NiiViewer.utils';
+import { ESI_LAYER_URL, DEFAULT_MESH_XRAY, getAziElev } from '@/utils/NiiViewer.utils';
 import {
   layerReducer,
   initLayerState,
@@ -71,6 +71,14 @@ function makeNv() {
   return nv;
 }
 
+// Stand-in for the topography view's NiiVue instance — only the calls useEsiLayer makes on it.
+function makeTopoNv() {
+  return {
+    setRenderAzimuthElevation: vi.fn(),
+    updateGLVolume: vi.fn(),
+  };
+}
+
 // Wraps useEsiLayer with the layer state it expects its caller to own, using the real reducer —
 // mirroring how NiiViewer itself supplies it. initialLayers lets tests seed a pending
 // (not-yet-in-nv.volumes) MRI/PET layer, same as useLayerLoader does synchronously before its
@@ -80,12 +88,26 @@ function makeNv() {
 // returned so a test can simulate other changes (that async load "finishing", a card being
 // deleted) independently of the ESI layer itself changing; orderedLayers/layerSettings are the
 // state's derived views, for assertions.
-function useHarness({ esiLayer, isEsiVolumeMode, nvRef, initialLayers = [], initialState }) {
+function useHarness({
+  esiLayer,
+  isEsiVolumeMode,
+  nvRef,
+  nvTopoRef,
+  initialLayers = [],
+  initialState,
+}) {
   const [layerState, dispatchLayers] = useReducer(layerReducer, null, () => ({
     ...(initialState ?? initLayerState(initialLayers)),
     lastEsiVolumeMode: isEsiVolumeMode,
   }));
-  const hookResult = useEsiLayer({ esiLayer, isEsiVolumeMode, nvRef, layerState, dispatchLayers });
+  const hookResult = useEsiLayer({
+    esiLayer,
+    isEsiVolumeMode,
+    nvRef,
+    nvTopoRef,
+    layerState,
+    dispatchLayers,
+  });
   return {
     layerState,
     dispatchLayers,
@@ -302,6 +324,18 @@ describe('useEsiLayer', () => {
       expect(nv.mm2frac).toHaveBeenCalledWith([4, 5, 6]);
       expect(nv.scene.crosshairPos).toEqual([4, 5, 6]); // mm2frac mock is identity, so this round-trips
     });
+
+    // connectome mode — after 'snaps the crosshair to maxSourcePowerLocation on rebuild'
+    it('rotates both the main and topography 3D views to face maxSourcePowerLocation', () => {
+      const nvTopo = makeTopoNv();
+      const esiLayer = makeEsiLayer({ maxSourcePowerLocation: [4, 5, 6] });
+      renderHook((props) => useHarness(props), {
+        initialProps: { esiLayer, isEsiVolumeMode: false, nvRef, nvTopoRef: { current: nvTopo } },
+      });
+      const [azi, elev] = getAziElev([4, 5, 6]);
+      expect(nv.setRenderAzimuthElevation).toHaveBeenCalledWith(azi, elev);
+      expect(nvTopo.setRenderAzimuthElevation).toHaveBeenCalledWith(azi, elev);
+    });
   });
 
   describe('volume mode', () => {
@@ -367,6 +401,19 @@ describe('useEsiLayer', () => {
       await waitFor(() => expect(nv.volumes).toHaveLength(1));
       expect(nv.mm2frac).toHaveBeenCalledWith([7, 8, 9]);
       expect(nv.scene.crosshairPos).toEqual([7, 8, 9]); // mm2frac mock is identity, so this round-trips
+    });
+
+    // volume mode — after 'snaps the crosshair … once the volume finishes loading'
+    it('rotates both 3D views to face maxSourcePowerLocation once the volume finishes loading', async () => {
+      const nvTopo = makeTopoNv();
+      const esiLayer = makeEsiLayer({ maxSourcePowerLocation: [7, 8, 9] });
+      renderHook((props) => useHarness(props), {
+        initialProps: { esiLayer, isEsiVolumeMode: true, nvRef, nvTopoRef: { current: nvTopo } },
+      });
+      await waitFor(() => expect(nv.volumes).toHaveLength(1));
+      const [azi, elev] = getAziElev([7, 8, 9]);
+      expect(nv.setRenderAzimuthElevation).toHaveBeenCalledWith(azi, elev);
+      expect(nvTopo.setRenderAzimuthElevation).toHaveBeenCalledWith(azi, elev);
     });
 
     it('removes the stale volume only after the replacement has finished loading', async () => {

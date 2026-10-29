@@ -1,5 +1,5 @@
 import { StrictMode } from 'react';
-import { describe, it, expect, vi, beforeEach, afterEach, assert } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {
@@ -9,6 +9,7 @@ import {
   ESI_LAYER_URL,
   ELECTRODE_LAYER_URL,
   DEFAULT_MESH_XRAY,
+  getAziElev,
 } from '@/utils/NiiViewer.utils';
 import {
   NiiViewer,
@@ -2977,6 +2978,29 @@ describe('NiiViewer', () => {
 
       expect(nv.scene.crosshairPos).toBeNull();
       expect(nv.updateGLVolume).not.toHaveBeenCalled();
+      expect(nv.setRenderAzimuthElevation).not.toHaveBeenCalled();
+    });
+
+    it('rotates the main and topography 3D views to face the clicked position', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      const nvTopo = { setRenderAzimuthElevation: vi.fn(), updateGLVolume: vi.fn() };
+      const nvTopoRef = { current: nvTopo };
+      const { rerender } = render(<NiiViewer nvRef={nvRef} nvTopoRef={nvTopoRef} layers={[]} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      rerender(
+        <NiiViewer
+          nvRef={nvRef}
+          nvTopoRef={nvTopoRef}
+          layers={[]}
+          clickedEegChannelPos={{ pos: { x: 1, y: 2, z: 3 }, clickId: 1 }}
+        />
+      );
+
+      const [azi, elev] = getAziElev([1, 2, 3]);
+      expect(nvRef.current.setRenderAzimuthElevation).toHaveBeenCalledWith(azi, elev);
+      expect(nvTopo.setRenderAzimuthElevation).toHaveBeenCalledWith(azi, elev);
     });
   });
 });

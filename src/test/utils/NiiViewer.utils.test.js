@@ -18,6 +18,7 @@ import {
   applyColormap,
   MAX_RANDOM_COLORMAP_LABELS,
   ESI_LAYER_URL,
+  getAziElev,
 } from '@/utils/NiiViewer.utils';
 
 describe('isAnyColorbarActive', () => {
@@ -182,5 +183,38 @@ describe('fractionToCalValue', () => {
 
   it('works with a negative boundMin', () => {
     expect(fractionToCalValue(0.5, -10, 10)).toBe(0);
+  });
+});
+
+describe('getAziElev', () => {
+  // NiiVue azimuths wrap around (-270 and 90 are the same camera position) — fold into
+  // [0, 360) so the expectations below can use NiiVue's canonical values.
+  const normalizeAzi = (azi) => ((azi % 360) + 360) % 360;
+
+  // NiiVue convention: azimuth 0/90/180/270 puts the camera behind/left/in front/right of the
+  // head, elevation 90 puts it above. Each point must land the camera on its own side.
+  it.each([
+    ['posterior', [0, -50, 0], 0],
+    ['left', [-50, 0, 0], 90],
+    ['anterior', [0, 50, 0], 180],
+    ['right', [50, 0, 0], 270],
+  ])('points the camera at a %s position from that side', (_, pos, expectedAzi) => {
+    const [azi, elev] = getAziElev(pos);
+    expect(normalizeAzi(azi)).toBeCloseTo(expectedAzi);
+    expect(elev).toBeCloseTo(0);
+  });
+
+  it('raises the camera to 90° elevation for a position straight above', () => {
+    expect(getAziElev([0, 0, 50])[1]).toBeCloseTo(90);
+  });
+
+  it('lowers the camera to -90° elevation for a position straight below', () => {
+    expect(getAziElev([0, 0, -50])[1]).toBeCloseTo(-90);
+  });
+
+  it('tilts the camera 45° up for a position as high as it is far out horizontally', () => {
+    const [azi, elev] = getAziElev([-30, 0, 30]);
+    expect(normalizeAzi(azi)).toBeCloseTo(90);
+    expect(elev).toBeCloseTo(45);
   });
 });
