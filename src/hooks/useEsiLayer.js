@@ -212,7 +212,7 @@ export function useEsiLayer({
       esiMeshRef.current = mesh; // track it so the next change/removal can find it
       nv.scene.crosshairPos = nv.mm2frac(esiLayer.maxSourcePowerLocation); // move the crosshair to the location where the ESI source power is max
       // change the 3D view to align the view to the max ESI
-      const [azi, elev] = getAziElev(esiLayer.maxSourcePowerLocation);
+      const [azi, elev] = getAziElev(esiLayer.maxSourcePowerLocation, nv.pivot3D);
       nv.setRenderAzimuthElevation(azi, elev);
       nv.updateGLVolume(); // redraw with the new mesh visible
       if (nvTopo) {
@@ -265,7 +265,7 @@ export function useEsiLayer({
 
           nv.scene.crosshairPos = nv.mm2frac(esiLayer.maxSourcePowerLocation); // move the crosshair to the location where the ESI source power is max
           // change the 3D view to align the view to the max ESI
-          const [azi, elev] = getAziElev(esiLayer.maxSourcePowerLocation);
+          const [azi, elev] = getAziElev(esiLayer.maxSourcePowerLocation, nv.pivot3D);
           nv.setRenderAzimuthElevation(azi, elev);
           nv.updateGLVolume(); // redraw with the new volume visible
           if (nvTopo) {

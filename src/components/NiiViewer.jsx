@@ -689,7 +689,7 @@ export const NiiViewer = ({
     if (!nv || !pos) return; // if nv or pos is null / undefined
     nv.scene.crosshairPos = nv.mm2frac([pos.x, pos.y, pos.z]);
     // change the 3D view to align the view to the max ESI
-    const [azi, elev] = getAziElev([pos.x, pos.y, pos.z]);
+    const [azi, elev] = getAziElev([pos.x, pos.y, pos.z], nv.pivot3D);
     nv.setRenderAzimuthElevation(azi, elev);
     nv.updateGLVolume();
     if (nvTopo) {

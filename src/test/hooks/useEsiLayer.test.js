@@ -325,7 +325,6 @@ describe('useEsiLayer', () => {
       expect(nv.scene.crosshairPos).toEqual([4, 5, 6]); // mm2frac mock is identity, so this round-trips
     });
 
-    // connectome mode — after 'snaps the crosshair to maxSourcePowerLocation on rebuild'
     it('rotates both the main and topography 3D views to face maxSourcePowerLocation', () => {
       const nvTopo = makeTopoNv();
       const esiLayer = makeEsiLayer({ maxSourcePowerLocation: [4, 5, 6] });
@@ -403,7 +402,6 @@ describe('useEsiLayer', () => {
       expect(nv.scene.crosshairPos).toEqual([7, 8, 9]); // mm2frac mock is identity, so this round-trips
     });
 
-    // volume mode — after 'snaps the crosshair … once the volume finishes loading'
     it('rotates both 3D views to face maxSourcePowerLocation once the volume finishes loading', async () => {
       const nvTopo = makeTopoNv();
       const esiLayer = makeEsiLayer({ maxSourcePowerLocation: [7, 8, 9] });

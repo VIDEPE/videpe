@@ -217,4 +217,37 @@ describe('getAziElev', () => {
     expect(normalizeAzi(azi)).toBeCloseTo(90);
     expect(elev).toBeCloseTo(45);
   });
+
+  // NiiVue rotates the 3D render around nv.pivot3D — the centre of the scene's bounding box —
+  // not around the mm origin. A scan whose origin isn't at the centre of the head (e.g. MNI, where
+  // the brain's centre is roughly [0, -20, 20], or native scanner space) must still get the
+  // camera on the point's side as seen from that pivot.
+  describe('with a pivot away from the origin', () => {
+    const PIVOT = [0, -20, 20];
+
+    it('points the camera from the left at a position directly left of the pivot', () => {
+      // Seen from the origin this point is left, posterior and up (~22° azimuth off, ~20° up).
+      const [azi, elev] = getAziElev([-50, -20, 20], PIVOT);
+      expect(normalizeAzi(azi)).toBeCloseTo(90);
+      expect(elev).toBeCloseTo(0);
+    });
+
+    it('points the camera from behind at a position directly behind the pivot', () => {
+      // Seen from the origin this point is behind but ~16° up, and [0, 0, 20] would even be in front.
+      const [azi, elev] = getAziElev([0, -90, 20], PIVOT);
+      expect(normalizeAzi(azi)).toBeCloseTo(0);
+      expect(elev).toBeCloseTo(0);
+    });
+
+    it('raises the camera to 90° elevation for a position straight above the pivot', () => {
+      const [, elev] = getAziElev([0, -20, 70], PIVOT);
+      expect(elev).toBeCloseTo(90);
+    });
+  });
+
+  it('treats an undefined pivot as the origin', () => {
+    // nv.pivot3D is only set once NiiVue has drawn a 3D scene — before that the call site passes
+    // undefined, which must fall back to the origin rather than throw.
+    expect(getAziElev([-50, 10, 30], undefined)).toEqual(getAziElev([-50, 10, 30], [0, 0, 0]));
+  });
 });
