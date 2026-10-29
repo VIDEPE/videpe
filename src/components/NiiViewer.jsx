@@ -355,7 +355,7 @@ export const NiiViewer = ({
     nvRef,
     layerState,
     dispatchLayers,
-	nvTopoRef,
+    nvTopoRef,
   });
 
   // ─── Handlers ───────────────────────────────────────────────────────────────
@@ -684,18 +684,18 @@ export const NiiViewer = ({
   // move the main niivue canvas cursor to the position that is packed inside clickedEegChannelPos
   useEffect(() => {
     const nv = nvRef.current;
-	const nvTopo = nvTopoRef?.current;
+    const nvTopo = nvTopoRef?.current;
     const pos = clickedEegChannelPos?.pos;
     if (!nv || !pos) return; // if nv or pos is null / undefined
     nv.scene.crosshairPos = nv.mm2frac([pos.x, pos.y, pos.z]);
-	// change the 3D view to align the view to the max ESI
-	const [azi, elev] = getAziElev([pos.x, pos.y, pos.z]); 
-	nv.setRenderAzimuthElevation(azi, elev);
-	nv.updateGLVolume();
-	if (nvTopo){
-		nvTopo.setRenderAzimuthElevation(azi, elev);
-		nvTopo.updateGLVolume();
-	};
+    // change the 3D view to align the view to the max ESI
+    const [azi, elev] = getAziElev([pos.x, pos.y, pos.z]);
+    nv.setRenderAzimuthElevation(azi, elev);
+    nv.updateGLVolume();
+    if (nvTopo) {
+      nvTopo.setRenderAzimuthElevation(azi, elev);
+      nvTopo.updateGLVolume();
+    }
   }, [clickedEegChannelPos, nvRef, nvTopoRef]);
 
   // ─── Render ─────────────────────────────────────────────────────────────────
