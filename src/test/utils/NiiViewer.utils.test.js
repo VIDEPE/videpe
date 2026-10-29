@@ -18,7 +18,7 @@ import {
   applyColormap,
   MAX_RANDOM_COLORMAP_LABELS,
   ESI_LAYER_URL,
-  getAziElev,
+  computeAzimuthElevation,
 } from '@/utils/NiiViewer.utils';
 
 describe('isAnyColorbarActive', () => {
@@ -186,7 +186,7 @@ describe('fractionToCalValue', () => {
   });
 });
 
-describe('getAziElev', () => {
+describe('computeAzimuthElevation', () => {
   // NiiVue azimuths wrap around (-270 and 90 are the same camera position) — fold into
   // [0, 360) so the expectations below can use NiiVue's canonical values.
   const normalizeAzi = (azi) => ((azi % 360) + 360) % 360;
@@ -199,21 +199,21 @@ describe('getAziElev', () => {
     ['anterior', [0, 50, 0], 180],
     ['right', [50, 0, 0], 270],
   ])('points the camera at a %s position from that side', (_, pos, expectedAzi) => {
-    const [azi, elev] = getAziElev(pos);
+    const [azi, elev] = computeAzimuthElevation(pos);
     expect(normalizeAzi(azi)).toBeCloseTo(expectedAzi);
     expect(elev).toBeCloseTo(0);
   });
 
   it('raises the camera to 90° elevation for a position straight above', () => {
-    expect(getAziElev([0, 0, 50])[1]).toBeCloseTo(90);
+    expect(computeAzimuthElevation([0, 0, 50])[1]).toBeCloseTo(90);
   });
 
   it('lowers the camera to -90° elevation for a position straight below', () => {
-    expect(getAziElev([0, 0, -50])[1]).toBeCloseTo(-90);
+    expect(computeAzimuthElevation([0, 0, -50])[1]).toBeCloseTo(-90);
   });
 
   it('tilts the camera 45° up for a position as high as it is far out horizontally', () => {
-    const [azi, elev] = getAziElev([-30, 0, 30]);
+    const [azi, elev] = computeAzimuthElevation([-30, 0, 30]);
     expect(normalizeAzi(azi)).toBeCloseTo(90);
     expect(elev).toBeCloseTo(45);
   });
@@ -227,20 +227,20 @@ describe('getAziElev', () => {
 
     it('points the camera from the left at a position directly left of the pivot', () => {
       // Seen from the origin this point is left, posterior and up (~22° azimuth off, ~20° up).
-      const [azi, elev] = getAziElev([-50, -20, 20], PIVOT);
+      const [azi, elev] = computeAzimuthElevation([-50, -20, 20], PIVOT);
       expect(normalizeAzi(azi)).toBeCloseTo(90);
       expect(elev).toBeCloseTo(0);
     });
 
     it('points the camera from behind at a position directly behind the pivot', () => {
       // Seen from the origin this point is behind but ~16° up, and [0, 0, 20] would even be in front.
-      const [azi, elev] = getAziElev([0, -90, 20], PIVOT);
+      const [azi, elev] = computeAzimuthElevation([0, -90, 20], PIVOT);
       expect(normalizeAzi(azi)).toBeCloseTo(0);
       expect(elev).toBeCloseTo(0);
     });
 
     it('raises the camera to 90° elevation for a position straight above the pivot', () => {
-      const [, elev] = getAziElev([0, -20, 70], PIVOT);
+      const [, elev] = computeAzimuthElevation([0, -20, 70], PIVOT);
       expect(elev).toBeCloseTo(90);
     });
   });
@@ -248,6 +248,8 @@ describe('getAziElev', () => {
   it('treats an undefined pivot as the origin', () => {
     // nv.pivot3D is only set once NiiVue has drawn a 3D scene — before that the call site passes
     // undefined, which must fall back to the origin rather than throw.
-    expect(getAziElev([-50, 10, 30], undefined)).toEqual(getAziElev([-50, 10, 30], [0, 0, 0]));
+    expect(computeAzimuthElevation([-50, 10, 30], undefined)).toEqual(
+      computeAzimuthElevation([-50, 10, 30], [0, 0, 0])
+    );
   });
 });

@@ -9,7 +9,7 @@ import {
   ESI_LAYER_URL,
   ELECTRODE_LAYER_URL,
   DEFAULT_MESH_XRAY,
-  getAziElev,
+  computeAzimuthElevation,
 } from '@/utils/NiiViewer.utils';
 import {
   NiiViewer,
@@ -2998,7 +2998,7 @@ describe('NiiViewer', () => {
         />
       );
 
-      const [azi, elev] = getAziElev([1, 2, 3]);
+      const [azi, elev] = computeAzimuthElevation([1, 2, 3]);
       expect(nvRef.current.setRenderAzimuthElevation).toHaveBeenCalledWith(azi, elev);
       expect(nvTopo.setRenderAzimuthElevation).toHaveBeenCalledWith(azi, elev);
     });

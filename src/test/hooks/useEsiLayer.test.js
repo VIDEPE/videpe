@@ -2,7 +2,7 @@ import { useReducer } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor, act } from '@testing-library/react';
 import { useEsiLayer } from '@/hooks/useEsiLayer';
-import { ESI_LAYER_URL, DEFAULT_MESH_XRAY, getAziElev } from '@/utils/NiiViewer.utils';
+import { ESI_LAYER_URL, DEFAULT_MESH_XRAY, computeAzimuthElevation } from '@/utils/NiiViewer.utils';
 import {
   layerReducer,
   initLayerState,
@@ -331,7 +331,7 @@ describe('useEsiLayer', () => {
       renderHook((props) => useHarness(props), {
         initialProps: { esiLayer, isEsiVolumeMode: false, nvRef, nvTopoRef: { current: nvTopo } },
       });
-      const [azi, elev] = getAziElev([4, 5, 6]);
+      const [azi, elev] = computeAzimuthElevation([4, 5, 6]);
       expect(nv.setRenderAzimuthElevation).toHaveBeenCalledWith(azi, elev);
       expect(nvTopo.setRenderAzimuthElevation).toHaveBeenCalledWith(azi, elev);
     });
@@ -409,7 +409,7 @@ describe('useEsiLayer', () => {
         initialProps: { esiLayer, isEsiVolumeMode: true, nvRef, nvTopoRef: { current: nvTopo } },
       });
       await waitFor(() => expect(nv.volumes).toHaveLength(1));
-      const [azi, elev] = getAziElev([7, 8, 9]);
+      const [azi, elev] = computeAzimuthElevation([7, 8, 9]);
       expect(nv.setRenderAzimuthElevation).toHaveBeenCalledWith(azi, elev);
       expect(nvTopo.setRenderAzimuthElevation).toHaveBeenCalledWith(azi, elev);
     });

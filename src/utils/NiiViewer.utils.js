@@ -423,15 +423,26 @@ export function revokeLayerUrls(layers) {
   }
 }
 
-// Calculate NiiVue Azimuth and Elevation of the 3D render view for a given 3D position.
-// It is computed based on the CrossHair position. The camera is position on the axis based
-// on the position of the CrossHair and (0,0,0).
-// If pivot is given then it correct for that offset first.
-export function getAziElev(crossHairPos, pivot = [0, 0, 0]) {
-  // offset crossHairPos by the pivot point
-  const x = crossHairPos[0] - pivot[0];
-  const y = crossHairPos[1] - pivot[1];
-  const z = crossHairPos[2] - pivot[2];
+/**
+ * Calculates the NiiVue azimuth and elevation of the 3D render view that make a given 3D
+ * position face the viewer. The camera is positioned on the axis through the pivot NiiVue
+ * rotates around (nv.pivot3D, the centre of the scene's bounding box) and the position, on the
+ * position's side — e.g. a point at the back of the head gives azimuth 0 (camera behind),
+ * one on the left gives 90 and one straight above gives elevation 90.
+ *
+ * @param   {number[]}  position  The [x, y, z] position in world mm (RAS) to turn towards
+ * @param   {number[]}  [pivot]   The [x, y, z] point the view rotates around, in world mm.
+ *                                Defaults to the origin [0, 0, 0] when omitted or undefined
+ *                                (nv.pivot3D is undefined until NiiVue first draws a 3D scene)
+ * @return  {number[]}            [azimuth, elevation] in degrees, as taken by
+ *                                nv.setRenderAzimuthElevation. The azimuth isn't wrapped
+ *                                into [0, 360) — e.g. -270 for the left, the same as 90
+ */
+export function computeAzimuthElevation(position, pivot = [0, 0, 0]) {
+  // offset position by the pivot point
+  const x = position[0] - pivot[0];
+  const y = position[1] - pivot[1];
+  const z = position[2] - pivot[2];
 
   const r = Math.sqrt(x * x + y * y);
   const azi = (-180 / Math.PI) * Math.atan2(y, x) - 90; // remove 90 because -y and -x used as axis
