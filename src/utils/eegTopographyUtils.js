@@ -85,6 +85,7 @@ export function matchChannelsToPositions(channelNames, electrodes) {
  * @param {{ label, x, y, z }[]} electrodes
  * @returns {{ vertices: Float32Array, indices: Uint32Array }}
  */
+/*
 export function buildElectrodeMesh(electrodes) {
   const points = electrodes.map((e) => [e.x, e.y, e.z]);
   const faces = convexHull(points);
@@ -106,8 +107,314 @@ export function buildElectrodeMesh(electrodes) {
     indices[i * 3 + 1] = faces[i][1];
     indices[i * 3 + 2] = faces[i][2];
   }
-
+  
   return { vertices, indices };
+}
+*/
+/**
+ * Build a triangulated mesh from electrode positions using their convex hull.
+ * Since the convex hull may create a mesh that does not contains all the electrodes,
+ * we do it iteratively, where in each iteration the missing electrodes are pushed outward, 
+ * and the convex hull is computed again until there are no missing electrodes.
+ * The original electrodes positions are used for the final mesh.
+ * Vertex order in the output matches the input electrodes array, so
+ * electrodes[i] corresponds to vertices[i*3 .. i*3+2].
+ *
+ * @param {{ label, x, y, z }[]} electrodes
+ * @param {number[]} maxIterations  	- maximum number of iterations = 5 
+ * @param {number[]} offsetFraction  	- fraction of outward displacement for missing electrodes = 0.001
+ * @returns {{ vertices: Float32Array, indices: Uint32Array }}
+ */
+/* export function buildElectrodeMesh(electrodes,  maxIterations = 10,  offsetFraction = 0.001) {
+  const original = electrodes.map((e) => [e.x, e.y, e.z]);
+  const n = original.length;
+
+  if (n < 4) {
+    throw new Error("At least four electrodes are required.");
+  }
+
+  const center = [0, 1, 2].map(
+    (k) => original.reduce((sum, p) => sum + p[k], 0) / n
+  );
+
+  const mins = [0, 1, 2].map((k) =>
+    Math.min(...original.map((p) => p[k]))
+  );
+  const maxs = [0, 1, 2].map((k) =>
+    Math.max(...original.map((p) => p[k]))
+  );
+
+  const scale = Math.hypot(
+    maxs[0] - mins[0],
+    maxs[1] - mins[1],
+    maxs[2] - mins[2]
+  );
+
+  const offset = scale * offsetFraction;
+
+  // One working point per electrode, preserving its original index.
+  const working = original.map((p) => [...p]);
+
+  let faces = [];
+  let missing = [];
+
+  for (let iteration = 0; iteration < maxIterations; iteration++) {
+    faces = convexHull(working);
+
+    const hullVertices = new Set(faces.flat());
+    missing = [];
+
+    for (let i = 0; i < n; i++) {
+      if (!hullVertices.has(i)) missing.push(i);
+    }
+
+    console.log(
+      `Iteration ${iteration + 1}: ` +
+      `${hullVertices.size}/${n} electrodes on hull; ` +
+      `${missing.length} missing`
+    );
+	
+    if (missing.length === 0) break;
+
+    // Project every missing electrode onto its closest hull face,
+    // then move the projected point slightly outward.
+    const updates = [];
+
+    for (const i of missing) {
+      const p = original[i];
+
+      let bestDistance = Infinity;
+      let bestPoint = null;
+      let bestNormal = null;
+
+      for (const face of faces) {
+        const a = working[face[0]];
+        const b = working[face[1]];
+        const c = working[face[2]];
+
+        const q = closestPointOnTriangle(p, a, b, c);
+        const distance = squaredDistance(p, q);
+
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          bestPoint = q;
+
+          let normal = normalize(cross(sub(b, a), sub(c, a)));
+
+          // Orient the face normal outward relative to the point-cloud center.
+          const faceCenter = [
+            (a[0] + b[0] + c[0]) / 3,
+            (a[1] + b[1] + c[1]) / 3,
+            (a[2] + b[2] + c[2]) / 3,
+          ];
+
+          if (dot(normal, sub(faceCenter, center)) < 0) {
+            normal = normal.map((v) => -v);
+          }
+
+          bestNormal = normal;
+        }
+      }
+
+      if (bestPoint && bestNormal) {
+        updates.push({
+          index: i,
+          point: bestPoint.map(
+            (v, k) => v + offset * bestNormal[k]
+          ),
+        });
+      }
+    }
+
+    // Update after processing all missing electrodes, so every
+    // projection in this iteration uses the same hull.
+    for (const update of updates) {
+      working[update.index] = update.point;
+    }
+  }
+
+  // Recompute the final hull after the last update.
+  faces = convexHull(working);
+
+  const hullVertices = new Set(faces.flat());
+  missing = [];
+
+  for (let i = 0; i < n; i++) {
+    if (!hullVertices.has(i)) missing.push(i);
+  }
+
+  //console.log("Remaining missing electrode indices:", missing);
+	
+  // IMPORTANT: faces refer to original electrode indices, while
+  // the returned vertices retain the original electrode coordinates.
+  const vertices = new Float32Array(original.flat());
+  const indices = new Uint32Array(faces.flat());
+  //downloadArray(vertices, "vertices.txt");
+  //downloadArray(indices, "faces.txt");
+  return {
+    vertices,
+  indices,
+    missing,
+  };
+} */
+
+export function buildElectrodeMesh(electrodes) {
+  const n = electrodes.length;
+
+  if (n < 4) {
+    throw new Error("At least four electrodes are required.");
+  }
+
+  // Original electrode coordinates
+  const vertices = electrodes.map((e) => [e.x, e.y, e.z]);
+
+  // Estimate sphere centre as the centroid
+  const center = [0, 1, 2].map(
+    (k) => vertices.reduce((sum, p) => sum + p[k], 0) / n
+  );
+
+  // Estimate sphere radius as the mean distance from the centre
+  const radius =
+    vertices.reduce((sum, p) => {
+      const dx = p[0] - center[0];
+      const dy = p[1] - center[1];
+      const dz = p[2] - center[2];
+      return sum + Math.sqrt(dx * dx + dy * dy + dz * dz);
+    }, 0) / n;
+
+  if (radius < 1e-12) {
+    throw new Error("Electrode coordinates have near-zero spatial extent.");
+  }
+
+  // Project electrodes onto the sphere
+  const projected = vertices.map((p) => {
+    const dx = p[0] - center[0];
+    const dy = p[1] - center[1];
+    const dz = p[2] - center[2];
+    const distance = Math.hypot(dx, dy, dz);
+
+    if (distance < 1e-12) {
+      throw new Error(
+        "An electrode lies at the estimated sphere centre."
+      );
+    }
+
+    return [
+      center[0] + (dx / distance) * radius,
+      center[1] + (dy / distance) * radius,
+      center[2] + (dz / distance) * radius,
+    ];
+  });
+
+  // Compute convex hull on the projected spherical points
+  const faces = convexHull(projected);
+
+  const hullVertices = new Set(faces.flat());
+  const missing = [];
+
+  for (let i = 0; i < n; i++) {
+    if (!hullVertices.has(i)) missing.push(i);
+  }
+
+  console.log("Remaining missing electrode indices:", missing.length);
+
+  // Return original coordinates and hull triangle indices
+  return {
+    vertices: new Float32Array(vertices.flat()),
+    indices: new Uint32Array(faces.flat()),
+  };
+}
+
+function downloadArray(array, filename) {
+  const text = Array.from(array).join("\n");
+  const blob = new Blob([text], { type: "text/plain" });
+  const url = URL.createObjectURL(blob);
+
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+
+  URL.revokeObjectURL(url);
+}
+
+// ---------- Geometry helpers ----------
+
+function sub(a, b) {
+  return a.map((v, i) => v - b[i]);
+}
+
+function dot(a, b) {
+  return a.reduce((sum, v, i) => sum + v * b[i], 0);
+}
+
+function cross(a, b) {
+  return [
+    a[1] * b[2] - a[2] * b[1],
+    a[2] * b[0] - a[0] * b[2],
+    a[0] * b[1] - a[1] * b[0],
+  ];
+}
+
+function normalize(v) {
+  const length = Math.hypot(...v);
+  return length > 1e-12
+    ? v.map((x) => x / length)
+    : [0, 0, 0];
+}
+
+function squaredDistance(a, b) {
+  return a.reduce((sum, v, i) => sum + (v - b[i]) ** 2, 0);
+}
+
+function closestPointOnTriangle(p, a, b, c) {
+  const ab = sub(b, a);
+  const ac = sub(c, a);
+  const ap = sub(p, a);
+
+  const d1 = dot(ab, ap);
+  const d2 = dot(ac, ap);
+
+  if (d1 <= 0 && d2 <= 0) return [...a];
+
+  const bp = sub(p, b);
+  const d3 = dot(ab, bp);
+  const d4 = dot(ac, bp);
+
+  if (d3 >= 0 && d4 <= d3) return [...b];
+
+  const vc = d1 * d4 - d3 * d2;
+
+  if (vc <= 0 && d1 >= 0 && d3 <= 0) {
+    const v = d1 / (d1 - d3);
+    return a.map((x, i) => x + v * ab[i]);
+  }
+
+  const cp = sub(p, c);
+  const d5 = dot(ab, cp);
+  const d6 = dot(ac, cp);
+
+  if (d6 >= 0 && d5 <= d6) return [...c];
+
+  const vb = d5 * d2 - d1 * d6;
+
+  if (vb <= 0 && d2 >= 0 && d6 <= 0) {
+    const w = d2 / (d2 - d6);
+    return a.map((x, i) => x + w * ac[i]);
+  }
+
+  const va = d3 * d6 - d5 * d4;
+
+  if (va <= 0 && d4 - d3 >= 0 && d5 - d6 >= 0) {
+    const w = (d4 - d3) / ((d4 - d3) + (d5 - d6));
+    return b.map((x, i) => x + w * sub(c, b)[i]);
+  }
+
+  const denominator = 1 / (va + vb + vc);
+  const v = vb * denominator;
+  const w = vc * denominator;
+
+  return a.map((x, i) => x + ab[i] * v + ac[i] * w);
 }
 
 /**
@@ -138,6 +445,72 @@ export function gaussianRBF(queryXYZ, matchedXYZ, voltages, sigma = 30) {
   return weightSum > 0 ? weightedSum / weightSum : 0;
 }
 
+export function nearestNeighbour(queryXYZ, matchedXYZ, voltages) {
+  // Nearest-neighbour interpolation for unmatched electrodes
+  let minDistanceSquared = Infinity;
+  let nearestIndex = -1;
+
+  for (let j = 0; j < matchedXYZ.length; j++) {
+    const dx = queryXYZ[0] - matchedXYZ[j][0];
+    const dy = queryXYZ[1] - matchedXYZ[j][1];
+    const dz = queryXYZ[2] - matchedXYZ[j][2];
+
+    const distanceSquared = dx * dx + dy * dy + dz * dz;
+
+    if (distanceSquared < minDistanceSquared) {
+      minDistanceSquared = distanceSquared;
+      nearestIndex = j;
+    }
+  }
+
+  return voltages[nearestIndex];
+}
+
+export function inverseDistanceWeighting(queryXYZ, matchedXYZ, voltages, k = 5, p = 2) {
+  // Inverse-distance weighted interpolation using k nearest neighbours
+  const neighbours = [];
+
+  for (let j = 0; j < matchedXYZ.length; j++) {
+    const dx = queryXYZ[0] - matchedXYZ[j][0];
+    const dy = queryXYZ[1] - matchedXYZ[j][1];
+    const dz = queryXYZ[2] - matchedXYZ[j][2];
+
+    const distanceSquared = dx * dx + dy * dy + dz * dz;
+
+    // Return the exact voltage if coordinates coincide
+    if (distanceSquared < 1e-24) {
+      return voltages[j];
+    }
+
+    neighbours.push({
+      index: j,
+      distance: Math.sqrt(distanceSquared),
+    });
+  }
+
+  if (neighbours.length === 0) {
+    return NaN;
+  }
+
+  // Select the k nearest neighbours
+  neighbours.sort((a, b) => a.distance - b.distance);
+  const nearest = neighbours.slice(0, Math.min(k, neighbours.length));
+
+  // Compute inverse-distance weights
+  let weightedSum = 0;
+  let weightSum = 0;
+
+  for (const neighbour of nearest) {
+    const weight = 1 / Math.pow(neighbour.distance, p);
+
+    weightedSum += weight * voltages[neighbour.index];
+    weightSum += weight;
+  }
+
+  // Normalized weighted average (weights sum to 1)
+  return weightedSum / weightSum;
+}
+
 /**
  * Compute a per-vertex scalar (voltage) for every vertex in the electrode mesh.
  * Vertices that sit at a matched electrode take that electrode's recorded voltage
@@ -162,12 +535,17 @@ export function interpolateMeshVoltages(electrodes, matched, voltages, sigma = 3
     // returns an index when found and -1 when no match is found
     const matchedIndex = matched.findIndex((m) => m.pos.label === electrode.label);
 
-    scalars[i] =
+    /* scalars[i] =
       matchedIndex === -1 // if no match => interpolate, if there is a match => take voltage
         ? gaussianRBF([electrode.x, electrode.y, electrode.z], matchedXYZ, voltages, sigma)
+        : voltages[matchedIndex]; */
+
+    scalars[i] =
+      matchedIndex === -1 // if no match => interpolate, if there is a match => take voltage
+        ? inverseDistanceWeighting([electrode.x, electrode.y, electrode.z], matchedXYZ, voltages) // inverseDistanceWeighting or nearestNeighbour
         : voltages[matchedIndex];
   }
-
+  //downloadArray(scalars, "voltages.txt");
   return scalars;
 }
 
