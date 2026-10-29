@@ -1,12 +1,11 @@
 import { unzipToFiles } from '@/loaders/unzipToFiles';
 import {
-  classifyDataset,
   selectEegIntakeFiles,
   selectImagingFiles,
-  selectExtraDataFileNames,
   hasEegRecording,
   listFileExtensions,
-} from './shanoirFiles';
+} from '@/utils/launchFiles';
+import { classifyDataset, selectExtraDataFileNames } from './shanoirFiles';
 
 // Helper function to get readable name for a Shanoir dataset => used for user-facing messages.
 const datasetLabel = (dataset) => ({

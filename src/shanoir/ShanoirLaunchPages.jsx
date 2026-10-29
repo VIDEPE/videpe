@@ -1,17 +1,4 @@
-import { BrainCircuit } from 'lucide-react';
-
-// VIDEPE logo, same as the landing page's hero (BrainCircuit icon, wide-spaced name and
-// subtitle), but smaller. Decorative only (aria-hidden): each page's heading carries the
-// actual message.
-function VidepeLogo({ size = 160 }) {
-  return (
-    <div aria-hidden="true" className="flex flex-col items-center gap-2 select-none">
-      <BrainCircuit size={size} strokeWidth={1} style={{ stroke: 'var(--c-primary)' }} />
-      <span className="text-4xl font-semibold tracking-widest pt-2 text-heading">VIDEPE</span>
-      <span className="text-sm pb-6 text-foreground tracking-wide">Unifying Brain Data</span>
-    </div>
-  );
-}
+import { VidepeLogo } from '@/components/VidepeLogo';
 
 // Shown while a Shanoir launch signs in (redirect to Keycloak and back) — usually under a
 // second per step. Fades in after a short delay, so fast sign-ins don't flash it at all.
