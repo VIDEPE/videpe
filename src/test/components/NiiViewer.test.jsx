@@ -113,7 +113,8 @@ const makeVolumeLayer = (overrides = {}) => ({
   ...overrides,
 });
 
-const makeEsiLayer = ({ connectome, volume } = {}) => ({
+const makeEsiLayer = ({ connectome, volume, maxSourcePowerLocation } = {}) => ({
+  maxSourcePowerLocation: maxSourcePowerLocation ?? [1, 2, 3],
   sourcePowerConnectomes: connectome ?? makeConnectomeLayer(),
   sourcePowerVolume: volume ?? makeVolumeLayer(),
 });
@@ -179,6 +180,7 @@ vi.mock('@niivue/niivue', () => ({
       getRadiologicalConvention: vi.fn(() => false),
       setRadiologicalConvention: vi.fn(),
       setClipPlane: vi.fn(),
+      setRenderAzimuthElevation: vi.fn(),
       // mm2frac/scene.crosshairPos back the ESI "snap the 3D crosshair to the peak source"
       // behavior (see useEsiLayer.js) — identity stand-in, tests assert on what's passed in.
       mm2frac: vi.fn((mm) => mm),

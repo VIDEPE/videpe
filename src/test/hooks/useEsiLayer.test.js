@@ -62,6 +62,7 @@ function makeNv() {
     }),
     setOpacity: vi.fn(),
     setColormap: vi.fn(),
+    setRenderAzimuthElevation: vi.fn(),
     updateGLVolume: vi.fn(),
     mm2frac: vi.fn((mm) => mm), // identity stand-in — tests assert on what's passed in, not real geometry
     scene: { crosshairPos: null },
