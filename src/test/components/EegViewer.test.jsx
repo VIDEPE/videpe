@@ -13,7 +13,7 @@ vi.mock('uplot-react', () => {
       // Simulate uPlot calling onCreate with a minimal fake instance
       const fakeUplot = {
         cursor: { left: 100 },
-        posToVal: (_px, _scale) => 5.0,
+        posToVal: () => 5.0, // real signature is (px, scale) — the fake ignores both
         over: {
           addEventListener: (_event, handler) => {
             capturedClickHandler = handler;

@@ -1,4 +1,4 @@
-import { useRef, useEffect, useMemo, useState, useCallback } from 'react';
+import { useRef, useMemo, useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { SplitPane } from '@/components/SplitPane';
 import { useTheme } from '@/hooks/useTheme';
@@ -7,7 +7,6 @@ import { compareChannelNamesNaturally, buildSeegBipolarReferences } from '@/util
 import { parseMontageFile } from '@/loaders/parseMontageFile';
 import { toAnyWaveMontage } from '@/loaders/toMontageAnyWave';
 import { downloadTextFile } from '@/utils/fileDownload';
-import { EyeDashed } from 'lucide-react';
 import { cn } from '@/utils/utils';
 import {
   Plus,
@@ -20,7 +19,6 @@ import {
   ArrowUpWideNarrow,
   ArrowDownWideNarrow,
 } from 'lucide-react';
-import { e } from 'mathjs';
 
 // ─── Window sizing constants ────────────────────────────────────────────────
 // Default/minimum window size in px — default matches the previous fixed w-96 h-80 (24rem x 20rem)
@@ -67,15 +65,10 @@ const FILTER_COL_CLASS = 'w-14 shrink-0';
 const CLEAR_COL_CLASS = 'w-4 shrink-0';
 
 export function EegMontageEditor({
-  electrodes,
   matched,
-  voltages,
-  totalChannels,
   onClose,
   isStandardElectrodes = true,
-  onElecPosFile,
   channelNames,
-  voltagesByChannel,
   customFileName = null, // filename (no extension) of the loaded custom positions file — owned by PatientView, passed down
   channelSettings, // Record<channelname, {type, bad}> — live state owned by EegViewer/useChannelSettings
   onApplyChannelSettings, // (Record<name, {type, bad}>) => void — commits the draft on Apply/OK
@@ -546,7 +539,6 @@ export function EegMontageEditor({
 
   // ─── State ──────────────────────────────────────────────────────────────────
   const [isMaximized, setIsMaximized] = useState(false);
-  const [maximizedPanel, setMaximizedPanel] = useState(null); // null | 'left' | 'right'
   const [position, setPosition] = useState({ x: START_WINDOW_POS.x, y: START_WINDOW_POS.y });
   const [size, setSize] = useState(DEFAULT_WINDOW_SIZE);
   // Whether SplitPane's two panes are currently swapped — used to flip the montage pane's
@@ -1611,7 +1603,6 @@ export function EegMontageEditor({
       <SplitPane
         leftLabel={<span className={PANEL_TITLE_CLASS}>Channel Selection</span>}
         rightLabel={<span className={PANEL_TITLE_CLASS}>Montage Settings</span>}
-        onMaximizeChange={setMaximizedPanel}
         onSwapChange={setIsPanesSwapped}
         left={channelSelectionPane}
         right={montageSelectionPane}

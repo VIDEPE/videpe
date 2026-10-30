@@ -628,6 +628,7 @@ export const NiiViewer = ({
       clearElectrodeMesh,
       dismissEsiLayer,
       dismissElectrodeLayer,
+      onElectrodeLayerDismissed,
     ]
   );
 

@@ -120,10 +120,6 @@ function SortableSettingsCard({
   // node/edge colormap, not a NiiVue volume colormap — the intensity colormap dropdown,
   // invert toggle, and colorbar toggle don't apply to them.
   const isConnectome = layer.kind === 'connectome';
-  // File-loaded surface meshes (GIFTI/PLY/OBJ/…) render with their own vertex colors and
-  // have no NiiVue volume colormap or intensity range either, so — like connectomes — they
-  // expose only opacity/visibility, not the colormap/threshold/invert/colorbar controls.
-  const isMesh = layer.kind === 'mesh';
   // Image volumes have an adjustable intensity range/colormap and can be reordered;
   // connectomes and meshes don't/can't, but get their own Mesh Xray control instead.
   const isImageVolume = isImageVolumeLayer(layer);

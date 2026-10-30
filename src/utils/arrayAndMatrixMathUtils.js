@@ -76,7 +76,7 @@ export function makeMatrix(len, wid, fill) {
 
 export function matrixRandom(len, wid, min = 0, max = 100) {
   // create a matrix in any size, with random numbers
-  return makeMatrix(len, wid, (x) => Math.round(Math.random() * (max - min)) + min);
+  return makeMatrix(len, wid, () => Math.round(Math.random() * (max - min)) + min);
 }
 // matrixRandom(2, 3, -100)
 // /* shall yield [
@@ -209,7 +209,7 @@ export function matrixDet(matrix) {
 
 export function matrixCofactor(matrix) {
   // get the cofactor of a matrix
-  return matrixMap(matrix, ({ i, ix, j, jx }) =>
+  return matrixMap(matrix, ({ ix, jx }) =>
     matrix[0].length > 2
       ? Math.pow(-1, ix + jx + 2) * matrixDet(matrixMinor(matrix, ix + 1, jx + 1))
       : ix != jx

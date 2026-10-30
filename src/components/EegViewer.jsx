@@ -1502,16 +1502,10 @@ export const EegViewer = ({
       {/* Floating EEG Montage Editor — position:fixed so it overlays the whole page */}
       {montageVisible && (
         <EegMontageEditor
-          electrodes={electrodes}
           matched={matched}
-          voltages={topoVoltages}
           channelNames={channelNames}
-          voltagesByChannel={topoVoltagesByChannel}
-          totalChannels={channelNames.length}
           onClose={() => setMontageVisible(false)}
-          onTopoNvReady={onTopoNvReady}
           isStandardElectrodes={isStandardElectrodes}
-          onElecPosFile={onElecPosFile}
           customFileName={customElecPosFileName}
           channelSettings={channelSettings}
           onApplyChannelSettings={applyChannelSettings}
