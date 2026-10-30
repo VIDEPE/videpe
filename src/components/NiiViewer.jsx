@@ -28,7 +28,6 @@ import {
   ESI_LAYER_URL,
   ELECTRODE_LAYER_URL,
   applyColormap,
-  computeAzimuthElevation,
 } from '../utils/NiiViewer.utils';
 import {
   layerReducer,
@@ -236,7 +235,6 @@ export const NiiViewer = ({
   // dropped into this component's own dropzone, which never touch the layers/
   // electrodeLayer/esiLayer props, so it doesn't wrongly unmount this viewer when those go empty/null together.
   onHas3DExtentChange, // reports whether the scene has a volume/mesh (non-connectome) — gates the cross-panel rotation sync; see the effect below
-  isFullscreen = false,
   onElectrodeLayerDismissed,
   onLoadError,
   clickedEegChannelPos, // {pos: {x,y,z}, clickId} The location of the clicked Eeg Channel the niiviewer cursor should move to
@@ -684,19 +682,11 @@ export const NiiViewer = ({
   // move the main niivue canvas cursor to the position that is packed inside clickedEegChannelPos
   useEffect(() => {
     const nv = nvRef.current;
-    const nvTopo = nvTopoRef?.current;
     const pos = clickedEegChannelPos?.pos;
     if (!nv || !pos) return; // if nv or pos is null / undefined
     nv.scene.crosshairPos = nv.mm2frac([pos.x, pos.y, pos.z]);
-    // change the 3D view to align the view to the max ESI
-    const [azi, elev] = computeAzimuthElevation([pos.x, pos.y, pos.z], nv.pivot3D);
-    nv.setRenderAzimuthElevation(azi, elev);
     nv.updateGLVolume();
-    if (nvTopo) {
-      nvTopo.setRenderAzimuthElevation(azi, elev);
-      nvTopo.updateGLVolume();
-    }
-  }, [clickedEegChannelPos, nvRef, nvTopoRef]);
+  }, [clickedEegChannelPos, nvRef]);
 
   // ─── Render ─────────────────────────────────────────────────────────────────
 

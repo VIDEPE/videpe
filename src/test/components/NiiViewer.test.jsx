@@ -9,7 +9,6 @@ import {
   ESI_LAYER_URL,
   ELECTRODE_LAYER_URL,
   DEFAULT_MESH_XRAY,
-  computeAzimuthElevation,
 } from '@/utils/NiiViewer.utils';
 import {
   NiiViewer,
@@ -1877,7 +1876,7 @@ describe('NiiViewer', () => {
     });
 
     it('removes the volume settings card from the UI when delete is clicked', async () => {
-      const nv = await setup();
+      await setup();
 
       // click expand settings on the first volume (=> index = 0 )
       await userEvent.click(screen.getByRole('button', { name: /expand.*anat/i }));
@@ -2979,28 +2978,6 @@ describe('NiiViewer', () => {
       expect(nv.scene.crosshairPos).toBeNull();
       expect(nv.updateGLVolume).not.toHaveBeenCalled();
       expect(nv.setRenderAzimuthElevation).not.toHaveBeenCalled();
-    });
-
-    it('rotates the main and topography 3D views to face the clicked position', async () => {
-      const { Niivue } = await import('@niivue/niivue');
-      const nvRef = { current: new Niivue() };
-      const nvTopo = { setRenderAzimuthElevation: vi.fn(), updateGLVolume: vi.fn() };
-      const nvTopoRef = { current: nvTopo };
-      const { rerender } = render(<NiiViewer nvRef={nvRef} nvTopoRef={nvTopoRef} layers={[]} />);
-      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
-
-      rerender(
-        <NiiViewer
-          nvRef={nvRef}
-          nvTopoRef={nvTopoRef}
-          layers={[]}
-          clickedEegChannelPos={{ pos: { x: 1, y: 2, z: 3 }, clickId: 1 }}
-        />
-      );
-
-      const [azi, elev] = computeAzimuthElevation([1, 2, 3]);
-      expect(nvRef.current.setRenderAzimuthElevation).toHaveBeenCalledWith(azi, elev);
-      expect(nvTopo.setRenderAzimuthElevation).toHaveBeenCalledWith(azi, elev);
     });
   });
 });

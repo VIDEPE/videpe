@@ -3,8 +3,8 @@ import {
   getCalBounds,
   fractionToCalValue,
   isImageVolumeLayer,
-  computeAzimuthElevation,
   ESI_LAYER_URL,
+  rotateViews,
 } from '@/utils/NiiViewer.utils';
 import { selectEntry, SYNC_GENERATED_LAYER } from '@/state/layerState';
 import { EEG_NODE_POS_KEY } from '@/utils/eegColormaps';
@@ -102,7 +102,6 @@ export function useEsiLayer({
   useEffect(() => {
     const nv = nvRef.current; // guard — nothing to do before NiiVue has attached to a canvas
     if (!nv) return;
-    const nvTopo = nvTopoRef?.current;
     const activeEsiLayer = esiLayer
       ? isEsiVolumeMode
         ? esiLayer.sourcePowerVolume
@@ -211,14 +210,11 @@ export function useEsiLayer({
       nv.addMesh(mesh); // actually add it to the 3D scene
       esiMeshRef.current = mesh; // track it so the next change/removal can find it
       nv.scene.crosshairPos = nv.mm2frac(esiLayer.maxSourcePowerLocation); // move the crosshair to the location where the ESI source power is max
-      // change the 3D view to align the view to the max ESI
-      const [azi, elev] = computeAzimuthElevation(esiLayer.maxSourcePowerLocation, nv.pivot3D);
-      nv.setRenderAzimuthElevation(azi, elev);
-      nv.updateGLVolume(); // redraw with the new mesh visible
-      if (nvTopo) {
-        nvTopo.setRenderAzimuthElevation(azi, elev);
-        nvTopo.updateGLVolume();
-      }
+
+      rotateViews([nv, nvTopoRef?.current], esiLayer.maxSourcePowerLocation); // turn both 3D views to the max ESI
+
+      // Force Redraw
+      nv.updateGLVolume();
     } else {
       // Volume mode — drop any leftover mesh from a previous connectome-mode rebuild first.
       if (esiMeshRef.current) {
@@ -264,18 +260,13 @@ export function useEsiLayer({
           }
 
           nv.scene.crosshairPos = nv.mm2frac(esiLayer.maxSourcePowerLocation); // move the crosshair to the location where the ESI source power is max
-          // change the 3D view to align the view to the max ESI
-          const [azi, elev] = computeAzimuthElevation(esiLayer.maxSourcePowerLocation, nv.pivot3D);
-          nv.setRenderAzimuthElevation(azi, elev);
-          nv.updateGLVolume(); // redraw with the new volume visible
-          if (nvTopo) {
-            nvTopo.setRenderAzimuthElevation(azi, elev);
-            nvTopo.updateGLVolume();
-          }
+          // rotate the 3D views to align the view to the max ESI
+          rotateViews([nv, nvTopoRef?.current], esiLayer.maxSourcePowerLocation);
+          nv.updateGLVolume();
         })
         .catch((err) => console.error('ESI volume failed to load', err));
     }
-  }, [esiLayer, isEsiVolumeMode, layerState, nvRef]);
+  }, [esiLayer, isEsiVolumeMode, layerState, nvRef, nvTopoRef]);
 
   return { esiMeshRef, esiVolumeRef, clearEsiMesh, clearEsiVolume, dismissEsiLayer };
 }
