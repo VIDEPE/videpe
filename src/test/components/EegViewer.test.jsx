@@ -354,32 +354,59 @@ describe('EegViewer — window size controls', () => {
 });
 
 describe('EegViewer — channel count controls', () => {
-  it('decreases visible channel count when − is clicked', async () => {
+  // The +/− buttons step by 10 (the input's own arrows already step by 1). The 3-channel
+  // fixture can't show that — every 10-step would hit the 1..3 clamp — so the step tests use a
+  // wider recording and start mid-range (15 of 30), leaving room for a full step either way.
+  // 30 also stays under the height cap: 600px (ResizeObserver mock) / 12px per lane = 50.
+  const WIDE_CHANNEL_COUNT = 30;
+  const MID_CHANNEL_COUNT = 15;
+  const makeWideProvider = () => {
+    const wideChannelNames = Array.from({ length: WIDE_CHANNEL_COUNT }, (_, i) => `EEG${i + 1}`);
+    return {
+      channelNames: wideChannelNames,
+      fs: 1,
+      tMax: TMAX,
+      getChunk: vi.fn(async (start, end) => {
+        const indices = TIMESTAMPS.map((_, i) => i).filter(
+          (i) => TIMESTAMPS[i] >= start && TIMESTAMPS[i] <= end
+        );
+        return {
+          timestamps: Float32Array.from(indices.map((i) => TIMESTAMPS[i])),
+          // reuse CHANNEL_DATA's three rows round-robin — the values don't matter here
+          channels: wideChannelNames.map((_, c) =>
+            Float32Array.from(indices.map((i) => CHANNEL_DATA[c % CHANNEL_DATA.length][i]))
+          ),
+        };
+      }),
+    };
+  };
+
+  it('decreases visible channel count by 10 when − is clicked', async () => {
     const user = userEvent.setup();
-    await renderViewer();
+    await renderViewer(makeWideProvider());
     const input = screen.getByRole('spinbutton', { name: /number of channels/i });
     const decreaseBtn = within(containerOf(input)).getByRole('button', {
       name: 'Show fewer channels',
     });
 
-    fireEvent.change(input, { target: { value: String(channelNames.length) } });
+    fireEvent.change(input, { target: { value: String(MID_CHANNEL_COUNT) } });
     await user.click(decreaseBtn);
 
-    expect(input).toHaveValue(channelNames.length - 1);
+    expect(input).toHaveValue(MID_CHANNEL_COUNT - 10);
   });
 
-  it('increases visible channel count when + is clicked', async () => {
+  it('increases visible channel count by 10 when + is clicked', async () => {
     const user = userEvent.setup();
-    await renderViewer();
+    await renderViewer(makeWideProvider());
     const input = screen.getByRole('spinbutton', { name: /number of channels/i });
-    const channelControls = within(containerOf(input));
-    const increaseBtn = channelControls.getByRole('button', { name: 'Show more channels' });
-    const decreaseBtn = channelControls.getByRole('button', { name: 'Show fewer channels' });
+    const increaseBtn = within(containerOf(input)).getByRole('button', {
+      name: 'Show more channels',
+    });
 
-    await user.click(decreaseBtn);
+    fireEvent.change(input, { target: { value: String(MID_CHANNEL_COUNT) } });
     await user.click(increaseBtn);
 
-    expect(input).toHaveValue(channelNames.length);
+    expect(input).toHaveValue(MID_CHANNEL_COUNT + 10);
   });
 
   it('does not increase channel count above total number of channels', async () => {

@@ -17,6 +17,7 @@ import { checkEegFiles, detectAndLoadEEG } from '@/loaders/eegFormatRegistry';
 import { parseInverseSolutionFieldtrip } from '@/loaders/parseInverseSolutionFieldtrip';
 import { electricalSourceImaging } from '@/utils/electricalSourceImagingUtils';
 import { FileDropZone } from '@/components/FileDropZone';
+import { computeAzimuthElevation } from '@/utils/NiiViewer.utils';
 import { NiiViewer } from '@/components/NiiViewer';
 import { EegViewer } from '@/components/EegViewer';
 import { ShanoirSessionContext } from '@/shanoir/ShanoirSessionContext';
@@ -58,6 +59,7 @@ vi.mock('@/components/EegViewer', () => ({
       onElectrodeRenderChange,
       esiEnabled,
       onEsiEnabledChange,
+      onChannelPositionClick,
     }) => (
       <div data-testid="eeg-viewer">
         <span data-testid="eeg-custom-electrodes-count">{customElectrodes?.length ?? 0}</span>
@@ -194,6 +196,15 @@ vi.mock('@/components/EegViewer', () => ({
         >
           trigger-topo-no-content
         </button>
+        {/* Simulates clicking a channel label whose electrode has a matched position — real
+            EegViewer sends that electrode's crosshair position plus a fresh clickId. */}
+        <button
+          type="button"
+          data-testid="trigger-channel-position-click"
+          onClick={() => onChannelPositionClick?.({ pos: { x: -50, y: -20, z: 20 }, clickId: 1 })}
+        >
+          trigger-channel-position-click
+        </button>
       </div>
     )
   ),
@@ -278,7 +289,7 @@ vi.mock('@niivue/niivue', async (importOriginal) => {
   return {
     ...actual,
     Niivue: vi.fn().mockImplementation(function () {
-      return { broadcastTo: vi.fn() };
+      return { broadcastTo: vi.fn(), setRenderAzimuthElevation: vi.fn() };
     }),
   };
 });
@@ -1636,6 +1647,93 @@ describe('PatientView — cross-panel 3D rotation sync', () => {
 
     expect(nvNii.broadcastTo).toHaveBeenLastCalledWith([]);
     expect(nvTopo.broadcastTo).toHaveBeenLastCalledWith([]);
+  });
+});
+
+// Clicking a channel label rotates the imaging and topography 3D views so that electrode faces
+// the viewer. PatientView does this itself, since it owns both NiiVue instances: NiiViewer is
+// only mounted when there's imaging content, so the topography must still rotate without it.
+// The broadcastTo link can't be relied on either — it only fires from the focused canvas, and
+// is off unless both panels have a 3D scene.
+describe('PatientView — rotating the 3D views to a clicked EEG channel', () => {
+  const CLICKED_POSITION = [-50, -20, 20]; // matches the EegViewer mock's trigger-channel-position-click
+
+  beforeEach(() => {
+    FileDropZone.mockClear();
+    Niivue.mockClear();
+    checkEegFiles.mockReturnValue({
+      formatName: 'BrainVision',
+      complete: true,
+      missing: [],
+      warning: null,
+    });
+    detectAndLoadEEG.mockResolvedValue({ channelNames: ['B1'], fs: 1, tMax: 1, getChunk: vi.fn() });
+  });
+
+  // The two Niivue instances PatientView builds, in its fixed order: imaging, then topography
+  const getNiivueInstances = () => {
+    const [nvNii, nvTopo] = Niivue.mock.results.map((r) => r.value);
+    return { nvNii, nvTopo };
+  };
+
+  const loadEeg = async () => {
+    await act(async () => {
+      await getEegOnFiles()([makeFile('sub01.vhdr'), makeFile('sub01.eeg')]);
+    });
+    await waitFor(() => expect(screen.getByTestId('eeg-viewer')).toBeInTheDocument());
+  };
+
+  const loadImaging = async () => {
+    await act(async () => {
+      await getNiiOnFiles()([makeFile('sub-01_T1w.nii')]);
+    });
+    await waitFor(() => expect(screen.getByTestId('nii-viewer')).toBeInTheDocument());
+  };
+
+  it('rotates the topography view to face the clicked channel when no imaging is loaded', async () => {
+    renderPatientView();
+    await loadEeg();
+    expect(screen.queryByTestId('nii-viewer')).not.toBeInTheDocument();
+    const { nvTopo } = getNiivueInstances();
+    nvTopo.pivot3D = [0, -20, 20]; // the topography mesh's centre
+
+    await userEvent.click(screen.getByTestId('trigger-channel-position-click'));
+
+    expect(nvTopo.setRenderAzimuthElevation).toHaveBeenCalledWith(
+      ...computeAzimuthElevation(CLICKED_POSITION, [0, -20, 20])
+    );
+  });
+
+  it('rotates both views to the same angles, around the imaging pivot, while the imaging panel has a 3D scene', async () => {
+    renderPatientView();
+    await loadImaging();
+    await loadEeg();
+    await userEvent.click(screen.getByTestId('trigger-nii-has-3d-extent'));
+    const { nvNii, nvTopo } = getNiivueInstances();
+    nvNii.pivot3D = [0, -20, 20];
+    nvTopo.pivot3D = [10, 10, 10];
+
+    await userEvent.click(screen.getByTestId('trigger-channel-position-click'));
+
+    const [azi, elev] = computeAzimuthElevation(CLICKED_POSITION, [0, -20, 20]);
+    expect(nvNii.setRenderAzimuthElevation).toHaveBeenCalledWith(azi, elev);
+    expect(nvTopo.setRenderAzimuthElevation).toHaveBeenCalledWith(azi, elev);
+  });
+
+  it('uses the topography pivot while the imaging panel has no 3D scene, ignoring its stale one', async () => {
+    renderPatientView();
+    await loadEeg();
+    const { nvNii, nvTopo } = getNiivueInstances();
+    // The imaging instance is long-lived: it keeps the pivot of whatever it last drew, even
+    // after its panel has been emptied and NiiViewer unmounted.
+    nvNii.pivot3D = [100, 100, 100];
+    nvTopo.pivot3D = [0, -20, 20];
+
+    await userEvent.click(screen.getByTestId('trigger-channel-position-click'));
+
+    const [azi, elev] = computeAzimuthElevation(CLICKED_POSITION, [0, -20, 20]);
+    expect(nvTopo.setRenderAzimuthElevation).toHaveBeenCalledWith(azi, elev);
+    expect(nvNii.setRenderAzimuthElevation).toHaveBeenCalledWith(azi, elev);
   });
 });
 

@@ -12,7 +12,7 @@ import { NiiViewer } from '../components/NiiViewer';
 import { SplitPane } from '../components/SplitPane';
 import { FileDropZone } from '../components/FileDropZone';
 // Utils
-import { filesToLayers } from '../utils/NiiViewer.utils';
+import { filesToLayers, rotateViews } from '../utils/NiiViewer.utils';
 import { buildElectrodeLayer } from '../utils/eegTopographyUtils';
 import {
   EEG_FORMAT_EXTENSIONS,
@@ -206,6 +206,7 @@ export const PatientView = () => {
   if (nvRef_eegtopo.current === null) {
     nvRef_eegtopo.current = new Niivue({
       isOrientCube: true,
+      dragAndDropEnabled: false,
     });
   }
 
@@ -226,6 +227,19 @@ export const PatientView = () => {
       nvTopo.broadcastTo([]);
     }
   }, [niiNvReady, topoNvReady, niiHas3DExtent, topoHasContent]);
+
+  // Handler that rotates both 3D views so it faces the selected position when
+  // clicking an EEG channel label Rotating happens here rather than in NiiViewer because
+  // PatientView owns both NiiVue instances and rotating the topography view should
+  // still be possible even when NiiViewer isn't mounted
+  const handleChannelPositionClick = (click) => {
+    setClickedEegChannelPos(click);
+    const { x, y, z } = click.pos;
+    const nvNii = nvRef_niiviewer.current;
+    const nvTopo = nvRef_eegtopo.current;
+    // pivot from the imaging view only while it has a 3D scene, otherwise from the topography
+    rotateViews(niiHas3DExtent ? [nvNii, nvTopo] : [nvTopo, nvNii], [x, y, z]);
+  };
 
   // Handler for when imaging files are dropped or selected. It reads the files as ArrayBuffers and prepares them for visualization, updating state accordingly.
   // NiiViewer shows its own loading/success toast once mounted, so this just sets layers and surfaces errors.
@@ -431,7 +445,7 @@ export const PatientView = () => {
               onElectrodeRenderChange={setElectrodeRenderEnabled}
               esiEnabled={esiEnabled}
               onEsiEnabledChange={setEsiEnabled}
-              onChannelPositionClick={setClickedEegChannelPos}
+              onChannelPositionClick={handleChannelPositionClick}
             />
           ) : (
             <div className="h-full p-2">
@@ -465,12 +479,12 @@ export const PatientView = () => {
               esiLayer={esiLayer}
               onHasContentChange={setNiiHasOwnContent}
               onHas3DExtentChange={setNiiHas3DExtent}
-              isFullscreen={maximizedPanel === 'right'}
               onViewReady={() => niiReadyResolveRef.current?.()}
               onNiiNvReady={() => setNiiNvReady(true)}
               onElectrodeLayerDismissed={() => setElectrodeRenderEnabled(false)}
               onLoadError={handleLoadError}
               clickedEegChannelPos={clickedEegChannelPos}
+              nvTopoRef={nvRef_eegtopo}
             />
           ) : (
             <div className="h-full p-2">
