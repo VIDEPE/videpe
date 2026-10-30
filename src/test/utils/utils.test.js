@@ -7,7 +7,7 @@ describe('cn', () => {
   });
 
   it('ignores falsy values', () => {
-    expect(cn('foo', false && 'bar', null, undefined)).toBe('foo');
+    expect(cn('foo', false, null, undefined)).toBe('foo');
   });
 
   it('resolves conflicting Tailwind classes — last one wins', () => {
@@ -15,8 +15,12 @@ describe('cn', () => {
   });
 
   it('handles conditional classes', () => {
-    expect(cn('base', true && 'active')).toBe('base active');
-    expect(cn('base', false && 'active')).toBe('base');
+    // the `condition && 'class'` pattern components use — a variable rather than a literal
+    // true/false, the way it appears in real code
+    const isActive = true;
+    const isDisabled = false;
+    expect(cn('base', isActive && 'active')).toBe('base active');
+    expect(cn('base', isDisabled && 'active')).toBe('base');
   });
 });
 
