@@ -20,4 +20,12 @@ export default defineConfig([
       parserOptions: { ecmaFeatures: { jsx: true } },
     },
   },
+  {
+    // Tests run in Node (Vitest + jsdom), where Node globals like `global` exist alongside the
+    // browser ones — e.g. for stubbing global.fetch or global.ResizeObserver.
+    files: ['src/test/**/*.{js,jsx}'],
+    languageOptions: {
+      globals: { ...globals.browser, ...globals.node },
+    },
+  },
 ]);
