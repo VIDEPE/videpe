@@ -9,12 +9,10 @@ import {
   ESI_LAYER_URL,
   ELECTRODE_LAYER_URL,
   DEFAULT_MESH_XRAY,
-} from '@/utils/NiiViewer.utils';
-import {
-  NiiViewer,
   syncVolumesAndApplySettings,
   syncMeshesAndApplySettings,
-} from '@/components/NiiViewer';
+} from '@/utils/NiiViewer.utils';
+import { NiiViewer } from '@/components/NiiViewer';
 import { dicomLoader } from '@niivue/dicom-loader';
 // Mirrors the real @niivue/niivue MESH_EXTENSIONS list closely enough to exercise
 // isMeshExt's actual extension-based routing without pulling in the real package.

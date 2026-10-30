@@ -1,7 +1,7 @@
 import { useRef, useEffect, useMemo, useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { SplitPane } from '@/components/SplitPane';
-import { useTheme } from '@/components/ThemeContext';
+import { useTheme } from '@/hooks/useTheme';
 import { TrafficLightButtons } from '@/components/TrafficLightButtons';
 import { compareChannelNamesNaturally, buildSeegBipolarReferences } from '@/utils/eegViewerUtils';
 import { parseMontageFile } from '@/loaders/parseMontageFile';

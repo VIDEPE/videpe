@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { ThemeProvider, useTheme } from '@/components/ThemeContext';
+import { ThemeProvider } from '@/components/ThemeProvider';
+import { useTheme } from '@/hooks/useTheme';
 
 // Create a minimal component to observe context values in tests
 const ThemeConsumer = () => {

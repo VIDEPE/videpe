@@ -1,16 +1,7 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
+import { ThemeContext } from '@/components/ThemeContext';
 
-// This file provides a ThemeContext to manage light/dark mode across the app.
-// How the three pieces connect:
-// createContext()     1. creates the container
-// <Context.Provider>  2. fills the container with values
-// useContext()        3. any component reads from the container
-
-// 1. Create the Context
-// createContext creates a sort of global variable that Reacts manages for you.
-// It holds the current theme state and a function to toggle it, which can be accessed by any
-// component that calls useTheme().
-const ThemeContext = createContext(null);
+// Step 2 of the light/dark mode theme — see ThemeContext.js for how the three pieces connect.
 
 const getInitialDark = () => {
   // Check localStorage first, then system preference
@@ -52,11 +43,4 @@ export const ThemeProvider = ({ children }) => {
     // - {children} — everything wrapped inside <ThemeProvider> in App.jsx — the entire app
     <ThemeContext.Provider value={{ isDarkMode, toggleTheme }}>{children}</ThemeContext.Provider>
   );
-};
-
-// 3. Create a Custom Hook for easy access to the ThemeContext values (isDarkMode and toggleTheme).
-export const useTheme = () => {
-  const context = useContext(ThemeContext);
-  if (!context) throw new Error('useTheme must be used inside ThemeProvider');
-  return context;
 };

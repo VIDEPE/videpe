@@ -56,7 +56,7 @@ vi.mock('@/components/EegTopoViewer', () => ({
 // montage row color describe block below) — a plain top-level `let` wouldn't be
 // initialized yet when this factory runs, since vi.mock is hoisted above imports.
 const themeState = vi.hoisted(() => ({ isDarkMode: false }));
-vi.mock('@/components/ThemeContext', () => ({
+vi.mock('@/hooks/useTheme', () => ({
   useTheme: () => ({ isDarkMode: themeState.isDarkMode }),
 }));
 

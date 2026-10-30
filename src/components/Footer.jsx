@@ -1,5 +1,5 @@
 ﻿import { cn } from '@/utils/utils';
-import { useTheme } from '@/components/ThemeContext';
+import { useTheme } from '@/hooks/useTheme';
 import unigeLight from '@/assets/logo_UNIGE_light.png';
 import unigeDark from '@/assets/logo_UNIGE_dark.png';
 import hugLight from '@/assets/logo_hug_h_light.png';

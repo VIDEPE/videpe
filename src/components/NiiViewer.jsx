@@ -51,10 +51,6 @@ import { useLayerLoader } from '@/hooks/useLayerLoader';
 import { useElectrodeConnectome } from '@/hooks/useElectrodeConnectome';
 import { useEsiLayer } from '@/hooks/useEsiLayer';
 
-// Re-exported so existing imports (e.g. NiiViewer.test.jsx) keep working — the implementations
-// now live in NiiViewer.utils.js since useLayerLoader needs them too.
-export { syncVolumesAndApplySettings, syncMeshesAndApplySettings };
-
 // ─── handleSettingChange dispatch helpers ──────────────────────────────────────
 // Image volumes are the default case — addressed by their index in nv.volumes (nvIndex, see
 // selectNvVolumeIndex: connectome and mesh layers have a card but no slot in nv.volumes).

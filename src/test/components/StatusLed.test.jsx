@@ -2,11 +2,11 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { StatusLed } from '@/components/StatusLed';
 
-vi.mock('@/components/ThemeContext', () => ({
+vi.mock('@/hooks/useTheme', () => ({
   useTheme: vi.fn(),
 }));
 
-import { useTheme } from '@/components/ThemeContext';
+import { useTheme } from '@/hooks/useTheme';
 
 // Returns the dot span (aria-hidden, carries the color class) inside the LED with this title.
 const getDot = (title) => screen.getByTitle(title).querySelector('span');
