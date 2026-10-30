@@ -580,3 +580,19 @@ export function computeAzimuthElevation(position, pivot = [0, 0, 0]) {
   const elev = (180 / Math.PI) * Math.atan2(z, r);
   return [azi, elev];
 }
+
+/**
+ * Rotates one or more NiiVue 3D views to the same azimuth/elevation so `position` faces the
+ * viewer in all of them. Missing views (null/undefined) are skipped. The rotation pivot is taken
+ * from the first view that has one, so callers list the most reliable view first.
+ *
+ * @param   {Object[]}  views     The Niivue instances to rotate, most reliable pivot first
+ * @param   {number[]}  position  The [x, y, z] position in world mm (RAS) to face
+ */
+export function rotateViews(views, position) {
+  const activeViews = views.filter(Boolean); // keep each view that are truthy
+  const pivot = activeViews.find((nv) => nv.pivot3D)?.pivot3D; // takes the first pivot3D value from a view that has one
+  const [azi, elev] = computeAzimuthElevation(position, pivot);
+  // setRenderAzimuthElevation redraws by itself, so no updateGLVolume is needed
+  activeViews.forEach((nv) => nv.setRenderAzimuthElevation(azi, elev));
+}

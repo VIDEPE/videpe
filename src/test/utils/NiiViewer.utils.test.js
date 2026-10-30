@@ -19,6 +19,7 @@ import {
   MAX_RANDOM_COLORMAP_LABELS,
   ESI_LAYER_URL,
   computeAzimuthElevation,
+  rotateViews,
 } from '@/utils/NiiViewer.utils';
 
 describe('isAnyColorbarActive', () => {
@@ -251,5 +252,62 @@ describe('computeAzimuthElevation', () => {
     expect(computeAzimuthElevation([-50, 10, 30], undefined)).toEqual(
       computeAzimuthElevation([-50, 10, 30], [0, 0, 0])
     );
+  });
+});
+
+describe('rotateViews', () => {
+  // Stand-in for a Niivue instance — only what rotateViews touches.
+  const makeView = (pivot3D) => ({ pivot3D, setRenderAzimuthElevation: vi.fn() });
+  const POSITION = [-50, -20, 20];
+
+  it('rotates every view to the same azimuth/elevation, so the views stay aligned', () => {
+    const nvA = makeView([0, -20, 20]);
+    const nvB = makeView([0, -20, 20]);
+
+    rotateViews([nvA, nvB], POSITION);
+
+    const [azi, elev] = computeAzimuthElevation(POSITION, [0, -20, 20]);
+    expect(nvA.setRenderAzimuthElevation).toHaveBeenCalledWith(azi, elev);
+    expect(nvB.setRenderAzimuthElevation).toHaveBeenCalledWith(azi, elev);
+  });
+
+  it('takes the pivot from the first view, even when the others have a different one', () => {
+    // Both views share one rotation, so they can't each use their own pivot — the caller
+    // lists the view with the most reliable pivot first.
+    const nvA = makeView([0, -20, 20]);
+    const nvB = makeView([10, 10, 10]);
+
+    rotateViews([nvA, nvB], POSITION);
+
+    const [azi, elev] = computeAzimuthElevation(POSITION, [0, -20, 20]);
+    expect(nvB.setRenderAzimuthElevation).toHaveBeenCalledWith(azi, elev);
+  });
+
+  it('takes the pivot from the next view when the first has none yet', () => {
+    // nv.pivot3D is only set once NiiVue has drawn a 3D scene
+    const nvA = makeView(undefined);
+    const nvB = makeView([0, -20, 20]);
+
+    rotateViews([nvA, nvB], POSITION);
+
+    const [azi, elev] = computeAzimuthElevation(POSITION, [0, -20, 20]);
+    expect(nvA.setRenderAzimuthElevation).toHaveBeenCalledWith(azi, elev);
+  });
+
+  it('rotates around the origin when no view has a pivot yet', () => {
+    const nvA = makeView(undefined);
+
+    rotateViews([nvA], POSITION);
+
+    expect(nvA.setRenderAzimuthElevation).toHaveBeenCalledWith(
+      ...computeAzimuthElevation(POSITION)
+    );
+  });
+
+  it('skips missing views (e.g. a topography view that was never created)', () => {
+    const nvA = makeView([0, -20, 20]);
+
+    expect(() => rotateViews([null, nvA, undefined], POSITION)).not.toThrow();
+    expect(nvA.setRenderAzimuthElevation).toHaveBeenCalledTimes(1);
   });
 });

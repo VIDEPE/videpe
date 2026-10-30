@@ -236,7 +236,6 @@ export const NiiViewer = ({
   // dropped into this component's own dropzone, which never touch the layers/
   // electrodeLayer/esiLayer props, so it doesn't wrongly unmount this viewer when those go empty/null together.
   onHas3DExtentChange, // reports whether the scene has a volume/mesh (non-connectome) — gates the cross-panel rotation sync; see the effect below
-  isFullscreen = false,
   onElectrodeLayerDismissed,
   onLoadError,
   clickedEegChannelPos, // {pos: {x,y,z}, clickId} The location of the clicked Eeg Channel the niiviewer cursor should move to
