@@ -78,68 +78,36 @@ export function matchChannelsToPositions(channelNames, electrodes) {
 // markers) from matched channel voltages.
 
 /**
- * Build a triangulated mesh from electrode positions using their convex hull.
+ * Build a triangulated scalp mesh from electrode positions.
+ *
+ * A convex hull of the raw positions can leave out electrodes that sit slightly inside
+ * it (in concave regions of the head, or among densely spaced 10-05 positions), so they
+ * would get a vertex but no triangle. To make every electrode part of the surface, the
+ * electrodes are first projected onto a sphere fitted to them (centre = centroid,
+ * radius = mean distance to the centroid). Every point on a sphere lies on its convex
+ * hull, so the hull of the projected points contains every electrode. That triangulation
+ * is then applied to the original positions, so the mesh follows the actual head shape.
+ *
  * Vertex order in the output matches the input electrodes array, so
  * electrodes[i] corresponds to vertices[i*3 .. i*3+2].
  *
- * @param {{ label, x, y, z }[]} electrodes
+ * @param {{ label, x, y, z }[]} electrodes - at least four electrode positions
  * @returns {{ vertices: Float32Array, indices: Uint32Array }}
+ * @throws {Error} when there are fewer than four electrodes, when all electrodes are at
+ *   (nearly) the same position, or when an electrode lies at the fitted sphere's centre
  */
-/*
-export function buildElectrodeMesh(electrodes) {
-  const points = electrodes.map((e) => [e.x, e.y, e.z]);
-  const faces = convexHull(points);
-
-  // NiiVue expects all vertex positions as a single flat Float32Array: [x0,y0,z0, x1,y1,z1, ...]
-  // One electrode = one vertex = three consecutive numbers. 346 electrodes → 1038 numbers.
-  const vertices = new Float32Array(electrodes.length * 3);
-  for (let i = 0; i < electrodes.length; i++) {
-    vertices[i * 3] = electrodes[i].x;
-    vertices[i * 3 + 1] = electrodes[i].y;
-    vertices[i * 3 + 2] = electrodes[i].z;
-  }
-
-  // Flattens the faces into a Uint32Array [i0,j0,k0, i1,j1,k1, ...] of indices NiiVue expects
-  // Each triplet references three vertex indices that form one triangle on the mesh surface.
-  const indices = new Uint32Array(faces.length * 3);
-  for (let i = 0; i < faces.length; i++) {
-    indices[i * 3] = faces[i][0];
-    indices[i * 3 + 1] = faces[i][1];
-    indices[i * 3 + 2] = faces[i][2];
-  }
-  
-  return { vertices, indices };
-}
-*/
-/**
- * Build a triangulated mesh from electrode positions using their convex hull.
- * Since the convex hull may create a mesh that does not contains all the electrodes,
- * we do it iteratively, where in each iteration the missing electrodes are pushed outward, 
- * and the convex hull is computed again until there are no missing electrodes.
- * The original electrodes positions are used for the final mesh.
- * Vertex order in the output matches the input electrodes array, so
- * electrodes[i] corresponds to vertices[i*3 .. i*3+2].
- *
- * @param {{ label, x, y, z }[]} electrodes
- * @param {number[]} maxIterations  	- maximum number of iterations = 5 
- * @param {number[]} offsetFraction  	- fraction of outward displacement for missing electrodes = 0.001
- * @returns {{ vertices: Float32Array, indices: Uint32Array }}
- */
-
 export function buildElectrodeMesh(electrodes) {
   const n = electrodes.length;
 
   if (n < 4) {
-    throw new Error("At least four electrodes are required.");
+    throw new Error('At least four electrodes are required.');
   }
 
   // Original electrode coordinates
   const vertices = electrodes.map((e) => [e.x, e.y, e.z]);
 
   // Estimate sphere centre as the centroid
-  const center = [0, 1, 2].map(
-    (k) => vertices.reduce((sum, p) => sum + p[k], 0) / n
-  );
+  const center = [0, 1, 2].map((k) => vertices.reduce((sum, p) => sum + p[k], 0) / n);
 
   // Estimate sphere radius as the mean distance from the centre
   const radius =
@@ -151,7 +119,7 @@ export function buildElectrodeMesh(electrodes) {
     }, 0) / n;
 
   if (radius < 1e-12) {
-    throw new Error("Electrode coordinates have near-zero spatial extent.");
+    throw new Error('Electrode coordinates have near-zero spatial extent.');
   }
 
   // Project electrodes onto the sphere
@@ -162,9 +130,7 @@ export function buildElectrodeMesh(electrodes) {
     const distance = Math.hypot(dx, dy, dz);
 
     if (distance < 1e-12) {
-      throw new Error(
-        "An electrode lies at the estimated sphere centre."
-      );
+      throw new Error('An electrode lies at the estimated sphere centre.');
     }
 
     return [
@@ -177,29 +143,47 @@ export function buildElectrodeMesh(electrodes) {
   // Compute convex hull on the projected spherical points
   const faces = convexHull(projected);
 
+  // Sanity check: on a sphere every electrode should end up in a triangle.
+  // Only when a template has two electrodes in the same direction from the
+  // centre, one would be discarded.
+  // Warn rather than throw — a mesh with a small hole beats no topography at all.
   const hullVertices = new Set(faces.flat());
-  const missing = [];
-
-  for (let i = 0; i < n; i++) {
-    if (!hullVertices.has(i)) missing.push(i);
+  const missingLabels = electrodes.filter((_, i) => !hullVertices.has(i)).map((e) => e.label);
+  if (missingLabels.length > 0) {
+    console.warn(
+      `buildElectrodeMesh: ${missingLabels.length} electrode(s) not part of the mesh:`,
+      missingLabels
+    );
   }
-
-  console.log("Remaining missing electrode indices:", missing.length);
 
   // Return original coordinates and hull triangle indices
   return {
+    // NiiVue expects all vertex positions as a single flat Float32Array: [x0,y0,z0, x1,y1,z1, ...]
+    // One electrode = one vertex = three consecutive numbers. 346 electrodes → 1038 numbers.
     vertices: new Float32Array(vertices.flat()),
+    // Flattens the faces into a Uint32Array [i0,j0,k0, i1,j1,k1, ...] of indices NiiVue expects
+    // Each triplet references three vertex indices that form one triangle on the mesh surface.
     indices: new Uint32Array(faces.flat()),
   };
 }
 
-// Useful for debugging: download a Float32Array of scalars as a text file, one value per line
+/**
+ * Debugging helper only — not part of the normal app flow. Downloads an array of scalars
+ * (e.g. a mesh's Float32Array vertices or per-vertex colours) as a plain-text file with
+ * one value per line, so it can be inspected or loaded into another tool (MATLAB, Python, ...).
+ * Triggers a browser download via a temporary <a download> link.
+ *
+ * @param {ArrayLike<number>} array - values to write (Float32Array, Uint32Array, plain array, ...)
+ * @param {string} filename         - name of the downloaded file, e.g. 'vertices.txt'
+ * @returns {void}
+ */
+// eslint-disable-next-line no-unused-vars -- kept on purpose as a debugging helper
 function downloadArray(array, filename) {
-  const text = Array.from(array).join("\n");
-  const blob = new Blob([text], { type: "text/plain" });
+  const text = Array.from(array).join('\n');
+  const blob = new Blob([text], { type: 'text/plain' });
   const url = URL.createObjectURL(blob);
 
-  const link = document.createElement("a");
+  const link = document.createElement('a');
   link.href = url;
   link.download = filename;
   link.click();
@@ -304,18 +288,17 @@ export function inverseDistanceWeighting(queryXYZ, matchedXYZ, voltages, k = 5, 
 /**
  * Compute a per-vertex scalar (voltage) for every vertex in the electrode mesh.
  * Vertices that sit at a matched electrode take that electrode's recorded voltage
- * directly, so the mesh surface matches the electrode marker colour exactly there —
- * gaussianRBF is a weighted average, not a true interpolant, so running a matched
- * vertex through it would blend its own voltage with its neighbours' and mute any
- * spike. All other (unmatched) vertices are still filled in by Gaussian RBF.
+ * directly, so the mesh surface matches the electrode marker colour exactly there.
+ * All other (unmatched) vertices are filled in by inverse-distance weighting over
+ * the nearest matched electrodes (see inverseDistanceWeighting). When there are no
+ * matched electrodes at all, unmatched vertices come back as NaN.
  *
  * @param {{ label, x, y, z }[]} electrodes  - full electrode list (determines vertex order)
  * @param {{ pos: { label, x, y, z } }[]} matched - matched channel entries from matchChannelsToPositions
  * @param {number[]} voltages                 - voltage per matched entry (same order as matched)
- * @param {number} sigma                      - Gaussian falloff in mm
  * @returns {Float32Array}
  */
-export function interpolateMeshVoltages(electrodes, matched, voltages, sigma = 30) {
+export function interpolateMeshVoltages(electrodes, matched, voltages) {
   const matchedXYZ = matched.map((m) => [m.pos.x, m.pos.y, m.pos.z]);
   const scalars = new Float32Array(electrodes.length);
 
