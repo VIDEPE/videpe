@@ -1,5 +1,7 @@
 import { isMeshExt, isDicomExtension } from '@niivue/niivue';
 
+// ─── Constants ──────────────────────────────────────────────────────────────
+
 const ANAT_BIDS_SUFFIXES = new Set([
   'T1w',
   'T2w',
@@ -35,13 +37,6 @@ export const TYPE_COLORMAP_DEFAULTS = {
 // so multi-label files like FreeSurfer's 'wmparc' keep the DSEG colormap.
 const WHITE_MATTER_PATTERN = /(^|[^a-z])wm([^a-z]|$)|white[^a-z]?matter/;
 
-// Default colormap for a layer: by type, with white matter DSEG layers overridden to gray.
-const getDefaultColormap = (layer) => {
-  if (layer.type === 'DSEG' && WHITE_MATTER_PATTERN.test(layer.subtype?.toLowerCase() ?? ''))
-    return 'gray';
-  return TYPE_COLORMAP_DEFAULTS[layer.type] ?? 'gray';
-};
-
 // Every other layer is identified by its file's blob: URL.
 // The electrode connectome isn't loaded from a file — it's built in memory from EEG
 // data — so it has no real URL. This fixed string stands in for one, letting the
@@ -50,12 +45,6 @@ export const ELECTRODE_LAYER_URL = '__electrodes__';
 
 // Same sentinel-URL pattern for the ESI source-power connectome/volume layer.
 export const ESI_LAYER_URL = '__esi-source-power__';
-
-// True for layers backed by an entry in nv.volumes (not connectomes/meshes, which live in
-// nv.meshes). Used to index into nv.volumes and to decide reorderability: only volumes are
-// reorderable, since meshes/connectomes have no z-order and are pinned to the bottom. The ESI
-// layer follows its current kind — 'volume' in Volume mode, 'connectome' in Connectome mode.
-export const isImageVolumeLayer = (layer) => layer.kind !== 'connectome' && layer.kind !== 'mesh';
 
 // Connectome node/edge scale defaults — exported so ImagingControls can mark each slider's
 // reset point without the marker and the actual default drifting apart from each other.
@@ -66,12 +55,105 @@ export const DEFAULT_EDGE_SCALE = 0.5;
 // same reason as the scale defaults above: ImagingControls' double-click reset uses it.
 export const DEFAULT_MESH_XRAY = 0.75;
 
-// Returns default display settings, one per layer. Settings are keyed by the layer's url
-// (not array position, which shifts as layers are added/reordered). startIndex is where
-// `layers` starts among all loaded layers, so only the very first layer overall gets full
-// opacity. currentMeshXRay seeds the meshXRay field: DEFAULT_MESH_XRAY for a scene's first mesh/
-// connectome, or the scene's current value when appending to an already-populated scene.
-// Called only by layerState.js, the one place layer defaults are created.
+// Volumes always render through a fixed 256-entry LUT texture, so a random per-label colormap
+// is capped at 256 distinct labels. Each of the 256 slots gets the color of whichever label
+// value would normalize to that slot (inverting NiiVue's own value->slot formula), so a label
+// gets a consistent color instead of a gradient bleeding into its neighbors.
+export const MAX_RANDOM_COLORMAP_LABELS = 256;
+
+// ─── Layer type detection + default settings ────────────────────────────────
+
+/**
+ * Detects imaging modality from a filename using BIDS suffix first, then keyword fallback.
+ *
+ * @param   {string}  filename  The file's name, including its extension(s)
+ * @return  {{type: string, subtype: (string|null)}}  type is 'ANAT', 'PET', 'SPECT', 'CT',
+ *          'FUNC' or 'DSEG', or nameWithoutExtension for unknowns. subtype is
+ *          nameWithoutExtension for every match (e.g. 'sub-01_T1w'), so files are
+ *          distinguishable in the UI, and null for unknowns
+ */
+export const detectVolumeType = (filename) => {
+  // Strip everything from the first '.' onward (handles .nii.gz, .dcm, etc.)
+  const dotIndex = filename.indexOf('.');
+  const nameWithoutExtension = dotIndex === -1 ? filename : filename.slice(0, dotIndex);
+  const lastSegment = nameWithoutExtension.split('_').at(-1);
+  const lower = filename.toLowerCase();
+
+  // Pass 1: BIDS suffix (case-sensitive) — all use nameWithoutExtension as subtype for consistency
+  if (ANAT_BIDS_SUFFIXES.has(lastSegment)) return { type: 'ANAT', subtype: nameWithoutExtension };
+  if (lastSegment === 'pet') return { type: 'PET', subtype: nameWithoutExtension };
+  if (lastSegment === 'spect') return { type: 'SPECT', subtype: nameWithoutExtension };
+  if (lastSegment === 'ct') return { type: 'CT', subtype: nameWithoutExtension };
+  if (lastSegment === 'bold') return { type: 'FUNC', subtype: nameWithoutExtension };
+  if (lastSegment === 'dseg') return { type: 'DSEG', subtype: nameWithoutExtension };
+
+  // Pass 2: keyword fallback (case-insensitive, for non-BIDS filenames) — use nameWithoutExtension as subtype so files are distinguishable in the UI
+  // Bare 'seg'/'aseg' only match as standalone tokens, so joined words like 'phaseGRE' (ph-aseg-re) don't trigger it
+  if (/atlas|dseg|segm|parc|label|(^|[^a-z])a?seg([^a-z]|$)/.test(lower))
+    return { type: 'DSEG', subtype: nameWithoutExtension }; // do DSEG one first as dseg is often addtional to other keywords ,e.g. t1 and should overrule those
+  if (/t1|t2|flair|mri|mprage|mp2rage|bravo/.test(lower))
+    return { type: 'ANAT', subtype: nameWithoutExtension };
+  if (/pet|fdg/.test(lower)) return { type: 'PET', subtype: nameWithoutExtension };
+  if (/spect|siscom/.test(lower)) return { type: 'SPECT', subtype: nameWithoutExtension };
+  if (/ct|os|bones/.test(lower)) return { type: 'CT', subtype: nameWithoutExtension };
+  if (/func|epi|bold/.test(lower)) return { type: 'FUNC', subtype: nameWithoutExtension };
+
+  return { type: nameWithoutExtension, subtype: null };
+};
+
+/**
+ * Strips the extension(s) from a filename for use as a mesh layer's subtype — mirrors
+ * detectVolumeType's nameWithoutExtension so a mesh card reads e.g. "Mesh - cortex".
+ *
+ * @param   {string}  filename  The file's name, e.g. 'cortex.surf.gii'
+ * @return  {string}            Everything before the first '.', e.g. 'cortex'
+ */
+const nameWithoutExtension = (filename) => {
+  const dotIndex = filename.indexOf('.');
+  return dotIndex === -1 ? filename : filename.slice(0, dotIndex);
+};
+
+/**
+ * True for layers backed by an entry in nv.volumes (not connectomes/meshes, which live in
+ * nv.meshes). Used to index into nv.volumes and to decide reorderability: only volumes are
+ * reorderable, since meshes/connectomes have no z-order and are pinned to the bottom. The ESI
+ * layer follows its current kind — 'volume' in Volume mode, 'connectome' in Connectome mode.
+ *
+ * @param   {Object}   layer  The layer, with an optional `kind` ('connectome', 'mesh', ...)
+ * @return  {boolean}         Whether the layer is an image volume
+ */
+export const isImageVolumeLayer = (layer) => layer.kind !== 'connectome' && layer.kind !== 'mesh';
+
+/**
+ * Default colormap for a layer: by type, with white matter DSEG layers overridden to gray.
+ *
+ * @param   {Object}  layer  The layer, with its detected `type` and `subtype`
+ * @return  {string}         The NiiVue colormap name, 'gray' for types without a default
+ */
+const getDefaultColormap = (layer) => {
+  if (layer.type === 'DSEG' && WHITE_MATTER_PATTERN.test(layer.subtype?.toLowerCase() ?? ''))
+    return 'gray';
+  return TYPE_COLORMAP_DEFAULTS[layer.type] ?? 'gray';
+};
+
+/**
+ * Returns default display settings, one per layer. Settings are keyed by the layer's url
+ * (not array position, which shifts as layers are added/reordered).
+ * Called only by layerState.js, the one place layer defaults are created.
+ *
+ * @param   {Object[]}  layers             The layers to create settings for
+ * @param   {number}    [startIndex]       Where `layers` starts among all loaded layers, so only
+ *                                         the very first layer overall gets full opacity.
+ *                                         Defaults to 0
+ * @param   {boolean}   isEsiVolumeMode    Whether the ESI layer shows as a volume (true) or a
+ *                                         connectome (false). Also makes every layer except the
+ *                                         first start at 0.9 opacity instead of 0.6
+ * @param   {number}    [currentMeshXRay]  Seeds the meshXRay field: DEFAULT_MESH_XRAY (the
+ *                                         default) for a scene's first mesh/connectome, or the
+ *                                         scene's current value when appending to an
+ *                                         already-populated scene
+ * @return  {Object[]}                     One settings object per layer, in the same order
+ */
 export const getInitialLayerSettings = (
   layers,
   startIndex = 0,
@@ -105,41 +187,21 @@ export const getInitialLayerSettings = (
     ...(layer.url === ELECTRODE_LAYER_URL ? { electrodeDisplayMode: 'none' } : {}), // Electrodes layer's display-mode dropdown
   }));
 
-// Detects imaging modality from a filename using BIDS suffix first, then keyword fallback.
-// Returns { type, subtype } where type is 'MRI', 'PET', 'SPECT', or nameWithoutExtension for unknowns.
-// subtype is the BIDS suffix for MRI (e.g. 'T1w', 'T2star'), nameWithoutExtension for PET/SPECT/keyword matches, null for unknowns.
-export const detectVolumeType = (filename) => {
-  // Strip everything from the first '.' onward (handles .nii.gz, .dcm, etc.)
-  const dotIndex = filename.indexOf('.');
-  const nameWithoutExtension = dotIndex === -1 ? filename : filename.slice(0, dotIndex);
-  const lastSegment = nameWithoutExtension.split('_').at(-1);
-  const lower = filename.toLowerCase();
+// ─── Colormaps, thresholds + colorbars ──────────────────────────────────────
 
-  // Pass 1: BIDS suffix (case-sensitive) — all use nameWithoutExtension as subtype for consistency
-  if (ANAT_BIDS_SUFFIXES.has(lastSegment)) return { type: 'ANAT', subtype: nameWithoutExtension };
-  if (lastSegment === 'pet') return { type: 'PET', subtype: nameWithoutExtension };
-  if (lastSegment === 'spect') return { type: 'SPECT', subtype: nameWithoutExtension };
-  if (lastSegment === 'ct') return { type: 'CT', subtype: nameWithoutExtension };
-  if (lastSegment === 'bold') return { type: 'FUNC', subtype: nameWithoutExtension };
-  if (lastSegment === 'dseg') return { type: 'DSEG', subtype: nameWithoutExtension };
-
-  // Pass 2: keyword fallback (case-insensitive, for non-BIDS filenames) — use nameWithoutExtension as subtype so files are distinguishable in the UI
-  // Bare 'seg'/'aseg' only match as standalone tokens, so joined words like 'phaseGRE' (ph-aseg-re) don't trigger it
-  if (/atlas|dseg|segm|parc|label|(^|[^a-z])a?seg([^a-z]|$)/.test(lower))
-    return { type: 'DSEG', subtype: nameWithoutExtension }; // do DSEG one first as dseg is often addtional to other keywords ,e.g. t1 and should overrule those
-  if (/t1|t2|flair|mri|mprage|mp2rage|bravo/.test(lower))
-    return { type: 'ANAT', subtype: nameWithoutExtension };
-  if (/pet|fdg/.test(lower)) return { type: 'PET', subtype: nameWithoutExtension };
-  if (/spect|siscom/.test(lower)) return { type: 'SPECT', subtype: nameWithoutExtension };
-  if (/ct|os|bones/.test(lower)) return { type: 'CT', subtype: nameWithoutExtension };
-  if (/func|epi|bold/.test(lower)) return { type: 'FUNC', subtype: nameWithoutExtension };
-
-  return { type: nameWithoutExtension, subtype: null };
-};
-
-// NiiVue cal_min/cal_max values depend on the specific volume/source-power data values, so a
-// percentile 0-1 slider value would be meaningless applied directly. getCalBounds() resolves a layer's
-// actual bounds so a fraction can be converted to a real value
+/**
+ * NiiVue cal_min/cal_max values depend on the specific volume/source-power data values, so a
+ * percentile 0-1 slider value would be meaningless applied directly. getCalBounds() resolves a
+ * layer's actual bounds so a fraction can be converted to a real value (see fractionToCalValue).
+ *
+ * @param   {Object}  layer            The layer; ESI layers carry their own boundMin/boundMax
+ * @param   {Object}  [nvVolume]       The layer's loaded NiiVue volume (NVImage), whose
+ *                                     global_min/max or robust_min/max are used otherwise
+ * @param   {string}  [colormapValue]  The layer's colormap; 'randomised' uses the global range
+ *                                     so every label index gets its own color
+ * @return  {{boundMin: number, boundMax: number}}  The range a 0-1 fraction maps onto
+ *          (0-1 while nvVolume isn't loaded yet)
+ */
 export function getCalBounds(layer, nvVolume, colormapValue) {
   // for ESI layers use the predetermined bounds calculated for that layer
   if (layer.url === ESI_LAYER_URL) {
@@ -151,6 +213,19 @@ export function getCalBounds(layer, nvVolume, colormapValue) {
   }
   // for all the other colormaps it is better to use the robost_min/max to avoid blown out values
   return { boundMin: nvVolume?.robust_min ?? 0, boundMax: nvVolume?.robust_max ?? 1 };
+}
+
+/**
+ * Converts a 0-1 Threshold-slider fraction into a real cal_min/cal_max value within
+ * [boundMin, boundMax].
+ *
+ * @param   {number}  fraction  The slider value, 0-1
+ * @param   {number}  boundMin  The lower bound, from getCalBounds
+ * @param   {number}  boundMax  The upper bound, from getCalBounds
+ * @return  {number}            The value to set as cal_min/cal_max
+ */
+export function fractionToCalValue(fraction, boundMin, boundMax) {
+  return boundMin + fraction * (boundMax - boundMin);
 }
 
 // Source - https://stackoverflow.com/a/9493060
@@ -183,6 +258,14 @@ function hslToRgb(h, s, l) {
   return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
 }
 
+/**
+ * Helper for hslToRgb: converts one color channel's hue to its RGB component value.
+ *
+ * @param   {number}  p  The lower bound derived from the lightness and saturation
+ * @param   {number}  q  The upper bound derived from the lightness and saturation
+ * @param   {number}  t  The hue, offset per channel (+1/3 red, -1/3 blue), wrapped into [0, 1]
+ * @return  {number}     The channel value in [0, 1]
+ */
 function hueToRgb(p, q, t) {
   if (t < 0) t += 1;
   if (t > 1) t -= 1;
@@ -192,12 +275,15 @@ function hueToRgb(p, q, t) {
   return p;
 }
 
-// Volumes always render through a fixed 256-entry LUT texture, so a random per-label colormap
-// is capped at 256 distinct labels. Each of the 256 slots gets the color of whichever label
-// value would normalize to that slot (inverting NiiVue's own value->slot formula), so a label
-// gets a consistent color instead of a gradient bleeding into its neighbors.
-export const MAX_RANDOM_COLORMAP_LABELS = 256;
-
+/**
+ * Builds a NiiVue colormap that gives each integer label in [minIndex, maxIndex] its own random,
+ * fully saturated color, spread over the LUT slots as described at MAX_RANDOM_COLORMAP_LABELS.
+ *
+ * @param   {number}  minIndex  The lowest label value (the volume's global_min)
+ * @param   {number}  maxIndex  The highest label value (the volume's global_max)
+ * @return  {{R: number[], G: number[], B: number[], I: number[]}}  The colormap for
+ *          nv.addColormap: one R/G/B value (0-255) per LUT slot, with I holding the slot indices
+ */
 export function makeRandomColormap(minIndex, maxIndex) {
   const nLabels = maxIndex - minIndex + 1;
   // assign as many colours as there are indices
@@ -222,8 +308,15 @@ export function makeRandomColormap(minIndex, maxIndex) {
   return { R, G, B, I };
 }
 
-// 'random' is registered as a one-off named colormap per volume (nv.setColormap only resolves
-// by name); everything else goes straight through as a real NiiVue colormap name.
+/**
+ * Applies a colormap to a loaded volume. 'randomised' is registered as a one-off named colormap
+ * per volume (nv.setColormap only resolves by name); everything else goes straight through as a
+ * real NiiVue colormap name.
+ *
+ * @param   {Object}  nv             The Niivue instance
+ * @param   {Object}  nvVolume       The NiiVue volume (NVImage) to color
+ * @param   {string}  colormapValue  A NiiVue colormap name, or 'randomised'
+ */
 export function applyColormap(nv, nvVolume, colormapValue) {
   if (colormapValue === 'randomised') {
     const colormapKey = `randomised-${nvVolume.id}`;
@@ -234,22 +327,32 @@ export function applyColormap(nv, nvVolume, colormapValue) {
   }
 }
 
-// Converts a 0-1 Threshold-slider fraction into a real cal_min/cal_max value within [boundMin, boundMax].
-export function fractionToCalValue(fraction, boundMin, boundMax) {
-  return boundMin + fraction * (boundMax - boundMin);
-}
-
-// NiiVue's own colorbar-drawing logic only ever checks a volume/mesh's colorbarVisible flag,
-// never its opacity or visibility. This caused the bug that a hidden layer still showed
-// the colorbar if it was toggled. isAnyColorBarActive is a scene wide master switch that checks
-// if both the showColorBar toggle and the visibility toggle are active at the same time for any layer.
-// If not, the NiiVue global show colorbar setting is deactivated
+/**
+ * NiiVue's own colorbar-drawing logic only ever checks a volume/mesh's colorbarVisible flag,
+ * never its opacity or visibility. This caused the bug that a hidden layer still showed
+ * the colorbar if it was toggled. isAnyColorbarActive is a scene wide master switch that checks
+ * if both the showColorbar toggle and the visibility toggle are active at the same time for any
+ * layer. If not, the NiiVue global show colorbar setting is deactivated.
+ *
+ * @param   {Object[]}  layerSettings  The layers' settings, with `showColorbar` and `visible`
+ * @return  {boolean}                  Whether any visible layer wants its colorbar shown
+ */
 export function isAnyColorbarActive(layerSettings) {
   return layerSettings.some((layerSetting) => layerSetting.showColorbar && layerSetting.visible);
 }
 
-// Loads only new image volumes into nv (existing ones stay) and applies all settings.
-// Connectome/mesh layers are excluded — they're tracked separately by the build effects.
+// ─── Syncing layers into NiiVue ─────────────────────────────────────────────
+
+/**
+ * Loads only new image volumes into nv (existing ones stay) and applies all settings.
+ * Connectome/mesh layers are excluded — they're tracked separately by the build effects.
+ *
+ * @param   {Object}    nv             The Niivue instance
+ * @param   {Object[]}  layers         The image-volume layers, in nv.volumes order. Those past
+ *                                     the ones already in nv.volumes are loaded
+ * @param   {Object[]}  layerSettings  The settings for `layers`, matching them 1:1 by index
+ * @return  {Promise<void>}            Resolves once the new volumes are loaded and redrawn
+ */
 export async function syncVolumesAndApplySettings(nv, layers, layerSettings) {
   const indexOffset = nv.volumes.length; // Volumes before this index are already loaded into nv.
   const newLayers = layers.slice(indexOffset);
@@ -284,12 +387,21 @@ export async function syncVolumesAndApplySettings(nv, layers, layerSettings) {
   nv.updateGLVolume();
 }
 
-// Loads only new surface meshes into nv (existing ones stay) and applies their opacity/
-// visibility. meshMap tracks the file meshes already in the scene, keyed by their layer url —
-// unlike volumes, nv.meshes can't be indexed positionally because it also holds connectome
-// meshes built by the ESI/intracranial effects, so a url→mesh map is what distinguishes
-// "already loaded" file meshes from new ones. Meshes carry no colormap/threshold controls
-// (they render with their own baked-in vertex colors), so only opacity/visibility apply.
+/**
+ * Loads only new surface meshes into nv (existing ones stay) and applies their opacity/
+ * visibility. Meshes carry no colormap/threshold controls (they render with their own
+ * baked-in vertex colors), so only opacity/visibility apply.
+ *
+ * @param   {Object}    nv                 The Niivue instance
+ * @param   {Object[]}  meshLayers         The surface-mesh layers
+ * @param   {Object[]}  meshLayerSettings  The settings for `meshLayers`, matching them 1:1
+ * @param   {Map<string, Object>}  meshMap  The file meshes already in the scene, keyed by their
+ *          layer url; new meshes are added to it. Unlike volumes, nv.meshes can't be indexed
+ *          positionally because it also holds connectome meshes built by the ESI/intracranial
+ *          effects, so a url→mesh map is what distinguishes "already loaded" file meshes from
+ *          new ones
+ * @return  {Promise<void>}                Resolves once the new meshes are loaded and redrawn
+ */
 export async function syncMeshesAndApplySettings(nv, meshLayers, meshLayerSettings, meshMap) {
   if (meshLayers.length === 0) return; // nothing to load or redraw for
 
@@ -322,20 +434,20 @@ export async function syncMeshesAndApplySettings(nv, meshLayers, meshLayerSettin
   nv.updateGLVolume();
 }
 
-// Strips the extension(s) from a filename for use as a mesh layer's subtype — mirrors
-// detectVolumeType's nameWithoutExtension so a mesh card reads e.g. "Mesh - cortex".
-const nameWithoutExtension = (filename) => {
-  const dotIndex = filename.indexOf('.');
-  return dotIndex === -1 ? filename : filename.slice(0, dotIndex);
-};
+// ─── Files → layers ─────────────────────────────────────────────────────────
 
-// A DICOM series is many files (one per slice) representing a single volume, not one file per
-// layer like every other supported format, so dropped .dcm files are pulled out and converted
-// as a group instead of going through the same one-file-to-one-layer map as everything else.
-// isDicomExtension is NiiVue's own check (ext.toUpperCase() === 'DCM'), which misses DICOM
-// files with no extension at all — common in PACS exports (e.g. "IM000001"). Those fall back
-// to a DICOM magic-bytes check instead; files with a real (non-.dcm) extension are trusted and
-// skip that fallback entirely, so the extra read only happens where it's actually needed.
+/**
+ * A DICOM series is many files (one per slice) representing a single volume, not one file per
+ * layer like every other supported format, so dropped .dcm files are pulled out and converted
+ * as a group instead of going through the same one-file-to-one-layer map as everything else.
+ * isDicomExtension is NiiVue's own check (ext.toUpperCase() === 'DCM'), which misses DICOM
+ * files with no extension at all — common in PACS exports (e.g. "IM000001"). Those fall back
+ * to a DICOM magic-bytes check instead; files with a real (non-.dcm) extension are trusted and
+ * skip that fallback entirely, so the extra read only happens where it's actually needed.
+ *
+ * @param   {File}  file    The dropped or selected file
+ * @return  {Promise<boolean>}  Whether the file is a DICOM file
+ */
 async function isDicomFile(file) {
   // Extension check
   const extension = file.name.split('.').pop() ?? '';
@@ -365,10 +477,16 @@ async function isDicomFile(file) {
   return false;
 }
 
-// Runs dcm2niix (WASM, via @niivue/dicom-loader) on a group of .dcm files and turns each
-// resulting NIfTI into an image-volume layer, same shape as a regular file drop. dcm2niix
-// splits multiple series back out on its own, so a folder containing several series still
-// produces one layer per series.
+/**
+ * Runs dcm2niix (WASM, via @niivue/dicom-loader) on a group of .dcm files and turns each
+ * resulting NIfTI into an image-volume layer, same shape as a regular file drop. dcm2niix
+ * splits multiple series back out on its own, so a folder containing several series still
+ * produces one layer per series.
+ *
+ * @param   {File[]}  dicomFiles  The DICOM files, possibly from several series
+ * @return  {Promise<Object[]>}   One { url, name, type, subtype } layer per converted series,
+ *                                its url a blob: URL to the NIfTI data
+ */
 async function dicomFilesToLayers(dicomFiles) {
   const { dicomLoader } = await import('@niivue/dicom-loader');
   const converted = await dicomLoader(dicomFiles);
@@ -379,9 +497,16 @@ async function dicomFilesToLayers(dicomFiles) {
   });
 }
 
+/**
+ * Convert a FileList (from input or drag-and-drop) to an array of layer objects with
+ * { url, name, type, subtype } for image volumes, plus { kind: 'mesh' } for surface meshes.
+ * DICOM files are converted to NIfTI as a group (see isDicomFile/dicomFilesToLayers).
+ *
+ * @param   {FileList|File[]}  files  The dropped or selected files
+ * @return  {Promise<Object[]>}       The layers, each with a blob: url; the other files' layers
+ *                                    first, then the converted DICOM series
+ */
 export async function filesToLayers(files) {
-  // Convert a FileList (from input or drag-and-drop) to an array of layer objects with
-  // { url, name, type, subtype } for image volumes, plus { kind: 'mesh' } for surface meshes.
   const fileArray = Array.from(files);
   const dicomFlags = await Promise.all(fileArray.map(isDicomFile)); // real true/false values, resolved
 
@@ -412,13 +537,62 @@ export async function filesToLayers(files) {
   return [...otherLayers, ...dicomLayers];
 }
 
-// Frees the blob: URLs backing dropped-file layers. Called right after nv loads a layer
-// (redundant by then) and defensively wherever a layer is discarded (failed load, deleted
-// card, unmount). Re-revoking is a harmless no-op; non-blob (sentinel/demo) URLs are skipped,
-// as are non-string ones — the ESI volume is loaded with its raw NIfTI bytes as its `url`.
+/**
+ * Frees the blob: URLs backing dropped-file layers. Called right after nv loads a layer
+ * (redundant by then) and defensively wherever a layer is discarded (failed load, deleted
+ * card, unmount). Re-revoking is a harmless no-op; non-blob (sentinel/demo) URLs are skipped,
+ * as are non-string ones — the ESI volume is loaded with its raw NIfTI bytes as its `url`.
+ *
+ * @param   {Object[]}  layers  The layers whose blob: URLs to free
+ */
 export function revokeLayerUrls(layers) {
   for (const layer of layers) {
     if (typeof layer.url === 'string' && layer.url.startsWith('blob:'))
       URL.revokeObjectURL(layer.url);
   }
+}
+
+// ─── 3D view ────────────────────────────────────────────────────────────────
+
+/**
+ * Calculates the NiiVue azimuth and elevation of the 3D render view that make a given 3D
+ * position face the viewer. The camera is positioned on the axis through the pivot NiiVue
+ * rotates around (nv.pivot3D, the centre of the scene's bounding box) and the position, on the
+ * position's side — e.g. a point at the back of the head gives azimuth 0 (camera behind),
+ * one on the left gives 90 and one straight above gives elevation 90.
+ *
+ * @param   {number[]}  position  The [x, y, z] position in world mm (RAS) to turn towards
+ * @param   {number[]}  [pivot]   The [x, y, z] point the view rotates around, in world mm.
+ *                                Defaults to the origin [0, 0, 0] when omitted or undefined
+ *                                (nv.pivot3D is undefined until NiiVue first draws a 3D scene)
+ * @return  {number[]}            [azimuth, elevation] in degrees, as taken by
+ *                                nv.setRenderAzimuthElevation. The azimuth isn't wrapped
+ *                                into [0, 360) — e.g. -270 for the left, the same as 90
+ */
+export function computeAzimuthElevation(position, pivot = [0, 0, 0]) {
+  // offset position by the pivot point
+  const x = position[0] - pivot[0];
+  const y = position[1] - pivot[1];
+  const z = position[2] - pivot[2];
+
+  const r = Math.sqrt(x * x + y * y);
+  const azi = (-180 / Math.PI) * Math.atan2(y, x) - 90; // remove 90 because -y and -x used as axis
+  const elev = (180 / Math.PI) * Math.atan2(z, r);
+  return [azi, elev];
+}
+
+/**
+ * Rotates one or more NiiVue 3D views to the same azimuth/elevation so `position` faces the
+ * viewer in all of them. Missing views (null/undefined) are skipped. The rotation pivot is taken
+ * from the first view that has one, so callers list the most reliable view first.
+ *
+ * @param   {Object[]}  views     The Niivue instances to rotate, most reliable pivot first
+ * @param   {number[]}  position  The [x, y, z] position in world mm (RAS) to face
+ */
+export function rotateViews(views, position) {
+  const activeViews = views.filter(Boolean); // keep each view that are truthy
+  const pivot = activeViews.find((nv) => nv.pivot3D)?.pivot3D; // takes the first pivot3D value from a view that has one
+  const [azi, elev] = computeAzimuthElevation(position, pivot);
+  // setRenderAzimuthElevation redraws by itself, so no updateGLVolume is needed
+  activeViews.forEach((nv) => nv.setRenderAzimuthElevation(azi, elev));
 }

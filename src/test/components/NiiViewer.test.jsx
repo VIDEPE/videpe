@@ -1,5 +1,5 @@
 import { StrictMode } from 'react';
-import { describe, it, expect, vi, beforeEach, afterEach, assert } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {
@@ -9,12 +9,10 @@ import {
   ESI_LAYER_URL,
   ELECTRODE_LAYER_URL,
   DEFAULT_MESH_XRAY,
-} from '@/utils/NiiViewer.utils';
-import {
-  NiiViewer,
   syncVolumesAndApplySettings,
   syncMeshesAndApplySettings,
-} from '@/components/NiiViewer';
+} from '@/utils/NiiViewer.utils';
+import { NiiViewer } from '@/components/NiiViewer';
 import { dicomLoader } from '@niivue/dicom-loader';
 // Mirrors the real @niivue/niivue MESH_EXTENSIONS list closely enough to exercise
 // isMeshExt's actual extension-based routing without pulling in the real package.
@@ -113,7 +111,8 @@ const makeVolumeLayer = (overrides = {}) => ({
   ...overrides,
 });
 
-const makeEsiLayer = ({ connectome, volume } = {}) => ({
+const makeEsiLayer = ({ connectome, volume, maxSourcePowerLocation } = {}) => ({
+  maxSourcePowerLocation: maxSourcePowerLocation ?? [1, 2, 3],
   sourcePowerConnectomes: connectome ?? makeConnectomeLayer(),
   sourcePowerVolume: volume ?? makeVolumeLayer(),
 });
@@ -179,6 +178,7 @@ vi.mock('@niivue/niivue', () => ({
       getRadiologicalConvention: vi.fn(() => false),
       setRadiologicalConvention: vi.fn(),
       setClipPlane: vi.fn(),
+      setRenderAzimuthElevation: vi.fn(),
       // mm2frac/scene.crosshairPos back the ESI "snap the 3D crosshair to the peak source"
       // behavior (see useEsiLayer.js) — identity stand-in, tests assert on what's passed in.
       mm2frac: vi.fn((mm) => mm),
@@ -1874,7 +1874,7 @@ describe('NiiViewer', () => {
     });
 
     it('removes the volume settings card from the UI when delete is clicked', async () => {
-      const nv = await setup();
+      await setup();
 
       // click expand settings on the first volume (=> index = 0 )
       await userEvent.click(screen.getByRole('button', { name: /expand.*anat/i }));
@@ -2975,6 +2975,7 @@ describe('NiiViewer', () => {
 
       expect(nv.scene.crosshairPos).toBeNull();
       expect(nv.updateGLVolume).not.toHaveBeenCalled();
+      expect(nv.setRenderAzimuthElevation).not.toHaveBeenCalled();
     });
   });
 });

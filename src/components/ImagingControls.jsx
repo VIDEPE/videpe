@@ -120,10 +120,6 @@ function SortableSettingsCard({
   // node/edge colormap, not a NiiVue volume colormap — the intensity colormap dropdown,
   // invert toggle, and colorbar toggle don't apply to them.
   const isConnectome = layer.kind === 'connectome';
-  // File-loaded surface meshes (GIFTI/PLY/OBJ/…) render with their own vertex colors and
-  // have no NiiVue volume colormap or intensity range either, so — like connectomes — they
-  // expose only opacity/visibility, not the colormap/threshold/invert/colorbar controls.
-  const isMesh = layer.kind === 'mesh';
   // Image volumes have an adjustable intensity range/colormap and can be reordered;
   // connectomes and meshes don't/can't, but get their own Mesh Xray control instead.
   const isImageVolume = isImageVolumeLayer(layer);
@@ -143,7 +139,7 @@ function SortableSettingsCard({
       hasAutoSelectedVoltageMetric.current = true;
       onSettingChange(layer.url, 'electrodeDisplayMode', 'voltage');
     }
-  }, [layer.hasVoltageSnapshot, layer.url]);
+  }, [layer.hasVoltageSnapshot, layer.url, onSettingChange]);
 
   // Local string state — allows typing a partial value (e.g. empty string) without breaking the numeric opacity
   const [opacityStr, setOpacityStr] = useState(() => String(Math.round(settings.opacity * 100)));
@@ -179,11 +175,15 @@ function SortableSettingsCard({
   // Unlike opacity/cal_min/cal_max, meshXRay maps to a single value shared across every
   // mesh/connectome layer (see handleSettingChange in NiiViewer.jsx), so this card's own
   // settings.meshXRay can change from a slider on a *different* card. The local string state
-  // above is only ever written by this card's own handlers, so without this effect it would
+  // above is only ever written by this card's own handlers, so without this resync it would
   // silently go stale whenever another card is the one that changed the value.
-  useEffect(() => {
+  // Done during render (comparing against the previous value) rather than in an effect, so the
+  // card never shows the stale number for a render.
+  const [prevMeshXRay, setPrevMeshXRay] = useState(settings.meshXRay);
+  if (settings.meshXRay !== prevMeshXRay) {
+    setPrevMeshXRay(settings.meshXRay);
     setMeshXRayStr(String(Math.round(settings.meshXRay * 100)));
-  }, [settings.meshXRay]);
+  }
 
   // Typing must stay permissive: mirror the raw text as-is so partial/empty input isn't
   // clobbered mid-edit. Only forward a value upstream once it parses to a real number —
@@ -224,7 +224,7 @@ function SortableSettingsCard({
     if (isElectrodeColorbarDisabled && settings.showColorbar) {
       onSettingChange(layer.url, 'showColorbar', false);
     }
-  }, [isElectrodeColorbarDisabled]);
+  }, [isElectrodeColorbarDisabled, onSettingChange, layer.url, settings.showColorbar]);
 
   // Local string state — allows typing a partial value (e.g. empty string) without breaking
   // the numeric threshold. cal_min/cal_max are 0-1 fractions of this layer's own data range

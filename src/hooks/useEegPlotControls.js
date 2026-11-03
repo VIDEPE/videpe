@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 
 // Layout constant shared with the channel-plot area, used only to cap how many channels can fit
 const MIN_PLOT_HEIGHT = 12; // minimum px per channel lane — prevents uPlot from collapsing at high channel counts
@@ -127,10 +127,14 @@ export function useEegPlotControls({ tMax, channelCount, channelAreaHeight }) {
   };
 
   // Re-clamp channel count whenever the container height changes (e.g. window resize, split-pane drag)
-  useEffect(() => {
+  // Done during render (comparing against the previous height) rather than in an effect, so
+  // there's never a render with more channels than fit. Starts at null so the first render
+  // clamps too — e.g. the default of 20 down to a 3-channel recording.
+  const [prevChannelAreaHeight, setPrevChannelAreaHeight] = useState(null);
+  if (channelAreaHeight !== prevChannelAreaHeight) {
+    setPrevChannelAreaHeight(channelAreaHeight);
     updateVisibleChannelCount(visibleChannelCount);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channelAreaHeight]);
+  }
 
   // ── Input change/blur handlers — wire directly to the controls' <input> elements ──
   const onVisibleChannelCountChange = (e) => {

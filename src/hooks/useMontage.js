@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 
 // Helper function to create order-independent identity keys comparing montage rows to montage template rows.
 function rowKey(row) {
@@ -66,9 +66,14 @@ export function useMontageChannels(channelNames, fileTemplates = []) {
   // (automatic housekeeping) When channelNames change (e.g. a new recording) it drops any montage rows
   // which no longer exists in channelNames (i.e. in the recording)
   // Note: it never adds rows for new channels, since row creation is always an explicit user action.
-  useEffect(() => {
+  // Done during render (comparing against the previous channelNames) rather than in an effect, so
+  // there's never a render with rows for channels that no longer exist — same pattern as
+  // customMontageChannels below.
+  const [prevChannelNames, setPrevChannelNames] = useState(channelNames);
+  if (channelNames !== prevChannelNames) {
+    setPrevChannelNames(channelNames);
     setMontageChannels((prev) => prev.filter((row) => channelNames.includes(row.channel)));
-  }, [channelNames]);
+  }
 
   // ─── Template dropdown (None / Common Average Reference / file templates / Custom) ────
   const montageTemplate = useMemo(

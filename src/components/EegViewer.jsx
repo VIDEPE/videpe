@@ -3,7 +3,7 @@ import UplotReact from 'uplot-react';
 import { cn } from '../utils/utils';
 import toast from 'react-hot-toast';
 import 'uplot/dist/uPlot.min.css';
-import { useTheme } from '@/components/ThemeContext';
+import { useTheme } from '@/hooks/useTheme';
 import {
   ZoomIn,
   ZoomOut,
@@ -1066,7 +1066,7 @@ export const EegViewer = ({
                   <button
                     type="button"
                     className="button button-icon"
-                    onClick={() => updateVisibleChannelCount(visibleChannelCount + 1)}
+                    onClick={() => updateVisibleChannelCount(visibleChannelCount + 10)}
                     title="Show more channels"
                     disabled={eegIsStacked}
                   >
@@ -1088,7 +1088,7 @@ export const EegViewer = ({
                   <button
                     type="button"
                     className="button button-icon"
-                    onClick={() => updateVisibleChannelCount(visibleChannelCount - 1)}
+                    onClick={() => updateVisibleChannelCount(visibleChannelCount - 10)}
                     title="Show fewer channels"
                     disabled={eegIsStacked}
                   >
@@ -1502,16 +1502,10 @@ export const EegViewer = ({
       {/* Floating EEG Montage Editor — position:fixed so it overlays the whole page */}
       {montageVisible && (
         <EegMontageEditor
-          electrodes={electrodes}
           matched={matched}
-          voltages={topoVoltages}
           channelNames={channelNames}
-          voltagesByChannel={topoVoltagesByChannel}
-          totalChannels={channelNames.length}
           onClose={() => setMontageVisible(false)}
-          onTopoNvReady={onTopoNvReady}
           isStandardElectrodes={isStandardElectrodes}
-          onElecPosFile={onElecPosFile}
           customFileName={customElecPosFileName}
           channelSettings={channelSettings}
           onApplyChannelSettings={applyChannelSettings}

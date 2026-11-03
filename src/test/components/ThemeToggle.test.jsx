@@ -3,14 +3,14 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { ThemeToggle } from '@/components/ThemeToggle';
 
 // Mock the useTheme hook to control the theme state in tests
-// This says: whenever anything in this test file imports from @/components/ThemeContext,
+// This says: whenever anything in this test file imports from @/hooks/useTheme,
 // give them { useTheme: vi.fn() } instead of the real module
-vi.mock('@/components/ThemeContext', () => ({
+vi.mock('@/hooks/useTheme', () => ({
   useTheme: vi.fn(),
 }));
 
 // Only now that we've mocked useTheme can we import it to set its return value in our tests
-import { useTheme } from '@/components/ThemeContext';
+import { useTheme } from '@/hooks/useTheme';
 
 describe('ThemeToggle', () => {
   it('shows switch-to-light label in dark mode', () => {
