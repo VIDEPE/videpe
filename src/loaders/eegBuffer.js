@@ -52,11 +52,15 @@ const computeMargin = (provider, windowSize) => {
  * remain the previous buffer's data while a reload is in flight, and are
  * swapped atomically once the new buffer resolves — there is no
  * intermediate empty/cleared state, avoiding a flash on screen.
- * `isLoading` is only true before the first buffer has ever arrived.
+ * `isLoading` is only true until the first buffer for the current provider
+ * has arrived.
  */
 export function useEegBuffer(provider, startTime, windowSize) {
   const [buffer, setBuffer] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
+  // Derived rather than stored: loading means there's no buffer yet for this provider (none at
+  // all, or one left over from the previous recording). A separate isLoading state would have
+  // to be set from inside the load effect, costing an extra render with a stale value.
+  const isLoading = buffer === null || buffer.provider !== provider;
   const requestIdRef = useRef(0);
   // Cancels the in-flight getChunk when a newer request replaces it (or on unmount), so a
   // superseded reload stops demuxing instead of finishing work that would be thrown away.
@@ -130,7 +134,6 @@ export function useEegBuffer(provider, startTime, windowSize) {
             timestamps,
             channels,
           });
-          setIsLoading(false);
         })
         .catch((error) => {
           // a cancelled request ends in an AbortError on purpose, so ignore it; re-throw real errors
@@ -147,7 +150,6 @@ export function useEegBuffer(provider, startTime, windowSize) {
         clearTimeout(pendingTimerRef.current);
         pendingTimerRef.current = null;
       }
-      setIsLoading(true);
       load();
       return undefined;
     }
