@@ -219,8 +219,22 @@ export function gaussianRBF(queryXYZ, matchedXYZ, voltages, sigma = 30) {
   return weightSum > 0 ? weightedSum / weightSum : 0;
 }
 
+/**
+ * Nearest-neighbour interpolation at a single 3D query point: copies the voltage of
+ * the closest matched electrode. Gives a patchwork of flat regions (one per matched
+ * electrode) rather than a smooth map — mainly useful to check which electrode drives
+ * which part of the mesh.
+ *
+ * @param {[number,number,number]} queryXYZ
+ * @param {[number,number,number][]} matchedXYZ  - positions of matched electrodes
+ * @param {number[]} voltages                    - voltage per matched electrode
+ * @returns {number} the closest electrode's voltage, or NaN when matchedXYZ is empty
+ */
 export function nearestNeighbour(queryXYZ, matchedXYZ, voltages) {
-  // Nearest-neighbour interpolation for unmatched electrodes
+  if (matchedXYZ.length === 0) {
+    return NaN;
+  }
+
   let minDistanceSquared = Infinity;
   let nearestIndex = -1;
 
@@ -240,8 +254,21 @@ export function nearestNeighbour(queryXYZ, matchedXYZ, voltages) {
   return voltages[nearestIndex];
 }
 
+/**
+ * Inverse-distance weighted (IDW) interpolation at a single 3D query point, using only
+ * the k nearest matched electrodes. Each one's weight is 1 / distance^p, so closer
+ * electrodes count more; a higher p makes the map follow the nearest electrode more
+ * closely, a lower p smooths it out. Unlike gaussianRBF this is a true interpolant:
+ * at an electrode's own position it returns exactly that electrode's voltage.
+ *
+ * @param {[number,number,number]} queryXYZ
+ * @param {[number,number,number][]} matchedXYZ  - positions of matched electrodes
+ * @param {number[]} voltages                    - voltage per matched electrode
+ * @param {number} k                             - number of nearest electrodes to use (default 5)
+ * @param {number} p                             - distance power (default 2 = inverse squared distance)
+ * @returns {number} the weighted voltage, or NaN when matchedXYZ is empty
+ */
 export function inverseDistanceWeighting(queryXYZ, matchedXYZ, voltages, k = 5, p = 2) {
-  // Inverse-distance weighted interpolation using k nearest neighbours
   const neighbours = [];
 
   for (let j = 0; j < matchedXYZ.length; j++) {

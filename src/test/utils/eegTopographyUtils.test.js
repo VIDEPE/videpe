@@ -320,12 +320,13 @@ describe('matchChannelsToPositions', () => {
 });
 
 // ---------------------------------------------------------------------------
-// buildElectrodeMesh / gaussianRBF / inverseDistanceWeighting / interpolateMeshVoltages
+// buildElectrodeMesh / gaussianRBF / nearestNeighbour / inverseDistanceWeighting / interpolateMeshVoltages
 // ---------------------------------------------------------------------------
 
 import {
   buildElectrodeMesh,
   gaussianRBF,
+  nearestNeighbour,
   inverseDistanceWeighting,
   interpolateMeshVoltages,
 } from '@/utils/eegTopographyUtils';
@@ -472,6 +473,38 @@ describe('gaussianRBF', () => {
   it('returns 0 for an empty electrode list', () => {
     const val = gaussianRBF([0, 0, 0], [], [], 30);
     expect(val).toBe(0);
+  });
+});
+
+describe('nearestNeighbour', () => {
+  it('returns the voltage of the closest electrode', () => {
+    // the closest one sits in the middle of the list, so neither first nor last wins by accident
+    const val = nearestNeighbour(
+      [0, 0, 0],
+      [
+        [5, 0, 0],
+        [0, 1, 0],
+        [0, 0, -3],
+      ],
+      [10, 20, 30]
+    );
+    expect(val).toBe(20);
+  });
+
+  it('returns the electrode voltage when the query coincides with it', () => {
+    const val = nearestNeighbour(
+      [10, 0, 0],
+      [
+        [20, 0, 0],
+        [10, 0, 0],
+      ],
+      [-5, 5]
+    );
+    expect(val).toBe(5);
+  });
+
+  it('returns NaN for an empty electrode list', () => {
+    expect(nearestNeighbour([0, 0, 0], [], [])).toBeNaN();
   });
 });
 
