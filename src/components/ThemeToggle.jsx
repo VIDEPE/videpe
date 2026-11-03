@@ -1,5 +1,5 @@
 import { Sun, Moon } from 'lucide-react';
-import { useTheme } from '@/components/ThemeContext';
+import { useTheme } from '@/hooks/useTheme';
 
 export const ThemeToggle = ({ className = 'fixed top-5 right-5 z-50' }) => {
   const { isDarkMode, toggleTheme } = useTheme();

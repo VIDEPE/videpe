@@ -10,6 +10,7 @@ import { VidepeLogo } from '../components/VidepeLogo';
 // Icons & Logos
 import {
   Globe,
+  // eslint-disable-next-line no-unused-vars -- for the commented-out Wiki link, until the docs exist
   BookMarked,
   BookOpenText,
   Info,
@@ -128,6 +129,7 @@ const FEATURES = [
 const GITHUB_URL = 'https://github.com/VIDEPE/videpe'; // Link to github page
 const UNIGE_URL =
   'https://www.unige.ch/medecine/neucli/groupes-de-recherche/serge-vulliemoz/open-science/videpe2';
+// eslint-disable-next-line no-unused-vars -- for the commented-out Wiki link, until the docs exist
 const DOCS_URL = '#'; // TODO: add when available
 
 export const LandingPage = () => {
