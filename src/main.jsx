@@ -137,7 +137,7 @@ function startHostApp() {
 }
 
 // Dev-only previews, to check the Shanoir screens without a Shanoir setup (under `npm run dev`):
-// - /videpe/?preview=signin or ?preview=error: the start-up pages.
+// - /videpe/?preview=shanoir-signin or ?preview=shanoir-error: the start-up pages.
 // - /videpe/?preview=shanoir: PatientView as if launched from Shanoir, with a fake client
 //   serving the demo data (everything after sign-in: downloading, unzipping, loading).
 // - /videpe/?preview=hostapp: PatientView as if launched from a host app, with a fake client
@@ -145,17 +145,17 @@ function startHostApp() {
 // - /videpe/?preview=hostapp-error: the host-app error page.
 // import.meta.env.DEV is false in production builds, so Vite strips this out entirely.
 //
-// http://localhost:5173/videpe/?preview=error
-// └┬─┘   └───┬───┘ └┬─┘└──┬───┘└─────┬──────┘
+// http://localhost:5173/videpe/?preview=shanoir-error
+// └┬─┘   └───┬───┘ └┬─┘└──┬───┘└─────────┬─────────┘
 // protocol hostname port pathname  search
 //
 // There's no `#…` part in this URL, so location.hash is ''.
 const preview = import.meta.env.DEV && new URLSearchParams(window.location.search).get('preview');
 
-if (preview === 'signin') {
+if (preview === 'shanoir-signin') {
   // in Dev mode and there is a preview search key => only render that preview page
   root.render(<ShanoirSignInPage />);
-} else if (preview === 'error') {
+} else if (preview === 'shanoir-error') {
   root.render(
     <ShanoirErrorPage
       error={new Error('EXAMPLE ERROR: Shanoir sign-in has expired, reopen VIDEPE from Shanoir')}
