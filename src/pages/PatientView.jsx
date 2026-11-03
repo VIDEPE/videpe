@@ -75,7 +75,6 @@ export const PatientView = () => {
   const [isLoading, setIsLoading] = useState(false);
   const eegReadyResolveRef = useRef(null); // set before demo/shanoir/host-app load; EegViewer calls it when charts are ready
   const niiReadyResolveRef = useRef(null); // set before demo/shanoir/host-app load; NiiViewer calls it when volumes are ready
-  const [maximizedPanel, setMaximizedPanel] = useState(null); // null | 'left' | 'right'
 
   // Live EEG/electrode state lifted out of EegViewer — drives the intracranial connectome
   // layer in the Neuroimaging pane. { isIntracranial, matched, voltages } | null.
@@ -419,7 +418,6 @@ export const PatientView = () => {
         rightLabel={<span className={PANEL_TITLE_CLASS}>Neuroimaging</span>}
         onLeftReset={eeg || pendingEegFiles.length > 0 ? handleEegReset : undefined}
         onRightReset={niiViewerHasContent ? handleNiiReset : undefined}
-        onMaximizeChange={setMaximizedPanel}
         left={
           eeg ? (
             <EegViewer
