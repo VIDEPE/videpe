@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { parseElectrodePositionElc } from '@/loaders/parseElectrodePositionElc';
 import { parseElectrodePositionTsv } from '@/loaders/parseElectrodePositionTsv';
 import { findDuplicateChannelNames, matchChannelsToPositions } from '@/utils/eegTopographyUtils';
@@ -398,6 +398,41 @@ describe('buildElectrodeMesh', () => {
     expect(() => buildElectrodeMesh(electrodes)).toThrow(
       'Electrode coordinates have near-zero spatial extent.'
     );
+  });
+
+  it('rejects an electrode at the estimated sphere centre', () => {
+    // The cube is symmetric around the origin, so adding an electrode there keeps the
+    // centroid at the origin — that electrode has no direction to project along
+    const electrodes = [...CUBE_ELECTRODES, { label: 'O', x: 0, y: 0, z: 0 }];
+
+    expect(() => buildElectrodeMesh(electrodes)).toThrow(
+      'An electrode lies at the estimated sphere centre.'
+    );
+  });
+
+  describe('missing-electrode warning', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('does not warn when every electrode is part of the mesh', () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      buildElectrodeMesh(CUBE_ELECTRODES);
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('warns with the labels of electrodes left out of the mesh', () => {
+      // A2 sits exactly on A, so both project to the same point on the sphere
+      // and the hull can only use one of them
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      buildElectrodeMesh([...CUBE_ELECTRODES, { label: 'A2', x: 1, y: 1, z: 1 }]);
+
+      expect(warn).toHaveBeenCalledTimes(1);
+      const [message, missingLabels] = warn.mock.calls[0];
+      expect(message).toContain('1 electrode(s) not part of the mesh');
+      expect(missingLabels).toHaveLength(1);
+      expect(['A', 'A2']).toContain(missingLabels[0]);
+    });
   });
 });
 
