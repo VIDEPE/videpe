@@ -320,12 +320,13 @@ describe('matchChannelsToPositions', () => {
 });
 
 // ---------------------------------------------------------------------------
-// buildElectrodeMesh / gaussianRBF / interpolateMeshVoltages
+// buildElectrodeMesh / gaussianRBF / inverseDistanceWeighting / interpolateMeshVoltages
 // ---------------------------------------------------------------------------
 
 import {
   buildElectrodeMesh,
   gaussianRBF,
+  inverseDistanceWeighting,
   interpolateMeshVoltages,
 } from '@/utils/eegTopographyUtils';
 
@@ -364,9 +365,39 @@ describe('buildElectrodeMesh', () => {
 
   it('vertex coordinates match the input electrode positions', () => {
     const { vertices } = buildElectrodeMesh(CUBE_ELECTRODES);
-    expect(vertices[0]).toBeCloseTo(CUBE_ELECTRODES[0].x);
-    expect(vertices[1]).toBeCloseTo(CUBE_ELECTRODES[0].y);
-    expect(vertices[2]).toBeCloseTo(CUBE_ELECTRODES[0].z);
+    expect(Array.from(vertices)).toEqual(CUBE_ELECTRODES.flatMap(({ x, y, z }) => [x, y, z]));
+  });
+
+  it('triangulates electrode positions projected onto the estimated sphere', () => {
+    const electrodes = [
+      { label: 'A', x: 0, y: 0, z: 0 },
+      { label: 'B', x: 4, y: 0, z: 0 },
+      { label: 'C', x: 0, y: 4, z: 0 },
+      { label: 'D', x: 0, y: 0, z: 4 },
+      { label: 'E', x: 1, y: 0.6, z: 0.7 },
+    ];
+
+    const { indices } = buildElectrodeMesh(electrodes);
+    expect(new Set(indices).size).toBe(electrodes.length);
+  });
+
+  it('requires at least four electrodes', () => {
+    expect(() => buildElectrodeMesh(CUBE_ELECTRODES.slice(0, 3))).toThrow(
+      'At least four electrodes are required.'
+    );
+  });
+
+  it('rejects electrodes with no spatial extent', () => {
+    const electrodes = Array.from({ length: 4 }, (_, i) => ({
+      label: `E${i}`,
+      x: 1,
+      y: 1,
+      z: 1,
+    }));
+
+    expect(() => buildElectrodeMesh(electrodes)).toThrow(
+      'Electrode coordinates have near-zero spatial extent.'
+    );
   });
 });
 
@@ -409,6 +440,46 @@ describe('gaussianRBF', () => {
   });
 });
 
+describe('inverseDistanceWeighting', () => {
+  it('returns the electrode voltage when the query coincides with it', () => {
+    const val = inverseDistanceWeighting(
+      [10, 0, 0],
+      [
+        [10, 0, 0],
+        [20, 0, 0],
+      ],
+      [5, -5]
+    );
+    expect(val).toBe(5);
+  });
+
+  it('weights the nearest electrodes by inverse squared distance', () => {
+    const val = inverseDistanceWeighting(
+      [0, 0, 0],
+      [
+        [1, 0, 0],
+        [2, 0, 0],
+      ],
+      [10, 0]
+    );
+    expect(val).toBeCloseTo(8);
+  });
+
+  it('uses only the requested number of nearest electrodes', () => {
+    const val = inverseDistanceWeighting(
+      [0, 0, 0],
+      [
+        [1, 0, 0],
+        [2, 0, 0],
+        [3, 0, 0],
+      ],
+      [10, 0, -100],
+      2
+    );
+    expect(val).toBeCloseTo(8);
+  });
+});
+
 describe('interpolateMeshVoltages', () => {
   it('returns a Float32Array with one value per electrode', () => {
     const matched = [{ pos: CUBE_ELECTRODES[0] }];
@@ -423,20 +494,31 @@ describe('interpolateMeshVoltages', () => {
     expect(out[0]).toBe(10);
   });
 
-  it('vertex at a matched electrode gets its own voltage, not blended with a nearby differing neighbour', () => {
-    // A and B are opposite corners of a 2-unit cube edge — 2mm apart, far closer than the
-    // default 30mm sigma. Under the old RBF-only implementation this closeness would pull
-    // A's vertex value most of the way toward B's voltage; the fix looks up matched vertices
-    // by label directly, so A must come back untouched by B.
+  it('interpolates unmatched vertices using inverse-distance weighting', () => {
+    const electrodes = [
+      { label: 'A', x: 1, y: 0, z: 0 },
+      { label: 'B', x: 2, y: 0, z: 0 },
+      { label: 'C', x: 0, y: 0, z: 0 },
+    ];
+    const matched = [{ pos: electrodes[0] }, { pos: electrodes[1] }];
+
+    const out = interpolateMeshVoltages(electrodes, matched, [10, 0]);
+
+    expect(out[2]).toBeCloseTo(8);
+  });
+
+  it('keeps matched electrode voltages exact when a nearby matched electrode differs', () => {
+    // A and B are opposite corners of a 2-unit cube edge, so both sample voltages
+    // must pass through without interpolation.
     const matched = [{ pos: CUBE_ELECTRODES[0] }, { pos: CUBE_ELECTRODES[1] }]; // A, B
     const out = interpolateMeshVoltages(CUBE_ELECTRODES, matched, [100, 0]);
     expect(out[0]).toBe(100);
     expect(out[1]).toBe(0);
   });
 
-  it('returns all zeros when no channels are matched', () => {
+  it('returns NaN for unmatched vertices when there are no samples to interpolate', () => {
     const out = interpolateMeshVoltages(CUBE_ELECTRODES, [], []);
-    expect(Array.from(out).every((v) => v === 0)).toBe(true);
+    expect(Array.from(out).every(Number.isNaN)).toBe(true);
   });
 });
 
