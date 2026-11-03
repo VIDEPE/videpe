@@ -1,4 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useEffectEvent } from 'react';
+
+// Both hooks below are handed plain functions recreated on every render of their caller (e.g.
+// ImagingControls' commitOpacity). Listing them as effect dependencies would re-run the effect
+// on every render — restarting the reset timer and, while click === 2, firing the double-click
+// action again each time. useEffectEvent lets the effect call the latest action without the
+// action counting as a dependency, so the effects only re-run when the click count or delay change.
 
 /**
  * hook to differentiate single click from a double click on the same element, firing exactly one
@@ -13,20 +19,22 @@ import { useState, useEffect } from 'react';
  */
 export function useSingleAndDoubleClick(actionSingleClick, actionDoubleClick, delay = 250) {
   const [click, setClick] = useState(0);
+  const onSingleClick = useEffectEvent(() => actionSingleClick());
+  const onDoubleClick = useEffectEvent(() => actionDoubleClick());
 
   useEffect(() => {
     const timer = setTimeout(() => {
       // single click
-      if (click === 1) actionSingleClick();
+      if (click === 1) onSingleClick();
       setClick(0);
     }, delay);
 
     // the duration between this click and the previous one
     // is less than the value of delay = double-click
-    if (click === 2) actionDoubleClick();
+    if (click === 2) onDoubleClick();
 
     return () => clearTimeout(timer);
-  }, [click]);
+  }, [click, delay]);
 
   return () => setClick((prev) => prev + 1);
 }
@@ -43,6 +51,7 @@ export function useSingleAndDoubleClick(actionSingleClick, actionDoubleClick, de
  */
 export function useDoubleClickToDefault(actionDoubleClick, defaultVal, delay = 250) {
   const [click, setClick] = useState(0);
+  const onDoubleClick = useEffectEvent(() => actionDoubleClick(defaultVal));
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -52,10 +61,10 @@ export function useDoubleClickToDefault(actionDoubleClick, defaultVal, delay = 2
 
     // the duration between this click and the previous one
     // is less than the value of delay = double-click
-    if (click === 2) actionDoubleClick(defaultVal);
+    if (click === 2) onDoubleClick();
 
     return () => clearTimeout(timer);
-  }, [click]);
+  }, [click, delay]);
 
   return () => setClick((prev) => prev + 1);
 }

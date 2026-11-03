@@ -68,15 +68,18 @@ export function useSharedNiiVueInstance({
   // nv is long-lived and reused across remounts — clear volumes/meshes on unmount so they
   // don't silently reappear on the next mount.
   useEffect(() => {
+    // Read once here rather than inside the cleanup: both refs are set once and never replaced,
+    // so these are the same objects the cleanup will clear.
+    const nv = nvRef.current;
+    const fileMeshes = fileMeshesRef.current;
     return () => {
-      const nv = nvRef.current;
       if (!nv) return;
       // Defensive backstop — normally already revoked right after load.
       revokeLayerUrls(nv.volumes);
       revokeLayerUrls(nv.meshes ?? []);
       while (nv.volumes.length > 0) nv.removeVolumeByIndex(0);
       (nv.meshes ?? []).slice().forEach((mesh) => nv.removeMesh(mesh));
-      fileMeshesRef.current.clear(); // drop tracked file meshes so they aren't re-applied on remount
+      fileMeshes.clear(); // drop tracked file meshes so they aren't re-applied on remount
       onHas3DExtentChange?.(false); // nv is now genuinely empty — report that before it goes stale
     };
   }, [nvRef, fileMeshesRef, onHas3DExtentChange]);

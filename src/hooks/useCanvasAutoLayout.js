@@ -39,7 +39,7 @@ export function useCanvasAutoLayout({ nvRef }) {
     if (!nvRef.current) return;
     const isWide = canvasSize.height > 0 && canvasSize.width >= 1.75 * canvasSize.height;
     nvRef.current.setMultiplanarLayout(isWide ? MULTIPLANAR_TYPE.AUTO : MULTIPLANAR_TYPE.GRID);
-  }, [canvasSize]);
+  }, [canvasSize, nvRef]);
 
   return { canvasContainerRef };
 }
