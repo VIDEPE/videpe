@@ -16,10 +16,10 @@
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useScrollToHash } from '@/utils/useScrollToHash';
-import { CenteredLayout } from '../components/CenteredLayout';
-import { Footer } from '../components/Footer';
-import { ThemeToggle } from '../components/ThemeToggle';
-import { ScrollToTopButton } from '../components/ScrollToTopButton';
+import { CenteredLayout } from '@/components/CenteredLayout';
+import { Footer } from '@/components/Footer';
+import { ThemeToggle } from '@/components/ThemeToggle';
+import { ScrollToTopButton } from '@/components/ScrollToTopButton';
 
 const Section = ({ title, id, className, children }) => (
   <section id={id} className={`mb-10 ${className ?? ''}`}>
