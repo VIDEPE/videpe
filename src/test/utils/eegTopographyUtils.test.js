@@ -507,6 +507,51 @@ describe('interpolateMeshVoltages', () => {
     expect(out[2]).toBeCloseTo(8);
   });
 
+  describe('method argument', () => {
+    // A and B are matched (10 and 0); C is unmatched, 1 mm from A and 2 mm from B.
+    // Each method gives C a different value, so the tests prove which one was picked.
+    const LINE_ELECTRODES = [
+      { label: 'A', x: 1, y: 0, z: 0 },
+      { label: 'B', x: 2, y: 0, z: 0 },
+      { label: 'C', x: 0, y: 0, z: 0 },
+    ];
+    const LINE_MATCHED = [{ pos: LINE_ELECTRODES[0] }, { pos: LINE_ELECTRODES[1] }];
+    const LINE_VOLTAGES = [10, 0];
+
+    it('uses inverse-distance weighting for method "idw"', () => {
+      // p = 2 (set in interpolateMeshVoltages) → weights 1 and 1/4 → (10 * 1) / 1.25
+      const out = interpolateMeshVoltages(LINE_ELECTRODES, LINE_MATCHED, LINE_VOLTAGES, 'idw');
+      expect(out[2]).toBeCloseTo(8);
+    });
+
+    it('uses Gaussian RBF for method "rbf"', () => {
+      const out = interpolateMeshVoltages(LINE_ELECTRODES, LINE_MATCHED, LINE_VOLTAGES, 'rbf');
+      // squared distances 1 and 4, sigma 30 (set in interpolateMeshVoltages) → 2σ² = 1800
+      const wA = Math.exp(-1 / 1800);
+      const wB = Math.exp(-4 / 1800);
+      expect(out[2]).toBeCloseTo((10 * wA) / (wA + wB));
+    });
+
+    it('copies the nearest matched voltage for method "nearest"', () => {
+      const out = interpolateMeshVoltages(LINE_ELECTRODES, LINE_MATCHED, LINE_VOLTAGES, 'nearest');
+      expect(out[2]).toBe(10);
+    });
+
+    it('keeps matched vertices exact regardless of method', () => {
+      for (const method of ['idw', 'rbf', 'nearest']) {
+        const out = interpolateMeshVoltages(LINE_ELECTRODES, LINE_MATCHED, LINE_VOLTAGES, method);
+        expect(out[0]).toBe(10);
+        expect(out[1]).toBe(0);
+      }
+    });
+
+    it('throws for an unknown method', () => {
+      expect(() =>
+        interpolateMeshVoltages(LINE_ELECTRODES, LINE_MATCHED, LINE_VOLTAGES, 'kriging')
+      ).toThrow('Unknown interpolation method: kriging');
+    });
+  });
+
   it('keeps matched electrode voltages exact when a nearby matched electrode differs', () => {
     // A and B are opposite corners of a 2-unit cube edge, so both sample voltages
     // must pass through without interpolation.

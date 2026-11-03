@@ -289,16 +289,44 @@ export function inverseDistanceWeighting(queryXYZ, matchedXYZ, voltages, k = 5, 
  * Compute a per-vertex scalar (voltage) for every vertex in the electrode mesh.
  * Vertices that sit at a matched electrode take that electrode's recorded voltage
  * directly, so the mesh surface matches the electrode marker colour exactly there.
- * All other (unmatched) vertices are filled in by inverse-distance weighting over
- * the nearest matched electrodes (see inverseDistanceWeighting). When there are no
- * matched electrodes at all, unmatched vertices come back as NaN.
+ * All other (unmatched) vertices are filled in by the chosen interpolation method,
+ * using the settings set in the switch below (tune them there):
+ *   - 'idw'     (default) inverse-distance weighting over the nearest matched electrodes
+ *               (see inverseDistanceWeighting)
+ *   - 'rbf'     Gaussian radial basis weighting over all matched electrodes (see gaussianRBF).
+ *               This is a weighted average, not a true interpolant, which is why matched
+ *               vertices bypass it — otherwise their own voltage would be blended away.
+ *   - 'nearest' copies the voltage of the nearest matched electrode (see nearestNeighbour)
+ * When there are no matched electrodes at all, unmatched vertices come back as NaN
+ * for 'idw' and 'nearest', and as 0 for 'rbf'.
  *
  * @param {{ label, x, y, z }[]} electrodes  - full electrode list (determines vertex order)
  * @param {{ pos: { label, x, y, z } }[]} matched - matched channel entries from matchChannelsToPositions
  * @param {number[]} voltages                 - voltage per matched entry (same order as matched)
+ * @param {'idw'|'rbf'|'nearest'} [method='idw'] - interpolation method for unmatched vertices
  * @returns {Float32Array}
+ * @throws {Error} for an unknown method
  */
-export function interpolateMeshVoltages(electrodes, matched, voltages) {
+export function interpolateMeshVoltages(electrodes, matched, voltages, method = 'idw') {
+  // Pick the interpolation method and its settings once, before the loop.
+  // Tune k/p (IDW) or sigma (RBF) here.
+  let interpolate;
+  switch (method) {
+    case 'idw':
+      interpolate = (queryXYZ, matchedXYZ, voltages) =>
+        inverseDistanceWeighting(queryXYZ, matchedXYZ, voltages, 5, 2); // k = 5 neighbours, p = 2
+      break;
+    case 'rbf':
+      interpolate = (queryXYZ, matchedXYZ, voltages) =>
+        gaussianRBF(queryXYZ, matchedXYZ, voltages, 30); // sigma = 30 mm
+      break;
+    case 'nearest':
+      interpolate = nearestNeighbour;
+      break;
+    default:
+      throw new Error(`Unknown interpolation method: ${method}`);
+  }
+
   const matchedXYZ = matched.map((m) => [m.pos.x, m.pos.y, m.pos.z]);
   const scalars = new Float32Array(electrodes.length);
 
@@ -308,14 +336,9 @@ export function interpolateMeshVoltages(electrodes, matched, voltages) {
     // returns an index when found and -1 when no match is found
     const matchedIndex = matched.findIndex((m) => m.pos.label === electrode.label);
 
-    /* scalars[i] =
-      matchedIndex === -1 // if no match => interpolate, if there is a match => take voltage
-        ? gaussianRBF([electrode.x, electrode.y, electrode.z], matchedXYZ, voltages, sigma)
-        : voltages[matchedIndex]; */
-
     scalars[i] =
       matchedIndex === -1 // if no match => interpolate, if there is a match => take voltage
-        ? inverseDistanceWeighting([electrode.x, electrode.y, electrode.z], matchedXYZ, voltages) // inverseDistanceWeighting or nearestNeighbour
+        ? interpolate([electrode.x, electrode.y, electrode.z], matchedXYZ, voltages)
         : voltages[matchedIndex];
   }
   //downloadArray(scalars, "voltages.txt");
