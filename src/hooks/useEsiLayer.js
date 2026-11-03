@@ -3,7 +3,6 @@ import {
   getCalBounds,
   fractionToCalValue,
   isImageVolumeLayer,
-  computeAzimuthElevation,
   ESI_LAYER_URL,
   rotateViews,
 } from '@/utils/NiiViewer.utils';
@@ -211,6 +210,7 @@ export function useEsiLayer({
       nv.addMesh(mesh); // actually add it to the 3D scene
       esiMeshRef.current = mesh; // track it so the next change/removal can find it
       nv.scene.crosshairPos = nv.mm2frac(esiLayer.maxSourcePowerLocation); // move the crosshair to the location where the ESI source power is max
+
       rotateViews([nv, nvTopoRef?.current], esiLayer.maxSourcePowerLocation); // turn both 3D views to the max ESI
 
       // Force Redraw
