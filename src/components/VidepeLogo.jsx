@@ -5,24 +5,28 @@ import { cn } from '@/utils/utils';
 // ?raw: import the file's contents as a string, instead of its URL
 import DISCLAIMER_TEXT from '@/assets/ruo_disclaimer.txt?raw';
 
-// The two sizes of the logo, with the styles each used before they shared this component:
-// - large: the landing page's hero.
-// - small: the start-up pages of the launch modes (Shanoir, host app).
+// The two sizes of the logo:
+// - large: the landing page's hero. Its name is an <h1>, so it gets the global h1 styles
+//   (index.css: weight 500, heading colour, -1.68px letter-spacing, 20px top margin), which
+//   beat Tailwind utilities — hence the ! on the ones that must win.
+// - small: the start-up pages of the launch modes (Shanoir, host app). A scaled-down copy of
+//   large: its name is a <span>, so it sets the h1 styles itself, scaled to its font size.
 const SIZES = {
   large: {
     icon: 220,
-    name: '!mb-0 !text-6xl tracking-widest',
+    name: '!mb-0 !text-6xl',
     subtitle: 'text-lg text-foreground/60 tracking-wide text-center',
   },
   small: {
     icon: 160,
-    name: 'text-4xl font-semibold tracking-widest pt-2 text-heading',
-    subtitle: 'text-sm pb-6 text-foreground tracking-wide',
+    // tracking: the h1's -1.68px ÷ the landing name's 67.5px (text-6xl at the 18px desktop root)
+    name: 'text-4xl font-medium tracking-[-0.025em] mt-4 text-heading',
+    subtitle: 'text-sm text-foreground/60 tracking-wide text-center',
   },
 };
 
 /**
- * VIDEPE logo: the BrainCircuit icon, the wide-spaced name, the subtitle and the "For Research
+ * VIDEPE logo: the BrainCircuit icon, the name, the subtitle and the "For Research
  * Use Only - In Development" badge — the same on every page, so VIDEPE looks consistent
  * wherever it opens, and users always see it's for research use only and still in development.
  *
