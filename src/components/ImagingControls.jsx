@@ -139,7 +139,7 @@ function SortableSettingsCard({
       hasAutoSelectedVoltageMetric.current = true;
       onSettingChange(layer.url, 'electrodeDisplayMode', 'voltage');
     }
-  }, [layer.hasVoltageSnapshot, layer.url]);
+  }, [layer.hasVoltageSnapshot, layer.url, onSettingChange]);
 
   // Local string state — allows typing a partial value (e.g. empty string) without breaking the numeric opacity
   const [opacityStr, setOpacityStr] = useState(() => String(Math.round(settings.opacity * 100)));
@@ -224,7 +224,7 @@ function SortableSettingsCard({
     if (isElectrodeColorbarDisabled && settings.showColorbar) {
       onSettingChange(layer.url, 'showColorbar', false);
     }
-  }, [isElectrodeColorbarDisabled]);
+  }, [isElectrodeColorbarDisabled, onSettingChange, layer.url, settings.showColorbar]);
 
   // Local string state — allows typing a partial value (e.g. empty string) without breaking
   // the numeric threshold. cal_min/cal_max are 0-1 fractions of this layer's own data range
