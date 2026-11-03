@@ -319,9 +319,9 @@ export const AboutPage = () => {
                     colour-blind mode, and voltage-coloured electrode markers
                   </li>
                   <li>
-                    <strong>Electrode positions</strong> — fsaverage_1005 (FreeSurfer) by default,
-                    or load your own <code>.elc</code> or <code>*_electrodes.tsv</code> (BIDS
-                    specifications) file
+                    <strong>Electrode positions</strong> — the best-matching bundled template is
+                    selected automatically, or load your own <code>.elc</code> or{' '}
+                    <code>*_electrodes.tsv</code> (BIDS specifications) file
                   </li>
                   <li>
                     <strong>Channel to anatomy</strong> — click a channel label to move the

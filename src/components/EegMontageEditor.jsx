@@ -73,6 +73,7 @@ export function EegMontageEditor({
   totalChannels,
   onClose,
   isStandardElectrodes = true,
+  standardTemplateLabel = 'fsaverage_1005 (FreeSurfer)',
   onElecPosFile,
   channelNames,
   voltagesByChannel,
@@ -698,7 +699,7 @@ export function EegMontageEditor({
 
   // Human-readable name of the electrode position source, for the Pos tooltip text below.
   const electrodePositionSourceLabel = isStandardElectrodes
-    ? 'the fsaverage_1005 (FreeSurfer) template'
+    ? `the ${standardTemplateLabel} template`
     : customFileName
       ? `"${customFileName}"`
       : 'the loaded electrode position file';

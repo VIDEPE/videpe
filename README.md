@@ -49,7 +49,7 @@ High-performance multichannel viewer built on [uPlot](https://github.com/leeoniy
   - Import montage files in AnyWave (XML) or Cartool (plain-text) format — auto-detected from file content — and export back out as AnyWave XML (filter settings included).
 
 - EEG topography — a resizable panel showing a 3D voltage map at the selected time point using [NiiVue](https://niivue.com/) mesh rendering
-  - Load custom positions via `.elc` or `*_electrodes.tsv` (BIDS specifications) file (Uses fsaverage_1005 (FreeSurfer) electrode positions by default)
+  - Automatically selects the best-matching bundled electrode-position template; load custom positions via `.elc` or `*_electrodes.tsv` (BIDS specifications) file
   - 3D rotation is synchronised with the neuroimaging viewer — rotate one and the other follows
   - Matrix electrode overview to spot outliers
 

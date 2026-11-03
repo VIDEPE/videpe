@@ -11,7 +11,7 @@ import { useTheme } from '@/components/ThemeContext';
  *   • green — a file is loaded and (if matchCount/totalCount are given) matches well
  *   • amber — a file is loaded, but matchCount/totalCount show too few matched channels
  *             — likely the wrong file
- *   • blue  — no file, but matchCount/totalCount (the fsaverage_1005 template match) clear
+ *   • blue  — no file, but matchCount/totalCount (the best-matching template) clear
  *             isGoodMatch
  *   • red   — nothing loaded, or a match too sparse to be usable (the title still reports
  *             the count, so a poor match isn't indistinguishable from no match at all)
@@ -53,6 +53,7 @@ export const StatusLed = ({
   isGoodMatch = false,
   matchIssue,
   highlighted = false,
+  defaultSourceLabel = 'fsaverage_1005 (FreeSurfer)',
 }) => {
   // isDarkMode is the one source of truth that actually reflects the app's theme toggle.
   const { isDarkMode } = useTheme();
@@ -114,7 +115,7 @@ export const StatusLed = ({
           ? `Custom: ${fileName}${matchSuffix}`
           : fileName
       : hasMatchInfo
-        ? `Using default fsaverage_1005 (FreeSurfer) template${matchSuffix}`
+        ? `Using default ${defaultSourceLabel} template${matchSuffix}`
         : `No ${label.toLowerCase()} loaded`;
   return (
     <span

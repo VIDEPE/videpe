@@ -290,6 +290,7 @@ export const EegViewer = ({
     electrodes,
     matched,
     isStandardElectrodes,
+    standardTemplatePath,
     electrodePositionMatchCount,
     electrodePositionTotalCount,
     isElectrodePositionMatchGoodForLed,
@@ -298,6 +299,15 @@ export const EegViewer = ({
     customElectrodes,
     customElecPosFileName,
   });
+  const standardTemplateName =
+    standardTemplatePath
+      ?.split('/')
+      .pop()
+      ?.replace(/\.tsv$/i, '') ?? 'fsaverage_1005';
+  const standardTemplateLabel =
+    standardTemplateName === 'fsaverage_1005'
+      ? 'fsaverage_1005 (FreeSurfer)'
+      : standardTemplateName;
 
   // Per-channel type/bad-channel state, edited via the EegMontageEditor window — new
   // channels are seeded from the whole-recording auto-detection above; from then on the
@@ -1448,6 +1458,7 @@ export const EegViewer = ({
               matchCount={electrodePositionMatchCount}
               totalCount={electrodePositionTotalCount}
               isGoodMatch={isElectrodePositionMatchGoodForLed}
+              defaultSourceLabel={standardTemplateLabel}
               highlighted={hoveredLedHighlight === 'electrodePosition'}
             />
             <StatusLed
@@ -1492,6 +1503,7 @@ export const EegViewer = ({
           onClose={() => setTopoEnabled(false)}
           onTopoNvReady={onTopoNvReady}
           isStandardElectrodes={isStandardElectrodes}
+          standardTemplateLabel={standardTemplateLabel}
           onElecPosFile={onElecPosFile}
           customFileName={customElecPosFileName}
           isIntracranial={majorityIsSeeg}
@@ -1511,6 +1523,7 @@ export const EegViewer = ({
           onClose={() => setMontageVisible(false)}
           onTopoNvReady={onTopoNvReady}
           isStandardElectrodes={isStandardElectrodes}
+          standardTemplateLabel={standardTemplateLabel}
           onElecPosFile={onElecPosFile}
           customFileName={customElecPosFileName}
           channelSettings={channelSettings}

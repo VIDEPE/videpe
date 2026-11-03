@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { useElectrodeMatching } from '@/hooks/useElectrodeMatching';
+import electrodeTemplatePaths from 'virtual:electrode-position-templates';
 
 // react-hot-toast's default export is itself a callable function with .loading/.success/etc
 // attached — a plain object mock would make the hook's toast(...) call throw silently.
@@ -27,7 +28,10 @@ const channelNames = ['EEG1', 'EEG2', 'EEG3'];
 const seegChannelNames = ['B1', 'B2', "B'1"];
 
 beforeEach(() => {
-  global.fetch = vi.fn().mockResolvedValue({ text: () => Promise.resolve(MOCK_TSV) });
+  global.fetch = vi.fn().mockResolvedValue({
+    ok: true,
+    text: () => Promise.resolve(MOCK_TSV),
+  });
 });
 
 const setup = (overrides = {}) =>
@@ -41,11 +45,12 @@ const setup = (overrides = {}) =>
   });
 
 describe('useElectrodeMatching — fsaverage_1005 detection', () => {
-  it('fetches the fsaverage_1005 template on mount', async () => {
+  it('fetches every bundled TSV template on mount', async () => {
     setup();
-    await waitFor(() =>
-      expect(global.fetch).toHaveBeenCalledWith('electrode_positions/fsaverage_1005.tsv')
-    );
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(electrodeTemplatePaths.length));
+    electrodeTemplatePaths.forEach((path) => {
+      expect(global.fetch).toHaveBeenCalledWith(path);
+    });
   });
 
   it('detects EEG from the fsaverage_1005 match and toasts it', async () => {
@@ -76,9 +81,36 @@ describe('useElectrodeMatching — fsaverage_1005 detection', () => {
     expect(result.current.isStandardElectrodes).toBe(true);
   });
 
-  it('silently ignores a fetch failure instead of throwing', async () => {
+  it('uses the template that matches the most channel names', async () => {
+    const egiTsv = `name\tx\ty\tz
+E1\t1\t1\t1
+E2\t2\t2\t2
+E3\t3\t3\t3
+`;
+    global.fetch = vi.fn((path) =>
+      Promise.resolve({
+        ok: true,
+        text: () => Promise.resolve(path.includes('template_256EGI_prefix_E') ? egiTsv : MOCK_TSV),
+      })
+    );
+
+    const { result } = setup({ channelNames: ['E1', 'E2', 'E3'] });
+    await waitFor(() => expect(result.current.matched.length).toBe(3));
+    expect(result.current.standardTemplatePath).toBe(
+      'electrode_positions/template_256EGI_prefix_E.tsv'
+    );
+    expect(result.current.electrodes.map(({ label }) => label)).toEqual(['E1', 'E2', 'E3']);
+  });
+
+  it('reports an error if no bundled template can be loaded', async () => {
     global.fetch = vi.fn().mockRejectedValue(new Error('network down'));
-    expect(() => setup()).not.toThrow();
+    const { default: toast } = await import('react-hot-toast');
+    setup();
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(
+        'Unable to load any built-in electrode position templates.'
+      )
+    );
   });
 });
 
@@ -144,7 +176,9 @@ describe('useElectrodeMatching — intracranial mode', () => {
 describe('useElectrodeMatching — re-detection on channel change', () => {
   it('re-fetches and re-detects when channelNames changes (new recording loaded)', async () => {
     const { rerender } = setup();
-    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(global.fetch).toHaveBeenCalledTimes(electrodeTemplatePaths.length)
+    );
 
     act(() => {
       rerender({
@@ -154,6 +188,14 @@ describe('useElectrodeMatching — re-detection on channel change', () => {
       });
     });
 
-    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(global.fetch).toHaveBeenCalledTimes(electrodeTemplatePaths.length * 2)
+    );
+    electrodeTemplatePaths.forEach((path) => {
+      expect(global.fetch).toHaveBeenCalledWith(path);
+      expect(global.fetch.mock.calls.filter(([calledPath]) => calledPath === path)).toHaveLength(
+        2
+      );
+    });
   });
 });

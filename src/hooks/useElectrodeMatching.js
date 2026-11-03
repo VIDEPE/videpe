@@ -3,95 +3,104 @@ import toast from 'react-hot-toast';
 import { parseElectrodePositionFile } from '@/loaders/parseElectrodePositionFile';
 import { matchChannelsToPositions } from '@/utils/eegTopographyUtils';
 import { detectIsIntracranial } from '@/utils/intracranialDetection';
+import electrodeTemplatePaths from 'virtual:electrode-position-templates';
 
-const MIN_STANDARD_MATCH_COUNT_FOR_LED = 19; // below this limit (=>classic 10-20 system's electrode count), the fsaverage_1005 template match is too sparse for a usable topography — status LED stays red instead of auto-matched blue
+const MIN_STANDARD_MATCH_COUNT_FOR_LED = 19; // below this limit (=>classic 10-20 system's electrode count), the template match is too sparse for a usable topography — status LED stays red instead of auto-matched blue
 const MIN_CUSTOM_MATCH_RATIO_FOR_LED = 0.9; // a user-supplied position file should cover nearly every channel — below this, the LED turns amber rather than green, since it likely doesn't match this recording. 90% (not 100%) tolerates the odd non-scalp channel (ECG/EOG/trigger) a position file has no reason to cover.
 const RECORDING_TYPE_TOAST_ID = 'eeg-recording-type-detected'; // fixed id so re-detection updates the toast in place instead of stacking
-// Extension drives which parser parseElectrodePositionFile picks — swapping the built-in
-// template to a different format later only means changing this path, not this hook.
-const FSAVERAGE_TEMPLATE_PATH = 'electrode_positions/fsaverage_1005.tsv';
 
 /**
- * Fetches the built-in fsaverage_1005 electrode-position template, matches it against the
- * recording's channel names, and (re-)detects whether the recording is scalp EEG or SEEG
- * from that match — purely local detection state, used only to seed new channels' type in
- * useChannelSettings (see EegViewer.jsx); nothing else should read it as a live "current
- * recording type", since a user can hand-edit individual channels' types afterward. Also
- * derives the render-facing electrode/match set: a user-supplied file (customElectrodes)
- * always wins when present, SEEG recordings never fall back to the scalp template, and
- * otherwise the fsaverage_1005 template is used.
+ * Loads all bundled position templates, selects the one matching the most channel names,
+ * and detects whether the recording is scalp EEG or SEEG from that match.
  *
- * @param {Object} params
- * @param {string[]} params.channelNames - the loaded recording's channel names; the
- *   template (and any custom positions) are matched against these.
- * @param {Array<{label:string,x:number,y:number,z:number}>} params.customElectrodes -
- *   user-supplied electrode positions (from a dropped .elc/.tsv file), or `[]` if none.
- * @param {string|null} params.customElecPosFileName - filename of the loaded custom
- *   electrode-position file, or `null` if none — used only to decide which match count
- *   drives the status LED.
- * @returns {Object} The electrode/recording-type detection state:
- *   - `detectedIsSeeg` (boolean) — true when the fsaverage_1005 match looks like SEEG.
- *   - `electrodes` (Array) — the render-facing electrode positions (custom file if
- *     present or SEEG, otherwise the fsaverage_1005 template).
- *   - `matched` (Array) — the subset of `electrodes` matched to `channelNames`, each with
- *     a `channelIdx` back-reference.
- *   - `isStandardElectrodes` (boolean) — true when no custom file is active and the
- *     recording isn't SEEG, i.e. `electrodes` is the fsaverage_1005 template.
- *   - `electrodePositionMatchCount` (number|undefined) — match count to show on the
- *     Electrode Position status LED, or `undefined` when there's nothing meaningful to
- *     show (SEEG with no custom file).
- *   - `electrodePositionTotalCount` (number|undefined) — channel count to pair with
- *     `electrodePositionMatchCount` on the LED, same `undefined` case.
- *   - `isElectrodePositionMatchGoodForLed` (boolean) — whether the LED should render as a
- *     good match (green/blue) rather than a weak one (amber/red).
+ * A custom position file always wins when present. SEEG recordings never fall back to a
+ * scalp template; otherwise the best-matching bundled template is used.
  */
 export function useElectrodeMatching({ channelNames, customElectrodes, customElecPosFileName }) {
-  // Detection-only — always holds the fsaverage_1005 template + its match against
-  // channelNames, used purely as input to detectIsIntracranial. Never used to
-  // render the topography itself (that's customElectrodes' job — see below).
-  const [fsaverage1005Electrodes, setFsaverage1005Electrodes] = useState([]);
-  const [fsaverage1005Matched, setFsaverage1005Matched] = useState([]);
+  const [standardTemplate, setStandardTemplate] = useState({
+    path: null,
+    electrodes: [],
+    matched: [],
+  });
   const [detectedIsSeeg, setDetectedIsSeeg] = useState(false);
 
-  // Fetch the built-in electrode position template, match it against the recording's
-  // channel names (for detection purposes only), then (re-)detect the recording type.
+  // Fetch the built-in electrode position templates, match them against the recording's
+  // channel names (for detection purposes only), use the best-matching template
+  // then (re-)detect the recording type.
   // Re-runs whenever channelNames changes (new recording loaded).
   useEffect(() => {
-    fetch(FSAVERAGE_TEMPLATE_PATH)
-      .then((r) => r.text())
-      .then((text) => parseElectrodePositionFile(new File([text], FSAVERAGE_TEMPLATE_PATH)))
-      .then(({ electrodes: parsedElectrodes }) => {
-        setFsaverage1005Electrodes(parsedElectrodes);
-        setFsaverage1005Matched(matchChannelsToPositions(channelNames, parsedElectrodes).matched);
-        const isSeeg = detectIsIntracranial(channelNames, parsedElectrodes);
-        setDetectedIsSeeg(isSeeg);
-        toast(isSeeg ? 'SEEG recording detected' : 'EEG recording detected', {
-          id: RECORDING_TYPE_TOAST_ID,
-          icon: '🔍',
-        });
+    let cancelled = false;
+
+    Promise.allSettled(
+      electrodeTemplatePaths.map(async (path) => {
+        const response = await fetch(path);
+        if (response.ok === false) throw new Error(`Failed to load electrode template: ${path}`);
+
+        const { electrodes } = await parseElectrodePositionFile(
+          new File([await response.text()], path.split('/').pop())
+        );
+        if (electrodes.length === 0)
+          throw new Error(`Electrode template contains no positions: ${path}`);
+
+        const { matched } = matchChannelsToPositions(channelNames, electrodes);
+        return { path, electrodes, matched };
       })
-      .catch(() => {}); // silently ignore if file unavailable (e.g. in tests without the asset)
+    ).then((results) => {
+      if (cancelled) return;
+
+      const candidates = results.flatMap((result, index) => {
+        if (result.status === 'fulfilled') return [result.value];
+        console.error(
+          `Unable to use electrode template ${electrodeTemplatePaths[index]}.`,
+          result.reason
+        );
+        return [];
+      });
+
+      if (candidates.length === 0) {
+        setStandardTemplate({ path: null, electrodes: [], matched: [] });
+        setDetectedIsSeeg(false);
+        toast.error('Unable to load any built-in electrode position templates.');
+        return;
+      }
+
+      // Paths are sorted in the generated module, so ties resolve deterministically.
+      const bestMatch = candidates.reduce((best, candidate) =>
+        candidate.matched.length > best.matched.length ? candidate : best
+      );
+      setStandardTemplate(bestMatch);
+      const isSeeg = detectIsIntracranial(channelNames, bestMatch.electrodes);
+      setDetectedIsSeeg(isSeeg);
+      toast(isSeeg ? 'SEEG recording detected' : 'EEG recording detected', {
+        id: RECORDING_TYPE_TOAST_ID,
+        icon: '🔍',
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [channelNames]);
 
-  // Channels matched against the custom electrode positions (if any) — independent
-  // of mode, since intracranial recordings need this for the 3D connectome too.
+  // Custom positions are matched independently of mode, since intracranial recordings
+  // need them for the 3D connectome too.
   const customMatched = useMemo(
     () => matchChannelsToPositions(channelNames, customElectrodes).matched,
     [channelNames, customElectrodes]
   );
 
-  // Render-facing electrodes/matched. Scalp mode falls back to the fsaverage_1005
+  // Render-facing electrodes/matched. Scalp mode falls back to the best-matchingtemplate
   // template when no custom file is loaded (today's behavior); intracranial mode
-  // never falls back to it — fsaverage_1005 simply doesn't apply to depth probes.
+  // never falls back to it — best-matching template simply doesn't apply to depth probes.
   const usingCustom = detectedIsSeeg || customElectrodes.length > 0;
-  const electrodes = usingCustom ? customElectrodes : fsaverage1005Electrodes;
-  const matched = usingCustom ? customMatched : fsaverage1005Matched;
+  const electrodes = usingCustom ? customElectrodes : standardTemplate.electrodes;
+  const matched = usingCustom ? customMatched : standardTemplate.matched;
   const isStandardElectrodes = !detectedIsSeeg && customElectrodes.length === 0;
   // Gates the status LED's auto-matched (blue) state — a technically non-empty match can
   // still be too sparse (e.g. one shared label like "Cz" out of 200+ channels) to call
   // positions "known".
   const isStandardMatchGoodForLed =
-    isStandardElectrodes && fsaverage1005Matched.length >= MIN_STANDARD_MATCH_COUNT_FOR_LED;
+    isStandardElectrodes && standardTemplate.matched.length >= MIN_STANDARD_MATCH_COUNT_FOR_LED;
 
   // Electrode Position status LED — matchCount/totalCount are shown regardless of quality
   // (isGoodMatch just picks the color). A custom file's match is judged against
@@ -102,7 +111,7 @@ export function useElectrodeMatching({ channelNames, customElectrodes, customEle
   const electrodePositionMatchCount = hasCustomElecPos
     ? customMatched.length
     : !detectedIsSeeg
-      ? fsaverage1005Matched.length
+      ? standardTemplate.matched.length
       : undefined;
   const electrodePositionTotalCount =
     hasCustomElecPos || !detectedIsSeeg ? channelNames.length : undefined;
@@ -116,6 +125,7 @@ export function useElectrodeMatching({ channelNames, customElectrodes, customEle
     electrodes,
     matched,
     isStandardElectrodes,
+    standardTemplatePath: standardTemplate.path,
     electrodePositionMatchCount,
     electrodePositionTotalCount,
     isElectrodePositionMatchGoodForLed,
