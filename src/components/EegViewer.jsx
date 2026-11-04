@@ -290,6 +290,7 @@ export const EegViewer = ({
     electrodes,
     matched,
     isStandardElectrodes,
+    standardTemplateName,
     electrodePositionMatchCount,
     electrodePositionTotalCount,
     isElectrodePositionMatchGoodForLed,
@@ -1448,6 +1449,7 @@ export const EegViewer = ({
               matchCount={electrodePositionMatchCount}
               totalCount={electrodePositionTotalCount}
               isGoodMatch={isElectrodePositionMatchGoodForLed}
+              defaultSourceLabel={standardTemplateName}
               highlighted={hoveredLedHighlight === 'electrodePosition'}
             />
             <StatusLed
@@ -1492,6 +1494,7 @@ export const EegViewer = ({
           onClose={() => setTopoEnabled(false)}
           onTopoNvReady={onTopoNvReady}
           isStandardElectrodes={isStandardElectrodes}
+          standardTemplateLabel={standardTemplateName}
           onElecPosFile={onElecPosFile}
           customFileName={customElecPosFileName}
           isIntracranial={majorityIsSeeg}
@@ -1506,6 +1509,8 @@ export const EegViewer = ({
           channelNames={channelNames}
           onClose={() => setMontageVisible(false)}
           isStandardElectrodes={isStandardElectrodes}
+          standardTemplateLabel={standardTemplateName}
+          onElecPosFile={onElecPosFile}
           customFileName={customElecPosFileName}
           channelSettings={channelSettings}
           onApplyChannelSettings={applyChannelSettings}

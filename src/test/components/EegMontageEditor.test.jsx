@@ -46,6 +46,7 @@ const defaultProps = {
   onApplyMontageChannels: vi.fn(),
   onClose: vi.fn(),
   fs: 256, // used to compute nyquist for highPass/lowPass/notch clamping
+  standardTemplateLabel: 'Standard 10-20', // always passed by EegViewer — no default
 };
 
 describe('EegMontageEditor', () => {
@@ -112,11 +113,11 @@ describe('EegMontageEditor', () => {
   });
 
   describe('electrode position match tooltip', () => {
-    it('names the matched electrode and the standard template by default', () => {
+    it('names the matched electrode and the standard template when no file is active', () => {
       render(<EegMontageEditor {...defaultProps} />);
       expect(screen.getByTestId('channel-pos-FP1')).toHaveAttribute(
         'title',
-        'Matched to electrode "FP1" in the fsaverage_1005 (FreeSurfer) template'
+        'Matched to electrode "FP1" in the Standard 10-20 template'
       );
     });
 
@@ -138,7 +139,7 @@ describe('EegMontageEditor', () => {
       render(<EegMontageEditor {...defaultProps} />);
       expect(screen.getByTestId('channel-pos-FP2')).toHaveAttribute(
         'title',
-        'No match for "FP2" in the fsaverage_1005 (FreeSurfer) template'
+        'No match for "FP2" in the Standard 10-20 template'
       );
     });
   });

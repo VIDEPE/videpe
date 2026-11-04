@@ -11,7 +11,7 @@ import { useTheme } from '@/hooks/useTheme';
  *   • green — a file is loaded and (if matchCount/totalCount are given) matches well
  *   • amber — a file is loaded, but matchCount/totalCount show too few matched channels
  *             — likely the wrong file
- *   • blue  — no file, but matchCount/totalCount (the fsaverage_1005 template match) clear
+ *   • blue  — no file, but matchCount/totalCount (the best-matching template) clear
  *             isGoodMatch
  *   • red   — nothing loaded, or a match too sparse to be usable (the title still reports
  *             the count, so a poor match isn't indistinguishable from no match at all)
@@ -43,6 +43,9 @@ import { useTheme } from '@/hooks/useTheme';
  *   while true — used to draw the eye to this LED while the user hovers a toggle that's
  *   disabled because this file is missing. No effect when the dot isn't red (already
  *   communicating an on/good-match state) or when disabled.
+ * @param {string} [defaultSourceLabel] - name of the built-in source used when no file is
+ *   loaded (e.g. the best-matching electrode template), shown as "Using default <name>
+ *   template". Left out of the title when not given — e.g. Inverse Solution has no default.
  */
 export const StatusLed = ({
   label,
@@ -53,6 +56,7 @@ export const StatusLed = ({
   isGoodMatch = false,
   matchIssue,
   highlighted = false,
+  defaultSourceLabel,
 }) => {
   // isDarkMode is the one source of truth that actually reflects the app's theme toggle.
   const { isDarkMode } = useTheme();
@@ -114,7 +118,7 @@ export const StatusLed = ({
           ? `Custom: ${fileName}${matchSuffix}`
           : fileName
       : hasMatchInfo
-        ? `Using default fsaverage_1005 (FreeSurfer) template${matchSuffix}`
+        ? `Using default ${defaultSourceLabel ? `${defaultSourceLabel} ` : ''}template${matchSuffix}`
         : `No ${label.toLowerCase()} loaded`;
   return (
     <span

@@ -68,6 +68,7 @@ export function EegMontageEditor({
   matched,
   onClose,
   isStandardElectrodes = true,
+  standardTemplateLabel, // display name of the best-matching built-in template — always passed by EegViewer
   channelNames,
   customFileName = null, // filename (no extension) of the loaded custom positions file — owned by PatientView, passed down
   channelSettings, // Record<channelname, {type, bad}> — live state owned by EegViewer/useChannelSettings
@@ -690,7 +691,7 @@ export function EegMontageEditor({
 
   // Human-readable name of the electrode position source, for the Pos tooltip text below.
   const electrodePositionSourceLabel = isStandardElectrodes
-    ? 'the fsaverage_1005 (FreeSurfer) template'
+    ? `the ${standardTemplateLabel} template`
     : customFileName
       ? `"${customFileName}"`
       : 'the loaded electrode position file';
