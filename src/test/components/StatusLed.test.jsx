@@ -49,13 +49,29 @@ describe('StatusLed — with a match-count concept (e.g. Electrode Position)', (
         matchCount={19}
         totalCount={32}
         isGoodMatch
+        defaultSourceLabel="Standard 10-20"
       />
     );
 
-    const dot = getDot(
-      'Using default fsaverage_1005 (FreeSurfer) template (19/32 channels matched)'
-    );
+    const dot = getDot('Using default Standard 10-20 template (19/32 channels matched)');
     expect(dot).toHaveClass('bg-blue-500');
+  });
+
+  // StatusLed is generic (also the Inverse Solution LED, which passes no default source),
+  // so a missing label must not read "Using default undefined template"
+  it('leaves the template name out of the title when no defaultSourceLabel is given', () => {
+    useTheme.mockReturnValue({ isDarkMode: false });
+    render(
+      <StatusLed
+        label="Electrode Position"
+        fileName={null}
+        matchCount={19}
+        totalCount={32}
+        isGoodMatch
+      />
+    );
+
+    expect(getDot('Using default template (19/32 channels matched)')).toHaveClass('bg-blue-500');
   });
 
   it('shows red and still reports the count when no file is loaded and the match is poor', () => {
@@ -67,12 +83,11 @@ describe('StatusLed — with a match-count concept (e.g. Electrode Position)', (
         matchCount={1}
         totalCount={208}
         isGoodMatch={false}
+        defaultSourceLabel="Standard 10-20"
       />
     );
 
-    const dot = getDot(
-      'Using default fsaverage_1005 (FreeSurfer) template (1/208 channels matched)'
-    );
+    const dot = getDot('Using default Standard 10-20 template (1/208 channels matched)');
     expect(dot).toHaveClass('bg-red-600/50');
   });
 

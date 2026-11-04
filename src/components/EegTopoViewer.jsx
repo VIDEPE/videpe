@@ -94,7 +94,7 @@ export function EegTopoViewer({
   onClose,
   onTopoNvReady,
   isStandardElectrodes = true,
-  standardTemplateLabel = 'fsaverage_1005 (FreeSurfer)',
+  standardTemplateLabel, // display name of the best-matching built-in template — always passed by EegViewer
   onElecPosFile,
   isIntracranial = false,
   hasEegChannels = true,
