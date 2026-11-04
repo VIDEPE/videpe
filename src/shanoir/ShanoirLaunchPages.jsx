@@ -11,7 +11,7 @@ export function ShanoirSignInPage() {
     >
       <VidepeLogo />
       {/* Loading Spinner (same spinner as NiiViewer's loading overlay) */}
-      <div className="h-10 w-10 animate-spin rounded-full border-4 border-border border-t-primary" />
+      <div className="mt-6 h-10 w-10 animate-spin rounded-full border-4 border-border border-t-primary" />
       {/* Explanatory text */}
       <h1 className="text-xl font-semibold">Signing in to Shanoir…</h1>
       <p className="max-w-xl text-foreground">VIDEPE will open the examination in a moment.</p>

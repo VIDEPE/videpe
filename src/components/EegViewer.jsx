@@ -3,7 +3,7 @@ import UplotReact from 'uplot-react';
 import { cn } from '../utils/utils';
 import toast from 'react-hot-toast';
 import 'uplot/dist/uPlot.min.css';
-import { useTheme } from '@/components/ThemeContext';
+import { useTheme } from '@/hooks/useTheme';
 import {
   ZoomIn,
   ZoomOut,
@@ -1514,14 +1514,9 @@ export const EegViewer = ({
       {/* Floating EEG Montage Editor — position:fixed so it overlays the whole page */}
       {montageVisible && (
         <EegMontageEditor
-          electrodes={electrodes}
           matched={matched}
-          voltages={topoVoltages}
           channelNames={channelNames}
-          voltagesByChannel={topoVoltagesByChannel}
-          totalChannels={channelNames.length}
           onClose={() => setMontageVisible(false)}
-          onTopoNvReady={onTopoNvReady}
           isStandardElectrodes={isStandardElectrodes}
           standardTemplateLabel={standardTemplateLabel}
           onElecPosFile={onElecPosFile}

@@ -1,5 +1,5 @@
 import { cn } from '../utils/utils';
-import { useTheme } from '@/components/ThemeContext';
+import { useTheme } from '@/hooks/useTheme';
 
 /**
  * LED-style indicator for whether an optional file (electrode positions, inverse solution)

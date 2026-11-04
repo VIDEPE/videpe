@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import { downloadTextFile } from '@/utils/fileDownload';
 import { EegMontageEditor } from '@/components/EegMontageEditor';
 
-vi.mock('@/components/ThemeContext', () => ({
+vi.mock('@/hooks/useTheme', () => ({
   useTheme: () => ({ isDarkMode: false }),
 }));
 

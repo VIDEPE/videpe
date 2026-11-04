@@ -1,5 +1,5 @@
 ﻿import { HashRouter, Routes, Route } from 'react-router-dom';
-import { ThemeProvider } from './components/ThemeContext';
+import { ThemeProvider } from './components/ThemeProvider';
 import { ThemedToaster } from './components/ThemedToaster';
 import { LandingPage } from './pages/LandingPage';
 import { AboutPage } from './pages/AboutPage';

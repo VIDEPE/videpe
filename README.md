@@ -134,7 +134,7 @@ npm run test:run  # single run (used in CI)
 Under `npm run dev`, these URLs show the Shanoir screens without a Shanoir server:
 
 - [`/videpe/?preview=shanoir`](http://localhost:5173/videpe/?preview=shanoir) — the patient view as if opened from Shanoir, loading the demo data through a fake Shanoir client
-- [`/videpe/?preview=signin`](http://localhost:5173/videpe/?preview=signin) and [`/videpe/?preview=error`](http://localhost:5173/videpe/?preview=error) — the sign-in and error pages
+- [`/videpe/?preview=shanoir-signin`](http://localhost:5173/videpe/?preview=shanoir-signin) and [`/videpe/?preview=shanoir-error`](http://localhost:5173/videpe/?preview=shanoir-error) — the sign-in and error pages
 
 ### Docker image
 
