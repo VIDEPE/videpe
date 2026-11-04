@@ -1,13 +1,60 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import toast from 'react-hot-toast';
-import { parseElectrodePositionFile } from '@/loaders/parseElectrodePositionFile';
+
+import { parseElectrodePositionTsv } from '@/loaders/parseElectrodePositionTsv';
 import { matchChannelsToPositions } from '@/utils/eegTopographyUtils';
 import { detectIsIntracranial } from '@/utils/intracranialDetection';
-import electrodeTemplatePaths from 'virtual:electrode-position-templates';
+
+// ?raw: import the file's contents as a string (bundled at build time), instead of its URL
+import fsaverage1005Tsv from '@/assets/electrode_positions/fsaverage_1005.tsv?raw';
+import standard1020Tsv from '@/assets/electrode_positions/standard_1020.tsv?raw';
+import egi128PrefixETsv from '@/assets/electrode_positions/template_128EGI_prefix_E.tsv?raw';
+import egi128Tsv from '@/assets/electrode_positions/template_128EGI.tsv?raw';
+import egi256PrefixETsv from '@/assets/electrode_positions/template_256EGI_prefix_E.tsv?raw';
+import egi256Tsv from '@/assets/electrode_positions/template_256EGI.tsv?raw';
+
+// Bundled position templates, parsed once at module load.
+// - id: stable key for code (the file name without .tsv), e.g. for filtering montages later
+// - name: UI text shown to the user, free to change
+// Order doesn't matter, best match is found using findBestStandardTemplate.
+export const STANDARD_TEMPLATES = [
+  { id: 'fsaverage_1005', name: 'fsaverage 10-05 (FreeSurfer)', text: fsaverage1005Tsv },
+  { id: 'standard_1020', name: 'Standard 10-20', text: standard1020Tsv },
+  { id: 'template_128EGI_prefix_E', name: 'GSN-HydroCel-128 (E1-E128)', text: egi128PrefixETsv },
+  { id: 'template_128EGI', name: 'GSN-HydroCel-128 (1-128)', text: egi128Tsv },
+  { id: 'template_256EGI_prefix_E', name: 'GSN-HydroCel-256 (E1-E256)', text: egi256PrefixETsv },
+  { id: 'template_256EGI', name: 'GSN-HydroCel-256 (1-256)', text: egi256Tsv },
+].map(({ id, name, text }) => ({
+  id,
+  name,
+  electrodes: parseElectrodePositionTsv(text).electrodes,
+}));
 
 const MIN_STANDARD_MATCH_COUNT_FOR_LED = 19; // below this limit (=>classic 10-20 system's electrode count), the template match is too sparse for a usable topography — status LED stays red instead of auto-matched blue
 const MIN_CUSTOM_MATCH_RATIO_FOR_LED = 0.9; // a user-supplied position file should cover nearly every channel — below this, the LED turns amber rather than green, since it likely doesn't match this recording. 90% (not 100%) tolerates the odd non-scalp channel (ECG/EOG/trigger) a position file has no reason to cover.
 const RECORDING_TYPE_TOAST_ID = 'eeg-recording-type-detected'; // fixed id so re-detection updates the toast in place instead of stacking
+
+// Best template for this recording:
+// 1. the most matched channels in the recording — covers as much of the recording as possible
+// 2. on a tie, the highest share of the template's positions used — favours the smallest template
+function findBestStandardTemplate(channelNames) {
+  // Match every template, and add the share of its positions the recording uses
+  const scoredTemplates = STANDARD_TEMPLATES.map((template) => {
+    const { matched } = matchChannelsToPositions(channelNames, template.electrodes);
+    const templateCoverage = matched.length / template.electrodes.length;
+    return { ...template, matched, templateCoverage };
+  });
+
+  let best = scoredTemplates[0];
+  for (const candidate of scoredTemplates.slice(1)) {
+    const hasMoreMatches = candidate.matched.length > best.matched.length;
+    const hasMatchesTieButHigherCoverage =
+      candidate.matched.length === best.matched.length &&
+      candidate.templateCoverage > best.templateCoverage;
+    if (hasMoreMatches || hasMatchesTieButHigherCoverage) best = candidate;
+  }
+  return best;
+}
 
 /**
  * Loads all bundled position templates, selects the one matching the most channel names,
@@ -17,70 +64,23 @@ const RECORDING_TYPE_TOAST_ID = 'eeg-recording-type-detected'; // fixed id so re
  * scalp template; otherwise the best-matching bundled template is used.
  */
 export function useElectrodeMatching({ channelNames, customElectrodes, customElecPosFileName }) {
-  const [standardTemplate, setStandardTemplate] = useState({
-    path: null,
-    electrodes: [],
-    matched: [],
-  });
-  const [detectedIsSeeg, setDetectedIsSeeg] = useState(false);
+  // 1. Best bundled template — needed first, since the SEEG check uses its match
+  const standardTemplate = useMemo(() => findBestStandardTemplate(channelNames), [channelNames]);
+  // 2. SEEG check, from the channel names' shape and that template match
+  const detectedIsSeeg = useMemo(
+    () => detectIsIntracranial(channelNames, standardTemplate.electrodes),
+    [channelNames, standardTemplate]
+  );
 
-  // Fetch the built-in electrode position templates, match them against the recording's
-  // channel names (for detection purposes only), use the best-matching template
-  // then (re-)detect the recording type.
-  // Re-runs whenever channelNames changes (new recording loaded).
+  // Toast the detected recording type — a side effect, so it belongs in an effect, not in
+  // the useMemo above. Re-runs when a new recording is loaded (channelNames) or the
+  // detection changes; the fixed toast id updates the existing toast instead of stacking.
   useEffect(() => {
-    let cancelled = false;
-
-    Promise.allSettled(
-      electrodeTemplatePaths.map(async (path) => {
-        const response = await fetch(path);
-        if (response.ok === false) throw new Error(`Failed to load electrode template: ${path}`);
-
-        const { electrodes } = await parseElectrodePositionFile(
-          new File([await response.text()], path.split('/').pop())
-        );
-        if (electrodes.length === 0)
-          throw new Error(`Electrode template contains no positions: ${path}`);
-
-        const { matched } = matchChannelsToPositions(channelNames, electrodes);
-        return { path, electrodes, matched };
-      })
-    ).then((results) => {
-      if (cancelled) return;
-
-      const candidates = results.flatMap((result, index) => {
-        if (result.status === 'fulfilled') return [result.value];
-        console.error(
-          `Unable to use electrode template ${electrodeTemplatePaths[index]}.`,
-          result.reason
-        );
-        return [];
-      });
-
-      if (candidates.length === 0) {
-        setStandardTemplate({ path: null, electrodes: [], matched: [] });
-        setDetectedIsSeeg(false);
-        toast.error('Unable to load any built-in electrode position templates.');
-        return;
-      }
-
-      // Paths are sorted in the generated module, so ties resolve deterministically.
-      const bestMatch = candidates.reduce((best, candidate) =>
-        candidate.matched.length > best.matched.length ? candidate : best
-      );
-      setStandardTemplate(bestMatch);
-      const isSeeg = detectIsIntracranial(channelNames, bestMatch.electrodes);
-      setDetectedIsSeeg(isSeeg);
-      toast(isSeeg ? 'SEEG recording detected' : 'EEG recording detected', {
-        id: RECORDING_TYPE_TOAST_ID,
-        icon: '🔍',
-      });
+    toast(detectedIsSeeg ? 'SEEG recording detected' : 'EEG recording detected', {
+      id: RECORDING_TYPE_TOAST_ID,
+      icon: '🔍',
     });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [channelNames]);
+  }, [channelNames, detectedIsSeeg]);
 
   // Custom positions are matched independently of mode, since intracranial recordings
   // need them for the 3D connectome too.
@@ -89,7 +89,7 @@ export function useElectrodeMatching({ channelNames, customElectrodes, customEle
     [channelNames, customElectrodes]
   );
 
-  // Render-facing electrodes/matched. Scalp mode falls back to the best-matchingtemplate
+  // Render-facing electrodes/matched. Scalp mode falls back to the best-matching
   // template when no custom file is loaded (today's behavior); intracranial mode
   // never falls back to it — best-matching template simply doesn't apply to depth probes.
   const usingCustom = detectedIsSeeg || customElectrodes.length > 0;
@@ -125,7 +125,8 @@ export function useElectrodeMatching({ channelNames, customElectrodes, customEle
     electrodes,
     matched,
     isStandardElectrodes,
-    standardTemplatePath: standardTemplate.path,
+    standardTemplateId: standardTemplate.id,
+    standardTemplateName: standardTemplate.name,
     electrodePositionMatchCount,
     electrodePositionTotalCount,
     isElectrodePositionMatchGoodForLed,

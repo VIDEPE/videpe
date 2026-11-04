@@ -69,7 +69,6 @@ export function EegMontageEditor({
   onClose,
   isStandardElectrodes = true,
   standardTemplateLabel = 'fsaverage_1005 (FreeSurfer)',
-  onElecPosFile,
   channelNames,
   customFileName = null, // filename (no extension) of the loaded custom positions file — owned by PatientView, passed down
   channelSettings, // Record<channelname, {type, bad}> — live state owned by EegViewer/useChannelSettings
