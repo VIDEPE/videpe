@@ -4,7 +4,7 @@ import { SplitPane } from '@/components/SplitPane';
 import { useTheme } from '@/hooks/useTheme';
 import { TrafficLightButtons } from '@/components/TrafficLightButtons';
 import { compareChannelNamesNaturally, buildSeegBipolarReferences } from '@/utils/eegViewerUtils';
-import { parseMontageFile } from '@/loaders/parseMontageFile';
+import { parseMontageText } from '@/loaders/parseMontageText';
 import { toAnyWaveMontage } from '@/loaders/toMontageAnyWave';
 import { downloadTextFile } from '@/utils/fileDownload';
 import { cn } from '@/utils/utils';
@@ -308,7 +308,7 @@ export function EegMontageEditor({
       if (!file) return;
 
       try {
-        const { rows, channelTypes } = await parseMontageFile(file);
+        const { rows, channelTypes } = parseMontageText(await file.text());
         setDraftMontageChannels(
           rows.map((row) =>
             makeMontageRow(row.channel, {
@@ -1483,7 +1483,7 @@ export function EegMontageEditor({
                   with Clear, both whole-list-replacing); Save always exports AnyWave format
                   regardless of the montage's origin. Both .mtg formats share the same file
                   extension, so format detection happens by content-sniffing in
-                  parseMontageFile, not via the file input's accept filter. */}
+                  parseMontageText, not via the file input's accept filter. */}
               {/* Load montage button */}
               <button
                 type="button"

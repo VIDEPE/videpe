@@ -338,7 +338,7 @@ export const EegViewer = ({
     onChannelTypesChange?.(channelTypes);
   }, [channelTypes, onChannelTypesChange]);
 
-  // File-backed montage templates (public/montage_files/TEMPLATE_MONTAGES.json), listed
+  // Bundled montage templates (src/assets/montage_files, see useMontageTemplates), listed
   // in the sidebar quick-select alongside the None/CAR/Custom presets below — fetched here
   // (rather than where it's applied, further down) so useMontageChannels can recognize a
   // live montage that exactly matches one of them.
@@ -461,10 +461,10 @@ export const EegViewer = ({
     applyChannelSettings(nextChannelSettings);
   };
 
-  // Routes the sidebar template <select>'s value to the right apply function — a file path
+  // Routes the sidebar template <select>'s value to the right apply function — a template id
   // (looked up in montageTemplates) or one of the built-in preset strings.
   const applyTemplateSelection = (value) => {
-    const template = montageTemplates.find((t) => t.path === value);
+    const template = montageTemplates.find((t) => t.id === value);
     if (template) applyMontageFileTemplate(template);
     else applyMontageTemplate(value);
   };
@@ -1146,7 +1146,7 @@ export const EegViewer = ({
                 {customMontageChannels && <option value="custom">Custom</option>}
                 <option value="average">CAR (Common Average Reference)</option>
                 {montageTemplates.map((template) => (
-                  <option key={template.path} value={template.path}>
+                  <option key={template.id} value={template.id}>
                     {template.name}
                   </option>
                 ))}

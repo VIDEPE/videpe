@@ -113,14 +113,14 @@ describe('useMontageChannels — montageTemplate', () => {
 
 describe('useMontageChannels — montageTemplate (file-backed templates)', () => {
   const doubleBanana = {
-    path: 'montage_files/double-banana_10-20.mtg',
+    id: 'double-banana_10-20',
     rows: [
       { channel: 'FP1', reference: 'F7', color: 'yellow' },
       { channel: 'F7', reference: 'FP2', color: 'yellow' },
     ],
   };
 
-  it("reflects the template's path when the applied rows exactly match a file-backed template", () => {
+  it("reflects the template's id when the applied rows exactly match a file-backed template", () => {
     const { result } = setup(['FP1', 'F7', 'FP2'], [doubleBanana]);
     act(() =>
       result.current.applyMontageChannels([
@@ -128,7 +128,7 @@ describe('useMontageChannels — montageTemplate (file-backed templates)', () =>
         { id: 'row-2', channel: 'F7', reference: 'FP2', color: 'yellow' },
       ])
     );
-    expect(result.current.montageTemplate).toBe(doubleBanana.path);
+    expect(result.current.montageTemplate).toBe(doubleBanana.id);
   });
 
   it('matches regardless of row order', () => {
@@ -139,7 +139,7 @@ describe('useMontageChannels — montageTemplate (file-backed templates)', () =>
         { id: 'row-1', channel: 'FP1', reference: 'F7', color: 'yellow' },
       ])
     );
-    expect(result.current.montageTemplate).toBe(doubleBanana.path);
+    expect(result.current.montageTemplate).toBe(doubleBanana.id);
   });
 
   it('is "custom" once a row is edited away from the matching template', () => {

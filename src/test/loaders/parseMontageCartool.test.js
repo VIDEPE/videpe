@@ -6,7 +6,7 @@ import { parseCartoolMontage } from '@/loaders/parseMontageCartool';
 
 const FIXTURE_DIR = path.dirname(fileURLToPath(import.meta.url));
 const CARTOOL_FIXTURE = readFileSync(
-  path.join(FIXTURE_DIR, '../../../public/montage_files/Cartool_montage_file.mtg'),
+  path.join(FIXTURE_DIR, '../../assets/montage_files/Cartool_montage_file.mtg'),
   'utf-8'
 );
 

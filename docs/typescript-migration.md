@@ -67,7 +67,7 @@ The layer state was rebuilt as one url-keyed reducer (instead of the parallel `o
 - [ ] `src/loaders/parseInverseSolutionFieldtrip.js`
 - [ ] `src/loaders/parseMontageAnywave.js`
 - [ ] `src/loaders/parseMontageCartool.js`
-- [ ] `src/loaders/parseMontageFile.js`
+- [ ] `src/loaders/parseMontageText.js`
 - [ ] `src/loaders/toMontageAnyWave.js`
 - [ ] `src/loaders/unzipToFiles.js`
 

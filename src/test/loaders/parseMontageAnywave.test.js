@@ -9,7 +9,7 @@ import { parseAnyWaveMontage } from '@/loaders/parseMontageAnywave';
 // plain Node readFileSync under Vitest.
 const FIXTURE_DIR = path.dirname(fileURLToPath(import.meta.url));
 const ANYWAVE_FIXTURE = readFileSync(
-  path.join(FIXTURE_DIR, '../../../public/montage_files/AnyWave_montage_file.mtg'),
+  path.join(FIXTURE_DIR, '../../assets/montage_files/AnyWave_montage_file.mtg'),
   'utf-8'
 );
 

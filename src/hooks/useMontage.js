@@ -20,7 +20,7 @@ function rowsMatchTemplate(rows, templateRows) {
 // - 'none' = no rows (plot one row per non-bad channel with no reference, see buildMontageDisplayRows);
 // - 'average' = every channel has exactly one row referenced to 'average'
 //    (color is ignored — recoloring a CAR montage shouldn't demote it to Custom);
-// - template file `path` = means `rows` matches template's rows (see rowsMatchTemplate —
+// - template file `id` = means `rows` matches template's rows (see rowsMatchTemplate —
 // this holds even when some of those rows name channels absent from the current recording,
 // since that's still "the template, as loaded", not a hand edit);
 // - anything else = null, i.e. a hand-built montage that doesn't match any known preset.
@@ -34,7 +34,7 @@ function getMontageTemplateMatch(rows, channelNames, fileTemplates) {
   )
     return 'average';
   const fileMatch = fileTemplates.find((template) => rowsMatchTemplate(rows, template.rows));
-  if (fileMatch) return fileMatch.path;
+  if (fileMatch) return fileMatch.id;
   return null;
 }
 
@@ -50,7 +50,7 @@ function getMontageTemplateMatch(rows, channelNames, fileTemplates) {
  * "+ Add selected" / "Add by type" controls) and that draft is committed.
  *
  * @param {string[]} channelNames
- * @param {Array<{path: string, rows: Array}>} [fileTemplates] - file-backed templates (see
+ * @param {Array<{id: string, rows: Array}>} [fileTemplates] - file-backed templates (see
  *   useMontageTemplates) the dropdown should also recognize as a match, in addition to the
  *   None/CAR presets.
  */
