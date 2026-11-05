@@ -3,7 +3,11 @@ import toast from 'react-hot-toast';
 import { SplitPane } from '@/components/SplitPane';
 import { useTheme } from '@/hooks/useTheme';
 import { TrafficLightButtons } from '@/components/TrafficLightButtons';
-import { compareChannelNamesNaturally, buildSeegBipolarReferences } from '@/utils/eegViewerUtils';
+import {
+  compareChannelNamesNaturally,
+  buildSeegBipolarReferences,
+  resolveMontageToRecording,
+} from '@/utils/eegViewerUtils';
 import { parseMontageText } from '@/loaders/parseMontageText';
 import { toAnyWaveMontage } from '@/loaders/toMontageAnyWave';
 import { downloadTextFile } from '@/utils/fileDownload';
@@ -300,7 +304,8 @@ export function EegMontageEditor({
   }, [typeSortDescending, draftChannelSettings]);
 
   // Loads a montage file (AnyWave XML or Cartool text) and replaces the draft montage rows
-  // wholesale, same as Add ALL/Clear all.
+  // wholesale, same as Add ALL/Clear all. Converted to the recording's spelling first, so a
+  // file written with Fp1 works on a recording with FP1.
   const handleLoadMontageFile = useCallback(
     async (e) => {
       const file = e.target.files?.[0];
@@ -308,7 +313,10 @@ export function EegMontageEditor({
       if (!file) return;
 
       try {
-        const { rows, channelTypes } = parseMontageText(await file.text());
+        const { rows, channelTypes } = resolveMontageToRecording(
+          parseMontageText(await file.text()),
+          channelNames
+        );
         setDraftMontageChannels(
           rows.map((row) =>
             makeMontageRow(row.channel, {
@@ -337,7 +345,7 @@ export function EegMontageEditor({
         toast.error(`Error loading montage file:\n${err.message}`);
       }
     },
-    [makeMontageRow]
+    [makeMontageRow, channelNames]
   );
 
   // Exports the current draft as AnyWave XML, regardless of whether it was built by hand

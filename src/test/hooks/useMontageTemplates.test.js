@@ -1,6 +1,33 @@
 import { describe, it, expect } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import { useMontageTemplates, MONTAGE_TEMPLATES } from '@/hooks/useMontageTemplates';
+import { STANDARD_TEMPLATES } from '@/hooks/useElectrodeMatching';
+
+// EGI-style channel names: egiChannelNames(3) → ['E1', 'E2', 'E3'], egiChannelNames(3, '') → ['1', '2', '3']
+const egiChannelNames = (count, prefix = 'E') =>
+  Array.from({ length: count }, (_, i) => `${prefix}${i + 1}`);
+// 10-20 style channel names
+const TEN_TWENTY_NAMES = [
+  'Fp1',
+  'Fp2',
+  'F7',
+  'F3',
+  'Fz',
+  'F4',
+  'F8',
+  'T7',
+  'C3',
+  'Cz',
+  'C4',
+  'T8',
+  'P7',
+  'P3',
+  'Pz',
+  'P4',
+  'P8',
+  'O1',
+  'O2',
+];
 
 describe('useMontageTemplates — bundled templates', () => {
   it.each(MONTAGE_TEMPLATES.map((template) => [template.name, template]))(
@@ -38,10 +65,133 @@ describe('useMontageTemplates — bundled templates', () => {
   });
 });
 
-describe('useMontageTemplates — hook', () => {
-  // Bundled at build time, so there's no loading period: the full list on the first render
-  it('returns every bundled template on the first render', () => {
-    const { result } = renderHook(() => useMontageTemplates());
-    expect(result.current).toBe(MONTAGE_TEMPLATES);
+describe('useMontageTemplates — compatibility links', () => {
+  it('links every bundled template to at least one electrode template', () => {
+    MONTAGE_TEMPLATES.forEach(({ compatibleElectrodeTemplateIds }) => {
+      expect(compatibleElectrodeTemplateIds.length).toBeGreaterThan(0);
+    });
+  });
+
+  // The links are written by hand — a typo would silently hide a template forever
+  it('only links to electrode templates that exist', () => {
+    const electrodeTemplateIds = STANDARD_TEMPLATES.map(({ id }) => id);
+    MONTAGE_TEMPLATES.forEach(({ compatibleElectrodeTemplateIds }) => {
+      compatibleElectrodeTemplateIds.forEach((id) => expect(electrodeTemplateIds).toContain(id));
+    });
+  });
+});
+
+describe('useMontageTemplates — templates offered for a recording', () => {
+  const offeredIds = (result) => result.current.map(({ id }) => id).sort();
+  const setup = (props) =>
+    renderHook((hookProps) => useMontageTemplates(hookProps), {
+      initialProps: { detectedIsSeeg: false, ...props },
+    });
+
+  it.each([
+    [
+      'GSN-HydroCel-256 with E names',
+      egiChannelNames(256),
+      'template_256EGI_prefix_E',
+      [
+        'GSN-HydroCel-257',
+        'GSN-HydroCel-257_downsampled',
+        'longbip_GSN-HydroCel-257_downsampled',
+        'transbip_GSN-HydroCel-257_downsampled',
+      ],
+    ],
+    [
+      'GSN-HydroCel-256 with bare numbers',
+      egiChannelNames(256, ''),
+      'template_256EGI',
+      [
+        'GSN-HydroCel-257_10-20',
+        'GSN-HydroCel-257_withoutE',
+        'GSN-HydroCel-257_withoutE_downsampled',
+        'longbip_GSN-HydroCel-257_withoutE_downsampled',
+        'transbip_GSN-HydroCel-257_withoutE_downsampled',
+      ],
+    ],
+    [
+      '10-20 names',
+      TEN_TWENTY_NAMES,
+      'standard_1020',
+      [
+        'GSN-HydroCel-257_10-20_downsampled',
+        'double-banana_10-20',
+        'longbip_GSN-HydroCel-257_10-20_downsampled',
+        'transbip_GSN-HydroCel-257_10-20_downsampled',
+        'triple-banana_10-20',
+      ],
+    ],
+    [
+      '10-05 names',
+      TEN_TWENTY_NAMES,
+      'fsaverage_1005',
+      [
+        'GSN-HydroCel-257_10-20_downsampled',
+        'double-banana_10-20',
+        'longbip_GSN-HydroCel-257_10-20_downsampled',
+        'transbip_GSN-HydroCel-257_10-20_downsampled',
+        'triple-banana_10-20',
+      ],
+    ],
+  ])('offers the linked templates for %s', (_, channelNames, standardTemplateId, expectedIds) => {
+    const { result } = setup({ channelNames, standardTemplateId });
+    expect(offeredIds(result)).toEqual(expectedIds);
+  });
+
+  // E1–E128 also exist in the 257 montages, but sit at different positions on the 128 net.
+  // Nothing is linked to these templates until their montages have been verified.
+  it.each([
+    ['E names', egiChannelNames(128), 'template_128EGI_prefix_E'],
+    ['bare numbers', egiChannelNames(128, ''), 'template_128EGI'],
+  ])('offers nothing for GSN-HydroCel-128 with %s', (_, channelNames, standardTemplateId) => {
+    const { result } = setup({ channelNames, standardTemplateId });
+    expect(result.current).toEqual([]);
+  });
+
+  it('offers nothing for SEEG, even when the channel names look like a linked template', () => {
+    const { result } = setup({
+      channelNames: TEN_TWENTY_NAMES,
+      standardTemplateId: 'standard_1020',
+      detectedIsSeeg: true,
+    });
+    expect(result.current).toEqual([]);
+  });
+
+  // With 0 matches the electrode matching still returns its first template
+  it('offers nothing when no row of a linked template can be drawn', () => {
+    const { result } = setup({
+      channelNames: ['Marker', 'Trigger'],
+      standardTemplateId: 'fsaverage_1005',
+    });
+    expect(result.current).toEqual([]);
+  });
+
+  it('keeps a template when only some of its rows can be drawn', () => {
+    const { result } = setup({ channelNames: ['Fp1'], standardTemplateId: 'standard_1020' });
+    expect(offeredIds(result)).toContain('GSN-HydroCel-257_10-20_downsampled');
+  });
+
+  it("returns the offered templates in the recording's own spelling", () => {
+    const channelNames = TEN_TWENTY_NAMES.map((name) => name.toUpperCase());
+    const { result } = setup({ channelNames, standardTemplateId: 'standard_1020' });
+
+    const doubleBanana = result.current.find(({ id }) => id === 'double-banana_10-20');
+    const namesInRows = doubleBanana.rows.flatMap(({ channel, reference }) => [channel, reference]);
+    expect(namesInRows).toContain('FP1'); // 'Fp1' in the template file
+    expect(namesInRows).toContain('PZ'); // 'Pz' in the template file
+    expect(namesInRows).not.toContain('Fp1');
+    expect(namesInRows).not.toContain('Pz');
+  });
+
+  it('keeps the same list between renders, so the montage match is not recomputed', () => {
+    const props = { channelNames: TEN_TWENTY_NAMES, standardTemplateId: 'standard_1020' };
+    const { result, rerender } = setup(props);
+    const firstList = result.current;
+
+    rerender({ ...props, detectedIsSeeg: false });
+    expect(result.current).toBe(firstList);
   });
 });

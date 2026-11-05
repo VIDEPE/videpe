@@ -1,4 +1,5 @@
 import { parseElectrodeContactName } from './intracranialDetection';
+import { normalizeChannelName } from './eegTopographyUtils';
 import { getTukeyWindow, applyMontageRowFilter } from './eegFilters';
 import { yieldToMain } from './yieldToMain';
 
@@ -196,6 +197,56 @@ const REFERENCE_LABELS = { average: 'Avg', median: 'Med' };
 const SPECIAL_REFERENCES = Object.keys(REFERENCE_LABELS);
 
 /**
+ * Whether a montage row can be drawn for this recording: its channel exists, and so does its
+ * reference, unless that's referential (none) or an average/median. Exact name comparison —
+ * see resolveMontageToRecording for loading a montage spelled differently from the recording.
+ *
+ * @param {{channel: string, reference: string|null}} row
+ * @param {string[]} channelNames - the recording's channel names.
+ * @returns {boolean}
+ */
+export function isMontageRowDrawable(row, channelNames) {
+  return (
+    channelNames.includes(row.channel) &&
+    (!row.reference ||
+      SPECIAL_REFERENCES.includes(row.reference) ||
+      channelNames.includes(row.reference))
+  );
+}
+
+/**
+ * Rewrites a montage's channel names to the recording's own spelling, so a montage written
+ * with `Fp1` works on a recording with `FP1` or `EEG Fp1-Ref`. Everything after this point
+ * (buildMontageDisplayRows, channelSettings' keys, ...) compares names exactly, so this is the
+ * one conversion needed when a montage enters the app. Unambiguous, because a recording whose
+ * names collide after normalizeChannelName is rejected at load (findDuplicateChannelNames).
+ * Names not in the recording stay as they are, for the "recording is missing" warning.
+ *
+ * @param {{rows: Array<{channel: string, reference: string|null}>, channelTypes: Object}} montage
+ *   a parsed montage, see parseMontageText.
+ * @param {string[]} channelNames - the recording's channel names.
+ * @returns {{rows: Array, channelTypes: Object}} the same montage in the recording's spelling.
+ */
+export function resolveMontageToRecording({ rows, channelTypes }, channelNames) {
+  const recordingNames = new Map(channelNames.map((name) => [normalizeChannelName(name), name]));
+  const toRecordingName = (name) => recordingNames.get(normalizeChannelName(name)) ?? name;
+
+  return {
+    rows: rows.map((row) => ({
+      ...row,
+      channel: toRecordingName(row.channel),
+      reference:
+        row.reference && !SPECIAL_REFERENCES.includes(row.reference)
+          ? toRecordingName(row.reference)
+          : row.reference,
+    })),
+    channelTypes: Object.fromEntries(
+      Object.entries(channelTypes).map(([name, type]) => [toRecordingName(name), type])
+    ),
+  };
+}
+
+/**
  * Builds the rows to render in the EEG channel-plot area, resolving channel/reference
  * indices for deriveMontageRowSamples. Drops rows that are bad, or (only reachable via a
  * loaded montage file) name a channel not in channelNames — indexOf would return -1 there,
@@ -240,13 +291,7 @@ export function buildMontageDisplayRows(channelNames, channelSettings, montageCh
       // note: channelSettings[row.reference] is simply undefined when reference is null/''
       .filter((row) => !channelSettings[row.channel]?.bad && !channelSettings[row.reference]?.bad)
       // filter out rows with channel/reference not present in the current recording
-      .filter(
-        (row) =>
-          channelNames.includes(row.channel) &&
-          (!row.reference ||
-            SPECIAL_REFERENCES.includes(row.reference) ||
-            channelNames.includes(row.reference))
-      )
+      .filter((row) => isMontageRowDrawable(row, channelNames))
       // - create new names: [channel] - [ref] if there is a reference, else: row.channel
       //   if row.reference === 'average'/'median': [channel] - Avg / Med
       .map((row) => {

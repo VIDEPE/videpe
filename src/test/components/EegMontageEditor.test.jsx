@@ -1588,6 +1588,19 @@ describe('EegMontageEditor', () => {
       expect(toast.error).not.toHaveBeenCalled();
     });
 
+    it("loads a file spelled differently from the recording under the recording's own names", async () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      const file = new File([ANYWAVE_FILE_TEXT.replaceAll('FP', 'Fp')], 'custom.mtg');
+      await userEvent.upload(screen.getByTestId('montage-file-input'), file);
+
+      const rows = screen.getAllByTestId(/^montage-channel-/);
+      expect(rows.map((r) => r.textContent)).toEqual(['FP1', 'FP2']);
+      const referenceSelects = screen.getAllByTestId(/^reference-/);
+      expect(referenceSelects.map((s) => s.value)).toEqual(['', 'FP1']);
+      // channelSettings is keyed by the recording's names, so the type lands on FP1 too.
+      expect(screen.getByTestId('channel-type-FP1')).toHaveValue('seeg');
+    });
+
     it('loading a valid Cartool file replaces the montage rows and leaves channel types untouched', async () => {
       render(<EegMontageEditor {...defaultProps} />);
       const file = new File([CARTOOL_FILE_TEXT], 'custom.mtg');

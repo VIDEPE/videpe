@@ -131,6 +131,21 @@ describe('useMontageChannels — montageTemplate (file-backed templates)', () =>
     expect(result.current.montageTemplate).toBe(doubleBanana.id);
   });
 
+  it('falls back to "custom" once the matching template is no longer offered for the recording', () => {
+    const channelNames = ['FP1', 'F7', 'FP2'];
+    const { result, rerender } = setup(channelNames, [doubleBanana]);
+    act(() =>
+      result.current.applyMontageChannels([
+        { id: 'row-1', channel: 'FP1', reference: 'F7', color: 'yellow' },
+        { id: 'row-2', channel: 'F7', reference: 'FP2', color: 'yellow' },
+      ])
+    );
+
+    rerender({ channelNames, fileTemplates: [] });
+    expect(result.current.montageTemplate).toBe('custom');
+    expect(result.current.customMontageChannels).toHaveLength(2);
+  });
+
   it('matches regardless of row order', () => {
     const { result } = setup(['FP1', 'F7', 'FP2'], [doubleBanana]);
     act(() =>

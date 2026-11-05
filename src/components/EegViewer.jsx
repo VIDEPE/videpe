@@ -290,6 +290,7 @@ export const EegViewer = ({
     electrodes,
     matched,
     isStandardElectrodes,
+    standardTemplateId,
     standardTemplateName,
     electrodePositionMatchCount,
     electrodePositionTotalCount,
@@ -338,11 +339,15 @@ export const EegViewer = ({
     onChannelTypesChange?.(channelTypes);
   }, [channelTypes, onChannelTypesChange]);
 
-  // Bundled montage templates (src/assets/montage_files, see useMontageTemplates), listed
-  // in the sidebar quick-select alongside the None/CAR/Custom presets below — fetched here
+  // Bundled montage templates that fit this recording (see useMontageTemplates), listed in
+  // the sidebar quick-select alongside the None/CAR/Custom presets below — looked up here
   // (rather than where it's applied, further down) so useMontageChannels can recognize a
   // live montage that exactly matches one of them.
-  const montageTemplates = useMontageTemplates();
+  const montageTemplates = useMontageTemplates({
+    channelNames,
+    standardTemplateId,
+    detectedIsSeeg,
+  });
 
   // Montage row list (reference/color per displayed trace), edited via the same window's
   // montage-settings pane — kept separate from channelSettings since it's an array (can
@@ -1124,8 +1129,11 @@ export const EegViewer = ({
             </div>
             {/* EEG Montage: opens the montage editor window for per-channel/row referencing,
                 plus a quick template <select> below it that applies a preset straight to
-                the live montage (no Apply/OK gate) — None/Common Average Reference always
-                offered, "Custom" only once a hand-built montage exists to switch back to. */}
+                the live montage (no Apply/OK gate) — None always offered, Common Average
+                Reference unless the recording is SEEG (a global average across depth contacts
+                isn't a meaningful reference; still listed while it's the active montage, which
+                the editor can build, so this <select> can show it), "Custom" only once a
+                hand-built montage exists to switch back to. */}
             <div className="flex flex-col items-center gap-1 pb-1">
               <button type="button" className="button" onClick={() => setMontageVisible((v) => !v)}>
                 Montage
@@ -1144,7 +1152,9 @@ export const EegViewer = ({
               >
                 <option value="none">None</option>
                 {customMontageChannels && <option value="custom">Custom</option>}
-                <option value="average">CAR (Common Average Reference)</option>
+                {(!detectedIsSeeg || montageTemplate === 'average') && (
+                  <option value="average">CAR (Common Average Reference)</option>
+                )}
                 {montageTemplates.map((template) => (
                   <option key={template.id} value={template.id}>
                     {template.name}

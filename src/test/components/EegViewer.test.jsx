@@ -96,9 +96,12 @@ vi.mock('@/assets/electrode_positions/fsaverage_1005.tsv?raw', () => ({ default:
 // Montage templates the dropdown offers — empty by default; the "file-backed montage
 // templates" tests below fill it with their own test template. The real bundled templates
 // are covered by useMontageTemplates.test.js.
-const montageTemplatesMock = vi.hoisted(() => ({ current: [] }));
+const montageTemplatesMock = vi.hoisted(() => ({ current: [], lastProps: null }));
 vi.mock('@/hooks/useMontageTemplates', () => ({
-  useMontageTemplates: () => montageTemplatesMock.current,
+  useMontageTemplates: (props) => {
+    montageTemplatesMock.lastProps = props;
+    return montageTemplatesMock.current;
+  },
 }));
 
 // jsdom does not implement ResizeObserver; use a class so `new` works,
@@ -2515,6 +2518,40 @@ describe('EegViewer — montage row wiring', () => {
 });
 
 describe('EegViewer — montage template dropdown', () => {
+  const dropdownOptions = () =>
+    Array.from(screen.getByTestId('montage-template-select').options).map((o) => o.value);
+
+  it('asks for the templates that fit this recording', async () => {
+    await renderViewer();
+
+    expect(montageTemplatesMock.lastProps).toEqual({
+      channelNames,
+      standardTemplateId: 'fsaverage_1005', // MOCK_TSV stands in for this template
+      detectedIsSeeg: false,
+    });
+  });
+
+  it('does not offer CAR for an SEEG recording', async () => {
+    await renderViewer(makeIntracranialProvider());
+
+    expect(dropdownOptions()).toEqual(['none']);
+  });
+
+  // An average-referenced montage can still be built in the editor — the dropdown then has
+  // to be able to show it, or it would read "None" for a montage that isn't.
+  it('still shows CAR for an SEEG recording while that is the active montage', async () => {
+    await renderViewer(makeIntracranialProvider());
+
+    await userEvent.click(screen.getByRole('button', { name: 'Montage' }));
+    await userEvent.selectOptions(screen.getByTestId('add-by-type-select'), 'seeg');
+    await userEvent.click(screen.getByTestId('add-by-type-button'));
+    await userEvent.selectOptions(screen.getByTestId('bulk-reference-select'), 'average');
+    await userEvent.click(screen.getByTestId('bulk-reference-apply-button'));
+    await userEvent.click(screen.getByRole('button', { name: 'OK' }));
+
+    expect(screen.getByTestId('montage-template-select')).toHaveValue('average');
+  });
+
   it('defaults to "None" with no "Custom" option, before any montage has been built', async () => {
     await renderViewer();
 
