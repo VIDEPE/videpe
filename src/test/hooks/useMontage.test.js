@@ -113,7 +113,7 @@ describe('useMontageChannels — montageTemplate', () => {
 
 describe('useMontageChannels — montageTemplate (file-backed templates)', () => {
   const doubleBanana = {
-    id: 'double-banana_10-20',
+    id: 'DoubleBanana_10-20',
     rows: [
       { channel: 'FP1', reference: 'F7', color: 'yellow' },
       { channel: 'F7', reference: 'FP2', color: 'yellow' },
