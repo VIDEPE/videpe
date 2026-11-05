@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { parseMontageText } from '@/loaders/parseMontageText';
-import { isMontageRowDrawable, resolveMontageToRecording } from '@/utils/eegViewerUtils';
+import { isMontageRowDrawable, remapMontageToRecording } from '@/utils/eegViewerUtils';
 
 // montage templates
 // ?raw: import the file's contents as a string (bundled at build time), instead of its URL
@@ -30,7 +30,7 @@ export const MAP_1020_TO_EGI256_NUMBER_NAMES = buildEgi256ChannelNames('');
 // 256 net but at different positions, so the GSN-HydroCel-128 templates are left out until it
 // has been verified which montages make sense for them — they only get None and CAR.
 // - namePrefix: added to each montage's name, so the dropdown shows which net it's for
-// - channelAliases: the recording's name for each montage channel, see resolveMontageToRecording
+// - channelAliases: the recording's name for each montage channel, see remapMontageToRecording
 export const MONTAGE_NAMING_SYSTEMS = {
   standard_1020: { namePrefix: '', channelAliases: {} },
   fsaverage_1005: { namePrefix: '', channelAliases: {} },
@@ -75,7 +75,7 @@ export const MONTAGE_TEMPLATES = [
 
 /**
  * The montage templates to offer for this recording, in the recording's own channel spelling
- * (see resolveMontageToRecording), so applying one needs no further conversion. A template is
+ * (see remapMontageToRecording), so applying one needs no further conversion. A template is
  * offered when the recording's best-matching electrode template has a naming system (see
  * MONTAGE_NAMING_SYSTEMS) and at least one of the template's rows can be drawn. The second check
  * is needed because the electrode matching always returns a template, even with 0 matched
@@ -90,14 +90,21 @@ export const MONTAGE_TEMPLATES = [
  */
 export function useMontageTemplates({ channelNames, standardTemplateId, detectedIsSeeg }) {
   return useMemo(() => {
+    // find how this recording names its channels; SEEG and unlisted templates get no montages
     const namingSystem = MONTAGE_NAMING_SYSTEMS[standardTemplateId];
     if (detectedIsSeeg || !namingSystem) return [];
 
+    // rewrite each montage to the recording's channel names and add the dropdown prefix
     const { namePrefix, channelAliases } = namingSystem;
-    return MONTAGE_TEMPLATES.map((template) => ({
+    const remappedTemplates = MONTAGE_TEMPLATES.map((template) => ({
       ...template,
-      ...resolveMontageToRecording(template, channelNames, channelAliases),
+      ...remapMontageToRecording(template, channelNames, channelAliases),
       name: `${namePrefix}${template.name}`,
-    })).filter(({ rows }) => rows.some((row) => isMontageRowDrawable(row, channelNames)));
+    }));
+
+    // only keep the montages with at least one row that can be drawn for this recording
+    return remappedTemplates.filter(({ rows }) =>
+      rows.some((row) => isMontageRowDrawable(row, channelNames))
+    );
   }, [channelNames, standardTemplateId, detectedIsSeeg]);
 }

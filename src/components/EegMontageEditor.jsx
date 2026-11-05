@@ -6,7 +6,7 @@ import { TrafficLightButtons } from '@/components/TrafficLightButtons';
 import {
   compareChannelNamesNaturally,
   buildSeegBipolarReferences,
-  resolveMontageToRecording,
+  remapMontageToRecording,
 } from '@/utils/eegViewerUtils';
 import { parseMontageText } from '@/loaders/parseMontageText';
 import { toAnyWaveMontage } from '@/loaders/toMontageAnyWave';
@@ -313,7 +313,7 @@ export function EegMontageEditor({
       if (!file) return;
 
       try {
-        const { rows, channelTypes } = resolveMontageToRecording(
+        const { rows, channelTypes } = remapMontageToRecording(
           parseMontageText(await file.text()),
           channelNames
         );

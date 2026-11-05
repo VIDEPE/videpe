@@ -199,7 +199,7 @@ const SPECIAL_REFERENCES = Object.keys(REFERENCE_LABELS);
 /**
  * Whether a montage row can be drawn for this recording: its channel exists, and so does its
  * reference, unless that's referential (none) or an average/median. Exact name comparison —
- * see resolveMontageToRecording for loading a montage spelled differently from the recording.
+ * see remapMontageToRecording for loading a montage spelled differently from the recording.
  *
  * @param {{channel: string, reference: string|null}} row
  * @param {string[]} channelNames - the recording's channel names.
@@ -229,11 +229,7 @@ export function isMontageRowDrawable(row, channelNames) {
  *   in the recording, e.g. `{ F8: 'E2' }`.
  * @returns {{rows: Array, channelTypes: Object}} the same montage in the recording's spelling.
  */
-export function resolveMontageToRecording(
-  { rows, channelTypes },
-  channelNames,
-  channelAliases = {}
-) {
+export function remapMontageToRecording({ rows, channelTypes }, channelNames, channelAliases = {}) {
   // normalise the recording channel names
   const recordingNames = new Map(channelNames.map((name) => [normalizeChannelName(name), name]));
   // the aliases' names are normalised here, so a table can use the normal spelling ({ F8: 'E2' })
@@ -259,7 +255,7 @@ export function resolveMontageToRecording(
   }
   // resolve the montage row name to that of the recording name (if possible)
   // this excludes direct matches with the SPECIAL_REFERENCES
-  const resolvedRows = rows.map((row) => ({
+  const remappedRows = rows.map((row) => ({
     ...row,
     channel: toRecordingName(row.channel),
     reference:
@@ -269,7 +265,7 @@ export function resolveMontageToRecording(
   }));
 
   return {
-    rows: resolvedRows,
+    rows: remappedRows,
     channelTypes: Object.fromEntries(
       Object.entries(channelTypes).map(([name, type]) => [toRecordingName(name), type])
     ),
