@@ -21,6 +21,23 @@ vi.mock('@/utils/fileDownload', () => ({
 
 const CHANNEL_NAMES = ['FP1', 'FP2', 'FP3'];
 
+// The colors the Color selects should offer, in order. Written out here instead of imported
+// from the component, so a color dropped from the component's list fails these tests.
+const PRESET_COLORS = [
+  'red',
+  'blue',
+  'green',
+  'yellow',
+  'cyan',
+  'magenta',
+  'crimson',
+  'steelblue',
+  'seagreen',
+  'darkgoldenrod',
+  'chocolate',
+  'mediumpurple',
+];
+
 const CHANNEL_SETTINGS = {
   FP1: { type: 'eeg', bad: false },
   FP2: { type: 'eeg', bad: true },
@@ -485,7 +502,7 @@ describe('EegMontageEditor', () => {
       const options = Array.from(screen.getByTestId('bulk-color-select').options).map(
         (option) => option.value
       );
-      expect(options).toEqual(['', 'red', 'blue', 'green', 'yellow', 'cyan', 'magenta']);
+      expect(options).toEqual(['', ...PRESET_COLORS]);
     });
 
     it("tints each preset option's text to match the color it applies", () => {
@@ -493,9 +510,7 @@ describe('EegMontageEditor', () => {
       const options = Array.from(screen.getByTestId('bulk-color-select').options);
       const byValue = Object.fromEntries(options.map((option) => [option.value, option]));
 
-      ['red', 'blue', 'green', 'yellow', 'cyan', 'magenta'].forEach((color) =>
-        expect(byValue[color].style.color).toBe(color)
-      );
+      PRESET_COLORS.forEach((color) => expect(byValue[color].style.color).toBe(color));
     });
 
     it('sets every montage row to "red" when picked', async () => {
@@ -1656,9 +1671,7 @@ describe('EegMontageEditor', () => {
       const options = Array.from(screen.getByTestId('color-FP1').options);
       const byValue = Object.fromEntries(options.map((option) => [option.value, option]));
 
-      ['red', 'blue', 'green', 'yellow', 'cyan', 'magenta'].forEach((color) =>
-        expect(byValue[color].style.color).toBe(color)
-      );
+      PRESET_COLORS.forEach((color) => expect(byValue[color].style.color).toBe(color));
     });
   });
 });

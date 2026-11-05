@@ -45,7 +45,20 @@ const TYPE_ORDER = Object.keys(TYPE_LIST);
 // Preset options offered by each row's Color <select>. A loaded montage file (AnyWave) can
 // carry any CSS color keyword, not just these — see the color <select> below, which injects
 // an extra option for a row's current color when it isn't one of these presets.
-const PRESET_COLORS = ['red', 'blue', 'green', 'yellow', 'cyan', 'magenta'];
+const PRESET_COLORS = [
+  'red',
+  'blue',
+  'green',
+  'yellow',
+  'cyan',
+  'magenta',
+  'crimson',
+  'steelblue',
+  'seagreen',
+  'darkgoldenrod',
+  'chocolate',
+  'mediumpurple',
+];
 
 // ─── Shared styling settings ────────────────────────────────────────
 // Shared title styling — keeps panes titles visually consistent, with the same height (TrafficLightButtons are 16px tall).
