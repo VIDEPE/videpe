@@ -23,8 +23,8 @@ import tripleBananaMtg from '@/assets/montage_files/triple-banana_10-20.mtg?raw'
 // the 256 net but at different positions, so a GSN-HydroCel-128 recording would otherwise be
 // offered the 257 montages. Nothing is linked to the GSN-HydroCel-128 templates until it has
 // been verified which montages make sense for them — they only get None and CAR.
-const GSN_256_E_NAMES = ['template_256EGI_prefix_E'];
-const GSN_256_NUMBERS = ['template_256EGI'];
+const GSN_256_E_NAMES = ['template_EGI256_prefix_E'];
+const GSN_256_NUMBERS = ['template_EGI256'];
 const TEN_TWENTY_NAMES = ['standard_1020', 'fsaverage_1005'];
 
 // Bundled montage templates, parsed once at module load, in dropdown order.
@@ -47,7 +47,7 @@ export const MONTAGE_TEMPLATES = [
   },
   {
     // Mixes bare numbers with 10-20 names (1, F8, 3, ...), mostly numbers: 188 of its 257
-    // channels are in template_256EGI
+    // channels are in template_EGI256
     id: 'GSN-HydroCel-257_10-20',
     name: 'GSN-HydroCel-257 (10-20)',
     compatibleElectrodeTemplateIds: GSN_256_NUMBERS,

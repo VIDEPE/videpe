@@ -1,7 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { renderHook } from '@testing-library/react';
-import { useMontageTemplates, MONTAGE_TEMPLATES } from '@/hooks/useMontageTemplates';
 import { STANDARD_TEMPLATES } from '@/hooks/useElectrodeMatching';
+import {
+  useMontageTemplates,
+  MONTAGE_TEMPLATES,
+  EGI256_E_NAMES,
+  EGI256_NUMBER_NAMES,
+} from '@/hooks/useMontageTemplates';
 
 // EGI-style channel names: egiChannelNames(3) → ['E1', 'E2', 'E3'], egiChannelNames(3, '') → ['1', '2', '3']
 const egiChannelNames = (count, prefix = 'E') =>
@@ -28,6 +33,33 @@ const TEN_TWENTY_NAMES = [
   'O1',
   'O2',
 ];
+
+describe('useMontageTemplates — Channel Map: 10-20 to EGI 256', () => {
+  it('gives the E name of a 10-20 electrode', () => {
+    expect(EGI256_E_NAMES.F8).toBe('E2');
+    expect(EGI256_E_NAMES.F9).toBe('E252');
+  });
+
+  it('gives the bare number of a 10-20 electrode', () => {
+    expect(EGI256_NUMBER_NAMES.F8).toBe('2');
+    expect(EGI256_NUMBER_NAMES.F9).toBe('252');
+  });
+
+  // The net's reference electrode: Cz in some exports, VREF in others
+  it('knows Cz as VREF in both tables', () => {
+    expect(EGI256_E_NAMES.Cz).toBe('VREF');
+    expect(EGI256_NUMBER_NAMES.Cz).toBe('VREF');
+  });
+
+  it('covers all 69 mapped electrodes plus Cz', () => {
+    expect(Object.keys(EGI256_E_NAMES)).toHaveLength(70);
+  });
+
+  // Two 10-20 names on one electrode would be a typo in the list
+  it('maps every 10-20 name to a different electrode', () => {
+    expect(new Set(Object.values(EGI256_E_NAMES)).size).toBe(70);
+  });
+});
 
 describe('useMontageTemplates — bundled templates', () => {
   it.each(MONTAGE_TEMPLATES.map((template) => [template.name, template]))(
@@ -92,7 +124,7 @@ describe('useMontageTemplates — templates offered for a recording', () => {
     [
       'GSN-HydroCel-256 with E names',
       egiChannelNames(256),
-      'template_256EGI_prefix_E',
+      'template_EGI256_prefix_E',
       [
         'GSN-HydroCel-257',
         'GSN-HydroCel-257_downsampled',
@@ -103,7 +135,7 @@ describe('useMontageTemplates — templates offered for a recording', () => {
     [
       'GSN-HydroCel-256 with bare numbers',
       egiChannelNames(256, ''),
-      'template_256EGI',
+      'template_EGI256',
       [
         'GSN-HydroCel-257_10-20',
         'GSN-HydroCel-257_withoutE',
@@ -144,8 +176,8 @@ describe('useMontageTemplates — templates offered for a recording', () => {
   // E1–E128 also exist in the 257 montages, but sit at different positions on the 128 net.
   // Nothing is linked to these templates until their montages have been verified.
   it.each([
-    ['E names', egiChannelNames(128), 'template_128EGI_prefix_E'],
-    ['bare numbers', egiChannelNames(128, ''), 'template_128EGI'],
+    ['E names', egiChannelNames(128), 'template_EGI128_prefix_E'],
+    ['bare numbers', egiChannelNames(128, ''), 'template_EGI128'],
   ])('offers nothing for GSN-HydroCel-128 with %s', (_, channelNames, standardTemplateId) => {
     const { result } = setup({ channelNames, standardTemplateId });
     expect(result.current).toEqual([]);

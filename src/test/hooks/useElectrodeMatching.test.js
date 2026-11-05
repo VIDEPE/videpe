@@ -105,21 +105,21 @@ describe('useElectrodeMatching — bundled templates', () => {
     [
       'EGI 128, E-prefixed (also fully in the 256 net: the smaller template wins)',
       egiChannelNames(128),
-      'template_128EGI_prefix_E',
+      'template_EGI128_prefix_E',
     ],
     [
       'EGI 128, bare numbers (also fully in the 256 net: the smaller template wins)',
       egiChannelNames(128, ''),
-      'template_128EGI',
+      'template_EGI128',
     ],
-    ['EGI 256, E-prefixed', egiChannelNames(256), 'template_256EGI_prefix_E'],
-    ['EGI 256, bare numbers', egiChannelNames(256, ''), 'template_256EGI'],
+    ['EGI 256, E-prefixed', egiChannelNames(256), 'template_EGI256_prefix_E'],
+    ['EGI 256, bare numbers', egiChannelNames(256, ''), 'template_EGI256'],
     // More matched channels beats a higher share of the template used: the 128 net would
     // use 128/130 of its positions vs 200/258 for the 256 net, but leave E129–E200 unmatched
     [
       'EGI 256 with only E1–E200 exported (most matched channels wins)',
       egiChannelNames(200),
-      'template_256EGI_prefix_E',
+      'template_EGI256_prefix_E',
     ],
   ])('picks the right template for %s', (_, names, expectedTemplateId) => {
     const { result } = setup({ channelNames: names });

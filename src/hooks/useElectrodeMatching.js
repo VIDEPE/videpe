@@ -8,10 +8,10 @@ import { detectIsIntracranial } from '@/utils/intracranialDetection';
 // ?raw: import the file's contents as a string (bundled at build time), instead of its URL
 import fsaverage1005Tsv from '@/assets/electrode_positions/fsaverage_1005.tsv?raw';
 import standard1020Tsv from '@/assets/electrode_positions/standard_1020.tsv?raw';
-import egi128PrefixETsv from '@/assets/electrode_positions/template_128EGI_prefix_E.tsv?raw';
-import egi128Tsv from '@/assets/electrode_positions/template_128EGI.tsv?raw';
-import egi256PrefixETsv from '@/assets/electrode_positions/template_256EGI_prefix_E.tsv?raw';
-import egi256Tsv from '@/assets/electrode_positions/template_256EGI.tsv?raw';
+import egi128PrefixETsv from '@/assets/electrode_positions/template_EGI128_prefix_E.tsv?raw';
+import egi128Tsv from '@/assets/electrode_positions/template_EGI128.tsv?raw';
+import egi256PrefixETsv from '@/assets/electrode_positions/template_EGI256_prefix_E.tsv?raw';
+import egi256Tsv from '@/assets/electrode_positions/template_EGI256.tsv?raw';
 
 // Bundled position templates, parsed once at module load.
 // - id: stable key for code (the file name without .tsv), e.g. for filtering montages later
@@ -20,10 +20,10 @@ import egi256Tsv from '@/assets/electrode_positions/template_256EGI.tsv?raw';
 export const STANDARD_TEMPLATES = [
   { id: 'fsaverage_1005', name: 'fsaverage 10-05 (FreeSurfer)', text: fsaverage1005Tsv },
   { id: 'standard_1020', name: 'Standard 10-20', text: standard1020Tsv },
-  { id: 'template_128EGI_prefix_E', name: 'GSN-HydroCel-128 (E1-E128)', text: egi128PrefixETsv },
-  { id: 'template_128EGI', name: 'GSN-HydroCel-128 (1-128)', text: egi128Tsv },
-  { id: 'template_256EGI_prefix_E', name: 'GSN-HydroCel-256 (E1-E256)', text: egi256PrefixETsv },
-  { id: 'template_256EGI', name: 'GSN-HydroCel-256 (1-256)', text: egi256Tsv },
+  { id: 'template_EGI128_prefix_E', name: 'GSN-HydroCel-128 (E1-E128)', text: egi128PrefixETsv },
+  { id: 'template_EGI128', name: 'GSN-HydroCel-128 (1-128)', text: egi128Tsv },
+  { id: 'template_EGI256_prefix_E', name: 'GSN-HydroCel-256 (E1-E256)', text: egi256PrefixETsv },
+  { id: 'template_EGI256', name: 'GSN-HydroCel-256 (1-256)', text: egi256Tsv },
 ].map(({ id, name, text }) => ({
   id,
   name,
