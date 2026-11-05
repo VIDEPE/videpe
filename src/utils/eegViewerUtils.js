@@ -225,21 +225,51 @@ export function isMontageRowDrawable(row, channelNames) {
  * @param {{rows: Array<{channel: string, reference: string|null}>, channelTypes: Object}} montage
  *   a parsed montage, see parseMontageText.
  * @param {string[]} channelNames - the recording's channel names.
+ * @param {Object<string, string>} [channelAliases] - other names a montage channel can have
+ *   in the recording, e.g. `{ F8: 'E2' }`.
  * @returns {{rows: Array, channelTypes: Object}} the same montage in the recording's spelling.
  */
-export function resolveMontageToRecording({ rows, channelTypes }, channelNames) {
+export function resolveMontageToRecording(
+  { rows, channelTypes },
+  channelNames,
+  channelAliases = {}
+) {
+  // normalise the recording channel names
   const recordingNames = new Map(channelNames.map((name) => [normalizeChannelName(name), name]));
-  const toRecordingName = (name) => recordingNames.get(normalizeChannelName(name)) ?? name;
+  // the aliases' names are normalised here, so a table can use the normal spelling ({ F8: 'E2' })
+  const aliases = new Map(
+    Object.entries(channelAliases).map(([name, alias]) => [normalizeChannelName(name), alias])
+  );
+
+  // finds the recording's spelling of a montage name; returns the name unchanged if there's no match
+  function toRecordingName(name) {
+    const normalizedName = normalizeChannelName(name);
+    // 1. the recording has the name itself?
+    const recordingName = recordingNames.get(normalizedName);
+    if (recordingName !== undefined) return recordingName;
+
+    // 2. otherwise: does the name have an alias?
+    const alias = aliases.get(normalizedName);
+    if (alias !== undefined) {
+      // 3. if so: does the recording have that alias?
+      return recordingNames.get(normalizeChannelName(alias)) ?? name;
+    }
+    // if not, just return name
+    return name;
+  }
+  // resolve the montage row name to that of the recording name (if possible)
+  // this excludes direct matches with the SPECIAL_REFERENCES
+  const resolvedRows = rows.map((row) => ({
+    ...row,
+    channel: toRecordingName(row.channel),
+    reference:
+      row.reference && !SPECIAL_REFERENCES.includes(row.reference)
+        ? toRecordingName(row.reference)
+        : row.reference,
+  }));
 
   return {
-    rows: rows.map((row) => ({
-      ...row,
-      channel: toRecordingName(row.channel),
-      reference:
-        row.reference && !SPECIAL_REFERENCES.includes(row.reference)
-          ? toRecordingName(row.reference)
-          : row.reference,
-    })),
+    rows: resolvedRows,
     channelTypes: Object.fromEntries(
       Object.entries(channelTypes).map(([name, type]) => [toRecordingName(name), type])
     ),

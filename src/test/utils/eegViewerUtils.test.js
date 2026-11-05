@@ -782,6 +782,56 @@ describe('resolveMontageToRecording', () => {
     expect(channelTypes).toEqual({ FP1: 'seeg', T7: 'eeg' });
   });
 
+  describe('channel aliases', () => {
+    const aliases = { F8: 'E2', Cz: 'VREF' };
+
+    it("uses a name's alias when the recording doesn't have the name itself", () => {
+      const { rows, channelTypes } = resolveMontageToRecording(
+        { rows: [row('F8', 'Cz')], channelTypes: { F8: 'eeg' } },
+        ['E2', 'VREF'],
+        aliases
+      );
+      expect(rows).toEqual([row('E2', 'VREF')]);
+      expect(channelTypes).toEqual({ E2: 'eeg' });
+    });
+
+    it('prefers the name itself when the recording has it', () => {
+      const { rows } = resolveMontageToRecording(
+        { rows: [row('Cz')], channelTypes: {} },
+        ['Cz', 'VREF'],
+        aliases
+      );
+      expect(rows[0].channel).toBe('Cz');
+    });
+
+    // Spelling can differ in three places: the montage, the alias table and the recording
+    it.each([
+      ['F8', 'F8', 'E2'], // same case everywhere
+      ['f8', 'F8', 'e2'], // lowercase montage and recording, capitalised alias key
+      ['F8', 'f8', 'E2'], // lowercase alias key
+      ['FP1', 'Fp1', 'e18'], // uppercase montage, mixed-case alias key
+    ])(
+      'finds an alias with montage name %s, alias key %s and recording name %s',
+      (montageName, aliasKey, recordingName) => {
+        const { rows } = resolveMontageToRecording(
+          { rows: [row(montageName)], channelTypes: {} },
+          [recordingName],
+          { [aliasKey]: recordingName.toUpperCase() }
+        );
+        expect(rows[0].channel).toBe(recordingName);
+      }
+    );
+
+    it('leaves a name unchanged when neither it nor its alias is in the recording', () => {
+      const { rows } = resolveMontageToRecording(
+        { rows: [row('F8')], channelTypes: {} },
+        ['E3'],
+        aliases
+      );
+      expect(rows[0].channel).toBe('F8');
+    });
+  });
+
   it('keeps the rest of each row, such as its color and filter settings', () => {
     const fullRow = { channel: 'Fp1', reference: null, color: 'red', highPass: 1, lowPass: 70 };
     const { rows } = resolveMontageToRecording({ rows: [fullRow], channelTypes: {} }, ['FP1']);
