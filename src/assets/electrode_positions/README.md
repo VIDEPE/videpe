@@ -9,7 +9,7 @@ This file is sourced from [MNE-Python](https://mne.tools/), an open-source Pytho
 
 ### Changes from the original
 
-- Added `T1` and `T2` at the positions of `FT9` and `FT10`, with the last decimals dropped so they are not exact duplicates (exact duplicates are left out of the topography mesh). T1/T2 are anterior temporal electrodes common in clinical (epilepsy) recordings but not part of the 10-05 template; FT9/FT10 are the closest standard positions, so recordings that use T1/T2 still get matched to a position.
+- Added `T1` and `T2` at the positions of `FT9` and `FT10`, offset by 1 nm along each of x, y and z so they are not exact duplicates (exact duplicates are left out of the topography mesh). T1/T2 are anterior temporal electrodes common in clinical (epilepsy) recordings but not part of the 10-05 template; FT9/FT10 are the closest standard positions, so recordings that use T1/T2 still get matched to a position.
 
 If you use this file in your work, please cite MNE-Python:
 
@@ -22,10 +22,10 @@ These files are sourced from [FieldTrip](https://www.fieldtriptoolbox.org/), an 
 | File                         | FieldTrip original     |
 | ---------------------------- | ---------------------- |
 | standard_1020.tsv            | `standard_1020.elc`    |
-| template_128EGI_prefix_E.tsv | `GSN-HydroCel-129.sfp` |
-| template_128EGI.tsv          | `GSN-HydroCel-129.sfp` |
-| template_256EGI_prefix_E.tsv | `GSN-HydroCel-257.sfp` |
-| template_256EGI.tsv          | `GSN-HydroCel-257.sfp` |
+| template_EGI128_prefix_E.tsv | `GSN-HydroCel-129.sfp` |
+| template_EGI128.tsv          | `GSN-HydroCel-129.sfp` |
+| template_EGI256_prefix_E.tsv | `GSN-HydroCel-257.sfp` |
+| template_EGI256.tsv          | `GSN-HydroCel-257.sfp` |
 
 - **Licence:** [GPL3](https://www.gnu.org/licenses/gpl-3.0)
 - **Software DOI:** [10.5281/zenodo.10495174](https://doi.org/10.5281/zenodo.10495174)
@@ -33,10 +33,12 @@ These files are sourced from [FieldTrip](https://www.fieldtriptoolbox.org/), an 
 ### Changes from the original
 
 - **All files:** Converted to tsv. The EGI files leave out the fiducials (`FidNz`, `FidT9`, `FidT10`).
-- **standard_1020.tsv:** Added `T1` and `T2` at the positions of `FT9` and `FT10`, with the y coordinate set to 14.7 so they are not exact duplicates (exact duplicates are left out of the topography mesh). See [fsaverage_1005.tsv](#fsaverage_1005tsv) for why T1/T2 are added.
-- **template_128EGI_prefix_E.tsv and template_256EGI_prefix_E.tsv:** Added `VREF` at the position of `Cz`, slightly offset so they are not exact duplicates. EGI recordings label the reference electrode either `Cz` or `VREF`, so both get matched to a position.
-- **template_256EGI_prefix_E.tsv:** Converted from cm to mm, and rotated/shifted into a different head coordinate frame; the electrode layout itself is unchanged.
-- **template_128EGI.tsv and template_256EGI.tsv:** Same as their `_prefix_E` counterparts, with the `E` prefix removed from the channel labels (`E1` → `1`), for recordings that label channels with bare numbers.
+- **Offsets:** Names at the same position are 1 nm apart along each of x, y and z, so they are not exact duplicates (exact duplicates are left out of the topography mesh). The number in the file differs per unit: these files use mm, except the EGI 128 files, which use cm.
+- **standard_1020.tsv:** Added `T1` and `T2` at the positions of `FT9` and `FT10`, offset as above. See [fsaverage_1005.tsv](#fsaverage_1005tsv) for why T1/T2 are added. Also offset `T3`, `T4`, `T5` and `T6` as above: they are the old names of `T7`, `T8`, `P7` and `P8`, which FieldTrip lists at the exact same positions.
+- **template_EGI128_prefix_E.tsv:** Added `VREF` at the position of `Cz`, offset as above. EGI recordings label the reference electrode either `Cz` or `VREF`, so both get matched to a position.
+- **template_EGI128.tsv:** Same as template_EGI128_prefix_E.tsv, with the `E` prefix removed from the channel labels (`E1` → `1`), for recordings that label channels with bare numbers.
+- **template_EGI256_prefix_E.tsv:** Converted from cm to mm, and rotated/shifted into a different head coordinate frame; the electrode layout itself is unchanged. Added `E257` and `VREF` at the position of `Cz`, the net's reference electrode, offset 1 nm in opposite directions from it. EGI recordings label that electrode in any of these three ways, so each gets matched to a position.
+- **template_EGI256.tsv:** Same as template_EGI256_prefix_E.tsv, with the `E` prefix removed from the channel labels (`E1` → `1`), for recordings that label channels with bare numbers, and its coordinates rounded to fewer decimals.
 
 If you use one of these files in your work, please cite FieldTrip:
 

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import toast from 'react-hot-toast';
 import { useElectrodeMatching, STANDARD_TEMPLATES } from '@/hooks/useElectrodeMatching';
+import { buildElectrodeMesh } from '@/utils/eegTopographyUtils';
 
 // react-hot-toast's default export is itself a callable function with .loading/.success/etc
 // attached — a plain object mock would make the hook's toast(...) call throw silently.
@@ -88,6 +89,37 @@ describe('useElectrodeMatching — bundled templates', () => {
     }
   );
 
+  // A damaged line can parse into a wrong or missing electrode without any error, so this
+  // checks the raw files instead of the parsed templates
+  it.each(
+    Object.entries(
+      import.meta.glob('../../assets/electrode_positions/*.tsv', {
+        query: '?raw',
+        import: 'default',
+        eager: true,
+      })
+    )
+  )('template file %s has a name and three coordinates on every line', (_, text) => {
+    const [, ...lines] = text.trim().split(/\r?\n/);
+    lines.forEach((line) => {
+      const [name, ...coordinates] = line.split('\t');
+      expect(coordinates, name).toHaveLength(3);
+      coordinates.forEach((value) => expect(Number.isFinite(Number(value)), name).toBe(true));
+    });
+  });
+
+  // Two electrodes in the same direction from the head's centre would leave one out of the
+  // mesh, so a recording using that name would have no voltage there. The templates are fixed
+  // at build time, so this is caught here rather than at runtime — see the small offsets
+  // described in the template README.
+  it.each(STANDARD_TEMPLATES.map((template) => [template.name, template]))(
+    'bundled template %s has every electrode in the topography mesh',
+    (_, template) => {
+      const { indices } = buildElectrodeMesh(template.electrodes);
+      expect(new Set(indices).size).toBe(template.electrodes.length);
+    }
+  );
+
   it('gives every bundled template a unique id', () => {
     const ids = STANDARD_TEMPLATES.map(({ id }) => id);
     expect(new Set(ids).size).toBe(ids.length);
@@ -105,21 +137,21 @@ describe('useElectrodeMatching — bundled templates', () => {
     [
       'EGI 128, E-prefixed (also fully in the 256 net: the smaller template wins)',
       egiChannelNames(128),
-      'template_128EGI_prefix_E',
+      'template_EGI128_prefix_E',
     ],
     [
       'EGI 128, bare numbers (also fully in the 256 net: the smaller template wins)',
       egiChannelNames(128, ''),
-      'template_128EGI',
+      'template_EGI128',
     ],
-    ['EGI 256, E-prefixed', egiChannelNames(256), 'template_256EGI_prefix_E'],
-    ['EGI 256, bare numbers', egiChannelNames(256, ''), 'template_256EGI'],
+    ['EGI 256, E-prefixed', egiChannelNames(256), 'template_EGI256_prefix_E'],
+    ['EGI 256, bare numbers', egiChannelNames(256, ''), 'template_EGI256'],
     // More matched channels beats a higher share of the template used: the 128 net would
     // use 128/130 of its positions vs 200/258 for the 256 net, but leave E129–E200 unmatched
     [
       'EGI 256 with only E1–E200 exported (most matched channels wins)',
       egiChannelNames(200),
-      'template_256EGI_prefix_E',
+      'template_EGI256_prefix_E',
     ],
   ])('picks the right template for %s', (_, names, expectedTemplateId) => {
     const { result } = setup({ channelNames: names });

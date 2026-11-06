@@ -3,8 +3,12 @@ import toast from 'react-hot-toast';
 import { SplitPane } from '@/components/SplitPane';
 import { useTheme } from '@/hooks/useTheme';
 import { TrafficLightButtons } from '@/components/TrafficLightButtons';
-import { compareChannelNamesNaturally, buildSeegBipolarReferences } from '@/utils/eegViewerUtils';
-import { parseMontageFile } from '@/loaders/parseMontageFile';
+import {
+  compareChannelNamesNaturally,
+  buildSeegBipolarReferences,
+  remapMontageToRecording,
+} from '@/utils/eegViewerUtils';
+import { parseMontageText } from '@/loaders/parseMontageText';
 import { toAnyWaveMontage } from '@/loaders/toMontageAnyWave';
 import { downloadTextFile } from '@/utils/fileDownload';
 import { cn } from '@/utils/utils';
@@ -41,7 +45,20 @@ const TYPE_ORDER = Object.keys(TYPE_LIST);
 // Preset options offered by each row's Color <select>. A loaded montage file (AnyWave) can
 // carry any CSS color keyword, not just these — see the color <select> below, which injects
 // an extra option for a row's current color when it isn't one of these presets.
-const PRESET_COLORS = ['red', 'blue', 'green', 'yellow', 'cyan', 'magenta'];
+const PRESET_COLORS = [
+  'red',
+  'blue',
+  'green',
+  'yellow',
+  'cyan',
+  'magenta',
+  'crimson',
+  'steelblue',
+  'seagreen',
+  'darkgoldenrod',
+  'chocolate',
+  'mediumpurple',
+];
 
 // ─── Shared styling settings ────────────────────────────────────────
 // Shared title styling — keeps panes titles visually consistent, with the same height (TrafficLightButtons are 16px tall).
@@ -300,7 +317,8 @@ export function EegMontageEditor({
   }, [typeSortDescending, draftChannelSettings]);
 
   // Loads a montage file (AnyWave XML or Cartool text) and replaces the draft montage rows
-  // wholesale, same as Add ALL/Clear all.
+  // wholesale, same as Add ALL/Clear all. Converted to the recording's spelling first, so a
+  // file written with Fp1 works on a recording with FP1.
   const handleLoadMontageFile = useCallback(
     async (e) => {
       const file = e.target.files?.[0];
@@ -308,7 +326,10 @@ export function EegMontageEditor({
       if (!file) return;
 
       try {
-        const { rows, channelTypes } = await parseMontageFile(file);
+        const { rows, channelTypes } = remapMontageToRecording(
+          parseMontageText(await file.text()),
+          channelNames
+        );
         setDraftMontageChannels(
           rows.map((row) =>
             makeMontageRow(row.channel, {
@@ -337,7 +358,7 @@ export function EegMontageEditor({
         toast.error(`Error loading montage file:\n${err.message}`);
       }
     },
-    [makeMontageRow]
+    [makeMontageRow, channelNames]
   );
 
   // Exports the current draft as AnyWave XML, regardless of whether it was built by hand
@@ -1483,7 +1504,7 @@ export function EegMontageEditor({
                   with Clear, both whole-list-replacing); Save always exports AnyWave format
                   regardless of the montage's origin. Both .mtg formats share the same file
                   extension, so format detection happens by content-sniffing in
-                  parseMontageFile, not via the file input's accept filter. */}
+                  parseMontageText, not via the file input's accept filter. */}
               {/* Load montage button */}
               <button
                 type="button"

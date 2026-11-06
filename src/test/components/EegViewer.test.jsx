@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, within, fireEvent, act, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { EegViewer } from '@/components/EegViewer';
+import { parseAnyWaveMontage } from '@/loaders/parseMontageAnywave';
 
 // capturedClickHandler stores the 'click' listener attached to u.over inside onCreate,
 // so tests can fire a simulated click without a real uPlot instance.
@@ -92,11 +93,23 @@ Cz\t0.0\t0.0\t88.0
 // covered by useElectrodeMatching.test.js.
 vi.mock('@/assets/electrode_positions/fsaverage_1005.tsv?raw', () => ({ default: MOCK_TSV }));
 
+// Montage templates the dropdown offers — empty by default; the "file-backed montage
+// templates" tests below fill it with their own test template. The real bundled templates
+// are covered by useMontageTemplates.test.js.
+const montageTemplatesMock = vi.hoisted(() => ({ current: [], lastProps: null }));
+vi.mock('@/hooks/useMontageTemplates', () => ({
+  useMontageTemplates: (props) => {
+    montageTemplatesMock.lastProps = props;
+    return montageTemplatesMock.current;
+  },
+}));
+
 // jsdom does not implement ResizeObserver; use a class so `new` works,
 // and fire the callback immediately so plotWidth/plotHeight become non-zero
 beforeEach(() => {
   capturedClickHandler = null;
   themeState.isDarkMode = false;
+  montageTemplatesMock.current = [];
   global.ResizeObserver = class {
     constructor(callback) {
       this._cb = callback;
@@ -2505,6 +2518,40 @@ describe('EegViewer — montage row wiring', () => {
 });
 
 describe('EegViewer — montage template dropdown', () => {
+  const dropdownOptions = () =>
+    Array.from(screen.getByTestId('montage-template-select').options).map((o) => o.value);
+
+  it('asks for the templates that fit this recording', async () => {
+    await renderViewer();
+
+    expect(montageTemplatesMock.lastProps).toEqual({
+      channelNames,
+      standardTemplateId: 'fsaverage_1005', // MOCK_TSV stands in for this template
+      detectedIsSeeg: false,
+    });
+  });
+
+  it('does not offer CAR for an SEEG recording', async () => {
+    await renderViewer(makeIntracranialProvider());
+
+    expect(dropdownOptions()).toEqual(['none']);
+  });
+
+  // An average-referenced montage can still be built in the editor — the dropdown then has
+  // to be able to show it, or it would read "None" for a montage that isn't.
+  it('still shows CAR for an SEEG recording while that is the active montage', async () => {
+    await renderViewer(makeIntracranialProvider());
+
+    await userEvent.click(screen.getByRole('button', { name: 'Montage' }));
+    await userEvent.selectOptions(screen.getByTestId('add-by-type-select'), 'seeg');
+    await userEvent.click(screen.getByTestId('add-by-type-button'));
+    await userEvent.selectOptions(screen.getByTestId('bulk-reference-select'), 'average');
+    await userEvent.click(screen.getByTestId('bulk-reference-apply-button'));
+    await userEvent.click(screen.getByRole('button', { name: 'OK' }));
+
+    expect(screen.getByTestId('montage-template-select')).toHaveValue('average');
+  });
+
   it('defaults to "None" with no "Custom" option, before any montage has been built', async () => {
     await renderViewer();
 
@@ -2582,36 +2629,31 @@ describe('EegViewer — file-backed montage templates', () => {
 	</Channel>
 </Montage>`;
 
-  const TEMPLATE_LIST = [{ name: 'Test Template', path: 'montage_files/test.mtg' }];
+  // Same shape as a bundled template in useMontageTemplates: { id, name, rows, channelTypes }
+  const makeTemplate = (mtgText) => ({
+    id: 'test-template',
+    name: 'Test Template',
+    ...parseAnyWaveMontage(mtgText),
+  });
 
   beforeEach(() => {
-    global.fetch = vi.fn((url) => {
-      if (url === 'montage_files/TEMPLATE_MONTAGES.json')
-        return Promise.resolve({ text: () => Promise.resolve(JSON.stringify(TEMPLATE_LIST)) });
-      if (url === 'montage_files/test.mtg')
-        return Promise.resolve({ text: () => Promise.resolve(TEMPLATE_MTG_TEXT) });
-      return Promise.resolve({ text: () => Promise.resolve(MOCK_TSV) }); // fsaverage_1005.tsv
-    });
+    montageTemplatesMock.current = [makeTemplate(TEMPLATE_MTG_TEXT)];
   });
 
   const optionValues = () =>
     Array.from(screen.getByTestId('montage-template-select').options).map((o) => o.value);
 
-  it('lists file-backed templates from TEMPLATE_MONTAGES.json in the dropdown', async () => {
+  it('lists the bundled templates in the dropdown, keyed by id', async () => {
     await renderViewer();
 
-    await waitFor(() => expect(optionValues()).toContain('montage_files/test.mtg'));
+    expect(optionValues()).toContain('test-template');
     expect(screen.getByText('Test Template')).toBeTruthy();
   });
 
   it("applies a file-backed template's rows to the live waveform and patches channel types", async () => {
     await renderViewer();
-    await waitFor(() => expect(optionValues()).toContain('montage_files/test.mtg'));
 
-    await userEvent.selectOptions(
-      screen.getByTestId('montage-template-select'),
-      'montage_files/test.mtg'
-    );
+    await userEvent.selectOptions(screen.getByTestId('montage-template-select'), 'test-template');
 
     expect(screen.getByText('EEG1')).toBeTruthy();
     expect(screen.getByText('EEG2 - EEG1')).toBeTruthy();
@@ -2625,26 +2667,17 @@ describe('EegViewer — file-backed montage templates', () => {
 
   it('keeps showing the template selected once applied, since the loaded rows do exactly match it', async () => {
     await renderViewer();
-    await waitFor(() => expect(optionValues()).toContain('montage_files/test.mtg'));
 
-    await userEvent.selectOptions(
-      screen.getByTestId('montage-template-select'),
-      'montage_files/test.mtg'
-    );
+    await userEvent.selectOptions(screen.getByTestId('montage-template-select'), 'test-template');
 
-    expect(screen.getByTestId('montage-template-select')).toHaveValue('montage_files/test.mtg');
+    expect(screen.getByTestId('montage-template-select')).toHaveValue('test-template');
   });
 
   it('warns via toast when a template names a channel not present in this recording, and still applies the rows that do match', async () => {
     const { default: toast } = await import('react-hot-toast');
     toast.mockClear();
-    global.fetch = vi.fn((url) => {
-      if (url === 'montage_files/TEMPLATE_MONTAGES.json')
-        return Promise.resolve({ text: () => Promise.resolve(JSON.stringify(TEMPLATE_LIST)) });
-      if (url === 'montage_files/test.mtg')
-        return Promise.resolve({
-          text: () =>
-            Promise.resolve(`<!DOCTYPE AnyWaveMontage>
+    montageTemplatesMock.current = [
+      makeTemplate(`<!DOCTYPE AnyWaveMontage>
 <Montage>
 	<Channel name="EEG1">
 		<type>EEG</type>
@@ -2652,17 +2685,11 @@ describe('EegViewer — file-backed montage templates', () => {
 		<color></color>
 	</Channel>
 </Montage>`),
-        });
-      return Promise.resolve({ text: () => Promise.resolve(MOCK_TSV) });
-    });
+    ];
 
     await renderViewer();
-    await waitFor(() => expect(optionValues()).toContain('montage_files/test.mtg'));
 
-    await userEvent.selectOptions(
-      screen.getByTestId('montage-template-select'),
-      'montage_files/test.mtg'
-    );
+    await userEvent.selectOptions(screen.getByTestId('montage-template-select'), 'test-template');
 
     expect(toast).toHaveBeenCalledWith(
       expect.stringContaining('EEG9'),
