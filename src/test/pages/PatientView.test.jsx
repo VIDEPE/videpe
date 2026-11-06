@@ -21,6 +21,7 @@ import { computeAzimuthElevation } from '@/utils/NiiViewer.utils';
 import { NiiViewer } from '@/components/NiiViewer';
 import { EegViewer } from '@/components/EegViewer';
 import { ShanoirSessionContext } from '@/shanoir/ShanoirSessionContext';
+import { HostAppSessionContext } from '@/hostApp/HostAppSessionContext';
 
 // toast(...) itself must be callable (used for plain info toasts), with toast.promise
 // just running and returning the promise, and toast.error a no-op.
@@ -1781,5 +1782,36 @@ describe('PatientView — top bar when opened from Shanoir', () => {
     expect(
       screen.queryByRole('button', { name: /^(load demo|reset|loading…)$/i })
     ).not.toBeInTheDocument();
+  });
+});
+
+describe('PatientView — top bar when opened from a host app', () => {
+  // A host-app client whose request never finishes: these tests only look at the top bar,
+  // not at the loading itself (see useHostAppData.test.js for that)
+  const pendingClient = {
+    getSession: () => new Promise(() => {}),
+    downloadFile: () => new Promise(() => {}),
+  };
+
+  const renderFromHostApp = (appName) =>
+    render(
+      <MemoryRouter>
+        <HostAppSessionContext.Provider value={{ client: pendingClient, appName }}>
+          <PatientView />
+        </HostAppSessionContext.Provider>
+      </MemoryRouter>
+    );
+
+  it('shows the NeuXelec logo next to the app name when opened from NeuXelec', () => {
+    renderFromHostApp('NeuXelec');
+    expect(screen.getByAltText('NeuXelec logo')).toBeInTheDocument();
+    // The logo is an icon without the name in it, so the name stays
+    expect(screen.getByText('Opened from NeuXelec')).toBeInTheDocument();
+  });
+
+  it('shows only the app name when opened from any other host app', () => {
+    renderFromHostApp('My Host App');
+    expect(screen.getByText('Opened from My Host App')).toBeInTheDocument();
+    expect(screen.queryByRole('img', { name: /logo/i })).not.toBeInTheDocument();
   });
 });
