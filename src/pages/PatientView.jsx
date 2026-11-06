@@ -354,7 +354,7 @@ export const PatientView = () => {
                 {hostAppSession.appName === 'NeuXelec' && (
                   <img src={neuxelecLogo} alt="NeuXelec logo" className="h-7 w-auto" />
                 )}
-                <span className="text-sm font-semibold text-foreground">
+                <span className="text-xs font-semibold text-foreground">
                   Opened from {hostAppSession.appName}
                 </span>
               </div>
