@@ -28,6 +28,8 @@ import { useShanoirSession } from '../shanoir/ShanoirSessionContext';
 import { useShanoirData } from '../shanoir/useShanoirData';
 import { useHostAppSession } from '../hostApp/HostAppSessionContext';
 import { useHostAppData } from '../hostApp/useHostAppData';
+// Assets
+import shanoirLogo from '@/assets/shanoirLogoBlack.svg';
 
 // Shared title styling — keeps "Neuroimaging" and the toggle's labels visually
 // consistent, and both header bars the same height (TrafficLightButtons are 16px tall).
@@ -336,11 +338,7 @@ export const PatientView = () => {
           {shanoirSession ? (
             /* Launched from Shanoir: the Shanoir logo instead of the demo/reset button */
             <div className="flex flex-col items-start gap-2 pt-2">
-              <img
-                src={`${import.meta.env.BASE_URL}shanoirLogoBlack.svg`}
-                alt="Shanoir logo"
-                className="app-logo h-7 w-auto"
-              />
+              <img src={shanoirLogo} alt="Shanoir logo" className="app-logo h-7 w-auto" />
               <span className="text-xs text-foreground">
                 Examination ID: {shanoirSession.examinationId}
               </span>
