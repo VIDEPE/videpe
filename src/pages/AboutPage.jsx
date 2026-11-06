@@ -366,7 +366,8 @@ export const AboutPage = () => {
                     missing channels left out
                   </li>
                   <li>
-                    <strong>Presets</strong> — e.g. double and triple banana, from the EEG sidebar
+                    <strong>Presets</strong> — e.g. Downsampled to 10-20, Double Banana, or
+                    Longitudal/Transversal BipPolar — from the EEG sidebar
                   </li>
                   <li>
                     <strong>Safety check</strong> — warns before applying a montage that uses a bad

@@ -119,7 +119,6 @@ describe('useMontageTemplates — templates offered for a recording', () => {
     'Downsampled_10-20',
     'LongBipolar_10-20',
     'TransBipolar_10-20',
-    'TripleBanana_10-20',
   ];
   const EGI_256_RECORDINGS = [
     ['E names', egiChannelNames(256), 'template_EGI256_prefix_E', 'E'],

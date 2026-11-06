@@ -8,7 +8,6 @@ import downsampledMtg from '@/assets/montage_files/Downsampled_10-20.mtg?raw';
 import longBipolarMtg from '@/assets/montage_files/LongBipolar_10-20.mtg?raw';
 import transBipolarMtg from '@/assets/montage_files/TransBipolar_10-20.mtg?raw';
 import doubleBananaMtg from '@/assets/montage_files/DoubleBanana_10-20.mtg?raw';
-import tripleBananaMtg from '@/assets/montage_files/TripleBanana_10-20.mtg?raw';
 
 // channel maps
 import tenTwentyToEgi256Numbers from '@/assets/montage_files/channel_maps/10-20_to_EGI256.json';
@@ -65,11 +64,6 @@ export const MONTAGE_TEMPLATES = [
     id: 'DoubleBanana_10-20',
     name: 'Double Banana (10-20)',
     text: doubleBananaMtg,
-  },
-  {
-    id: 'TripleBanana_10-20',
-    name: 'Triple Banana (10-20)',
-    text: tripleBananaMtg,
   },
 ].map(({ text, ...template }) => ({ ...template, ...parseMontageText(text) }));
 
