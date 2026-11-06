@@ -30,6 +30,7 @@ import { useHostAppSession } from '../hostApp/HostAppSessionContext';
 import { useHostAppData } from '../hostApp/useHostAppData';
 // Assets
 import shanoirLogo from '@/assets/shanoirLogoBlack.svg';
+import neuxelecLogo from '@/assets/neuxelec_logo.ico';
 
 // Shared title styling — keeps "Neuroimaging" and the toggle's labels visually
 // consistent, and both header bars the same height (TrafficLightButtons are 16px tall).
@@ -345,11 +346,18 @@ export const PatientView = () => {
             </div>
           ) : hostAppSession ? (
             /* Launched from a host app: its name and the launch's title, as plain text — no
-               logo, as the Shanoir logo is reserved for the official Shanoir collaboration */
+               logo, as the Shanoir logo is reserved for the official Shanoir collaboration.
+               Only NeuXelec has its own logo: an icon without the name in it, so the name stays,
+               and no app-logo class, as that would invert the logo's colors in dark mode */
             <div className="flex flex-col items-start gap-1 pt-2">
-              <span className="text-sm font-semibold text-foreground">
-                Opened from {hostAppSession.appName}
-              </span>
+              <div className="flex items-center gap-2">
+                {hostAppSession.appName === 'NeuXelec' && (
+                  <img src={neuxelecLogo} alt="NeuXelec logo" className="h-7 w-auto" />
+                )}
+                <span className="text-sm font-semibold text-foreground">
+                  Opened from {hostAppSession.appName}
+                </span>
+              </div>
               {hostAppTitle && <span className="text-xs text-foreground">{hostAppTitle}</span>}
             </div>
           ) : (
