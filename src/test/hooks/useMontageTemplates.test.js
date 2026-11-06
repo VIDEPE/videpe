@@ -152,6 +152,24 @@ describe('useMontageTemplates — templates offered for a recording', () => {
     expect(result.current.map(({ name }) => name)).toContain('Double Banana (10-20)');
   });
 
+  // T3–T6 are the original 10-20 names of the positions the montage files call T7, T8, P7 and P8
+  it.each(['standard_1020', 'fsaverage_1005'])(
+    'translates the montages to the old T3–T6 names for %s',
+    (standardTemplateId) => {
+      const oldNames = { T7: 'T3', T8: 'T4', P7: 'T5', P8: 'T6' };
+      const channelNames = TEN_TWENTY_NAMES.map((name) => oldNames[name] ?? name);
+      const { result } = setup({ channelNames, standardTemplateId });
+
+      const doubleBanana = result.current.find(({ id }) => id === 'DoubleBanana_10-20');
+      const namesInRows = doubleBanana.rows.flatMap(({ channel, reference }) => [
+        channel,
+        reference,
+      ]);
+      Object.values(oldNames).forEach((name) => expect(namesInRows).toContain(name));
+      Object.keys(oldNames).forEach((name) => expect(namesInRows).not.toContain(name));
+    }
+  );
+
   describe.each(EGI_256_RECORDINGS)(
     'an EGI 256 recording with %s',
     (_, channelNames, standardTemplateId, prefix) => {

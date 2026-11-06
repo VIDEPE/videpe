@@ -11,6 +11,7 @@ import doubleBananaMtg from '@/assets/montage_files/DoubleBanana_10-20.mtg?raw';
 
 // channel maps
 import tenTwentyToEgi256Numbers from '@/assets/montage_files/channel_maps/10-20_to_EGI256.json';
+import tenTwentyToOldNames from '@/assets/montage_files/channel_maps/10-20_to_old_names.json';
 
 // Adds the recording's channel prefix to each electrode number: { Fp1: 'E37', ..., Cz: 'VREF' }
 function buildEgi256ChannelNames(prefix) {
@@ -29,10 +30,12 @@ export const MAP_1020_TO_EGI256_NUMBER_NAMES = buildEgi256ChannelNames('');
 // 256 net but at different positions, so the GSN-HydroCel-128 templates are left out until it
 // has been verified which montages make sense for them — they only get None and CAR.
 // - namePrefix: added to each montage's name, so the dropdown shows which net it's for
-// - channelAliases: the recording's name for each montage channel, see remapMontageToRecording
+// - channelAliases: the recording's name for each montage channel, see remapMontageToRecording.
+//   The montage files use the current names T7, T8, P7 and P8; 10-20 recordings can still use
+//   the original names of those same positions (T3–T6).
 export const MONTAGE_NAMING_SYSTEMS = {
-  standard_1020: { namePrefix: '', channelAliases: {} },
-  fsaverage_1005: { namePrefix: '', channelAliases: {} },
+  standard_1020: { namePrefix: '', channelAliases: tenTwentyToOldNames },
+  fsaverage_1005: { namePrefix: '', channelAliases: tenTwentyToOldNames },
   template_EGI256_prefix_E: {
     namePrefix: 'EGI 256 - ',
     channelAliases: MAP_1020_TO_EGI256_E_NAMES,
