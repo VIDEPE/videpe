@@ -1,126 +1,126 @@
 <!DOCTYPE AnyWaveMontage>
 <Montage>
-	<Channel name="18">
+	<Channel name="FP2">
 		<type>EEG</type>
 		<reference></reference>
-		<color>darkblue</color>
+		<color>crimson</color>
 	</Channel>
-	<Channel name="226">
+	<Channel name="F10">
 		<type>EEG</type>
 		<reference></reference>
-		<color>darkblue</color>
+		<color>crimson</color>
 	</Channel>
-	<Channel name="2">
+	<Channel name="F8">
 		<type>EEG</type>
 		<reference></reference>
-		<color>darkblue</color>
+		<color>crimson</color>
 	</Channel>
-	<Channel name="210">
+	<Channel name="T10">
 		<type>EEG</type>
 		<reference></reference>
-		<color>darkblue</color>
+		<color>crimson</color>
 	</Channel>
-	<Channel name="202">
+	<Channel name="T8">
 		<type>EEG</type>
 		<reference></reference>
-		<color>darkblue</color>
+		<color>crimson</color>
 	</Channel>
-	<Channel name="169">
+	<Channel name="P10">
 		<type>EEG</type>
 		<reference></reference>
-		<color>darkblue</color>
+		<color>crimson</color>
 	</Channel>
-	<Channel name="170">
+	<Channel name="P8">
 		<type>EEG</type>
 		<reference></reference>
-		<color>darkblue</color>
+		<color>crimson</color>
 	</Channel>
-	<Channel name="224">
+	<Channel name="F4">
 		<type>EEG</type>
 		<reference></reference>
-		<color>darkblue</color>
+		<color>crimson</color>
 	</Channel>
-	<Channel name="183">
+	<Channel name="C4">
 		<type>EEG</type>
 		<reference></reference>
-		<color>darkblue</color>
+		<color>crimson</color>
 	</Channel>
-	<Channel name="153">
+	<Channel name="P4">
 		<type>EEG</type>
 		<reference></reference>
-		<color>darkblue</color>
+		<color>crimson</color>
 	</Channel>
-	<Channel name="150">
+	<Channel name="O2">
 		<type>EEG</type>
 		<reference></reference>
-		<color>darkblue</color>
+		<color>crimson</color>
 	</Channel>
-	<Channel name="37">
+	<Channel name="FP1">
 		<type>EEG</type>
 		<reference></reference>
-		<color>brown</color>
+		<color>steelblue</color>
 	</Channel>
-	<Channel name="252">
+	<Channel name="F9">
 		<type>EEG</type>
 		<reference></reference>
-		<color>brown</color>
+		<color>steelblue</color>
 	</Channel>
-	<Channel name="47">
+	<Channel name="F7">
 		<type>EEG</type>
 		<reference></reference>
-		<color>brown</color>
+		<color>steelblue</color>
 	</Channel>
-	<Channel name="68">
+	<Channel name="T9">
 		<type>EEG</type>
 		<reference></reference>
-		<color>brown</color>
+		<color>steelblue</color>
 	</Channel>
-	<Channel name="69">
+	<Channel name="T7">
 		<type>EEG</type>
 		<reference></reference>
-		<color>brown</color>
+		<color>steelblue</color>
 	</Channel>
-	<Channel name="106">
+	<Channel name="P9">
 		<type>EEG</type>
 		<reference></reference>
-		<color>brown</color>
+		<color>steelblue</color>
 	</Channel>
-	<Channel name="96">
+	<Channel name="P7">
 		<type>EEG</type>
 		<reference></reference>
-		<color>brown</color>
+		<color>steelblue</color>
 	</Channel>
-	<Channel name="36">
+	<Channel name="F3">
 		<type>EEG</type>
 		<reference></reference>
-		<color>brown</color>
+		<color>steelblue</color>
 	</Channel>
-	<Channel name="59">
+	<Channel name="C3">
 		<type>EEG</type>
 		<reference></reference>
-		<color>brown</color>
+		<color>steelblue</color>
 	</Channel>
-	<Channel name="87">
+	<Channel name="P3">
 		<type>EEG</type>
 		<reference></reference>
-		<color>brown</color>
+		<color>steelblue</color>
 	</Channel>
-	<Channel name="116">
+	<Channel name="O1">
 		<type>EEG</type>
 		<reference></reference>
-		<color>brown</color>
+		<color>steelblue</color>
 	</Channel>
-	<Channel name="21">
-		<type>EEG</type>
-		<reference></reference>
-		<color>black</color>
-	</Channel>
-	<Channel name="VREF">
+	<Channel name="Fz">
 		<type>EEG</type>
 		<reference></reference>
 		<color>black</color>
 	</Channel>
-	<Channel name="101">
+	<Channel name="Cz">
+		<type>EEG</type>
+		<reference></reference>
+		<color>black</color>
+	</Channel>
+	<Channel name="Pz">
 		<type>EEG</type>
 		<reference></reference>
 		<color>black</color>

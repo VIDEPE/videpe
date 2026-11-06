@@ -94,6 +94,7 @@ export function EegTopoViewer({
   onClose,
   onTopoNvReady,
   isStandardElectrodes = true,
+  standardTemplateLabel, // display name of the best-matching built-in template — always passed by EegViewer
   onElecPosFile,
   isIntracranial = false,
   hasEegChannels = true,
@@ -470,7 +471,7 @@ export function EegTopoViewer({
           <div className="flex items-center justify-between px-2 py-1 text-xs border-t border-border shrink-0 bg-surface">
             <span className="text-foreground/60">
               {isStandardElectrodes
-                ? 'Default: fsaverage_1005 (FreeSurfer)'
+                ? `Default: ${standardTemplateLabel}`
                 : (customFileName ?? 'Custom')}
             </span>
             <button

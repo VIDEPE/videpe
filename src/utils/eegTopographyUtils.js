@@ -78,36 +78,117 @@ export function matchChannelsToPositions(channelNames, electrodes) {
 // markers) from matched channel voltages.
 
 /**
- * Build a triangulated mesh from electrode positions using their convex hull.
+ * Build a triangulated scalp mesh from electrode positions.
+ *
+ * A convex hull of the raw positions can leave out electrodes that sit slightly inside
+ * it (in concave regions of the head, or among densely spaced 10-05 positions), so they
+ * would get a vertex but no triangle. To make every electrode part of the surface, the
+ * electrodes are first projected onto a sphere fitted to them (centre = centroid,
+ * radius = mean distance to the centroid). Every point on a sphere lies on its convex
+ * hull, so the hull of the projected points contains every electrode. That triangulation
+ * is then applied to the original positions, so the mesh follows the actual head shape.
+ *
  * Vertex order in the output matches the input electrodes array, so
  * electrodes[i] corresponds to vertices[i*3 .. i*3+2].
  *
- * @param {{ label, x, y, z }[]} electrodes
+ * @param {{ label, x, y, z }[]} electrodes - at least four electrode positions
  * @returns {{ vertices: Float32Array, indices: Uint32Array }}
+ * @throws {Error} when there are fewer than four electrodes, when all electrodes are at
+ *   (nearly) the same position, or when an electrode lies at the fitted sphere's centre
  */
 export function buildElectrodeMesh(electrodes) {
-  const points = electrodes.map((e) => [e.x, e.y, e.z]);
-  const faces = convexHull(points);
+  const n = electrodes.length;
 
-  // NiiVue expects all vertex positions as a single flat Float32Array: [x0,y0,z0, x1,y1,z1, ...]
-  // One electrode = one vertex = three consecutive numbers. 346 electrodes → 1038 numbers.
-  const vertices = new Float32Array(electrodes.length * 3);
-  for (let i = 0; i < electrodes.length; i++) {
-    vertices[i * 3] = electrodes[i].x;
-    vertices[i * 3 + 1] = electrodes[i].y;
-    vertices[i * 3 + 2] = electrodes[i].z;
+  if (n < 4) {
+    throw new Error('At least four electrodes are required.');
   }
 
-  // Flattens the faces into a Uint32Array [i0,j0,k0, i1,j1,k1, ...] of indices NiiVue expects
-  // Each triplet references three vertex indices that form one triangle on the mesh surface.
-  const indices = new Uint32Array(faces.length * 3);
-  for (let i = 0; i < faces.length; i++) {
-    indices[i * 3] = faces[i][0];
-    indices[i * 3 + 1] = faces[i][1];
-    indices[i * 3 + 2] = faces[i][2];
+  // Original electrode coordinates
+  const vertices = electrodes.map((e) => [e.x, e.y, e.z]);
+
+  // Estimate sphere centre as the centroid
+  const center = [0, 1, 2].map((k) => vertices.reduce((sum, p) => sum + p[k], 0) / n);
+
+  // Estimate sphere radius as the mean distance from the centre
+  const radius =
+    vertices.reduce((sum, p) => {
+      const dx = p[0] - center[0];
+      const dy = p[1] - center[1];
+      const dz = p[2] - center[2];
+      return sum + Math.sqrt(dx * dx + dy * dy + dz * dz);
+    }, 0) / n;
+
+  if (radius < 1e-12) {
+    throw new Error('Electrode coordinates have near-zero spatial extent.');
   }
 
-  return { vertices, indices };
+  // Project electrodes onto the sphere
+  const projected = vertices.map((p) => {
+    const dx = p[0] - center[0];
+    const dy = p[1] - center[1];
+    const dz = p[2] - center[2];
+    const distance = Math.hypot(dx, dy, dz);
+
+    if (distance < 1e-12) {
+      throw new Error('An electrode lies at the estimated sphere centre.');
+    }
+
+    return [
+      center[0] + (dx / distance) * radius,
+      center[1] + (dy / distance) * radius,
+      center[2] + (dz / distance) * radius,
+    ];
+  });
+
+  // Compute convex hull on the projected spherical points
+  const faces = convexHull(projected);
+
+  // Sanity check: on a sphere every electrode should end up in a triangle.
+  // Only when a template has two electrodes in the same direction from the
+  // centre, one would be discarded.
+  // Warn rather than throw — a mesh with a small hole beats no topography at all.
+  const hullVertices = new Set(faces.flat());
+  const missingLabels = electrodes.filter((_, i) => !hullVertices.has(i)).map((e) => e.label);
+  if (missingLabels.length > 0) {
+    console.warn(
+      `buildElectrodeMesh: ${missingLabels.length} electrode(s) not part of the mesh:`,
+      missingLabels
+    );
+  }
+
+  // Return original coordinates and hull triangle indices
+  return {
+    // NiiVue expects all vertex positions as a single flat Float32Array: [x0,y0,z0, x1,y1,z1, ...]
+    // One electrode = one vertex = three consecutive numbers. 346 electrodes → 1038 numbers.
+    vertices: new Float32Array(vertices.flat()),
+    // Flattens the faces into a Uint32Array [i0,j0,k0, i1,j1,k1, ...] of indices NiiVue expects
+    // Each triplet references three vertex indices that form one triangle on the mesh surface.
+    indices: new Uint32Array(faces.flat()),
+  };
+}
+
+/**
+ * Debugging helper only — not part of the normal app flow. Downloads an array of scalars
+ * (e.g. a mesh's Float32Array vertices or per-vertex colours) as a plain-text file with
+ * one value per line, so it can be inspected or loaded into another tool (MATLAB, Python, ...).
+ * Triggers a browser download via a temporary <a download> link.
+ *
+ * @param {ArrayLike<number>} array - values to write (Float32Array, Uint32Array, plain array, ...)
+ * @param {string} filename         - name of the downloaded file, e.g. 'vertices.txt'
+ * @returns {void}
+ */
+// eslint-disable-next-line no-unused-vars -- kept on purpose as a debugging helper
+function downloadArray(array, filename) {
+  const text = Array.from(array).join('\n');
+  const blob = new Blob([text], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+
+  URL.revokeObjectURL(url);
 }
 
 /**
@@ -139,20 +220,140 @@ export function gaussianRBF(queryXYZ, matchedXYZ, voltages, sigma = 30) {
 }
 
 /**
+ * Nearest-neighbour interpolation at a single 3D query point: copies the voltage of
+ * the closest matched electrode. Gives a patchwork of flat regions (one per matched
+ * electrode) rather than a smooth map — mainly useful to check which electrode drives
+ * which part of the mesh.
+ *
+ * @param {[number,number,number]} queryXYZ
+ * @param {[number,number,number][]} matchedXYZ  - positions of matched electrodes
+ * @param {number[]} voltages                    - voltage per matched electrode
+ * @returns {number} the closest electrode's voltage, or NaN when matchedXYZ is empty
+ */
+export function nearestNeighbour(queryXYZ, matchedXYZ, voltages) {
+  if (matchedXYZ.length === 0) {
+    return NaN;
+  }
+
+  let minDistanceSquared = Infinity;
+  let nearestIndex = -1;
+
+  for (let j = 0; j < matchedXYZ.length; j++) {
+    const dx = queryXYZ[0] - matchedXYZ[j][0];
+    const dy = queryXYZ[1] - matchedXYZ[j][1];
+    const dz = queryXYZ[2] - matchedXYZ[j][2];
+
+    const distanceSquared = dx * dx + dy * dy + dz * dz;
+
+    if (distanceSquared < minDistanceSquared) {
+      minDistanceSquared = distanceSquared;
+      nearestIndex = j;
+    }
+  }
+
+  return voltages[nearestIndex];
+}
+
+/**
+ * Inverse-distance weighted (IDW) interpolation at a single 3D query point, using only
+ * the k nearest matched electrodes. Each one's weight is 1 / distance^p, so closer
+ * electrodes count more; a higher p makes the map follow the nearest electrode more
+ * closely, a lower p smooths it out. Unlike gaussianRBF this is a true interpolant:
+ * at an electrode's own position it returns exactly that electrode's voltage.
+ *
+ * @param {[number,number,number]} queryXYZ
+ * @param {[number,number,number][]} matchedXYZ  - positions of matched electrodes
+ * @param {number[]} voltages                    - voltage per matched electrode
+ * @param {number} k                             - number of nearest electrodes to use (default 5)
+ * @param {number} p                             - distance power (default 2 = inverse squared distance)
+ * @returns {number} the weighted voltage, or NaN when matchedXYZ is empty
+ */
+export function inverseDistanceWeighting(queryXYZ, matchedXYZ, voltages, k = 5, p = 2) {
+  const neighbours = [];
+
+  for (let j = 0; j < matchedXYZ.length; j++) {
+    const dx = queryXYZ[0] - matchedXYZ[j][0];
+    const dy = queryXYZ[1] - matchedXYZ[j][1];
+    const dz = queryXYZ[2] - matchedXYZ[j][2];
+
+    const distanceSquared = dx * dx + dy * dy + dz * dz;
+
+    // Return the exact voltage if coordinates coincide
+    if (distanceSquared < 1e-24) {
+      return voltages[j];
+    }
+
+    neighbours.push({
+      index: j,
+      distance: Math.sqrt(distanceSquared),
+    });
+  }
+
+  if (neighbours.length === 0) {
+    return NaN;
+  }
+
+  // Select the k nearest neighbours
+  neighbours.sort((a, b) => a.distance - b.distance);
+  const nearest = neighbours.slice(0, Math.min(k, neighbours.length));
+
+  // Compute inverse-distance weights
+  let weightedSum = 0;
+  let weightSum = 0;
+
+  for (const neighbour of nearest) {
+    const weight = 1 / Math.pow(neighbour.distance, p);
+
+    weightedSum += weight * voltages[neighbour.index];
+    weightSum += weight;
+  }
+
+  // Normalized weighted average (weights sum to 1)
+  return weightedSum / weightSum;
+}
+
+/**
  * Compute a per-vertex scalar (voltage) for every vertex in the electrode mesh.
  * Vertices that sit at a matched electrode take that electrode's recorded voltage
- * directly, so the mesh surface matches the electrode marker colour exactly there —
- * gaussianRBF is a weighted average, not a true interpolant, so running a matched
- * vertex through it would blend its own voltage with its neighbours' and mute any
- * spike. All other (unmatched) vertices are still filled in by Gaussian RBF.
+ * directly, so the mesh surface matches the electrode marker colour exactly there.
+ * All other (unmatched) vertices are filled in by the chosen interpolation method,
+ * using the settings set in the switch below (tune them there):
+ *   - 'idw'     (default) inverse-distance weighting over the nearest matched electrodes
+ *               (see inverseDistanceWeighting)
+ *   - 'rbf'     Gaussian radial basis weighting over all matched electrodes (see gaussianRBF).
+ *               This is a weighted average, not a true interpolant, which is why matched
+ *               vertices bypass it — otherwise their own voltage would be blended away.
+ *   - 'nearest' copies the voltage of the nearest matched electrode (see nearestNeighbour)
+ * When there are no matched electrodes at all, unmatched vertices come back as NaN
+ * for 'idw' and 'nearest', and as 0 for 'rbf'.
  *
  * @param {{ label, x, y, z }[]} electrodes  - full electrode list (determines vertex order)
  * @param {{ pos: { label, x, y, z } }[]} matched - matched channel entries from matchChannelsToPositions
  * @param {number[]} voltages                 - voltage per matched entry (same order as matched)
- * @param {number} sigma                      - Gaussian falloff in mm
+ * @param {'idw'|'rbf'|'nearest'} [method='idw'] - interpolation method for unmatched vertices
  * @returns {Float32Array}
+ * @throws {Error} for an unknown method
  */
-export function interpolateMeshVoltages(electrodes, matched, voltages, sigma = 30) {
+export function interpolateMeshVoltages(electrodes, matched, voltages, method = 'idw') {
+  // Pick the interpolation method and its settings once, before the loop.
+  // Tune k/p (IDW) or sigma (RBF) here.
+  let interpolate;
+  switch (method) {
+    case 'idw':
+      interpolate = (queryXYZ, matchedXYZ, voltages) =>
+        inverseDistanceWeighting(queryXYZ, matchedXYZ, voltages, 5, 2); // k = 5 neighbours, p = 2
+      break;
+    case 'rbf':
+      interpolate = (queryXYZ, matchedXYZ, voltages) =>
+        gaussianRBF(queryXYZ, matchedXYZ, voltages, 30); // sigma = 30 mm
+      break;
+    case 'nearest':
+      interpolate = nearestNeighbour;
+      break;
+    default:
+      throw new Error(`Unknown interpolation method: ${method}`);
+  }
+
   const matchedXYZ = matched.map((m) => [m.pos.x, m.pos.y, m.pos.z]);
   const scalars = new Float32Array(electrodes.length);
 
@@ -164,10 +365,10 @@ export function interpolateMeshVoltages(electrodes, matched, voltages, sigma = 3
 
     scalars[i] =
       matchedIndex === -1 // if no match => interpolate, if there is a match => take voltage
-        ? gaussianRBF([electrode.x, electrode.y, electrode.z], matchedXYZ, voltages, sigma)
+        ? interpolate([electrode.x, electrode.y, electrode.z], matchedXYZ, voltages)
         : voltages[matchedIndex];
   }
-
+  //downloadArray(scalars, "voltages.txt");
   return scalars;
 }
 

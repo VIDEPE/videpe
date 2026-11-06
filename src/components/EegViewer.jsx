@@ -3,7 +3,7 @@ import UplotReact from 'uplot-react';
 import { cn } from '../utils/utils';
 import toast from 'react-hot-toast';
 import 'uplot/dist/uPlot.min.css';
-import { useTheme } from '@/components/ThemeContext';
+import { useTheme } from '@/hooks/useTheme';
 import {
   ZoomIn,
   ZoomOut,
@@ -290,6 +290,8 @@ export const EegViewer = ({
     electrodes,
     matched,
     isStandardElectrodes,
+    standardTemplateId,
+    standardTemplateName,
     electrodePositionMatchCount,
     electrodePositionTotalCount,
     isElectrodePositionMatchGoodForLed,
@@ -337,11 +339,15 @@ export const EegViewer = ({
     onChannelTypesChange?.(channelTypes);
   }, [channelTypes, onChannelTypesChange]);
 
-  // File-backed montage templates (public/montage_files/TEMPLATE_MONTAGES.json), listed
-  // in the sidebar quick-select alongside the None/CAR/Custom presets below — fetched here
+  // Bundled montage templates that fit this recording (see useMontageTemplates), listed in
+  // the sidebar quick-select alongside the None/CAR/Custom presets below — looked up here
   // (rather than where it's applied, further down) so useMontageChannels can recognize a
   // live montage that exactly matches one of them.
-  const montageTemplates = useMontageTemplates();
+  const montageTemplates = useMontageTemplates({
+    channelNames,
+    standardTemplateId,
+    detectedIsSeeg,
+  });
 
   // Montage row list (reference/color per displayed trace), edited via the same window's
   // montage-settings pane — kept separate from channelSettings since it's an array (can
@@ -460,10 +466,10 @@ export const EegViewer = ({
     applyChannelSettings(nextChannelSettings);
   };
 
-  // Routes the sidebar template <select>'s value to the right apply function — a file path
+  // Routes the sidebar template <select>'s value to the right apply function — a template id
   // (looked up in montageTemplates) or one of the built-in preset strings.
   const applyTemplateSelection = (value) => {
-    const template = montageTemplates.find((t) => t.path === value);
+    const template = montageTemplates.find((t) => t.id === value);
     if (template) applyMontageFileTemplate(template);
     else applyMontageTemplate(value);
   };
@@ -1066,7 +1072,7 @@ export const EegViewer = ({
                   <button
                     type="button"
                     className="button button-icon"
-                    onClick={() => updateVisibleChannelCount(visibleChannelCount + 1)}
+                    onClick={() => updateVisibleChannelCount(visibleChannelCount + 10)}
                     title="Show more channels"
                     disabled={eegIsStacked}
                   >
@@ -1088,7 +1094,7 @@ export const EegViewer = ({
                   <button
                     type="button"
                     className="button button-icon"
-                    onClick={() => updateVisibleChannelCount(visibleChannelCount - 1)}
+                    onClick={() => updateVisibleChannelCount(visibleChannelCount - 10)}
                     title="Show fewer channels"
                     disabled={eegIsStacked}
                   >
@@ -1123,8 +1129,11 @@ export const EegViewer = ({
             </div>
             {/* EEG Montage: opens the montage editor window for per-channel/row referencing,
                 plus a quick template <select> below it that applies a preset straight to
-                the live montage (no Apply/OK gate) — None/Common Average Reference always
-                offered, "Custom" only once a hand-built montage exists to switch back to. */}
+                the live montage (no Apply/OK gate) — None always offered, Common Average
+                Reference unless the recording is SEEG (a global average across depth contacts
+                isn't a meaningful reference; still listed while it's the active montage, which
+                the editor can build, so this <select> can show it), "Custom" only once a
+                hand-built montage exists to switch back to. */}
             <div className="flex flex-col items-center gap-1 pb-1">
               <button type="button" className="button" onClick={() => setMontageVisible((v) => !v)}>
                 Montage
@@ -1143,9 +1152,11 @@ export const EegViewer = ({
               >
                 <option value="none">None</option>
                 {customMontageChannels && <option value="custom">Custom</option>}
-                <option value="average">CAR (Common Average Reference)</option>
+                {(!detectedIsSeeg || montageTemplate === 'average') && (
+                  <option value="average">CAR (Common Average Reference)</option>
+                )}
                 {montageTemplates.map((template) => (
-                  <option key={template.path} value={template.path}>
+                  <option key={template.id} value={template.id}>
                     {template.name}
                   </option>
                 ))}
@@ -1448,6 +1459,7 @@ export const EegViewer = ({
               matchCount={electrodePositionMatchCount}
               totalCount={electrodePositionTotalCount}
               isGoodMatch={isElectrodePositionMatchGoodForLed}
+              defaultSourceLabel={standardTemplateName}
               highlighted={hoveredLedHighlight === 'electrodePosition'}
             />
             <StatusLed
@@ -1492,6 +1504,7 @@ export const EegViewer = ({
           onClose={() => setTopoEnabled(false)}
           onTopoNvReady={onTopoNvReady}
           isStandardElectrodes={isStandardElectrodes}
+          standardTemplateLabel={standardTemplateName}
           onElecPosFile={onElecPosFile}
           customFileName={customElecPosFileName}
           isIntracranial={majorityIsSeeg}
@@ -1502,15 +1515,11 @@ export const EegViewer = ({
       {/* Floating EEG Montage Editor — position:fixed so it overlays the whole page */}
       {montageVisible && (
         <EegMontageEditor
-          electrodes={electrodes}
           matched={matched}
-          voltages={topoVoltages}
           channelNames={channelNames}
-          voltagesByChannel={topoVoltagesByChannel}
-          totalChannels={channelNames.length}
           onClose={() => setMontageVisible(false)}
-          onTopoNvReady={onTopoNvReady}
           isStandardElectrodes={isStandardElectrodes}
+          standardTemplateLabel={standardTemplateName}
           onElecPosFile={onElecPosFile}
           customFileName={customElecPosFileName}
           channelSettings={channelSettings}

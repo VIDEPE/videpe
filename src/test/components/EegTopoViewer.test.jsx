@@ -48,6 +48,7 @@ const ELECTRODES = [
   { label: 'Fp1', x: -29, y: 84, z: -7 },
   { label: 'Fp2', x: 29, y: 84, z: -7 },
   { label: 'Cz', x: 0, y: 0, z: 88 },
+  { label: 'Pz', x: 0, y: -80, z: 50 },
 ];
 
 const MATCHED = [
@@ -269,8 +270,8 @@ describe('EegTopoViewer', () => {
 
       // The current (second) load resolving is the only one that should add meshes: the
       // cortex mesh, plus the two electrode marker layers from addElectrodeMarkers — one
-      // for unmapped template dots (Fp2, the ELECTRODES entry absent from MATCHED) and one
-      // for matched, voltage-coloured dots (Fp1 and Cz). 3 calls total.
+      // for unmapped template dots (Fp2 and Pz, the ELECTRODES entries absent from MATCHED)
+      // and one for matched, voltage-coloured dots (Fp1 and Cz). 3 calls total.
       await act(async () => resolvers[1](makeMesh('current-mesh')));
       expect(mockNvInstance.addMesh).toHaveBeenCalledTimes(3);
       expect(mockNvInstance.addMesh.mock.calls[0][0].id).toBe('current-mesh');
@@ -328,11 +329,17 @@ describe('EegTopoViewer', () => {
   });
 
   describe('electrode source', () => {
-    it('shows "Default: fsaverage_1005 (FreeSurfer)" label when isStandardElectrodes is true', async () => {
+    it('shows "Default: <template name>" label when isStandardElectrodes is true', async () => {
       await act(async () =>
-        render(<EegTopoViewer {...defaultProps} isStandardElectrodes={true} />)
+        render(
+          <EegTopoViewer
+            {...defaultProps}
+            isStandardElectrodes={true}
+            standardTemplateLabel="Standard 10-20"
+          />
+        )
       );
-      expect(screen.getByText(/default: fsaverage_1005 \(freesurfer\)/i)).toBeTruthy();
+      expect(screen.getByText(/default: standard 10-20/i)).toBeTruthy();
     });
 
     it('shows the customFileName prop when isStandardElectrodes is false', async () => {

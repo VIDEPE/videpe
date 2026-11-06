@@ -51,10 +51,6 @@ import { useLayerLoader } from '@/hooks/useLayerLoader';
 import { useElectrodeConnectome } from '@/hooks/useElectrodeConnectome';
 import { useEsiLayer } from '@/hooks/useEsiLayer';
 
-// Re-exported so existing imports (e.g. NiiViewer.test.jsx) keep working — the implementations
-// now live in NiiViewer.utils.js since useLayerLoader needs them too.
-export { syncVolumesAndApplySettings, syncMeshesAndApplySettings };
-
 // ─── handleSettingChange dispatch helpers ──────────────────────────────────────
 // Image volumes are the default case — addressed by their index in nv.volumes (nvIndex, see
 // selectNvVolumeIndex: connectome and mesh layers have a card but no slot in nv.volumes).
@@ -235,10 +231,10 @@ export const NiiViewer = ({
   // dropped into this component's own dropzone, which never touch the layers/
   // electrodeLayer/esiLayer props, so it doesn't wrongly unmount this viewer when those go empty/null together.
   onHas3DExtentChange, // reports whether the scene has a volume/mesh (non-connectome) — gates the cross-panel rotation sync; see the effect below
-  isFullscreen = false,
   onElectrodeLayerDismissed,
   onLoadError,
   clickedEegChannelPos, // {pos: {x,y,z}, clickId} The location of the clicked Eeg Channel the niiviewer cursor should move to
+  nvTopoRef,
 }) => {
   // ─── State ─────────────────────────────────────────────────────────────────
   // layerState holds every layer (the `layers` prop's files, files dropped here, the electrode
@@ -353,6 +349,7 @@ export const NiiViewer = ({
     nvRef,
     layerState,
     dispatchLayers,
+    nvTopoRef,
   });
 
   // ─── Handlers ───────────────────────────────────────────────────────────────
@@ -631,6 +628,7 @@ export const NiiViewer = ({
       clearElectrodeMesh,
       dismissEsiLayer,
       dismissElectrodeLayer,
+      onElectrodeLayerDismissed,
     ]
   );
 

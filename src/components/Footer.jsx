@@ -1,5 +1,5 @@
 ﻿import { cn } from '@/utils/utils';
-import { useTheme } from '@/components/ThemeContext';
+import { useTheme } from '@/hooks/useTheme';
 import unigeLight from '@/assets/logo_UNIGE_light.png';
 import unigeDark from '@/assets/logo_UNIGE_dark.png';
 import hugLight from '@/assets/logo_hug_h_light.png';
@@ -20,7 +20,7 @@ export const Footer = () => {
       {/* flex-wrap moves whole lines below each other when they don't fit side by side, and
        *:whitespace-nowrap stops the text from wrapping inside a line */}
       <div className="flex flex-wrap gap-x-2 text-xs text-foreground whitespace-nowrap">
-        <p>VIDEPE v0.22.0 &copy; {new Date().getFullYear()}</p>
+        <p>VIDEPE v0.23.0 &copy; {new Date().getFullYear()}</p>
         <p>Clinical Neurosciences Department UNIGE & HUG.</p>
         <p>All rights reserved.</p>
       </div>

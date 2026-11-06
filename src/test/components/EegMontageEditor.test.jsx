@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import { downloadTextFile } from '@/utils/fileDownload';
 import { EegMontageEditor } from '@/components/EegMontageEditor';
 
-vi.mock('@/components/ThemeContext', () => ({
+vi.mock('@/hooks/useTheme', () => ({
   useTheme: () => ({ isDarkMode: false }),
 }));
 
@@ -20,6 +20,23 @@ vi.mock('@/utils/fileDownload', () => ({
 }));
 
 const CHANNEL_NAMES = ['FP1', 'FP2', 'FP3'];
+
+// The colors the Color selects should offer, in order. Written out here instead of imported
+// from the component, so a color dropped from the component's list fails these tests.
+const PRESET_COLORS = [
+  'red',
+  'blue',
+  'green',
+  'yellow',
+  'cyan',
+  'magenta',
+  'crimson',
+  'steelblue',
+  'seagreen',
+  'darkgoldenrod',
+  'chocolate',
+  'mediumpurple',
+];
 
 const CHANNEL_SETTINGS = {
   FP1: { type: 'eeg', bad: false },
@@ -46,6 +63,7 @@ const defaultProps = {
   onApplyMontageChannels: vi.fn(),
   onClose: vi.fn(),
   fs: 256, // used to compute nyquist for highPass/lowPass/notch clamping
+  standardTemplateLabel: 'Standard 10-20', // always passed by EegViewer — no default
 };
 
 describe('EegMontageEditor', () => {
@@ -112,11 +130,11 @@ describe('EegMontageEditor', () => {
   });
 
   describe('electrode position match tooltip', () => {
-    it('names the matched electrode and the standard template by default', () => {
+    it('names the matched electrode and the standard template when no file is active', () => {
       render(<EegMontageEditor {...defaultProps} />);
       expect(screen.getByTestId('channel-pos-FP1')).toHaveAttribute(
         'title',
-        'Matched to electrode "FP1" in the fsaverage_1005 (FreeSurfer) template'
+        'Matched to electrode "FP1" in the Standard 10-20 template'
       );
     });
 
@@ -138,7 +156,7 @@ describe('EegMontageEditor', () => {
       render(<EegMontageEditor {...defaultProps} />);
       expect(screen.getByTestId('channel-pos-FP2')).toHaveAttribute(
         'title',
-        'No match for "FP2" in the fsaverage_1005 (FreeSurfer) template'
+        'No match for "FP2" in the Standard 10-20 template'
       );
     });
   });
@@ -484,7 +502,7 @@ describe('EegMontageEditor', () => {
       const options = Array.from(screen.getByTestId('bulk-color-select').options).map(
         (option) => option.value
       );
-      expect(options).toEqual(['', 'red', 'blue', 'green', 'yellow', 'cyan', 'magenta']);
+      expect(options).toEqual(['', ...PRESET_COLORS]);
     });
 
     it("tints each preset option's text to match the color it applies", () => {
@@ -492,9 +510,7 @@ describe('EegMontageEditor', () => {
       const options = Array.from(screen.getByTestId('bulk-color-select').options);
       const byValue = Object.fromEntries(options.map((option) => [option.value, option]));
 
-      ['red', 'blue', 'green', 'yellow', 'cyan', 'magenta'].forEach((color) =>
-        expect(byValue[color].style.color).toBe(color)
-      );
+      PRESET_COLORS.forEach((color) => expect(byValue[color].style.color).toBe(color));
     });
 
     it('sets every montage row to "red" when picked', async () => {
@@ -1587,6 +1603,19 @@ describe('EegMontageEditor', () => {
       expect(toast.error).not.toHaveBeenCalled();
     });
 
+    it("loads a file spelled differently from the recording under the recording's own names", async () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      const file = new File([ANYWAVE_FILE_TEXT.replaceAll('FP', 'Fp')], 'custom.mtg');
+      await userEvent.upload(screen.getByTestId('montage-file-input'), file);
+
+      const rows = screen.getAllByTestId(/^montage-channel-/);
+      expect(rows.map((r) => r.textContent)).toEqual(['FP1', 'FP2']);
+      const referenceSelects = screen.getAllByTestId(/^reference-/);
+      expect(referenceSelects.map((s) => s.value)).toEqual(['', 'FP1']);
+      // channelSettings is keyed by the recording's names, so the type lands on FP1 too.
+      expect(screen.getByTestId('channel-type-FP1')).toHaveValue('seeg');
+    });
+
     it('loading a valid Cartool file replaces the montage rows and leaves channel types untouched', async () => {
       render(<EegMontageEditor {...defaultProps} />);
       const file = new File([CARTOOL_FILE_TEXT], 'custom.mtg');
@@ -1642,9 +1671,7 @@ describe('EegMontageEditor', () => {
       const options = Array.from(screen.getByTestId('color-FP1').options);
       const byValue = Object.fromEntries(options.map((option) => [option.value, option]));
 
-      ['red', 'blue', 'green', 'yellow', 'cyan', 'magenta'].forEach((color) =>
-        expect(byValue[color].style.color).toBe(color)
-      );
+      PRESET_COLORS.forEach((color) => expect(byValue[color].style.color).toBe(color));
     });
   });
 });

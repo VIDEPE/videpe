@@ -1,6 +1,6 @@
 // Parse Cartool montage text into montage-editor rows. Cartool montages carry no per-channel
 // type info, so channelTypes is always empty — kept as a return field only to match
-// parseAnyWaveMontage's shape (see parseMontageFile, which dispatches to either parser
+// parseAnyWaveMontage's shape (see parseMontageText, which dispatches to either parser
 // interchangeably).
 //
 // Returns:

@@ -18,6 +18,8 @@ import {
   applyColormap,
   MAX_RANDOM_COLORMAP_LABELS,
   ESI_LAYER_URL,
+  computeAzimuthElevation,
+  rotateViews,
 } from '@/utils/NiiViewer.utils';
 
 describe('isAnyColorbarActive', () => {
@@ -182,5 +184,130 @@ describe('fractionToCalValue', () => {
 
   it('works with a negative boundMin', () => {
     expect(fractionToCalValue(0.5, -10, 10)).toBe(0);
+  });
+});
+
+describe('computeAzimuthElevation', () => {
+  // NiiVue azimuths wrap around (-270 and 90 are the same camera position) — fold into
+  // [0, 360) so the expectations below can use NiiVue's canonical values.
+  const normalizeAzi = (azi) => ((azi % 360) + 360) % 360;
+
+  // NiiVue convention: azimuth 0/90/180/270 puts the camera behind/left/in front/right of the
+  // head, elevation 90 puts it above. Each point must land the camera on its own side.
+  it.each([
+    ['posterior', [0, -50, 0], 0],
+    ['left', [-50, 0, 0], 90],
+    ['anterior', [0, 50, 0], 180],
+    ['right', [50, 0, 0], 270],
+  ])('points the camera at a %s position from that side', (_, pos, expectedAzi) => {
+    const [azi, elev] = computeAzimuthElevation(pos);
+    expect(normalizeAzi(azi)).toBeCloseTo(expectedAzi);
+    expect(elev).toBeCloseTo(0);
+  });
+
+  it('raises the camera to 90° elevation for a position straight above', () => {
+    expect(computeAzimuthElevation([0, 0, 50])[1]).toBeCloseTo(90);
+  });
+
+  it('lowers the camera to -90° elevation for a position straight below', () => {
+    expect(computeAzimuthElevation([0, 0, -50])[1]).toBeCloseTo(-90);
+  });
+
+  it('tilts the camera 45° up for a position as high as it is far out horizontally', () => {
+    const [azi, elev] = computeAzimuthElevation([-30, 0, 30]);
+    expect(normalizeAzi(azi)).toBeCloseTo(90);
+    expect(elev).toBeCloseTo(45);
+  });
+
+  // NiiVue rotates the 3D render around nv.pivot3D — the centre of the scene's bounding box —
+  // not around the mm origin. A scan whose origin isn't at the centre of the head (e.g. MNI, where
+  // the brain's centre is roughly [0, -20, 20], or native scanner space) must still get the
+  // camera on the point's side as seen from that pivot.
+  describe('with a pivot away from the origin', () => {
+    const PIVOT = [0, -20, 20];
+
+    it('points the camera from the left at a position directly left of the pivot', () => {
+      // Seen from the origin this point is left, posterior and up (~22° azimuth off, ~20° up).
+      const [azi, elev] = computeAzimuthElevation([-50, -20, 20], PIVOT);
+      expect(normalizeAzi(azi)).toBeCloseTo(90);
+      expect(elev).toBeCloseTo(0);
+    });
+
+    it('points the camera from behind at a position directly behind the pivot', () => {
+      // Seen from the origin this point is behind but ~16° up, and [0, 0, 20] would even be in front.
+      const [azi, elev] = computeAzimuthElevation([0, -90, 20], PIVOT);
+      expect(normalizeAzi(azi)).toBeCloseTo(0);
+      expect(elev).toBeCloseTo(0);
+    });
+
+    it('raises the camera to 90° elevation for a position straight above the pivot', () => {
+      const [, elev] = computeAzimuthElevation([0, -20, 70], PIVOT);
+      expect(elev).toBeCloseTo(90);
+    });
+  });
+
+  it('treats an undefined pivot as the origin', () => {
+    // nv.pivot3D is only set once NiiVue has drawn a 3D scene — before that the call site passes
+    // undefined, which must fall back to the origin rather than throw.
+    expect(computeAzimuthElevation([-50, 10, 30], undefined)).toEqual(
+      computeAzimuthElevation([-50, 10, 30], [0, 0, 0])
+    );
+  });
+});
+
+describe('rotateViews', () => {
+  // Stand-in for a Niivue instance — only what rotateViews touches.
+  const makeView = (pivot3D) => ({ pivot3D, setRenderAzimuthElevation: vi.fn() });
+  const POSITION = [-50, -20, 20];
+
+  it('rotates every view to the same azimuth/elevation, so the views stay aligned', () => {
+    const nvA = makeView([0, -20, 20]);
+    const nvB = makeView([0, -20, 20]);
+
+    rotateViews([nvA, nvB], POSITION);
+
+    const [azi, elev] = computeAzimuthElevation(POSITION, [0, -20, 20]);
+    expect(nvA.setRenderAzimuthElevation).toHaveBeenCalledWith(azi, elev);
+    expect(nvB.setRenderAzimuthElevation).toHaveBeenCalledWith(azi, elev);
+  });
+
+  it('takes the pivot from the first view, even when the others have a different one', () => {
+    // Both views share one rotation, so they can't each use their own pivot — the caller
+    // lists the view with the most reliable pivot first.
+    const nvA = makeView([0, -20, 20]);
+    const nvB = makeView([10, 10, 10]);
+
+    rotateViews([nvA, nvB], POSITION);
+
+    const [azi, elev] = computeAzimuthElevation(POSITION, [0, -20, 20]);
+    expect(nvB.setRenderAzimuthElevation).toHaveBeenCalledWith(azi, elev);
+  });
+
+  it('takes the pivot from the next view when the first has none yet', () => {
+    // nv.pivot3D is only set once NiiVue has drawn a 3D scene
+    const nvA = makeView(undefined);
+    const nvB = makeView([0, -20, 20]);
+
+    rotateViews([nvA, nvB], POSITION);
+
+    const [azi, elev] = computeAzimuthElevation(POSITION, [0, -20, 20]);
+    expect(nvA.setRenderAzimuthElevation).toHaveBeenCalledWith(azi, elev);
+  });
+
+  it('rotates around the origin when no view has a pivot yet', () => {
+    const nvA = makeView(undefined);
+
+    rotateViews([nvA], POSITION);
+
+    expect(nvA.setRenderAzimuthElevation).toHaveBeenCalledWith(
+      ...computeAzimuthElevation(POSITION)
+    );
+  });
+
+  it('skips missing views (e.g. a topography view that was never created)', () => {
+    const nvA = makeView([0, -20, 20]);
+
+    expect(() => rotateViews([null, nvA, undefined], POSITION)).not.toThrow();
+    expect(nvA.setRenderAzimuthElevation).toHaveBeenCalledTimes(1);
   });
 });

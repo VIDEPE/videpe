@@ -10,6 +10,8 @@ import {
   getRowCrosshairPosition,
   filterMontageRows,
   computeAutoYScale,
+  isMontageRowDrawable,
+  remapMontageToRecording,
 } from '@/utils/eegViewerUtils';
 
 // ---------------------------------------------------------------------------
@@ -707,5 +709,132 @@ describe('filterMontageRows', () => {
     });
     controller.abort();
     await expect(promise).rejects.toMatchObject({ name: 'AbortError' });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// isMontageRowDrawable
+// ---------------------------------------------------------------------------
+describe('isMontageRowDrawable', () => {
+  const channelNames = ['Fp1', 'F7'];
+
+  it('is true for a referential row whose channel is in the recording', () => {
+    expect(isMontageRowDrawable({ channel: 'Fp1', reference: null }, channelNames)).toBe(true);
+  });
+
+  it('is true for a bipolar row only when both channels are in the recording', () => {
+    expect(isMontageRowDrawable({ channel: 'Fp1', reference: 'F7' }, channelNames)).toBe(true);
+    expect(isMontageRowDrawable({ channel: 'Fp1', reference: 'T7' }, channelNames)).toBe(false);
+  });
+
+  it('is false when the channel is not in the recording', () => {
+    expect(isMontageRowDrawable({ channel: 'T7', reference: null }, channelNames)).toBe(false);
+  });
+
+  it('treats average/median as always-available references', () => {
+    expect(isMontageRowDrawable({ channel: 'Fp1', reference: 'average' }, channelNames)).toBe(true);
+    expect(isMontageRowDrawable({ channel: 'Fp1', reference: 'median' }, channelNames)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// remapMontageToRecording
+// ---------------------------------------------------------------------------
+describe('remapMontageToRecording', () => {
+  const row = (channel, reference = null) => ({ channel, reference, color: 'red' });
+
+  it("rewrites channels and references to the recording's own spelling, ignoring case", () => {
+    const { rows } = remapMontageToRecording({ rows: [row('Fp1', 'f7')], channelTypes: {} }, [
+      'FP1',
+      'F7',
+    ]);
+    expect(rows).toEqual([row('FP1', 'F7')]);
+  });
+
+  it('matches through the "EEG " prefix and "-Ref" suffix too, like electrode positions do', () => {
+    const { rows } = remapMontageToRecording({ rows: [row('Fp1')], channelTypes: {} }, [
+      'EEG Fp1-Ref',
+    ]);
+    expect(rows[0].channel).toBe('EEG Fp1-Ref');
+  });
+
+  it('leaves average/median references alone', () => {
+    const { rows } = remapMontageToRecording(
+      { rows: [row('Fp1', 'average'), row('Fp1', 'median')], channelTypes: {} },
+      ['FP1']
+    );
+    expect(rows.map(({ reference }) => reference)).toEqual(['average', 'median']);
+  });
+
+  // The "recording is missing these channels" toast reports the montage's own spelling
+  it('leaves names that are not in the recording unchanged', () => {
+    const { rows } = remapMontageToRecording({ rows: [row('T7', 'Fp1')], channelTypes: {} }, [
+      'FP1',
+    ]);
+    expect(rows).toEqual([row('T7', 'FP1')]);
+  });
+
+  it("rewrites channelTypes' keys too, since channelSettings is keyed by the recording's names", () => {
+    const { channelTypes } = remapMontageToRecording(
+      { rows: [], channelTypes: { Fp1: 'seeg', T7: 'eeg' } },
+      ['FP1']
+    );
+    expect(channelTypes).toEqual({ FP1: 'seeg', T7: 'eeg' });
+  });
+
+  describe('channel aliases', () => {
+    const aliases = { F8: 'E2', Cz: 'VREF' };
+
+    it("uses a name's alias when the recording doesn't have the name itself", () => {
+      const { rows, channelTypes } = remapMontageToRecording(
+        { rows: [row('F8', 'Cz')], channelTypes: { F8: 'eeg' } },
+        ['E2', 'VREF'],
+        aliases
+      );
+      expect(rows).toEqual([row('E2', 'VREF')]);
+      expect(channelTypes).toEqual({ E2: 'eeg' });
+    });
+
+    it('prefers the name itself when the recording has it', () => {
+      const { rows } = remapMontageToRecording(
+        { rows: [row('Cz')], channelTypes: {} },
+        ['Cz', 'VREF'],
+        aliases
+      );
+      expect(rows[0].channel).toBe('Cz');
+    });
+
+    // Spelling can differ in three places: the montage, the alias table and the recording
+    it.each([
+      ['F8', 'F8', 'E2'], // same case everywhere
+      ['f8', 'F8', 'e2'], // lowercase montage and recording, capitalised alias key
+      ['F8', 'f8', 'E2'], // lowercase alias key
+      ['FP1', 'Fp1', 'e18'], // uppercase montage, mixed-case alias key
+    ])(
+      'finds an alias with montage name %s, alias key %s and recording name %s',
+      (montageName, aliasKey, recordingName) => {
+        const { rows } = remapMontageToRecording(
+          { rows: [row(montageName)], channelTypes: {} },
+          [recordingName],
+          { [aliasKey]: recordingName.toUpperCase() }
+        );
+        expect(rows[0].channel).toBe(recordingName);
+      }
+    );
+
+    it('leaves a name unchanged when neither it nor its alias is in the recording', () => {
+      const { rows } = remapMontageToRecording(
+        { rows: [row('F8')], channelTypes: {} },
+        ['E3'],
+        aliases
+      );
+      expect(rows[0].channel).toBe('F8');
+    });
+  });
+
+  it('keeps the rest of each row, such as its color and filter settings', () => {
+    const fullRow = { channel: 'Fp1', reference: null, color: 'red', highPass: 1, lowPass: 70 };
+    const { rows } = remapMontageToRecording({ rows: [fullRow], channelTypes: {} }, ['FP1']);
+    expect(rows).toEqual([{ ...fullRow, channel: 'FP1' }]);
   });
 });

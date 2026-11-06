@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, within, fireEvent, act, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { EegViewer } from '@/components/EegViewer';
+import { parseAnyWaveMontage } from '@/loaders/parseMontageAnywave';
 
 // capturedClickHandler stores the 'click' listener attached to u.over inside onCreate,
 // so tests can fire a simulated click without a real uPlot instance.
@@ -13,7 +14,7 @@ vi.mock('uplot-react', () => {
       // Simulate uPlot calling onCreate with a minimal fake instance
       const fakeUplot = {
         cursor: { left: 100 },
-        posToVal: (_px, _scale) => 5.0,
+        posToVal: () => 5.0, // real signature is (px, scale) — the fake ignores both
         over: {
           addEventListener: (_event, handler) => {
             capturedClickHandler = handler;
@@ -56,7 +57,7 @@ vi.mock('@/components/EegTopoViewer', () => ({
 // montage row color describe block below) — a plain top-level `let` wouldn't be
 // initialized yet when this factory runs, since vi.mock is hoisted above imports.
 const themeState = vi.hoisted(() => ({ isDarkMode: false }));
-vi.mock('@/components/ThemeContext', () => ({
+vi.mock('@/hooks/useTheme', () => ({
   useTheme: () => ({ isDarkMode: themeState.isDarkMode }),
 }));
 
@@ -76,18 +77,39 @@ vi.mock('react-hot-toast', () => {
 });
 
 // Minimal fsaverage_1005.tsv-shaped content (MNE's "label" header, mm-scale here for
-// simplicity) whose labels match two of the three test channel names
-const MOCK_TSV = `label\tx\ty\tz
+// simplicity) whose labels match two of the three test channel names. vi.hoisted, because
+// the vi.mock below is hoisted above this file's other top-level code.
+const { MOCK_TSV } = vi.hoisted(() => ({
+  MOCK_TSV: `label\tx\ty\tz
 EEG1\t-29.0\t84.0\t-7.0
 EEG2\t29.0\t84.0\t-7.0
 Cz\t0.0\t0.0\t88.0
-`;
+`,
+}));
+
+// Replace the bundled fsaverage_1005 template with MOCK_TSV, so these tests control which
+// test channels have a position (EEG1, EEG2) and which don't (EEG3). No real template
+// contains EEG1–EEG3, so MOCK_TSV is always the best match; the real templates are
+// covered by useElectrodeMatching.test.js.
+vi.mock('@/assets/electrode_positions/fsaverage_1005.tsv?raw', () => ({ default: MOCK_TSV }));
+
+// Montage templates the dropdown offers — empty by default; the "file-backed montage
+// templates" tests below fill it with their own test template. The real bundled templates
+// are covered by useMontageTemplates.test.js.
+const montageTemplatesMock = vi.hoisted(() => ({ current: [], lastProps: null }));
+vi.mock('@/hooks/useMontageTemplates', () => ({
+  useMontageTemplates: (props) => {
+    montageTemplatesMock.lastProps = props;
+    return montageTemplatesMock.current;
+  },
+}));
 
 // jsdom does not implement ResizeObserver; use a class so `new` works,
 // and fire the callback immediately so plotWidth/plotHeight become non-zero
 beforeEach(() => {
   capturedClickHandler = null;
   themeState.isDarkMode = false;
+  montageTemplatesMock.current = [];
   global.ResizeObserver = class {
     constructor(callback) {
       this._cb = callback;
@@ -354,32 +376,59 @@ describe('EegViewer — window size controls', () => {
 });
 
 describe('EegViewer — channel count controls', () => {
-  it('decreases visible channel count when − is clicked', async () => {
+  // The +/− buttons step by 10 (the input's own arrows already step by 1). The 3-channel
+  // fixture can't show that — every 10-step would hit the 1..3 clamp — so the step tests use a
+  // wider recording and start mid-range (15 of 30), leaving room for a full step either way.
+  // 30 also stays under the height cap: 600px (ResizeObserver mock) / 12px per lane = 50.
+  const WIDE_CHANNEL_COUNT = 30;
+  const MID_CHANNEL_COUNT = 15;
+  const makeWideProvider = () => {
+    const wideChannelNames = Array.from({ length: WIDE_CHANNEL_COUNT }, (_, i) => `EEG${i + 1}`);
+    return {
+      channelNames: wideChannelNames,
+      fs: 1,
+      tMax: TMAX,
+      getChunk: vi.fn(async (start, end) => {
+        const indices = TIMESTAMPS.map((_, i) => i).filter(
+          (i) => TIMESTAMPS[i] >= start && TIMESTAMPS[i] <= end
+        );
+        return {
+          timestamps: Float32Array.from(indices.map((i) => TIMESTAMPS[i])),
+          // reuse CHANNEL_DATA's three rows round-robin — the values don't matter here
+          channels: wideChannelNames.map((_, c) =>
+            Float32Array.from(indices.map((i) => CHANNEL_DATA[c % CHANNEL_DATA.length][i]))
+          ),
+        };
+      }),
+    };
+  };
+
+  it('decreases visible channel count by 10 when − is clicked', async () => {
     const user = userEvent.setup();
-    await renderViewer();
+    await renderViewer(makeWideProvider());
     const input = screen.getByRole('spinbutton', { name: /number of channels/i });
     const decreaseBtn = within(containerOf(input)).getByRole('button', {
       name: 'Show fewer channels',
     });
 
-    fireEvent.change(input, { target: { value: String(channelNames.length) } });
+    fireEvent.change(input, { target: { value: String(MID_CHANNEL_COUNT) } });
     await user.click(decreaseBtn);
 
-    expect(input).toHaveValue(channelNames.length - 1);
+    expect(input).toHaveValue(MID_CHANNEL_COUNT - 10);
   });
 
-  it('increases visible channel count when + is clicked', async () => {
+  it('increases visible channel count by 10 when + is clicked', async () => {
     const user = userEvent.setup();
-    await renderViewer();
+    await renderViewer(makeWideProvider());
     const input = screen.getByRole('spinbutton', { name: /number of channels/i });
-    const channelControls = within(containerOf(input));
-    const increaseBtn = channelControls.getByRole('button', { name: 'Show more channels' });
-    const decreaseBtn = channelControls.getByRole('button', { name: 'Show fewer channels' });
+    const increaseBtn = within(containerOf(input)).getByRole('button', {
+      name: 'Show more channels',
+    });
 
-    await user.click(decreaseBtn);
+    fireEvent.change(input, { target: { value: String(MID_CHANNEL_COUNT) } });
     await user.click(increaseBtn);
 
-    expect(input).toHaveValue(channelNames.length);
+    expect(input).toHaveValue(MID_CHANNEL_COUNT + 10);
   });
 
   it('does not increase channel count above total number of channels', async () => {
@@ -640,11 +689,6 @@ describe('EegViewer — plot rendering', () => {
 // ── EEG topography wiring ─────────────────────────────────────────────────────
 
 describe('EegViewer — topography wiring', () => {
-  it('fetches the electrode position file on mount', async () => {
-    await renderViewer();
-    expect(global.fetch).toHaveBeenCalledWith('electrode_positions/fsaverage_1005.tsv');
-  });
-
   it('does not show EegTopoViewer on initial render', async () => {
     await renderViewer();
     expect(screen.queryByTestId('eeg-topo-viewer')).toBeNull();
@@ -1667,7 +1711,6 @@ describe('EegViewer — recording type detection', () => {
     });
     await enableTopoAndClick();
 
-    expect(global.fetch).toHaveBeenCalled(); // still fetched, just not used for rendering in this mode
     // All 3 channels default to type 'seeg' (auto-detected intracranial), so the mesh's
     // "EEG channels mapped" denominator is 0 too, not the recording's total channel count.
     expect(screen.getByText(/0\s*\/\s*0\s*channels mapped/i)).toBeTruthy();
@@ -1840,7 +1883,7 @@ describe('EegViewer — persistent electrode position dropzone', () => {
     // MOCK_TSV matches 2 of the 3 test channel names — well under the 19 required for a
     // usable topography, so the count is shown but the LED reads red, not blue.
     const led = screen.getByTitle(
-      'Using default fsaverage_1005 (FreeSurfer) template (2/3 channels matched)'
+      'Using default fsaverage 10-05 (FreeSurfer) template (2/3 channels matched)'
     );
     expect(led).toBeInTheDocument();
     expect(led.querySelector('span')).toHaveClass('bg-red-600/50');
@@ -1849,7 +1892,6 @@ describe('EegViewer — persistent electrode position dropzone', () => {
   });
 
   it('shows the electrode position LED with a 0-match count, colored red, when the standard template matches no channels', async () => {
-    global.fetch = vi.fn().mockResolvedValue({ text: () => Promise.resolve(MOCK_TSV) });
     const provider = makeProvider();
     // No trailing digits — doesn't parse as an electrode-contact shape (unlike e.g.
     // "NoMatch1"), so this stays detected as scalp EEG rather than accidentally SEEG.
@@ -1861,7 +1903,7 @@ describe('EegViewer — persistent electrode position dropzone', () => {
     });
 
     const led = screen.getByTitle(
-      'Using default fsaverage_1005 (FreeSurfer) template (0/2 channels matched)'
+      'Using default fsaverage 10-05 (FreeSurfer) template (0/2 channels matched)'
     );
     expect(led).toBeInTheDocument();
     expect(led.querySelector('span')).toHaveClass('bg-red-600/50');
@@ -1871,7 +1913,6 @@ describe('EegViewer — persistent electrode position dropzone', () => {
   // labels (like "Cz") with the fsaverage_1005 template out of 200+ channels — a
   // technically non-empty match too sparse to be a usable topography.
   it('shows the electrode position LED as not auto-matched (red) when only a small minority of channels match the standard template', async () => {
-    global.fetch = vi.fn().mockResolvedValue({ text: () => Promise.resolve(MOCK_TSV) });
     const provider = makeProvider();
     provider.channelNames = ['Cz', 'X1', 'X2']; // MOCK_TSV only matches "Cz" — 1/3, and 1 < 19
     render(<EegViewer provider={provider} channelNames={provider.channelNames} />);
@@ -1881,20 +1922,36 @@ describe('EegViewer — persistent electrode position dropzone', () => {
     });
 
     const led = screen.getByTitle(
-      'Using default fsaverage_1005 (FreeSurfer) template (1/3 channels matched)'
+      'Using default fsaverage 10-05 (FreeSurfer) template (1/3 channels matched)'
     );
     expect(led).toBeInTheDocument();
     expect(led.querySelector('span')).toHaveClass('bg-red-600/50');
   });
 
   it('shows the electrode position LED as auto-matched (blue) when the standard template match meets the minimum threshold', async () => {
-    const manyChannelNames = Array.from({ length: 19 }, (_, i) => `E${i + 1}`);
-    const manyMatchTsv = [
-      'label\tx\ty\tz',
-      ...manyChannelNames.map((name) => `${name}\t0.0\t0.0\t0.0`),
-      '',
-    ].join('\n');
-    global.fetch = vi.fn().mockResolvedValue({ text: () => Promise.resolve(manyMatchTsv) });
+    // The 19 classic 10-20 names: none are in MOCK_TSV, so the real bundled standard_1020
+    // template is the best match, at exactly the 19 the LED needs
+    const manyChannelNames = [
+      'Fp1',
+      'Fp2',
+      'F7',
+      'F3',
+      'Fz',
+      'F4',
+      'F8',
+      'T7',
+      'C3',
+      'Cz',
+      'C4',
+      'T8',
+      'P7',
+      'P3',
+      'Pz',
+      'P4',
+      'P8',
+      'O1',
+      'O2',
+    ];
     const provider = {
       channelNames: manyChannelNames,
       fs: 1,
@@ -1915,9 +1972,7 @@ describe('EegViewer — persistent electrode position dropzone', () => {
       await Promise.resolve();
     });
 
-    const led = screen.getByTitle(
-      'Using default fsaverage_1005 (FreeSurfer) template (19/19 channels matched)'
-    );
+    const led = screen.getByTitle('Using default Standard 10-20 template (19/19 channels matched)');
     expect(led).toBeInTheDocument();
     expect(led.querySelector('span')).toHaveClass('bg-blue-500');
   });
@@ -2030,7 +2085,9 @@ describe('EegViewer — persistent electrode position dropzone', () => {
     expect(led).toBeInTheDocument();
     expect(led.querySelector('span')).toHaveClass('bg-green-500');
     expect(
-      screen.getByTitle('Using default fsaverage_1005 (FreeSurfer) template (2/3 channels matched)')
+      screen.getByTitle(
+        'Using default fsaverage 10-05 (FreeSurfer) template (2/3 channels matched)'
+      )
     ).toBeInTheDocument();
   });
 
@@ -2046,7 +2103,6 @@ describe('EegViewer — persistent electrode position dropzone', () => {
         isEsiChannelMatchGoodForLed={true}
       />
     );
-    // Two ticks flush useElectrodeMatching's fetch().then(r => r.text()).then(setState) chain — one tick per .then().
     await act(async () => {
       await Promise.resolve();
       await Promise.resolve();
@@ -2069,7 +2125,6 @@ describe('EegViewer — persistent electrode position dropzone', () => {
         isEsiChannelMatchGoodForLed={false}
       />
     );
-    // Two ticks flush useElectrodeMatching's fetch().then(r => r.text()).then(setState) chain — one tick per .then().
     await act(async () => {
       await Promise.resolve();
       await Promise.resolve();
@@ -2224,7 +2279,7 @@ describe('EegViewer — hovering a disabled toggle highlights the LED that expla
     // Default renderViewer() scenario: fsaverage_1005 matches 2/3 channels — below threshold,
     // so this LED is already red on its own merits, unrelated to any hover.
     const electrodeLed = screen
-      .getByTitle('Using default fsaverage_1005 (FreeSurfer) template (2/3 channels matched)')
+      .getByTitle('Using default fsaverage 10-05 (FreeSurfer) template (2/3 channels matched)')
       .querySelector('span');
 
     await userEvent.hover(esiButton.parentElement);
@@ -2463,6 +2518,40 @@ describe('EegViewer — montage row wiring', () => {
 });
 
 describe('EegViewer — montage template dropdown', () => {
+  const dropdownOptions = () =>
+    Array.from(screen.getByTestId('montage-template-select').options).map((o) => o.value);
+
+  it('asks for the templates that fit this recording', async () => {
+    await renderViewer();
+
+    expect(montageTemplatesMock.lastProps).toEqual({
+      channelNames,
+      standardTemplateId: 'fsaverage_1005', // MOCK_TSV stands in for this template
+      detectedIsSeeg: false,
+    });
+  });
+
+  it('does not offer CAR for an SEEG recording', async () => {
+    await renderViewer(makeIntracranialProvider());
+
+    expect(dropdownOptions()).toEqual(['none']);
+  });
+
+  // An average-referenced montage can still be built in the editor — the dropdown then has
+  // to be able to show it, or it would read "None" for a montage that isn't.
+  it('still shows CAR for an SEEG recording while that is the active montage', async () => {
+    await renderViewer(makeIntracranialProvider());
+
+    await userEvent.click(screen.getByRole('button', { name: 'Montage' }));
+    await userEvent.selectOptions(screen.getByTestId('add-by-type-select'), 'seeg');
+    await userEvent.click(screen.getByTestId('add-by-type-button'));
+    await userEvent.selectOptions(screen.getByTestId('bulk-reference-select'), 'average');
+    await userEvent.click(screen.getByTestId('bulk-reference-apply-button'));
+    await userEvent.click(screen.getByRole('button', { name: 'OK' }));
+
+    expect(screen.getByTestId('montage-template-select')).toHaveValue('average');
+  });
+
   it('defaults to "None" with no "Custom" option, before any montage has been built', async () => {
     await renderViewer();
 
@@ -2540,36 +2629,31 @@ describe('EegViewer — file-backed montage templates', () => {
 	</Channel>
 </Montage>`;
 
-  const TEMPLATE_LIST = [{ name: 'Test Template', path: 'montage_files/test.mtg' }];
+  // Same shape as a bundled template in useMontageTemplates: { id, name, rows, channelTypes }
+  const makeTemplate = (mtgText) => ({
+    id: 'test-template',
+    name: 'Test Template',
+    ...parseAnyWaveMontage(mtgText),
+  });
 
   beforeEach(() => {
-    global.fetch = vi.fn((url) => {
-      if (url === 'montage_files/TEMPLATE_MONTAGES.json')
-        return Promise.resolve({ text: () => Promise.resolve(JSON.stringify(TEMPLATE_LIST)) });
-      if (url === 'montage_files/test.mtg')
-        return Promise.resolve({ text: () => Promise.resolve(TEMPLATE_MTG_TEXT) });
-      return Promise.resolve({ text: () => Promise.resolve(MOCK_TSV) }); // fsaverage_1005.tsv
-    });
+    montageTemplatesMock.current = [makeTemplate(TEMPLATE_MTG_TEXT)];
   });
 
   const optionValues = () =>
     Array.from(screen.getByTestId('montage-template-select').options).map((o) => o.value);
 
-  it('lists file-backed templates from TEMPLATE_MONTAGES.json in the dropdown', async () => {
+  it('lists the bundled templates in the dropdown, keyed by id', async () => {
     await renderViewer();
 
-    await waitFor(() => expect(optionValues()).toContain('montage_files/test.mtg'));
+    expect(optionValues()).toContain('test-template');
     expect(screen.getByText('Test Template')).toBeTruthy();
   });
 
   it("applies a file-backed template's rows to the live waveform and patches channel types", async () => {
     await renderViewer();
-    await waitFor(() => expect(optionValues()).toContain('montage_files/test.mtg'));
 
-    await userEvent.selectOptions(
-      screen.getByTestId('montage-template-select'),
-      'montage_files/test.mtg'
-    );
+    await userEvent.selectOptions(screen.getByTestId('montage-template-select'), 'test-template');
 
     expect(screen.getByText('EEG1')).toBeTruthy();
     expect(screen.getByText('EEG2 - EEG1')).toBeTruthy();
@@ -2583,26 +2667,17 @@ describe('EegViewer — file-backed montage templates', () => {
 
   it('keeps showing the template selected once applied, since the loaded rows do exactly match it', async () => {
     await renderViewer();
-    await waitFor(() => expect(optionValues()).toContain('montage_files/test.mtg'));
 
-    await userEvent.selectOptions(
-      screen.getByTestId('montage-template-select'),
-      'montage_files/test.mtg'
-    );
+    await userEvent.selectOptions(screen.getByTestId('montage-template-select'), 'test-template');
 
-    expect(screen.getByTestId('montage-template-select')).toHaveValue('montage_files/test.mtg');
+    expect(screen.getByTestId('montage-template-select')).toHaveValue('test-template');
   });
 
   it('warns via toast when a template names a channel not present in this recording, and still applies the rows that do match', async () => {
     const { default: toast } = await import('react-hot-toast');
     toast.mockClear();
-    global.fetch = vi.fn((url) => {
-      if (url === 'montage_files/TEMPLATE_MONTAGES.json')
-        return Promise.resolve({ text: () => Promise.resolve(JSON.stringify(TEMPLATE_LIST)) });
-      if (url === 'montage_files/test.mtg')
-        return Promise.resolve({
-          text: () =>
-            Promise.resolve(`<!DOCTYPE AnyWaveMontage>
+    montageTemplatesMock.current = [
+      makeTemplate(`<!DOCTYPE AnyWaveMontage>
 <Montage>
 	<Channel name="EEG1">
 		<type>EEG</type>
@@ -2610,17 +2685,11 @@ describe('EegViewer — file-backed montage templates', () => {
 		<color></color>
 	</Channel>
 </Montage>`),
-        });
-      return Promise.resolve({ text: () => Promise.resolve(MOCK_TSV) });
-    });
+    ];
 
     await renderViewer();
-    await waitFor(() => expect(optionValues()).toContain('montage_files/test.mtg'));
 
-    await userEvent.selectOptions(
-      screen.getByTestId('montage-template-select'),
-      'montage_files/test.mtg'
-    );
+    await userEvent.selectOptions(screen.getByTestId('montage-template-select'), 'test-template');
 
     expect(toast).toHaveBeenCalledWith(
       expect.stringContaining('EEG9'),

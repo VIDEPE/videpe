@@ -12,7 +12,7 @@ import { NiiViewer } from '../components/NiiViewer';
 import { SplitPane } from '../components/SplitPane';
 import { FileDropZone } from '../components/FileDropZone';
 // Utils
-import { filesToLayers } from '../utils/NiiViewer.utils';
+import { filesToLayers, rotateViews } from '../utils/NiiViewer.utils';
 import { buildElectrodeLayer } from '../utils/eegTopographyUtils';
 import {
   EEG_FORMAT_EXTENSIONS,
@@ -28,6 +28,9 @@ import { useShanoirSession } from '../shanoir/ShanoirSessionContext';
 import { useShanoirData } from '../shanoir/useShanoirData';
 import { useHostAppSession } from '../hostApp/HostAppSessionContext';
 import { useHostAppData } from '../hostApp/useHostAppData';
+// Assets
+import shanoirLogo from '@/assets/shanoirLogoBlack.svg';
+import neuxelecLogo from '@/assets/neuxelec_logo.ico';
 
 // Shared title styling — keeps "Neuroimaging" and the toggle's labels visually
 // consistent, and both header bars the same height (TrafficLightButtons are 16px tall).
@@ -75,7 +78,6 @@ export const PatientView = () => {
   const [isLoading, setIsLoading] = useState(false);
   const eegReadyResolveRef = useRef(null); // set before demo/shanoir/host-app load; EegViewer calls it when charts are ready
   const niiReadyResolveRef = useRef(null); // set before demo/shanoir/host-app load; NiiViewer calls it when volumes are ready
-  const [maximizedPanel, setMaximizedPanel] = useState(null); // null | 'left' | 'right'
 
   // Live EEG/electrode state lifted out of EegViewer — drives the intracranial connectome
   // layer in the Neuroimaging pane. { isIntracranial, matched, voltages } | null.
@@ -206,6 +208,7 @@ export const PatientView = () => {
   if (nvRef_eegtopo.current === null) {
     nvRef_eegtopo.current = new Niivue({
       isOrientCube: true,
+      dragAndDropEnabled: false,
     });
   }
 
@@ -226,6 +229,19 @@ export const PatientView = () => {
       nvTopo.broadcastTo([]);
     }
   }, [niiNvReady, topoNvReady, niiHas3DExtent, topoHasContent]);
+
+  // Handler that rotates both 3D views so it faces the selected position when
+  // clicking an EEG channel label Rotating happens here rather than in NiiViewer because
+  // PatientView owns both NiiVue instances and rotating the topography view should
+  // still be possible even when NiiViewer isn't mounted
+  const handleChannelPositionClick = (click) => {
+    setClickedEegChannelPos(click);
+    const { x, y, z } = click.pos;
+    const nvNii = nvRef_niiviewer.current;
+    const nvTopo = nvRef_eegtopo.current;
+    // pivot from the imaging view only while it has a 3D scene, otherwise from the topography
+    rotateViews(niiHas3DExtent ? [nvNii, nvTopo] : [nvTopo, nvNii], [x, y, z]);
+  };
 
   // Handler for when imaging files are dropped or selected. It reads the files as ArrayBuffers and prepares them for visualization, updating state accordingly.
   // NiiViewer shows its own loading/success toast once mounted, so this just sets layers and surfaces errors.
@@ -323,22 +339,25 @@ export const PatientView = () => {
           {shanoirSession ? (
             /* Launched from Shanoir: the Shanoir logo instead of the demo/reset button */
             <div className="flex flex-col items-start gap-2 pt-2">
-              <img
-                src={`${import.meta.env.BASE_URL}shanoirLogoBlack.svg`}
-                alt="Shanoir logo"
-                className="app-logo h-7 w-auto"
-              />
+              <img src={shanoirLogo} alt="Shanoir logo" className="app-logo h-7 w-auto" />
               <span className="text-xs text-foreground">
                 Examination ID: {shanoirSession.examinationId}
               </span>
             </div>
           ) : hostAppSession ? (
             /* Launched from a host app: its name and the launch's title, as plain text — no
-               logo, as the Shanoir logo is reserved for the official Shanoir collaboration */
+               logo, as the Shanoir logo is reserved for the official Shanoir collaboration.
+               Only NeuXelec has its own logo: an icon without the name in it, so the name stays,
+               and no app-logo class, as that would invert the logo's colors in dark mode */
             <div className="flex flex-col items-start gap-1 pt-2">
-              <span className="text-sm font-semibold text-foreground">
-                Opened from {hostAppSession.appName}
-              </span>
+              <div className="flex items-center gap-2">
+                {hostAppSession.appName === 'NeuXelec' && (
+                  <img src={neuxelecLogo} alt="NeuXelec logo" className="h-7 w-auto" />
+                )}
+                <span className="text-xs font-semibold text-foreground">
+                  Opened from {hostAppSession.appName}
+                </span>
+              </div>
               {hostAppTitle && <span className="text-xs text-foreground">{hostAppTitle}</span>}
             </div>
           ) : (
@@ -405,7 +424,6 @@ export const PatientView = () => {
         rightLabel={<span className={PANEL_TITLE_CLASS}>Neuroimaging</span>}
         onLeftReset={eeg || pendingEegFiles.length > 0 ? handleEegReset : undefined}
         onRightReset={niiViewerHasContent ? handleNiiReset : undefined}
-        onMaximizeChange={setMaximizedPanel}
         left={
           eeg ? (
             <EegViewer
@@ -431,7 +449,7 @@ export const PatientView = () => {
               onElectrodeRenderChange={setElectrodeRenderEnabled}
               esiEnabled={esiEnabled}
               onEsiEnabledChange={setEsiEnabled}
-              onChannelPositionClick={setClickedEegChannelPos}
+              onChannelPositionClick={handleChannelPositionClick}
             />
           ) : (
             <div className="h-full p-2">
@@ -465,12 +483,12 @@ export const PatientView = () => {
               esiLayer={esiLayer}
               onHasContentChange={setNiiHasOwnContent}
               onHas3DExtentChange={setNiiHas3DExtent}
-              isFullscreen={maximizedPanel === 'right'}
               onViewReady={() => niiReadyResolveRef.current?.()}
               onNiiNvReady={() => setNiiNvReady(true)}
               onElectrodeLayerDismissed={() => setElectrodeRenderEnabled(false)}
               onLoadError={handleLoadError}
               clickedEegChannelPos={clickedEegChannelPos}
+              nvTopoRef={nvRef_eegtopo}
             />
           ) : (
             <div className="h-full p-2">

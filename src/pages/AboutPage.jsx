@@ -16,10 +16,13 @@
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useScrollToHash } from '@/utils/useScrollToHash';
-import { CenteredLayout } from '../components/CenteredLayout';
-import { Footer } from '../components/Footer';
-import { ThemeToggle } from '../components/ThemeToggle';
-import { ScrollToTopButton } from '../components/ScrollToTopButton';
+import { CenteredLayout } from '@/components/CenteredLayout';
+import { Footer } from '@/components/Footer';
+import { ThemeToggle } from '@/components/ThemeToggle';
+import { ScrollToTopButton } from '@/components/ScrollToTopButton';
+// The RUO disclaimer, shared with the badge's card in VidepeLogo.jsx so both always show the
+// same text. ?raw: import the file's contents as a string, instead of its URL
+import DISCLAIMER_TEXT from '@/assets/ruo_disclaimer.txt?raw';
 
 const Section = ({ title, id, className, children }) => (
   <section id={id} className={`mb-10 ${className ?? ''}`}>
@@ -198,17 +201,8 @@ export const AboutPage = () => {
               />
               <div>
                 <p className="font-semibold text-heading">Research Use Only: </p>
-                <p className="text-sm mt-1" style={{ color: 'var(--c-foreground)' }}>
-                  VIDEPE is a research software tool intended exclusively for scientific research
-                  and investigational purposes. It is not a medical device and has not been
-                  certified or approved for clinical use. VIDEPE is not intended to be used for
-                  medical diagnosis, treatment decisions, : patient management. The software is
-                  provided “AS IS”, without warranties of any kind, express or implied, including
-                  but not limited to warranties of accuracy, reliability, fitness for a particular
-                  purpose, or clinical suitability. The developers and institutions involved in its
-                  development accept no liability for any direct or indirect damages arising from
-                  its use. All clinical decisions must be made independently by qualified healthcare
-                  professionals using validated clinical tools and procedures. step.
+                <p className="text-xs mt-1" style={{ color: 'var(--c-foreground)' }}>
+                  {DISCLAIMER_TEXT}
                 </p>
               </div>
             </div>
@@ -319,9 +313,9 @@ export const AboutPage = () => {
                     colour-blind mode, and voltage-coloured electrode markers
                   </li>
                   <li>
-                    <strong>Electrode positions</strong> — fsaverage_1005 (FreeSurfer) by default,
-                    or load your own <code>.elc</code> or <code>*_electrodes.tsv</code> (BIDS
-                    specifications) file
+                    <strong>Electrode positions</strong> — the best-matching bundled template is
+                    selected automatically, or load your own <code>.elc</code> or{' '}
+                    <code>*_electrodes.tsv</code> (BIDS specifications) file
                   </li>
                   <li>
                     <strong>Channel to anatomy</strong> — click a channel label to move the
@@ -372,7 +366,8 @@ export const AboutPage = () => {
                     missing channels left out
                   </li>
                   <li>
-                    <strong>Presets</strong> — e.g. double and triple banana, from the EEG sidebar
+                    <strong>Presets</strong> — e.g. Downsampled to 10-20, Double Banana, or
+                    Longitudal/Transversal BipPolar — from the EEG sidebar
                   </li>
                   <li>
                     <strong>Safety check</strong> — warns before applying a montage that uses a bad

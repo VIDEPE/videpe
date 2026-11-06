@@ -1,6 +1,6 @@
 # VIDEPE
 
-![Version](https://img.shields.io/badge/version-0.22.0-blue)
+![Version](https://img.shields.io/badge/version-0.23.0-blue)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23312820.svg)](https://doi.org/10.5281/zenodo.23312820)
 
 **V**isualization & **I**ntegration of **D**ata for **E**pilepsy **P**resurgical **E**valuation
@@ -49,7 +49,7 @@ High-performance multichannel viewer built on [uPlot](https://github.com/leeoniy
   - Import montage files in AnyWave (XML) or Cartool (plain-text) format — auto-detected from file content — and export back out as AnyWave XML (filter settings included).
 
 - EEG topography — a resizable panel showing a 3D voltage map at the selected time point using [NiiVue](https://niivue.com/) mesh rendering
-  - Load custom positions via `.elc` or `*_electrodes.tsv` (BIDS specifications) file (Uses fsaverage_1005 (FreeSurfer) electrode positions by default)
+  - Automatically selects the best-matching bundled electrode-position template; load custom positions via `.elc` or `*_electrodes.tsv` (BIDS specifications) file
   - 3D rotation is synchronised with the neuroimaging viewer — rotate one and the other follows
   - Matrix electrode overview to spot outliers
 
@@ -134,7 +134,7 @@ npm run test:run  # single run (used in CI)
 Under `npm run dev`, these URLs show the Shanoir screens without a Shanoir server:
 
 - [`/videpe/?preview=shanoir`](http://localhost:5173/videpe/?preview=shanoir) — the patient view as if opened from Shanoir, loading the demo data through a fake Shanoir client
-- [`/videpe/?preview=signin`](http://localhost:5173/videpe/?preview=signin) and [`/videpe/?preview=error`](http://localhost:5173/videpe/?preview=error) — the sign-in and error pages
+- [`/videpe/?preview=shanoir-signin`](http://localhost:5173/videpe/?preview=shanoir-signin) and [`/videpe/?preview=shanoir-error`](http://localhost:5173/videpe/?preview=shanoir-error) — the sign-in and error pages
 
 ### Docker image
 

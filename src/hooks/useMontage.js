@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 
 // Helper function to create order-independent identity keys comparing montage rows to montage template rows.
 function rowKey(row) {
@@ -20,7 +20,7 @@ function rowsMatchTemplate(rows, templateRows) {
 // - 'none' = no rows (plot one row per non-bad channel with no reference, see buildMontageDisplayRows);
 // - 'average' = every channel has exactly one row referenced to 'average'
 //    (color is ignored — recoloring a CAR montage shouldn't demote it to Custom);
-// - template file `path` = means `rows` matches template's rows (see rowsMatchTemplate —
+// - template file `id` = means `rows` matches template's rows (see rowsMatchTemplate —
 // this holds even when some of those rows name channels absent from the current recording,
 // since that's still "the template, as loaded", not a hand edit);
 // - anything else = null, i.e. a hand-built montage that doesn't match any known preset.
@@ -34,7 +34,7 @@ function getMontageTemplateMatch(rows, channelNames, fileTemplates) {
   )
     return 'average';
   const fileMatch = fileTemplates.find((template) => rowsMatchTemplate(rows, template.rows));
-  if (fileMatch) return fileMatch.path;
+  if (fileMatch) return fileMatch.id;
   return null;
 }
 
@@ -50,7 +50,7 @@ function getMontageTemplateMatch(rows, channelNames, fileTemplates) {
  * "+ Add selected" / "Add by type" controls) and that draft is committed.
  *
  * @param {string[]} channelNames
- * @param {Array<{path: string, rows: Array}>} [fileTemplates] - file-backed templates (see
+ * @param {Array<{id: string, rows: Array}>} [fileTemplates] - file-backed templates (see
  *   useMontageTemplates) the dropdown should also recognize as a match, in addition to the
  *   None/CAR presets.
  */
@@ -66,9 +66,14 @@ export function useMontageChannels(channelNames, fileTemplates = []) {
   // (automatic housekeeping) When channelNames change (e.g. a new recording) it drops any montage rows
   // which no longer exists in channelNames (i.e. in the recording)
   // Note: it never adds rows for new channels, since row creation is always an explicit user action.
-  useEffect(() => {
+  // Done during render (comparing against the previous channelNames) rather than in an effect, so
+  // there's never a render with rows for channels that no longer exist — same pattern as
+  // customMontageChannels below.
+  const [prevChannelNames, setPrevChannelNames] = useState(channelNames);
+  if (channelNames !== prevChannelNames) {
+    setPrevChannelNames(channelNames);
     setMontageChannels((prev) => prev.filter((row) => channelNames.includes(row.channel)));
-  }, [channelNames]);
+  }
 
   // ─── Template dropdown (None / Common Average Reference / file templates / Custom) ────
   const montageTemplate = useMemo(
