@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import toast from 'react-hot-toast';
 import { useElectrodeMatching, STANDARD_TEMPLATES } from '@/hooks/useElectrodeMatching';
+import { buildElectrodeMesh } from '@/utils/eegTopographyUtils';
 
 // react-hot-toast's default export is itself a callable function with .loading/.success/etc
 // attached — a plain object mock would make the hook's toast(...) call throw silently.
@@ -85,6 +86,37 @@ describe('useElectrodeMatching — bundled templates', () => {
       // check for duplicate labels
       const labels = template.electrodes.map(({ label }) => label.toLowerCase());
       expect(new Set(labels).size).toBe(labels.length);
+    }
+  );
+
+  // A damaged line can parse into a wrong or missing electrode without any error, so this
+  // checks the raw files instead of the parsed templates
+  it.each(
+    Object.entries(
+      import.meta.glob('../../assets/electrode_positions/*.tsv', {
+        query: '?raw',
+        import: 'default',
+        eager: true,
+      })
+    )
+  )('template file %s has a name and three coordinates on every line', (_, text) => {
+    const [, ...lines] = text.trim().split(/\r?\n/);
+    lines.forEach((line) => {
+      const [name, ...coordinates] = line.split('\t');
+      expect(coordinates, name).toHaveLength(3);
+      coordinates.forEach((value) => expect(Number.isFinite(Number(value)), name).toBe(true));
+    });
+  });
+
+  // Two electrodes in the same direction from the head's centre would leave one out of the
+  // mesh, so a recording using that name would have no voltage there. The templates are fixed
+  // at build time, so this is caught here rather than at runtime — see the small offsets
+  // described in the template README.
+  it.each(STANDARD_TEMPLATES.map((template) => [template.name, template]))(
+    'bundled template %s has every electrode in the topography mesh',
+    (_, template) => {
+      const { indices } = buildElectrodeMesh(template.electrodes);
+      expect(new Set(indices).size).toBe(template.electrodes.length);
     }
   );
 
