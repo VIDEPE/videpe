@@ -52,8 +52,10 @@ export function VidepeTitle({ as: Tag = 'h1', className }) {
           >
             {/* overflow-hidden lets the 0fr column shrink the word to nothing; the non-breaking
                 space (not a trailing normal space, which would be dropped at the line end) keeps
-                a gap before the next letter */}
-            <span className="overflow-hidden text-sm font-normal tracking-normal text-foreground/70 opacity-0 transition-opacity duration-500 group-hover/title:opacity-100 group-hover/title:[transition-delay:var(--reveal-delay)] motion-reduce:transition-none">
+                a gap before the next letter.
+                text-[0.35em]: the words scale with the letters (em = the title's font size), 
+                so they keep the same proportion in the header and both logo sizes */}
+            <span className="overflow-hidden text-[0.35em] font-normal tracking-normal text-foreground/70 opacity-0 transition-opacity duration-500 group-hover/title:opacity-100 group-hover/title:[transition-delay:var(--reveal-delay)] motion-reduce:transition-none">
               {i < ACRONYM.length - 1 ? rest + NBSP : rest}
             </span>
           </span>
