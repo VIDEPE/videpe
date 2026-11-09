@@ -11,6 +11,7 @@ import {
 import { parseMontageText } from '@/loaders/parseMontageText';
 import { toAnyWaveMontage } from '@/loaders/toMontageAnyWave';
 import { downloadTextFile } from '@/utils/fileDownload';
+import { TYPE_LIST, TYPE_ORDER } from '@/utils/channelTypes';
 import { cn } from '@/utils/utils';
 import {
   Plus,
@@ -34,14 +35,6 @@ const DEFAULT_SPLIT_PERCENT = 27;
 const RESIZE_DIRECTIONS = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
 
 // ─── EEG Montage settings ────────────────────────────────────────
-const TYPE_LIST = {
-  eeg: 'EEG',
-  seeg: 'SEEG',
-  other: 'Other',
-};
-// Canonical grouping order for Sort by Type — clinical convention (eeg, then seeg, then
-// other), not alphabetical (which would separate seeg from eeg).
-const TYPE_ORDER = Object.keys(TYPE_LIST);
 // Preset options offered by each row's Color <select>. A loaded montage file (AnyWave) can
 // carry any CSS color keyword, not just these — see the color <select> below, which injects
 // an extra option for a row's current color when it isn't one of these presets.

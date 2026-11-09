@@ -8,6 +8,7 @@ import {
   applyFilterSections,
   applyMontageRowFilter,
   getTukeyWindow,
+  resolveRowFilters,
 } from '@/utils/eegFilters';
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
@@ -16,6 +17,12 @@ const fs = 256;
 const n = 1024;
 const time = Array.from({ length: n }, (_, i) => i / fs);
 const sine = (freq) => time.map((t) => Math.sin(2 * Math.PI * freq * t));
+
+const globalFilters = {
+  eeg: { highPass: 0.5, lowPass: 70, notch: 50 },
+  seeg: { highPass: null, lowPass: null, notch: null },
+  other: { highPass: null, lowPass: null, notch: null },
+};
 
 // RMS-based amplitude estimate over the middle half of the signal, so edge transients (fili's
 // filtfilt has no padding of its own — see applyFilterSections's docstring) don't skew the reading.
@@ -236,5 +243,42 @@ describe('getTukeyWindow', () => {
     expect(window[0]).toBeCloseTo(0, 6);
     expect(window[window.length - 1]).toBeCloseTo(0, 6);
     window.forEach((value, i) => expect(value).toBeCloseTo(window[window.length - 1 - i], 6));
+  });
+});
+
+// ─── resolveRowFilters ──────────────────────────────────────────────────────────────────
+describe('resolveRowFilters', () => {
+  it('returns the global values when all three are null on the row', () => {
+    const row = { highPass: null, lowPass: null, notch: null };
+    const result = resolveRowFilters(row, globalFilters.eeg);
+    // toEqual (contents), not toBe (same object) — the resolver may return a fresh object
+    expect(result).toEqual({ highPass: 0.5, lowPass: 70, notch: 50 });
+  });
+
+  it('returns the row values and ignores the global values when all three are set on the row', () => {
+    const row = { highPass: 1, lowPass: 40, notch: 60 };
+    const result = resolveRowFilters(row, globalFilters.eeg);
+    expect(result).toEqual({ highPass: 1, lowPass: 40, notch: 60 });
+  });
+
+  it('resolves each field on its own when the row is mixed', () => {
+    // only highPass is a channel-specific exception; lowPass/notch follow the global setting
+    const row = { highPass: 1, lowPass: null, notch: null };
+    const result = resolveRowFilters(row, globalFilters.eeg);
+    expect(result).toEqual({ highPass: 1, lowPass: 70, notch: 50 });
+  });
+
+  it('returns the row values (null where unset) without crashing when typeFilters is undefined', () => {
+    // e.g. a channel whose type isn't in TYPE_LIST, so globalFilters[type] is undefined
+    const row = { highPass: 1, lowPass: null, notch: null };
+    const result = resolveRowFilters(row, undefined);
+    expect(result).toEqual({ highPass: 1, lowPass: null, notch: null });
+  });
+
+  it('keeps a row value of 0 instead of falling through to the global value', () => {
+    // 0 is falsy: `row.highPass || global` would wrongly return 0.5 here, `??` keeps 0
+    const row = { highPass: 0, lowPass: null, notch: null };
+    const result = resolveRowFilters(row, globalFilters.eeg);
+    expect(result).toEqual({ highPass: 0, lowPass: 70, notch: 50 });
   });
 });
