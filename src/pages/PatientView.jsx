@@ -338,9 +338,16 @@ export const PatientView = () => {
           )}
           {/* Normal VIDEPE Top button layout (Back + Demo buttons) */}
           {shanoirSession ? (
-            /* Launched from Shanoir: the Shanoir logo instead of the demo/reset button */
-            <div className="flex flex-col items-start gap-2 pt-2">
-              <img src={shanoirLogo} alt="Shanoir logo" className="app-logo h-7 w-auto" />
+            /* Launched from Shanoir: the Shanoir logo instead of the demo/reset button.
+               max-w-none on the logos: Tailwind's base img max-width: 100% makes the grid count an
+               image as 0 wide when sizing the column, so it overlapped the title column's badge.
+               flex-wrap: on narrow screens the text moves below the logo instead of widening the page */
+            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 pt-2">
+              <img
+                src={shanoirLogo}
+                alt="Shanoir logo"
+                className="app-logo h-7 w-auto max-w-none"
+              />
               <span className="text-xs text-foreground">
                 Examination ID: {shanoirSession.examinationId}
               </span>
@@ -350,16 +357,19 @@ export const PatientView = () => {
                logo, as the Shanoir logo is reserved for the official Shanoir collaboration.
                Only NeuXelec has its own logo: an icon without the name in it, so the name stays,
                and no app-logo class, as that would invert the logo's colors in dark mode */
-            <div className="flex flex-col items-start gap-1 pt-2">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pt-2">
+              {/* No flex-wrap: the logo and "Opened from …" always stay side by side */}
               <div className="flex items-center gap-2">
                 {hostAppSession.appName === 'NeuXelec' && (
-                  <img src={neuxelecLogo} alt="NeuXelec logo" className="h-7 w-auto" />
+                  <img src={neuxelecLogo} alt="NeuXelec logo" className="h-7 w-auto max-w-none" />
                 )}
-                <span className="text-xs font-semibold text-foreground">
+                <span className="text-xs font-bold text-foreground">
                   Opened from {hostAppSession.appName}
                 </span>
               </div>
-              {hostAppTitle && <span className="text-xs text-foreground">{hostAppTitle}</span>}
+              {hostAppTitle && (
+                <span className="text-xs text-foreground italic">{hostAppTitle}</span>
+              )}
             </div>
           ) : (
             /* Normal VIDEPE: Load Demo / Reset button */
@@ -391,7 +401,9 @@ export const PatientView = () => {
 
         {/* Center column: title, centered on the screen because the side columns are equally wide */}
         <div className="flex flex-col items-center justify-center py-2 text-center select-none pointer-events-none">
-          <VidepeTitle className="!mb-2" /> {/* ! is needed to overwrite the H1 class margins */}
+          {/* revealFrom="xl": the opened title also needs room for the side columns' content */}
+          <VidepeTitle revealFrom="lg" className="!mb-2" />{' '}
+          {/* ! is needed to overwrite the H1 class margins */}
           <ResearchUseBadge className="pb-0.5" />
         </div>
 

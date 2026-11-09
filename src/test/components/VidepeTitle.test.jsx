@@ -23,6 +23,20 @@ describe('VidepeTitle', () => {
     expect(container.firstChild.tagName).toBe('SPAN');
   });
 
+  // jsdom has no layout or media queries, so the breakpoint is checked on the reveal classes
+  it('reveals the words from the md breakpoint by default', () => {
+    const { container } = render(<VidepeTitle />);
+    const word = container.querySelector('[aria-hidden="true"]');
+    expect(word.className).toContain('md:group-hover/title:grid-cols-[1fr]');
+  });
+
+  it('reveals the words from a later breakpoint when asked (the header, with its side content)', () => {
+    const { container } = render(<VidepeTitle revealFrom="xl" />);
+    const word = container.querySelector('[aria-hidden="true"]');
+    expect(word.className).toContain('xl:group-hover/title:grid-cols-[1fr]');
+    expect(word.className).not.toContain('md:group-hover/title:grid-cols-[1fr]');
+  });
+
   it('passes className through to the heading', () => {
     render(<VidepeTitle className="!mb-2" />);
     expect(screen.getByRole('heading', { name: 'VIDEPE' })).toHaveClass('!mb-2');

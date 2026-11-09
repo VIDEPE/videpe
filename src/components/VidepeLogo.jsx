@@ -114,7 +114,10 @@ export function ResearchUseBadge({ className = '' }) {
           'px-2 py-0.5'
         )}
       >
-        For Research Use Only - In Development
+        {/* Two unbreakable halves: when the badge has to wrap, it breaks only before
+            "- In Development", not in the middle of either half */}
+        <span className="whitespace-nowrap">For Research Use Only</span>{' '}
+        <span className="whitespace-nowrap">- In Development</span>
       </button>
       {/* Disclaimer card — fades in below the badge on click, overlays the content below.
           aria-hidden/inert while closed, so screen readers and Tab skip the invisible card */}
