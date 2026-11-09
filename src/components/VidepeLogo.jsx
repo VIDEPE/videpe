@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { BrainCircuit, TriangleAlert } from 'lucide-react';
 import { cn } from '@/utils/utils';
+import { VidepeTitle } from '@/components/VidepeTitle';
 // The RUO disclaimer, shared with the About page so both always show the same text.
 // ?raw: import the file's contents as a string, instead of its URL
 import DISCLAIMER_TEXT from '@/assets/ruo_disclaimer.txt?raw';
@@ -48,7 +49,12 @@ export function VidepeLogo({ size = 'small', asHeading = false }) {
         className="flex flex-col items-center gap-2"
       >
         <BrainCircuit size={styles.icon} strokeWidth={1} style={{ stroke: 'var(--c-primary)' }} />
-        <Name className={styles.name}>VIDEPE</Name>
+        {/* Name reveals its full meaning on hover. w-0 + justify-center: the widening name
+            overflows both sides instead of resizing the logo, which made the icon jitter.
+            shrink-0: else flex squeezes the name to its letters and the words spill out right */}
+        <div className="w-0 flex justify-center">
+          <VidepeTitle as={Name} className={cn(styles.name, 'shrink-0')} />
+        </div>
         <p className={styles.subtitle}>Unifying Brain Data</p>
       </div>
       {/* Disclaimer Badge, sits outside aria-hidden, so it's always read out in accessibility mode, 
@@ -108,7 +114,10 @@ export function ResearchUseBadge({ className = '' }) {
           'px-2 py-0.5'
         )}
       >
-        For Research Use Only - In Development
+        {/* Two unbreakable halves: when the badge has to wrap, it breaks only before
+            "- In Development", not in the middle of either half */}
+        <span className="whitespace-nowrap">For Research Use Only</span>{' '}
+        <span className="whitespace-nowrap">- In Development</span>
       </button>
       {/* Disclaimer card — fades in below the badge on click, overlays the content below.
           aria-hidden/inert while closed, so screen readers and Tab skip the invisible card */}

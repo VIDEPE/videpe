@@ -59,6 +59,16 @@ describe('VidepeLogo', () => {
     expect(getBadge()).toBeInTheDocument();
   });
 
+  it('shows the name as the hover-reveal VIDEPE title', () => {
+    const { container } = render(<VidepeLogo />);
+    expect(container.textContent).toContain('Visualization');
+  });
+
+  it('keeps the large logo name as the page heading named VIDEPE', () => {
+    render(<VidepeLogo size="large" asHeading />);
+    expect(screen.getByRole('heading', { name: 'VIDEPE' })).toBeInTheDocument();
+  });
+
   it('keeps the badge readable by screen readers when the rest of the logo is decorative', () => {
     render(<VidepeLogo />);
     expect(getBadge().closest('[aria-hidden="true"]')).toBeNull();
