@@ -28,6 +28,10 @@ const NBSP = String.fromCharCode(0xa0);
  * so opening waits but closing doesn't. Reduced-motion users get the same reveal without the
  * slide.
  *
+ * Only from the md breakpoint (768px): on narrower screens the opened title (the landing page's
+ * large logo, or the header's title plus its side buttons) would run off the page — there it
+ * stays plain "VIDEPE".
+ *
  * The revealed words are aria-hidden, so the heading's accessible name stays "VIDEPE".
  *
  * Used for PatientView's header title and for the name in VidepeLogo.
@@ -47,15 +51,15 @@ export function VidepeTitle({ as: Tag = 'h1', className }) {
           {letter}
           <span
             aria-hidden="true"
-            className="inline-grid grid-cols-[0fr] align-baseline transition-[grid-template-columns] duration-500 ease-out group-hover/title:grid-cols-[1fr] group-hover/title:[transition-delay:var(--reveal-delay)] motion-reduce:transition-none"
+            className="inline-grid grid-cols-[0fr] align-baseline transition-[grid-template-columns] duration-500 ease-out md:group-hover/title:grid-cols-[1fr] md:group-hover/title:[transition-delay:var(--reveal-delay)] motion-reduce:transition-none"
             style={{ '--reveal-delay': `${REVEAL_DELAY_MS}ms` }}
           >
             {/* overflow-hidden lets the 0fr column shrink the word to nothing; the non-breaking
                 space (not a trailing normal space, which would be dropped at the line end) keeps
                 a gap before the next letter.
-                text-[0.35em]: the words scale with the letters (em = the title's font size), 
+                text-[0.30em]: the words scale with the letters (em = the title's font size), 
                 so they keep the same proportion in the header and both logo sizes */}
-            <span className="overflow-hidden text-[0.35em] font-normal tracking-normal text-foreground/70 opacity-0 transition-opacity duration-500 group-hover/title:opacity-100 group-hover/title:[transition-delay:var(--reveal-delay)] motion-reduce:transition-none">
+            <span className="overflow-hidden text-[0.30em] font-normal tracking-normal text-foreground/70 opacity-0 transition-opacity duration-500 md:group-hover/title:opacity-100 md:group-hover/title:[transition-delay:var(--reveal-delay)] motion-reduce:transition-none">
               {i < ACRONYM.length - 1 ? rest + NBSP : rest}
             </span>
           </span>
