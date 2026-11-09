@@ -49,8 +49,12 @@ export function VidepeLogo({ size = 'small', asHeading = false }) {
         className="flex flex-col items-center gap-2"
       >
         <BrainCircuit size={styles.icon} strokeWidth={1} style={{ stroke: 'var(--c-primary)' }} />
-        {/* The name reveals what each letter stands for on hover */}
-        <VidepeTitle as={Name} className={styles.name} />
+        {/* Name reveals its full meaning on hover. w-0 + justify-center: the widening name
+            overflows both sides instead of resizing the logo, which made the icon jitter.
+            shrink-0: else flex squeezes the name to its letters and the words spill out right */}
+        <div className="w-0 flex justify-center">
+          <VidepeTitle as={Name} className={cn(styles.name, 'shrink-0')} />
+        </div>
         <p className={styles.subtitle}>Unifying Brain Data</p>
       </div>
       {/* Disclaimer Badge, sits outside aria-hidden, so it's always read out in accessibility mode, 
