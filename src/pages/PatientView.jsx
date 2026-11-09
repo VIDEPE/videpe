@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 import { FullWidthLayout } from '../components/FullWidthLayout';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { ResearchUseBadge } from '../components/VidepeLogo';
+import { VidepeTitle } from '../components/VidepeTitle';
 import { EegViewer } from '../components/EegViewer';
 import { NiiViewer } from '../components/NiiViewer';
 import { SplitPane } from '../components/SplitPane';
@@ -390,8 +391,8 @@ export const PatientView = () => {
 
         {/* Center column: title, centered on the screen because the side columns are equally wide */}
         <div className="flex flex-col items-center justify-center py-2 text-center select-none pointer-events-none">
-          <h1 className="!mb-3">VIDEPE</h1>
-          <ResearchUseBadge className="pt-1 pb-0.5" />
+          <VidepeTitle className="!mb-2" /> {/* ! is needed to overwrite the H1 class margins */}
+          <ResearchUseBadge className="pb-0.5" />
         </div>
 
         {/* Right column: ThemeToggle rendered inline (not fixed) — top bar never scrolls so fixed isn't needed,

@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { BrainCircuit, TriangleAlert } from 'lucide-react';
 import { cn } from '@/utils/utils';
+import { VidepeTitle } from '@/components/VidepeTitle';
 // The RUO disclaimer, shared with the About page so both always show the same text.
 // ?raw: import the file's contents as a string, instead of its URL
 import DISCLAIMER_TEXT from '@/assets/ruo_disclaimer.txt?raw';
@@ -48,7 +49,8 @@ export function VidepeLogo({ size = 'small', asHeading = false }) {
         className="flex flex-col items-center gap-2"
       >
         <BrainCircuit size={styles.icon} strokeWidth={1} style={{ stroke: 'var(--c-primary)' }} />
-        <Name className={styles.name}>VIDEPE</Name>
+        {/* The name reveals what each letter stands for on hover */}
+        <VidepeTitle as={Name} className={styles.name} />
         <p className={styles.subtitle}>Unifying Brain Data</p>
       </div>
       {/* Disclaimer Badge, sits outside aria-hidden, so it's always read out in accessibility mode, 
