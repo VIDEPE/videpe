@@ -9,6 +9,7 @@ import {
   applyMontageRowFilter,
   getTukeyWindow,
   resolveRowFilters,
+  hasActiveFilters,
 } from '@/utils/eegFilters';
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
@@ -280,5 +281,29 @@ describe('resolveRowFilters', () => {
     const row = { highPass: 0, lowPass: null, notch: null };
     const result = resolveRowFilters(row, globalFilters.eeg);
     expect(result).toEqual({ highPass: 0, lowPass: 70, notch: 50 });
+  });
+});
+
+// ─── hasActiveFilters ───────────────────────────────────────────────────────────────────
+describe('hasActiveFilters', () => {
+  const OFF = { highPass: null, lowPass: null, notch: null };
+
+  it('returns false for no rows', () => {
+    expect(hasActiveFilters([])).toBe(false);
+  });
+
+  it('returns false when every filter on every row is off', () => {
+    expect(hasActiveFilters([OFF, OFF])).toBe(false);
+  });
+
+  it.each(['highPass', 'lowPass', 'notch'])(
+    'returns true when one row has only a %s set',
+    (key) => {
+      expect(hasActiveFilters([OFF, { ...OFF, [key]: 50 }])).toBe(true);
+    }
+  );
+
+  it('counts 0 as on, since only null means off', () => {
+    expect(hasActiveFilters([{ ...OFF, lowPass: 0 }])).toBe(true);
   });
 });

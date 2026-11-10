@@ -243,3 +243,18 @@ export function resolveRowFilters(row, typeFilters) {
     notch: row.notch ?? typeFilters?.notch ?? null,
   };
 }
+
+/**
+ * Whether any of the given rows has at least one filter on — used to mark the Filters button
+ * as active. Pass the resolved display rows (after resolveRowFilters), so both the global
+ * filters and a montage row's own exceptions count. Only `null` means off; any number,
+ * including 0, counts as on, since buildFilterSections applies it too.
+ *
+ * @param {Array<{highPass: number|null, lowPass: number|null, notch: number|null}>} rows -
+ *   The resolved display rows; other row fields are ignored.
+ * @returns {boolean} `true` if any row has a highPass, lowPass or notch set; `false` for an
+ *   empty array or when every filter is off.
+ */
+export function hasActiveFilters(rows) {
+  return rows.some((row) => row.highPass != null || row.lowPass != null || row.notch != null);
+}

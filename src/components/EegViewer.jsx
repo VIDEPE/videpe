@@ -33,6 +33,7 @@ import {
   filterMontageRows,
   computeAutoYScale,
 } from '@/utils/eegViewerUtils';
+import { hasActiveFilters } from '@/utils/eegFilters';
 import { useEegBuffer } from '@/loaders/eegBuffer';
 import { useContainerResize } from '@/hooks/useContainerResize';
 import { useEegPlotControls } from '@/hooks/useEegPlotControls';
@@ -413,6 +414,10 @@ export const EegViewer = ({
     () => buildMontageDisplayRows(channelNames, channelSettings, montageChannels, globalFilters),
     [channelNames, channelSettings, montageChannels, globalFilters]
   );
+
+  // Flags whether are there is currently a global filter or montage active
+  const filtersActive = useMemo(() => hasActiveFilters(displayRows), [displayRows]);
+  const montageActive = montageChannels.length > 0;
 
   // visibleChannelCount is clamped inside useEegPlotControls against channelNames.length, which
   // doesn't account for bad channels or montage rows — reclamp against displayRows here too
@@ -1157,11 +1162,23 @@ export const EegViewer = ({
                 type="button"
                 className="button"
                 onClick={() => setGlobalFiltersVisible((v) => !v)}
+                data-active={filtersActive}
+                title={
+                  filtersActive ? 'Global EEG Filters (active)' : 'Global EEG Filters (inactive)'
+                }
               >
                 <Funnel size={ICON_SIZE * 0.75} />
                 Filters
               </button>
-              <button type="button" className="button" onClick={() => setMontageVisible((v) => !v)}>
+              <button
+                type="button"
+                className="button"
+                onClick={() => setMontageVisible((v) => !v)}
+                data-active={montageActive}
+                title={
+                  montageActive ? 'Global EEG Filters (active)' : 'Global EEG Filters (inactive)'
+                }
+              >
                 <TableColumnsSplit size={ICON_SIZE * 0.75} />
                 Montage
               </button>
