@@ -351,22 +351,24 @@ export const EegViewer = ({
     detectedIsSeeg ? 'seeg' : 'eeg'
   );
 
-  const majorityIsSeeg =
-    Object.values(channelSettings).filter((c) => c.type === 'seeg').length >
-    Object.values(channelSettings).filter((c) => c.type === 'eeg').length;
+  // Channels per type — the per-type aggregates below are derived from it, and the Global
+  // Filters window dims types without channels, since their filter currently affects nothing
+  const channelCountByType = useMemo(
+    () => countChannelsByType(channelNames, channelSettings),
+    [channelNames, channelSettings]
+  );
+
+  const majorityIsSeeg = channelCountByType.seeg > channelCountByType.eeg;
 
   // Whether any channel is currently typed EEG — gates EegTopoViewer's 3D mesh tab, since
   // the scalp mesh has nothing to render without at least one EEG-typed channel.
-  const hasEegChannels = Object.values(channelSettings).some((c) => c.type === 'eeg');
+  const hasEegChannels = channelCountByType.eeg > 0;
 
   // How many channels are typed EEG — the denominator for the mesh's "X / Y channels mapped"
   // footer. Using the whole recording's channel count there would read as if a mixed
   // EEG+SEEG recording with every EEG channel matched still had unmatched channels (the SEEG
   // ones, which were never eligible to match a scalp position template in the first place).
-  const eegChannelCount = useMemo(
-    () => Object.values(channelSettings).filter((c) => c.type === 'eeg').length,
-    [channelSettings]
-  );
+  const eegChannelCount = channelCountByType.eeg;
 
   // One channelSettings type per channelNames index — lets ESI reject a channel it needs
   // that's itself typed SEEG, even if its name happens to match (see channelSnapshot below).
@@ -418,13 +420,6 @@ export const EegViewer = ({
   // Flags whether are there is currently a global filter or montage active
   const filtersActive = useMemo(() => hasActiveFilters(displayRows), [displayRows]);
   const montageActive = montageChannels.length > 0;
-
-  // Channels per type — the Global Filters window dims types without channels, since their
-  // filter currently affects nothing
-  const channelCountByType = useMemo(
-    () => countChannelsByType(channelNames, channelSettings),
-    [channelNames, channelSettings]
-  );
 
   // visibleChannelCount is clamped inside useEegPlotControls against channelNames.length, which
   // doesn't account for bad channels or montage rows — reclamp against displayRows here too
