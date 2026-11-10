@@ -285,6 +285,19 @@ describe('buildMontageDisplayRows', () => {
   const channelNames = ['EEG1', 'EEG2', 'EEG3'];
   const noneBad = { EEG1: { bad: false }, EEG2: { bad: false }, EEG3: { bad: false } };
 
+  // filter tests: one channel per type, so a wrong type lookup shows up as wrong filter values
+  const mixedChannelNames = ['Fp1', 'LA1', 'ECG'];
+  const mixedTypes = {
+    Fp1: { bad: false, type: 'eeg' },
+    LA1: { bad: false, type: 'seeg' },
+    ECG: { bad: false, type: 'other' },
+  };
+  const globalFilters = {
+    eeg: { highPass: 0.5, lowPass: 70, notch: 50 },
+    seeg: { highPass: 1, lowPass: 200, notch: 50 },
+    other: { highPass: 5, lowPass: 40, notch: null },
+  };
+
   it('falls back to one row per non-bad channel, in order, when there are no montage rows', () => {
     const rows = buildMontageDisplayRows(channelNames, noneBad, []);
     expect(rows).toEqual([
@@ -462,6 +475,104 @@ describe('buildMontageDisplayRows', () => {
     ];
     const rows = buildMontageDisplayRows(channelNames, noneBad, montageChannels);
     expect(rows.map((r) => r.id)).toEqual(['row-2']);
+  });
+
+  // ─── global filters ────────────────────────────────────────────────────────
+
+  it('gives each fallback row its own channel type global filters when there are no montage rows', () => {
+    const rows = buildMontageDisplayRows(mixedChannelNames, mixedTypes, [], globalFilters);
+    expect(rows).toMatchObject([
+      { name: 'Fp1', highPass: 0.5, lowPass: 70, notch: 50 }, // eeg
+      { name: 'LA1', highPass: 1, lowPass: 200, notch: 50 }, // seeg
+      { name: 'ECG', highPass: 5, lowPass: 40, notch: null }, // other
+    ]);
+  });
+
+  it('gives a montage row without its own filters the global filters of its channel type', () => {
+    const montageChannels = [
+      {
+        id: 'row-1',
+        channel: 'LA1',
+        reference: null,
+        color: null,
+        highPass: null,
+        lowPass: null,
+        notch: null,
+      },
+    ];
+    const rows = buildMontageDisplayRows(
+      mixedChannelNames,
+      mixedTypes,
+      montageChannels,
+      globalFilters
+    );
+    expect(rows[0]).toMatchObject({ highPass: 1, lowPass: 200, notch: 50 }); // seeg
+  });
+
+  it('keeps a montage row own filter value and takes the unset ones from its channel type', () => {
+    // only lowPass is a channel-specific exception; highPass/notch follow the global "other" filters
+    const montageChannels = [
+      {
+        id: 'row-1',
+        channel: 'ECG',
+        reference: null,
+        color: null,
+        highPass: null,
+        lowPass: 30,
+        notch: null,
+      },
+    ];
+    const rows = buildMontageDisplayRows(
+      mixedChannelNames,
+      mixedTypes,
+      montageChannels,
+      globalFilters
+    );
+    expect(rows[0]).toMatchObject({ highPass: 5, lowPass: 30, notch: null });
+  });
+
+  it('uses the channel type, not the reference type, for a bipolar row across types', () => {
+    // unusual but allowed: the row follows its channel's type (eeg), not the reference's (other)
+    const montageChannels = [
+      {
+        id: 'row-1',
+        channel: 'Fp1',
+        reference: 'ECG',
+        color: null,
+        highPass: null,
+        lowPass: null,
+        notch: null,
+      },
+    ];
+    const rows = buildMontageDisplayRows(
+      mixedChannelNames,
+      mixedTypes,
+      montageChannels,
+      globalFilters
+    );
+    expect(rows[0]).toMatchObject({ highPass: 0.5, lowPass: 70, notch: 50 }); // eeg
+  });
+
+  it('falls back to the eeg global filters for a channel without a type', () => {
+    const untyped = { ...mixedTypes, ECG: { bad: false } }; // no type set
+    const montageChannels = [
+      {
+        id: 'row-1',
+        channel: 'ECG',
+        reference: null,
+        color: null,
+        highPass: null,
+        lowPass: null,
+        notch: null,
+      },
+    ];
+    const rows = buildMontageDisplayRows(
+      mixedChannelNames,
+      untyped,
+      montageChannels,
+      globalFilters
+    );
+    expect(rows[0]).toMatchObject({ highPass: 0.5, lowPass: 70, notch: 50 }); // eeg
   });
 });
 
