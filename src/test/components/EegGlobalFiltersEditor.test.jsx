@@ -88,11 +88,12 @@ describe('EegGlobalFiltersEditor', () => {
       expect(screen.getByTestId('global-notch-other')).toHaveValue(null); // off
     });
 
-    it("shows each type's channel count next to its label", () => {
+    it("shows each type's channel count in its own column, under a Channels header", () => {
       render(<EegGlobalFiltersEditor {...defaultProps} />);
-      expect(screen.getByTestId('global-filters-row-eeg')).toHaveTextContent('EEG (19 ch)');
-      expect(screen.getByTestId('global-filters-row-seeg')).toHaveTextContent('SEEG (0 ch)');
-      expect(screen.getByTestId('global-filters-row-other')).toHaveTextContent('Other (2 ch)');
+      expect(screen.getByText('Channels')).toBeTruthy();
+      expect(screen.getByTestId('global-filters-count-eeg')).toHaveTextContent('19');
+      expect(screen.getByTestId('global-filters-count-seeg')).toHaveTextContent('0');
+      expect(screen.getByTestId('global-filters-count-other')).toHaveTextContent('2');
     });
 
     it('dims the rows of types without channels, but keeps their inputs editable', () => {

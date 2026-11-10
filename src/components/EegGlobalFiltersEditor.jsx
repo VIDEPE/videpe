@@ -11,15 +11,18 @@ import { cn } from '@/utils/utils';
 // Default/minimum window size in px — much smaller than the montage editor, since this window
 // only holds one row per channel type
 const START_WINDOW_POS = { x: 40, y: 50 };
-const DEFAULT_WINDOW_SIZE = { width: 420, height: 300 };
-const MIN_WINDOW_WIDTH = 360;
-const MIN_WINDOW_HEIGHT = 220;
+const DEFAULT_WINDOW_SIZE = { width: 385, height: 300 };
+const MIN_WINDOW_WIDTH = 300;
+const MIN_WINDOW_HEIGHT = 245;
 const RESIZE_DIRECTIONS = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
 
 // ─── Shared styling settings ────────────────────────────────────────
 // Shared column-width classes — the header cell (with its bulk "set all" control) and each
 // type row's own input use the exact same class, so the columns line up.
-const TYPE_COL_CLASS = 'flex-1 min-w-12';
+// Type has a fixed width so Channels sits right next to it; Channels takes up the free space,
+// which keeps the filter columns on the right
+const TYPE_COL_CLASS = 'w-12 shrink-0';
+const COUNT_COL_CLASS = 'flex-1 min-w-14';
 const FILTER_COL_CLASS = 'w-14 shrink-0';
 
 export function EegGlobalFiltersEditor({
@@ -291,6 +294,12 @@ export function EegGlobalFiltersEditor({
           {/* Column headers — sticky so they stay visible if the window is made very short */}
           <div className="sticky top-0 z-10 flex items-end gap-2 pl-3 pr-1 py-1 text-xs font-medium text-header border-b-2 border-border bg-background">
             <span className={cn(TYPE_COL_CLASS, 'cursor-default')}>Type</span>
+            <span
+              className={cn(COUNT_COL_CLASS, 'cursor-default')}
+              title="Number of recording channels of this type"
+            >
+              Channels
+            </span>
             {/* High Pass / Low Pass / Notch — each applies independently: type a value in
                 that column and click its own checkmark. A blank field clears that one setting
                 (off) for every type. */}
@@ -342,9 +351,12 @@ export function EegGlobalFiltersEditor({
               style={{ borderBottom: `1px solid ${rowDividerColor}` }}
               data-testid={`global-filters-row-${type}`}
             >
-              <span className={cn(TYPE_COL_CLASS, 'truncate text-sm')}>
-                {TYPE_LIST[type]}
-                {channelCountByType && ` (${channelCountByType[type] ?? 0} ch)`}
+              <span className={cn(TYPE_COL_CLASS, 'truncate text-sm')}>{TYPE_LIST[type]}</span>
+              <span
+                className={cn(COUNT_COL_CLASS, 'text-xs')}
+                data-testid={`global-filters-count-${type}`}
+              >
+                {channelCountByType?.[type] ?? '–'}
               </span>
               {filterColumns.map((column) => (
                 <input
@@ -381,8 +393,7 @@ export function EegGlobalFiltersEditor({
           data-testid="row-filter-overrides"
         >
           <span>
-            {overrideCount} montage {overrideCount === 1 ? 'row uses its' : 'rows use their'} own
-            filters
+            {overrideCount} montage {overrideCount === 1 ? 'row has' : 'rows have'} custom filters
           </span>
           {/* Once clicked, the button is replaced in place by a pending note of the same size
               (same padding and border, dashed), so the line keeps its height and nothing shifts */}
