@@ -248,7 +248,7 @@ export function EegGlobalFiltersEditor({
         onMouseDown={handleDragStart}
       >
         <span className="text-sm font-medium text-heading">
-          {isModified ? 'Global Filters *' : 'Global Filters'}
+          {isModified ? 'Global EEG Filters *' : 'Global EEG Filters'}
         </span>
         <TrafficLightButtons
           onMaximize={() => setIsMaximized((v) => !v)}
