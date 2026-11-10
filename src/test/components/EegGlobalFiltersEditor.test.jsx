@@ -195,9 +195,29 @@ describe('EegGlobalFiltersEditor', () => {
 
       expect(onApplyGlobalFilters).not.toHaveBeenCalled();
     });
+
+    it("clamps a bulk highPass per type against that type's own lowPass", async () => {
+      render(<EegGlobalFiltersEditor {...defaultProps} />);
+      await userEvent.type(screen.getByTestId('bulk-highPass-input'), '80');
+      await userEvent.click(screen.getByTestId('bulk-highPass-apply-button'));
+
+      expect(screen.getByTestId('global-highPass-eeg')).toHaveValue(70); // eeg lowPass = 70
+      expect(screen.getByTestId('global-highPass-seeg')).toHaveValue(80); // lowPass off
+      expect(screen.getByTestId('global-highPass-other')).toHaveValue(80); // lowPass off
+    });
+
+    it("clamps a bulk lowPass per type against that type's own highPass", async () => {
+      render(<EegGlobalFiltersEditor {...defaultProps} />);
+      await userEvent.type(screen.getByTestId('bulk-lowPass-input'), '0.2');
+      await userEvent.click(screen.getByTestId('bulk-lowPass-apply-button'));
+
+      expect(screen.getByTestId('global-lowPass-eeg')).toHaveValue(0.5); // eeg highPass = 0.5
+      expect(screen.getByTestId('global-lowPass-seeg')).toHaveValue(1); // seeg highPass = 1
+      expect(screen.getByTestId('global-lowPass-other')).toHaveValue(0.2); // highPass off, so no clamp
+    });
   });
 
-  // ─── Clamping per-type inputs on blur (not implemented yet — TDD) ──────────
+  // ─── Clamping per-type inputs on blur ──────────
   // Same bounds as the montage editor's per-row inputs: highPass ≤ lowPass ≤ nyquist, and
   // notch within [0, nyquist]. Clamped on blur (not on every keystroke) so typing e.g. "100"
   // isn't cut off at "1" first.

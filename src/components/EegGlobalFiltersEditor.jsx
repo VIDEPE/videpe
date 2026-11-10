@@ -78,28 +78,27 @@ export function EegGlobalFiltersEditor({
 
   // Bulk "set all" filter controls — each of the three applies independently (its own
   // checkmark button, inline under its column header), not as one combined action. A blank
-  // field clears that one setting (off) for every type. Each typed value is clamped to
-  // [0, nyquist], mirroring the per-type inputs' own bounds.
+  // field clears that one setting (off) for every type. A typed value is clamped per type by
+  // the column's own clamp, the same bounds as the per-type inputs on blur.
   const [bulkHighPass, setBulkHighPass] = useState('');
   const [bulkLowPass, setBulkLowPass] = useState('');
   const [bulkNotch, setBulkNotch] = useState('');
 
-  const clampBulkFilterValue = (value) =>
-    value === '' ? null : Math.min(nyquist, Math.max(0, Number(value)));
-  const handleSetAllHighPass = () => {
-    const highPass = clampBulkFilterValue(bulkHighPass);
-    TYPE_ORDER.forEach((type) => setDraftFilterHighPass(type, highPass));
-  };
-  const handleSetAllLowPass = () => {
-    const lowPass = clampBulkFilterValue(bulkLowPass);
-    TYPE_ORDER.forEach((type) => setDraftFilterLowPass(type, lowPass));
-  };
-  const handleSetAllNotch = () => {
-    const notch = clampBulkFilterValue(bulkNotch);
-    TYPE_ORDER.forEach((type) => setDraftFilterNotch(type, notch));
+  // Applies one column's bulk value to every type (see the bulk comment above)
+  const handleSetAll = (column) => {
+    // Blank field = clear this setting (off) for every type; don't clamp it, or null becomes 0
+    if (column.bulkValue === '') {
+      TYPE_ORDER.forEach((type) => column.setDraft(type, null));
+      return;
+    }
+    // Otherwise clamp per type, against that type's own other filters
+    const value = Number(column.bulkValue);
+    TYPE_ORDER.forEach((type) =>
+      column.setDraft(type, column.clamp(value, draftGlobalFilters[type]))
+    );
   };
 
-  //  window drag/resize
+  // ─── Window drag/resize ───────────────────────────────────────────────────────────────
   // Drag the floating window by its title bar. Position is clamped to the viewport so the
   // window (and its title bar drag handle) can never be dragged out of view and get stranded.
   const handleDragStart = useCallback(
@@ -192,32 +191,36 @@ export function EegGlobalFiltersEditor({
     sw: 'bottom-0 left-0 w-2.5 h-2.5',
   };
 
-  // The three filter columns share the same header layout (label + bulk input + checkmark),
-  // so they're described once here and mapped over in both the header and the type rows.
+  // The three filter columns share the same header layout (label + bulk input + checkmark)
+  // and differ only in their state, setter and clamp rule, so they're described once here
+  // and mapped over in both the header and the type rows.
   const filterColumns = [
     {
       key: 'highPass',
       label: 'High Pass',
       bulkValue: bulkHighPass,
       setBulkValue: setBulkHighPass,
-      onSetAll: handleSetAllHighPass,
       setDraft: setDraftFilterHighPass,
+      // highPass may not exceed its own lowPass (or nyquist when lowPass is off)
+      clamp: (value, typeFilters) => Math.min(Math.max(0, value), typeFilters?.lowPass ?? nyquist),
     },
     {
       key: 'lowPass',
       label: 'Low Pass',
       bulkValue: bulkLowPass,
       setBulkValue: setBulkLowPass,
-      onSetAll: handleSetAllLowPass,
       setDraft: setDraftFilterLowPass,
+      // lowPass may not be lower than its own highPass or higher than nyquist
+      clamp: (value, typeFilters) => Math.min(Math.max(typeFilters?.highPass ?? 0, value), nyquist),
     },
     {
       key: 'notch',
       label: 'Notch',
       bulkValue: bulkNotch,
       setBulkValue: setBulkNotch,
-      onSetAll: handleSetAllNotch,
       setDraft: setDraftFilterNotch,
+      // notch can't be smaller than 0 or higher than nyquist
+      clamp: (value) => Math.min(Math.max(0, value), nyquist),
     },
   ];
 
@@ -292,7 +295,7 @@ export function EegGlobalFiltersEditor({
                     className="shrink-0 w-4 h-4 rounded-full bg-primary text-background flex items-center justify-center disabled:opacity-40 cursor-pointer"
                     data-testid={`bulk-${column.key}-apply-button`}
                     title={`Set every type's ${column.label} to this value`}
-                    onClick={column.onSetAll}
+                    onClick={() => handleSetAll(column)}
                   >
                     <Check size={10} />
                   </button>
@@ -325,6 +328,12 @@ export function EegGlobalFiltersEditor({
                   onChange={(e) =>
                     column.setDraft(type, e.target.value ? Number(e.target.value) : null)
                   }
+                  // Clamped on blur, not per keystroke, so typing e.g. "100" isn't cut off at "1" first
+                  onBlur={() => {
+                    const value = draftGlobalFilters[type]?.[column.key];
+                    if (value == null) return; // blank = off, don't clamp it to 0
+                    column.setDraft(type, column.clamp(value, draftGlobalFilters[type]));
+                  }}
                 />
               ))}
             </div>
