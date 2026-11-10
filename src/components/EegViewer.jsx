@@ -21,6 +21,8 @@ import {
   LocateFixed,
   Layers,
   LayersArrowDown,
+  Funnel,
+  TableColumnsSplit,
 } from 'lucide-react';
 import { minMaxDownsample } from '@/utils/downsample';
 import {
@@ -47,6 +49,7 @@ import { ELEC_POS_EXTENSIONS, INV_SOLUTIONS_EXTENSIONS } from '@/loaders/eegForm
 import { EegTopoViewer } from '@/components/EegTopoViewer';
 import { FileDropZone } from '@/components/FileDropZone';
 import { StatusLed } from '@/components/StatusLed';
+import { EegGlobalFiltersEditor } from './EegGlobalFiltersEditor';
 import { EegMontageEditor } from './EegMontageEditor';
 
 const EEG_LOADING_TOAST_ID = 'eeg-buffer-loading'; // fixed id so the loading/success toasts update in place rather than stacking
@@ -303,6 +306,9 @@ export const EegViewer = ({
   // Topograph window only opens when the toggle is on (topoEnabled) AND once a EEGplot
   // click has produced a timepoint to show (topoTimepoint)
   const topoVisible = topoEnabled && topoTimepoint !== null;
+
+  // EEG Global Filters window only opens when the button is pressed
+  const [globalFiltersVisible, setGlobalFiltersVisible] = useState(false);
 
   // EEG Montage window only opens when the button is pressed
   const [montageVisible, setMontageVisible] = useState(false);
@@ -1147,7 +1153,16 @@ export const EegViewer = ({
                 the editor can build, so this <select> can show it), "Custom" only once a
                 hand-built montage exists to switch back to. */}
             <div className="flex flex-col items-center gap-1 pb-1">
+              <button
+                type="button"
+                className="button"
+                onClick={() => setGlobalFiltersVisible((v) => !v)}
+              >
+                <Funnel size={ICON_SIZE * 0.75} />
+                Filters
+              </button>
               <button type="button" className="button" onClick={() => setMontageVisible((v) => !v)}>
+                <TableColumnsSplit size={ICON_SIZE * 0.75} />
                 Montage
               </button>
               <select
@@ -1502,7 +1517,7 @@ export const EegViewer = ({
         />
       </div>
 
-      {/* Floating topography viewer — position:fixed so it overlays the whole page */}
+      {/* Floating topography viewer */}
       {topoVisible && (
         <EegTopoViewer
           nvRef={nvRef_eegtopo}
@@ -1523,8 +1538,17 @@ export const EegViewer = ({
           hasEegChannels={hasEegChannels}
         />
       )}
+      {/* Floating EEG Global Filters Editor */}
+      {globalFiltersVisible && (
+        <EegGlobalFiltersEditor
+          globalFilters={globalFilters}
+          fs={provider.fs}
+          onApplyGlobalFilters={setGlobalFilters}
+          onClose={() => setGlobalFiltersVisible(false)}
+        />
+      )}
 
-      {/* Floating EEG Montage Editor — position:fixed so it overlays the whole page */}
+      {/* Floating EEG Montage Editor */}
       {montageVisible && (
         <EegMontageEditor
           matched={matched}
