@@ -41,6 +41,7 @@ import { useMontageChannels } from '@/hooks/useMontage';
 import { useMontageTemplates } from '@/hooks/useMontageTemplates';
 import { useTimepointSnapshot } from '@/hooks/useTimepointSnapshot';
 import { useRowResize } from '@/hooks/useRowResize';
+import { DEFAULT_GLOBAL_FILTERS } from '@/utils/channelTypes';
 
 import { ELEC_POS_EXTENSIONS, INV_SOLUTIONS_EXTENSIONS } from '@/loaders/eegFormatRegistry';
 import { EegTopoViewer } from '@/components/EegTopoViewer';
@@ -360,13 +361,17 @@ export const EegViewer = ({
     applyMontageTemplate,
   } = useMontageChannels(channelNames, montageTemplates);
 
+  // Global frequency filters per channel type, edited via the Filter window. A montage row's own
+  // filter value overrides these per field (see buildMontageDisplayRows / resolveRowFilters).
+  const [globalFilters, setGlobalFilters] = useState(DEFAULT_GLOBAL_FILTERS);
+
   // Rows to render in the channel-plot area: one per non-bad channel (in channelNames
   // order) when no montage rows are configured, or the configured montage rows once any
   // exist — each named "channel - reference" (or just "channel" when unreferenced) and
   // filtered to drop rows whose channel/reference is bad. See buildMontageDisplayRows.
   const displayRows = useMemo(
-    () => buildMontageDisplayRows(channelNames, channelSettings, montageChannels),
-    [channelNames, channelSettings, montageChannels]
+    () => buildMontageDisplayRows(channelNames, channelSettings, montageChannels, globalFilters),
+    [channelNames, channelSettings, montageChannels, globalFilters]
   );
 
   // visibleChannelCount is clamped inside useEegPlotControls against channelNames.length, which
