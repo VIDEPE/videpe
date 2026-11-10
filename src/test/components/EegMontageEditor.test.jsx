@@ -54,7 +54,16 @@ const MONTAGE_CHANNELS = CHANNEL_NAMES.map((name) => ({
   color: null,
 }));
 
+// Global filters per type — shown greyed as placeholders in rows without their own value.
+// eeg and seeg differ, and seeg's lowPass is off, so a placeholder from the wrong type fails.
+const GLOBAL_FILTERS = {
+  eeg: { highPass: 0.5, lowPass: 70, notch: 50 },
+  seeg: { highPass: 1, lowPass: null, notch: null },
+  other: { highPass: null, lowPass: null, notch: null },
+};
+
 const defaultProps = {
+  globalFilters: GLOBAL_FILTERS,
   channelNames: CHANNEL_NAMES,
   matched: MATCHED,
   channelSettings: CHANNEL_SETTINGS,
@@ -841,6 +850,47 @@ describe('EegMontageEditor', () => {
 
       const committed = onApplyMontageChannels.mock.calls[0][0];
       expect(committed.every((row) => !('type' in row))).toBe(true);
+    });
+  });
+
+  describe('global filter placeholders', () => {
+    it("shows the global filters of the row's channel type as placeholders", () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      // FP1 is eeg per CHANNEL_SETTINGS
+      expect(screen.getByTestId('montage-highpass-FP1')).toHaveAttribute('placeholder', '0.5');
+      expect(screen.getByTestId('montage-lowpass-FP1')).toHaveAttribute('placeholder', '70');
+      expect(screen.getByTestId('montage-notch-FP1')).toHaveAttribute('placeholder', '50');
+      // FP3 is seeg
+      expect(screen.getByTestId('montage-highpass-FP3')).toHaveAttribute('placeholder', '1');
+    });
+
+    it('shows no placeholder when the global filter for that type is off', () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      // seeg lowPass and notch are off
+      expect(screen.getByTestId('montage-lowpass-FP3')).not.toHaveAttribute('placeholder');
+      expect(screen.getByTestId('montage-notch-FP3')).not.toHaveAttribute('placeholder');
+    });
+
+    it("keeps the row's own value as the input value, with the global value still as placeholder", () => {
+      const montageChannels = [{ ...MONTAGE_CHANNELS[0], highPass: 2 }]; // FP1, eeg
+      render(<EegMontageEditor {...defaultProps} montageChannels={montageChannels} />);
+      const input = screen.getByTestId('montage-highpass-FP1');
+      expect(input).toHaveValue(2);
+      expect(input).toHaveAttribute('placeholder', '0.5');
+    });
+
+    it("follows a draft type change: switching FP1 to seeg shows seeg's global values", async () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      await userEvent.selectOptions(screen.getByTestId('channel-type-FP1'), 'seeg');
+
+      expect(screen.getByTestId('montage-highpass-FP1')).toHaveAttribute('placeholder', '1');
+      expect(screen.getByTestId('montage-lowpass-FP1')).not.toHaveAttribute('placeholder');
+    });
+
+    it('shows no placeholder on a row whose channel is missing from the recording', () => {
+      const montageChannels = [{ ...MONTAGE_CHANNELS[0], id: 'X', channel: 'MISSING' }];
+      render(<EegMontageEditor {...defaultProps} montageChannels={montageChannels} />);
+      expect(screen.getByTestId('montage-highpass-X')).not.toHaveAttribute('placeholder');
     });
   });
 

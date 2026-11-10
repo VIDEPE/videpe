@@ -72,6 +72,8 @@ const MONTAGE_TYPE_COL_CLASS = 'w-13 shrink-0';
 const REF_COL_CLASS = 'w-18 shrink-0';
 const COLOR_COL_CLASS = 'w-20 shrink-0';
 const FILTER_COL_CLASS = 'w-14 shrink-0';
+// Per-row filter inputs — placeholder shows the global value, greyed so it reads as inherited
+const FILTER_INPUT_CLASS = 'text-xs bg-surface placeholder:text-foreground/30';
 const CLEAR_COL_CLASS = 'w-4 shrink-0';
 
 export function EegMontageEditor({
@@ -86,6 +88,7 @@ export function EegMontageEditor({
   montageChannels, // Array<{id, channel, reference, color}> — live state owned by EegViewer/useMontageChannels
   onApplyMontageChannels, // (Array<{id, channel, reference, color}>) => void — commits the draft on Apply/OK
   fs, // sampling frequency of the loaded EEG recording
+  globalFilters, // Record<type, {highPass, lowPass, notch}> — live global filters owned by EegViewer, shown as placeholders in rows without their own value
 }) {
   const { isDarkMode } = useTheme();
   const channelDividerColor = isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
@@ -1272,6 +1275,7 @@ export function EegMontageEditor({
                 const channelType = isChannelMissing
                   ? null
                   : (draftChannelSettings[row.channel]?.type ?? 'eeg');
+                const typeFilters = channelType ? globalFilters?.[channelType] : undefined;
                 return (
                   <div
                     key={row.id}
@@ -1393,6 +1397,7 @@ export function EegMontageEditor({
                     <input
                       data-testid={`montage-highpass-${row.id}`}
                       type="number"
+                      placeholder={typeFilters?.highPass ?? undefined}
                       value={row.highPass ?? ''}
                       disabled={isChannelMissing}
                       min={0}
@@ -1413,12 +1418,13 @@ export function EegMontageEditor({
                         if (clamped !== row.highPass) setDraftMontageRowHighPass(row.id, clamped);
                       }}
                       aria-label="High Pass filter frequency"
-                      className={cn(FILTER_COL_CLASS, 'text-xs bg-surface')}
+                      className={cn(FILTER_COL_CLASS, FILTER_INPUT_CLASS)}
                     />
                     {/* Channel LPF */}
                     <input
                       data-testid={`montage-lowpass-${row.id}`}
                       type="number"
+                      placeholder={typeFilters?.lowPass ?? undefined}
                       value={row.lowPass ?? ''}
                       disabled={isChannelMissing}
                       min={Number.isFinite(row.highPass) ? row.highPass : 0} // lowPass can never be lower than high pass
@@ -1437,12 +1443,13 @@ export function EegMontageEditor({
                         if (clamped !== row.lowPass) setDraftMontageRowLowPass(row.id, clamped);
                       }}
                       aria-label="Low Pass filter frequency"
-                      className={cn(FILTER_COL_CLASS, 'text-xs bg-surface')}
+                      className={cn(FILTER_COL_CLASS, FILTER_INPUT_CLASS)}
                     />
                     {/* Channel Notch */}
                     <input
                       data-testid={`montage-notch-${row.id}`}
                       type="number"
+                      placeholder={typeFilters?.notch ?? undefined}
                       value={row.notch ?? ''}
                       disabled={isChannelMissing}
                       min={0} // lowPass can never be lower than high pass
@@ -1461,7 +1468,7 @@ export function EegMontageEditor({
                         if (clamped !== row.notch) setDraftMontageRowNotch(row.id, clamped);
                       }}
                       aria-label="Notch filter frequency"
-                      className={cn(FILTER_COL_CLASS, 'text-xs bg-surface')}
+                      className={cn(FILTER_COL_CLASS, FILTER_INPUT_CLASS)}
                     />
 
                     {/* Remove row */}

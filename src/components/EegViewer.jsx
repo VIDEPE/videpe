@@ -1583,6 +1583,7 @@ export const EegViewer = ({
           montageChannels={montageChannels}
           onApplyMontageChannels={applyMontageChannels}
           fs={provider.fs}
+          globalFilters={globalFilters}
         />
       )}
     </>
