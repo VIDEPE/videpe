@@ -198,11 +198,13 @@ export const EegViewer = ({
   onEsiEnabledChange, // handle for esiEnabled changes
   onChannelPositionClick, // handle for clicking the channel label to move the NiiVue cursor to that electrode's location
 }) => {
+  // ─── Theme + recording ──────────────────────────────────────────────────────
   const { isDarkMode } = useTheme();
   const syncKey = 'eeg-sync'; // shared across all channels to link their interactions
 
   const tMax = provider.tMax; // total time span of the recording, in seconds
 
+  // ─── Layout + plot controls ─────────────────────────────────────────────────
   // Container measurement — plotWidth feeds uPlot options, channelAreaHeight drives plotHeight below
   const { containerRef, width: plotWidth, height: channelAreaHeight } = useContainerResize();
 
@@ -247,11 +249,50 @@ export const EegViewer = ({
     channelAreaHeight > 0 ? Math.floor(channelAreaHeight / visibleChannelCount) : 0;
   const axisColor = isDarkMode ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.8)';
 
+  // Timeline scrubber drag (pan/resize the visible window)
+  const { scrubberRef, isDragging, startDrag } = useScrubberDrag({
+    tMax,
+    startTime,
+    windowSize,
+    setStartTime,
+    setWindowSize,
+    setWindowSizeStr,
+  });
+
+  // Signal onViewReady once the first measurement lands and charts have rendered
+  const onViewReadyCalledRef = useRef(false);
+  useEffect(() => {
+    if (plotWidth > 0 && !onViewReadyCalledRef.current) {
+      onViewReadyCalledRef.current = true;
+      onViewReady?.();
+    }
+  }, [plotWidth, onViewReady]);
+
+  // ─── EEG data buffer ────────────────────────────────────────────────────────
   // Buffer of EEG data around the visible window — reloads on big jumps, otherwise
   // keeps the previous buffer's data on screen until the new one arrives (no flash).
   const { timestamps, channels, isLoading } = useEegBuffer(provider, startTime, windowSize);
 
-  // ── Topography state ─────────────────────────────────────────────────────────────────────
+  // Show a loading toast while the initial buffer loads, then update it to a success
+  // message — self-contained so EegViewer reports its own status regardless of where
+  // it's embedded. Later reloads keep showing the previous buffer's data, so no toast
+  // is needed for those (isLoading is only true before the first buffer arrives).
+  useEffect(() => {
+    if (isLoading) {
+      toast.loading('Loading EEG data…', { id: EEG_LOADING_TOAST_ID });
+    } else {
+      toast.success('EEG data loaded!', { id: EEG_LOADING_TOAST_ID });
+    }
+  }, [isLoading]);
+
+  // Dismiss the toast if the viewer unmounts mid-load (e.g. resetting the EEG panel)
+  useEffect(() => {
+    return () => toast.dismiss(EEG_LOADING_TOAST_ID);
+  }, []);
+
+  // ─── View state: toggles, floating windows, snapshot timepoint ──────────────
+  // Topography toggle, and the timepoint of the voltage snapshot (set by clicking the EEG plot)
+  // shared by the topography, connectome, ESI and 3D-render views
   const [topoEnabled, setTopoEnabled] = useState(false);
   const [topoTimepoint, setTopoTimepoint] = useState(null);
 
@@ -274,15 +315,7 @@ export const EegViewer = ({
   // wired up below, so nowhere else needs to know about that offset.
   const [hoveredStackedChannelIdx, setHoveredStackedChannelIdx] = useState(null);
 
-  // Px position (from the plot area's left edge) of the vertical marker for topoTimepoint — the
-  // timestamp the electrode voltage snapshot was taken at, shared by the topography, ESI, and
-  // 3D-render views. Null hides the marker: no snapshot yet, or it's scrolled outside the window.
-  const snapshotMarkerLeft =
-    topoTimepoint !== null && topoTimepoint >= startTime && topoTimepoint <= startTime + windowSize
-      ? Y_AXIS_WIDTH +
-        ((topoTimepoint - startTime) / windowSize) * (plotWidth - Y_AXIS_WIDTH - PLOT_RIGHT_PAD)
-      : null;
-
+  // ─── Channel types + electrode positions ────────────────────────────────────
   // Electrode-position matching + recording-type (EEG/SEEG) auto-detection — feeds
   // channelSettings' initial seed below (see useChannelSettings) now that the manual
   // EEGTypeToggle is gone.
@@ -340,6 +373,7 @@ export const EegViewer = ({
     onChannelTypesChange?.(channelTypes);
   }, [channelTypes, onChannelTypesChange]);
 
+  // ─── Montage + filters ──────────────────────────────────────────────────────
   // Bundled montage templates that fit this recording (see useMontageTemplates), listed in
   // the sidebar quick-select alongside the None/CAR/Custom presets below — looked up here
   // (rather than where it's applied, further down) so useMontageChannels can recognize a
@@ -382,49 +416,6 @@ export const EegViewer = ({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- updateVisibleChannelCount isn't memoized
   }, [visibleChannelCount, displayRows.length]);
-
-  // Average/median reference series (see the diagram atop eegViewerUtils.js), computed once
-  // from the non-bad channels and shared by the montage rows and the topography/connectome/
-  // ESI snapshot. Only the series in use are computed: median for Med rows, average for Avg
-  // rows or once a plot click has set a snapshot timepoint. Booleans as memo dependencies,
-  // so montage edits that don't change which references are used don't recompute.
-  const { needsAverage, needsMedian } = getNeededReferenceSeries(
-    displayRows,
-    topoTimepoint !== null
-  );
-  const referenceSeries = useMemo(() => {
-    if (!channels) return null;
-    const nonBadChannels = channels.filter(
-      (_, index) => !channelSettings[channelNames[index]]?.bad
-    );
-    return computeReferenceSeries(nonBadChannels, { needsAverage, needsMedian });
-  }, [channels, channelSettings, channelNames, needsAverage, needsMedian]);
-
-  // Bad channels are hidden from topography/connectome/ESI entirely, not just excluded from
-  // the reference calc — a bad electrode's position never appears as a node to plot, and
-  // its own voltage never contributes to ESI's source-power computation (voltage set to 0).
-  // `matched` (from useElectrodeMatching) is kept raw for EegMontageEditor's Pos-match indicator below,
-  // which cares about position-file coverage independent of the current bad-channel flags.
-  // visibleMatched 'type' for each match => buildElectrodeLayer in eegTopographyUtils.js uses it
-  // to reconstruct proper connectome
-  const visibleMatched = useMemo(
-    () =>
-      matched
-        .filter((m) => !channelSettings[m.name]?.bad)
-        .map((m) => ({ ...m, type: channelSettings[m.name]?.type })),
-    [matched, channelSettings]
-  );
-
-  // Zeroes a bad channel's entry in an all-channel voltage array (channelNames-aligned) —
-  // used for the ESI/matrix snapshot below, where entries can't simply be dropped (their
-  // positions must stay aligned with channelNames/the inverse-solution model), only zeroed
-  // out so they stop contributing real-looking data. Memoized so the onChannelSnapshotChange
-  // wrapper below keeps a stable identity across renders — useTimepointSnapshot's effect
-  // deliberately fires only on topoTimepoint changes, not on every re-render.
-  const zeroBadChannelVoltages = useCallback(
-    (voltages) => voltages.map((v, index) => (channelSettings[channelNames[index]]?.bad ? 0 : v)),
-    [channelSettings, channelNames]
-  );
 
   const applyMontageFileTemplate = (template) => {
     // Warn about any channel/reference the template names that this recording doesn't
@@ -478,6 +469,102 @@ export const EegViewer = ({
     if (template) applyMontageFileTemplate(template);
     else applyMontageTemplate(value);
   };
+
+  // ─── Signal pipeline: reference → filter → downsample ───────────────────────
+  // Average/median reference series (see the diagram atop eegViewerUtils.js), computed once
+  // from the non-bad channels and shared by the montage rows and the topography/connectome/
+  // ESI snapshot. Only the series in use are computed: median for Med rows, average for Avg
+  // rows or once a plot click has set a snapshot timepoint. Booleans as memo dependencies,
+  // so montage edits that don't change which references are used don't recompute.
+  const { needsAverage, needsMedian } = getNeededReferenceSeries(
+    displayRows,
+    topoTimepoint !== null
+  );
+  const referenceSeries = useMemo(() => {
+    if (!channels) return null;
+    const nonBadChannels = channels.filter(
+      (_, index) => !channelSettings[channelNames[index]]?.bad
+    );
+    return computeReferenceSeries(nonBadChannels, { needsAverage, needsMedian });
+  }, [channels, channelSettings, channelNames, needsAverage, needsMedian]);
+
+  // Stage 1: derive (== subtract ref) + filter each buffered signal
+  // - only re-runs on data/montage/filter-setting changes, not on pan/zoom/resize.
+  // Filtering a big montage takes seconds, so it runs in pauseable steps (filterMontageRows)
+  // and a newer run cancels the previous one. Until a run finishes, the previous result stays
+  // on screen. The samples are stored together with the timestamps they were computed from,
+  // so a new buffer's timestamps are never paired with the old buffer's samples.
+  const [filteredRows, setFilteredRows] = useState(null); // { timestamps, samplesByRowId }
+  useEffect(() => {
+    if (!channels) return undefined;
+    const controller = new AbortController();
+    filterMontageRows(channels, displayRows, referenceSeries, provider.fs, {
+      signal: controller.signal,
+    })
+      .then((samplesByRowId) => setFilteredRows({ timestamps, samplesByRowId }))
+      .catch((error) => {
+        // a cancelled run ends in an AbortError on purpose, so ignore it; re-throw real errors
+        if (error.name !== 'AbortError') throw error;
+      });
+    // inputs changed (or the viewer closed): cancel this run, a newer one takes over
+    return () => controller.abort();
+  }, [channels, timestamps, provider.fs, displayRows, referenceSeries]);
+
+  // Auto-fit the y-range once, when the first filtered buffer arrives — gain differs a lot
+  // between recordings, so a fixed default range is too flat or too clipped for most files.
+  // Only once per mount (i.e. per loaded file): after that the range is the user's to set,
+  // so later re-filters (pan to a new buffer, montage/filter edits) never touch it again.
+  const hasAutoFittedYScaleRef = useRef(false);
+  useEffect(() => {
+    if (hasAutoFittedYScaleRef.current || !filteredRows) return;
+    hasAutoFittedYScaleRef.current = true; // set flag so this runs only once
+    const autoYScale = computeAutoYScale([...filteredRows.samplesByRowId.values()]);
+    if (autoYScale !== null) updateYScale(autoYScale);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- updateYScale isn't memoized
+  }, [filteredRows]);
+
+  // Stage 2: downsample the already-filtered signal for the current viewport — reruns on
+  // pan/zoom/resize, but never re-filters.
+  const displayedData = useMemo(() => {
+    // Guards: If we don't have valid dimensions or data yet, return empty arrays for each row to avoid rendering broken plots
+    if (plotWidth === 0 || !filteredRows || filteredRows.timestamps.length === 0)
+      return displayRows.map(() => [[], []]);
+    const endTime = startTime + windowSize;
+    // looked up by row id: a row added since the last finished run stays empty until its data is ready
+    return displayRows.map((row) => {
+      const samples = filteredRows.samplesByRowId.get(row.id);
+      return samples
+        ? minMaxDownsample(filteredRows.timestamps, samples, startTime, endTime, plotWidth)
+        : [[], []];
+    });
+  }, [filteredRows, displayRows, startTime, windowSize, plotWidth]);
+
+  // ─── Snapshot: topography / connectome / ESI ────────────────────────────────
+  // Bad channels are hidden from topography/connectome/ESI entirely, not just excluded from
+  // the reference calc — a bad electrode's position never appears as a node to plot, and
+  // its own voltage never contributes to ESI's source-power computation (voltage set to 0).
+  // `matched` (from useElectrodeMatching) is kept raw for EegMontageEditor's Pos-match indicator below,
+  // which cares about position-file coverage independent of the current bad-channel flags.
+  // visibleMatched 'type' for each match => buildElectrodeLayer in eegTopographyUtils.js uses it
+  // to reconstruct proper connectome
+  const visibleMatched = useMemo(
+    () =>
+      matched
+        .filter((m) => !channelSettings[m.name]?.bad)
+        .map((m) => ({ ...m, type: channelSettings[m.name]?.type })),
+    [matched, channelSettings]
+  );
+
+  // Zeroes a bad channel's entry in an all-channel voltage array (channelNames-aligned) —
+  // used for the ESI/matrix snapshot below, where entries can't simply be dropped (their
+  // positions must stay aligned with channelNames/the inverse-solution model), only zeroed
+  // out so they stop contributing real-looking data. Memoized so the onChannelSnapshotChange
+  // wrapper below keeps a stable identity across renders — useTimepointSnapshot's effect
+  // deliberately fires only on topoTimepoint changes, not on every re-render.
+  const zeroBadChannelVoltages = useCallback(
+    (voltages) => voltages.map((v, index) => (channelSettings[channelNames[index]]?.bad ? 0 : v)),
+    [channelSettings, channelNames]
+  );
 
   // Electrode/channel voltage snapshots at the clicked topography timepoint, lifted up to
   // PatientView for the intracranial connectome and ESI — always common-average-referenced
@@ -536,108 +623,7 @@ export const EegViewer = ({
     onTopoHasContentChange?.(topoHasContent);
   }, [topoHasContent, onTopoHasContentChange]);
 
-  // Show a loading toast while the initial buffer loads, then update it to a success
-  // message — self-contained so EegViewer reports its own status regardless of where
-  // it's embedded. Later reloads keep showing the previous buffer's data, so no toast
-  // is needed for those (isLoading is only true before the first buffer arrives).
-  useEffect(() => {
-    if (isLoading) {
-      toast.loading('Loading EEG data…', { id: EEG_LOADING_TOAST_ID });
-    } else {
-      toast.success('EEG data loaded!', { id: EEG_LOADING_TOAST_ID });
-    }
-  }, [isLoading]);
-
-  // Dismiss the toast if the viewer unmounts mid-load (e.g. resetting the EEG panel)
-  useEffect(() => {
-    return () => toast.dismiss(EEG_LOADING_TOAST_ID);
-  }, []);
-
-  // Stage 1: derive (== subtract ref) + filter each buffered signal
-  // - only re-runs on data/montage/filter-setting changes, not on pan/zoom/resize.
-  // Filtering a big montage takes seconds, so it runs in pauseable steps (filterMontageRows)
-  // and a newer run cancels the previous one. Until a run finishes, the previous result stays
-  // on screen. The samples are stored together with the timestamps they were computed from,
-  // so a new buffer's timestamps are never paired with the old buffer's samples.
-  const [filteredRows, setFilteredRows] = useState(null); // { timestamps, samplesByRowId }
-  useEffect(() => {
-    if (!channels) return undefined;
-    const controller = new AbortController();
-    filterMontageRows(channels, displayRows, referenceSeries, provider.fs, {
-      signal: controller.signal,
-    })
-      .then((samplesByRowId) => setFilteredRows({ timestamps, samplesByRowId }))
-      .catch((error) => {
-        // a cancelled run ends in an AbortError on purpose, so ignore it; re-throw real errors
-        if (error.name !== 'AbortError') throw error;
-      });
-    // inputs changed (or the viewer closed): cancel this run, a newer one takes over
-    return () => controller.abort();
-  }, [channels, timestamps, provider.fs, displayRows, referenceSeries]);
-
-  // Auto-fit the y-range once, when the first filtered buffer arrives — gain differs a lot
-  // between recordings, so a fixed default range is too flat or too clipped for most files.
-  // Only once per mount (i.e. per loaded file): after that the range is the user's to set,
-  // so later re-filters (pan to a new buffer, montage/filter edits) never touch it again.
-  const hasAutoFittedYScaleRef = useRef(false);
-  useEffect(() => {
-    if (hasAutoFittedYScaleRef.current || !filteredRows) return;
-    hasAutoFittedYScaleRef.current = true; // set flag so this runs only once
-    const autoYScale = computeAutoYScale([...filteredRows.samplesByRowId.values()]);
-    if (autoYScale !== null) updateYScale(autoYScale);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- updateYScale isn't memoized
-  }, [filteredRows]);
-
-  // Stage 2: downsample the already-filtered signal for the current viewport — reruns on
-  // pan/zoom/resize, but never re-filters.
-  const displayedData = useMemo(() => {
-    // Guards: If we don't have valid dimensions or data yet, return empty arrays for each row to avoid rendering broken plots
-    if (plotWidth === 0 || !filteredRows || filteredRows.timestamps.length === 0)
-      return displayRows.map(() => [[], []]);
-    const endTime = startTime + windowSize;
-    // looked up by row id: a row added since the last finished run stays empty until its data is ready
-    return displayRows.map((row) => {
-      const samples = filteredRows.samplesByRowId.get(row.id);
-      return samples
-        ? minMaxDownsample(filteredRows.timestamps, samples, startTime, endTime, plotWidth)
-        : [[], []];
-    });
-  }, [filteredRows, displayRows, startTime, windowSize, plotWidth]);
-
-  // Stacking only makes sense with more than one channel — if bad-channel/montage edits drop
-  // displayedData to ≤1 row while stacked, fall back to unstacked instead of leaving the view
-  // showing a "Stacked" single trace behind a now-disabled toggle
-  useEffect(() => {
-    if (eegIsStacked && displayedData.length <= 1) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setEegIsStacked(false);
-    }
-  }, [eegIsStacked, displayedData.length]);
-
-  // Signal onViewReady once the first measurement lands and charts have rendered
-  const onViewReadyCalledRef = useRef(false);
-  useEffect(() => {
-    if (plotWidth > 0 && !onViewReadyCalledRef.current) {
-      onViewReadyCalledRef.current = true;
-      onViewReady?.();
-    }
-  }, [plotWidth, onViewReady]);
-
-  // eegLabelClickId is the count how many times a eeg channel label has been clicked
-  // this is used as unique ID to ensure clicking the same channelPos again still triggers
-  // moving the cursor despite the state not having changed (=> still the same pos)
-  const clickEegLabelIdRef = useRef(0);
-
-  // Timeline scrubber drag (pan/resize the visible window)
-  const { scrubberRef, isDragging, startDrag } = useScrubberDrag({
-    tMax,
-    startTime,
-    windowSize,
-    setStartTime,
-    setWindowSize,
-    setWindowSizeStr,
-  });
-
+  // ─── Keyboard + focus ───────────────────────────────────────────────────────
   // Clicking anywhere in the viewer (other than a button/input) moves keyboard focus to the
   // container so the shortcuts above become active, without stealing focus from form controls
   const viewerRef = useRef(null);
@@ -705,6 +691,31 @@ export const EegViewer = ({
         break;
     }
   };
+
+  // ─── Plot rendering ─────────────────────────────────────────────────────────
+  // Px position (from the plot area's left edge) of the vertical marker for topoTimepoint — the
+  // timestamp the electrode voltage snapshot was taken at, shared by the topography, ESI, and
+  // 3D-render views. Null hides the marker: no snapshot yet, or it's scrolled outside the window.
+  const snapshotMarkerLeft =
+    topoTimepoint !== null && topoTimepoint >= startTime && topoTimepoint <= startTime + windowSize
+      ? Y_AXIS_WIDTH +
+        ((topoTimepoint - startTime) / windowSize) * (plotWidth - Y_AXIS_WIDTH - PLOT_RIGHT_PAD)
+      : null;
+
+  // Stacking only makes sense with more than one channel — if bad-channel/montage edits drop
+  // displayedData to ≤1 row while stacked, fall back to unstacked instead of leaving the view
+  // showing a "Stacked" single trace behind a now-disabled toggle
+  useEffect(() => {
+    if (eegIsStacked && displayedData.length <= 1) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setEegIsStacked(false);
+    }
+  }, [eegIsStacked, displayedData.length]);
+
+  // eegLabelClickId is the count how many times a eeg channel label has been clicked
+  // this is used as unique ID to ensure clicking the same channelPos again still triggers
+  // moving the cursor despite the state not having changed (=> still the same pos)
+  const clickEegLabelIdRef = useRef(0);
 
   // Current default view: one uPlot instance per displayed row, each in its own
   // horizontal lane with an independent y-baseline (see buildChannelOptions/OVERDRAW
@@ -917,11 +928,7 @@ export const EegViewer = ({
     </div>
   );
 
-  {
-    /* --------------
-    Main EEGViewer return
-    ----------------*/
-  }
+  // ─── Render ─────────────────────────────────────────────────────────────────
   return (
     <>
       {/* min-h-full (not h-full) so this box grows with a dragged-taller plot row, keeping the
