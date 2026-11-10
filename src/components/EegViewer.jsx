@@ -1159,7 +1159,7 @@ export const EegViewer = ({
                 isn't a meaningful reference; still listed while it's the active montage, which
                 the editor can build, so this <select> can show it), "Custom" only once a
                 hand-built montage exists to switch back to. */}
-            <div className="flex flex-col items-center gap-1 pb-1">
+            <div className="flex flex-col items-start gap-1 pb-1">
               <button
                 type="button"
                 className="button"
@@ -1177,9 +1177,7 @@ export const EegViewer = ({
                 className="button"
                 onClick={() => setMontageVisible((v) => !v)}
                 data-active={montageActive}
-                title={
-                  montageActive ? 'Global EEG Filters (active)' : 'Global EEG Filters (inactive)'
-                }
+                title={montageActive ? 'Montage (active)' : 'Montage (inactive)'}
               >
                 <TableColumnsSplit size={ICON_SIZE * 0.75} />
                 Montage

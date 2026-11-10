@@ -924,9 +924,11 @@ export function EegMontageEditor({
         >
           Add ALL
         </button>
+        {/* Outlined, unlike the filled Add buttons — same style as the Global Filters
+            window's Clear all, so clearing reads as a secondary action */}
         <button
           type="button"
-          className="button"
+          className="text-xs border border-border rounded-full px-2 py-1 bg-surface hover:bg-background cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
           data-testid="clear-all-button"
           onClick={handleClearAllMontageRows}
           disabled={draftMontageChannels.length === 0}
