@@ -3,14 +3,15 @@ import { Check } from 'lucide-react';
 
 import { useTheme } from '@/hooks/useTheme';
 import { TrafficLightButtons } from '@/components/TrafficLightButtons';
-import { TYPE_LIST, TYPE_ORDER } from '@/utils/channelTypes';
+import { TYPE_LIST, TYPE_ORDER, DEFAULT_GLOBAL_FILTERS } from '@/utils/channelTypes';
+import { hasActiveFilters } from '@/utils/eegFilters';
 import { cn } from '@/utils/utils';
 
 // ─── Window sizing constants ────────────────────────────────────────────────
 // Default/minimum window size in px — much smaller than the montage editor, since this window
 // only holds one row per channel type
 const START_WINDOW_POS = { x: 40, y: 50 };
-const DEFAULT_WINDOW_SIZE = { width: 420, height: 280 };
+const DEFAULT_WINDOW_SIZE = { width: 420, height: 300 };
 const MIN_WINDOW_WIDTH = 360;
 const MIN_WINDOW_HEIGHT = 220;
 const RESIZE_DIRECTIONS = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
@@ -25,6 +26,9 @@ export function EegGlobalFiltersEditor({
   globalFilters,
   fs, // sampling frequency of the loaded EEG recording
   channelCountByType, // number of recording channels per type, from countChannelsByType
+  montageChannels = [], // live montage rows owned by EegViewer — to count/reset their own filters
+  onApplyMontageChannels, // (rows) => void — commits the "Reset to global" on Apply/OK
+  montageEditorOpen = false, // the montage editor's own draft would overwrite a reset, so it's disabled then
   onApplyGlobalFilters,
   onClose,
 }) {
@@ -46,11 +50,17 @@ export function EegGlobalFiltersEditor({
   // draft; nothing reaches the live state in EegViewer until Apply/OK explicitly commits it.
   const [draftGlobalFilters, setDraftGlobalFilters] = useState(() => globalFilters);
 
+  // Montage rows with their own filter values (exceptions that win over the global filters),
+  // and whether "Reset to global" is pending — part of the draft, so it only clears those
+  // rows' own values on Apply/OK and Cancel drops it.
+  const overrideCount = montageChannels.filter((row) => hasActiveFilters([row])).length;
+  const [resetRowFilters, setResetRowFilters] = useState(false);
+
   // Whether the draft differs from what was last applied — marks the title with * and
   // highlights Apply, same as the montage editor.
   const isModified = useMemo(
-    () => JSON.stringify(draftGlobalFilters) !== JSON.stringify(globalFilters),
-    [draftGlobalFilters, globalFilters]
+    () => resetRowFilters || JSON.stringify(draftGlobalFilters) !== JSON.stringify(globalFilters),
+    [resetRowFilters, draftGlobalFilters, globalFilters]
   );
 
   // ─── Handlers ───────────────────────────────────────────────────────────────
@@ -70,7 +80,20 @@ export function EegGlobalFiltersEditor({
 
   const handleApply = useCallback(() => {
     onApplyGlobalFilters(draftGlobalFilters);
-  }, [draftGlobalFilters, onApplyGlobalFilters]);
+    if (resetRowFilters) {
+      // Clear only the rows' own filter values (null = follow global); keep their other fields
+      onApplyMontageChannels(
+        montageChannels.map((row) => ({ ...row, highPass: null, lowPass: null, notch: null }))
+      );
+      setResetRowFilters(false);
+    }
+  }, [
+    draftGlobalFilters,
+    onApplyGlobalFilters,
+    resetRowFilters,
+    montageChannels,
+    onApplyMontageChannels,
+  ]);
 
   const handleOk = useCallback(() => {
     handleApply();
@@ -350,9 +373,59 @@ export function EegGlobalFiltersEditor({
         </div>
       </div>
 
+      {/* Montage rows with their own filters — these win over the global values above, so
+          say so here, with a draft "Reset to global" that clears their own values on Apply. */}
+      {overrideCount > 0 && (
+        <div
+          className="shrink-0 flex items-center justify-between gap-2 px-3 py-1 text-xs border-t border-border bg-surface"
+          data-testid="row-filter-overrides"
+        >
+          <span>
+            {overrideCount} montage {overrideCount === 1 ? 'row uses its' : 'rows use their'} own
+            filters
+          </span>
+          {/* Once clicked, the button is replaced in place by a pending note of the same size
+              (same padding and border, dashed), so the line keeps its height and nothing shifts */}
+          {resetRowFilters ? (
+            <span
+              className="shrink-0 border border-dashed border-border rounded-full px-2 py-0.5 text-foreground/40"
+              data-testid="reset-row-filters-pending"
+              title="Cancel to keep the rows' own filters"
+            >
+              Resets on Apply/OK
+            </span>
+          ) : (
+            <button
+              type="button"
+              className="shrink-0 text-xs border border-border rounded-full px-2 py-0.5 bg-surface hover:bg-background disabled:opacity-40 disabled:cursor-not-allowed"
+              data-testid="reset-row-filters-button"
+              title={
+                montageEditorOpen
+                  ? 'Close the montage editor to reset its rows to the global filters'
+                  : 'Clear the rows’ own filters on Apply, so they follow the global filters'
+              }
+              disabled={montageEditorOpen}
+              onClick={() => setResetRowFilters(true)}
+            >
+              Reset to global
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Footer — Apply/OK commit the draft to EegViewer's live globalFilters; Cancel (and
-          the title bar's red X, via onClose) discard it by simply closing without committing. */}
+          the title bar's red X, via onClose) discard it by simply closing without committing.
+          Clear all sits on the left, apart from the commit buttons, and only edits the draft. */}
       <div className="shrink-0 flex items-center justify-end gap-2 px-3 py-2 border-t border-border bg-surface">
+        <button
+          type="button"
+          className="mr-auto text-xs border border-border rounded-full px-2 py-1 bg-surface hover:bg-background"
+          data-testid="clear-all-filters-button"
+          title="Turn every global filter off (the montage rows' own filters stay)"
+          onClick={() => setDraftGlobalFilters(DEFAULT_GLOBAL_FILTERS)}
+        >
+          Clear all
+        </button>
         <button type="button" className="button" onClick={handleOk}>
           OK
         </button>

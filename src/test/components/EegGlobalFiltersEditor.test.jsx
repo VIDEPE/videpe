@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { EegGlobalFiltersEditor } from '@/components/EegGlobalFiltersEditor';
-import { TYPE_LIST } from '@/utils/channelTypes';
+import { TYPE_LIST, DEFAULT_GLOBAL_FILTERS } from '@/utils/channelTypes';
 
 vi.mock('@/hooks/useTheme', () => ({
   useTheme: () => ({ isDarkMode: false }),
@@ -21,10 +21,43 @@ const NYQUIST = FS / 2;
 // No seeg channels, so the seeg row is dimmed
 const CHANNEL_COUNT_BY_TYPE = { eeg: 19, seeg: 0, other: 2 };
 
+// Montage rows: two with their own filter values (exceptions to global), one following global
+const MONTAGE_CHANNELS = [
+  {
+    id: 'r1',
+    channel: 'Fp1',
+    reference: null,
+    color: 'red',
+    highPass: 2,
+    lowPass: null,
+    notch: null,
+  },
+  {
+    id: 'r2',
+    channel: 'Fp2',
+    reference: 'Fp1',
+    color: null,
+    highPass: null,
+    lowPass: null,
+    notch: 60,
+  },
+  {
+    id: 'r3',
+    channel: 'ECG',
+    reference: null,
+    color: null,
+    highPass: null,
+    lowPass: null,
+    notch: null,
+  },
+];
+
 const defaultProps = {
   globalFilters: GLOBAL_FILTERS,
   fs: FS,
   channelCountByType: CHANNEL_COUNT_BY_TYPE,
+  montageChannels: MONTAGE_CHANNELS,
+  onApplyMontageChannels: vi.fn(),
   onApplyGlobalFilters: vi.fn(),
   onClose: vi.fn(),
 };
@@ -296,6 +329,116 @@ describe('EegGlobalFiltersEditor', () => {
       await userEvent.tab();
 
       expect(input).toHaveValue(null);
+    });
+  });
+
+  // ─── Clear all ─────────────────────────────────────────────────────────────
+  describe('Clear all', () => {
+    it('clears every global filter of every type in the draft', async () => {
+      render(<EegGlobalFiltersEditor {...defaultProps} />);
+      await userEvent.click(screen.getByTestId('clear-all-filters-button'));
+
+      Object.keys(TYPE_LIST).forEach((type) =>
+        FILTER_KEYS.forEach((key) =>
+          expect(screen.getByTestId(`global-${key}-${type}`)).toHaveValue(null)
+        )
+      );
+    });
+
+    it('only edits the draft: nothing is committed until Apply, which commits all filters off', async () => {
+      const onApplyGlobalFilters = vi.fn();
+      render(
+        <EegGlobalFiltersEditor {...defaultProps} onApplyGlobalFilters={onApplyGlobalFilters} />
+      );
+      await userEvent.click(screen.getByTestId('clear-all-filters-button'));
+      expect(onApplyGlobalFilters).not.toHaveBeenCalled();
+
+      await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+      expect(onApplyGlobalFilters).toHaveBeenCalledWith(DEFAULT_GLOBAL_FILTERS);
+    });
+
+    it("leaves the montage rows' own filters alone", async () => {
+      const onApplyMontageChannels = vi.fn();
+      render(
+        <EegGlobalFiltersEditor {...defaultProps} onApplyMontageChannels={onApplyMontageChannels} />
+      );
+      await userEvent.click(screen.getByTestId('clear-all-filters-button'));
+      await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+      expect(onApplyMontageChannels).not.toHaveBeenCalled();
+    });
+  });
+
+  // ─── Montage rows with their own filters ───────────────────────────────────
+  describe('montage rows with their own filters', () => {
+    it('shows how many montage rows use their own filters', () => {
+      render(<EegGlobalFiltersEditor {...defaultProps} />);
+      expect(screen.getByTestId('row-filter-overrides')).toHaveTextContent('2 montage rows');
+    });
+
+    it('hides the line when no montage row has its own filter', () => {
+      render(<EegGlobalFiltersEditor {...defaultProps} montageChannels={[MONTAGE_CHANNELS[2]]} />);
+      expect(screen.queryByTestId('row-filter-overrides')).toBeNull();
+    });
+
+    it('hides the line when there is no montage', () => {
+      render(<EegGlobalFiltersEditor {...defaultProps} montageChannels={[]} />);
+      expect(screen.queryByTestId('row-filter-overrides')).toBeNull();
+    });
+
+    it("Reset to global + Apply clears every row's own filters and keeps its other fields", async () => {
+      const onApplyMontageChannels = vi.fn();
+      render(
+        <EegGlobalFiltersEditor {...defaultProps} onApplyMontageChannels={onApplyMontageChannels} />
+      );
+      await userEvent.click(screen.getByTestId('reset-row-filters-button'));
+      await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+      expect(onApplyMontageChannels).toHaveBeenCalledWith(
+        MONTAGE_CHANNELS.map((row) => ({ ...row, highPass: null, lowPass: null, notch: null }))
+      );
+    });
+
+    it('Reset to global only takes effect on Apply: Cancel commits nothing', async () => {
+      const onApplyMontageChannels = vi.fn();
+      render(
+        <EegGlobalFiltersEditor {...defaultProps} onApplyMontageChannels={onApplyMontageChannels} />
+      );
+      await userEvent.click(screen.getByTestId('reset-row-filters-button'));
+      expect(onApplyMontageChannels).not.toHaveBeenCalled();
+
+      await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+      expect(onApplyMontageChannels).not.toHaveBeenCalled();
+    });
+
+    it('disables Reset to global while the montage editor is open, since its draft would overwrite the reset', () => {
+      render(<EegGlobalFiltersEditor {...defaultProps} montageEditorOpen />);
+      expect(screen.getByTestId('reset-row-filters-button')).toBeDisabled();
+    });
+
+    it('replaces the Reset to global button with a pending note once clicked', async () => {
+      render(<EegGlobalFiltersEditor {...defaultProps} />);
+      await userEvent.click(screen.getByTestId('reset-row-filters-button'));
+
+      expect(screen.queryByTestId('reset-row-filters-button')).toBeNull();
+      expect(screen.getByTestId('reset-row-filters-pending')).toHaveTextContent('Resets on Apply');
+    });
+
+    it('marks the title as modified once Reset to global is clicked', async () => {
+      render(<EegGlobalFiltersEditor {...defaultProps} />);
+      await userEvent.click(screen.getByTestId('reset-row-filters-button'));
+      expect(screen.getByText('Global EEG Filters *')).toBeTruthy();
+    });
+
+    it('Apply without Reset to global leaves the montage rows untouched', async () => {
+      const onApplyMontageChannels = vi.fn();
+      render(
+        <EegGlobalFiltersEditor {...defaultProps} onApplyMontageChannels={onApplyMontageChannels} />
+      );
+      await userEvent.type(screen.getByTestId('global-notch-seeg'), '50');
+      await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+      expect(onApplyMontageChannels).not.toHaveBeenCalled();
     });
   });
 });

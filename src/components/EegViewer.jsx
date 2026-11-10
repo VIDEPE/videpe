@@ -1563,6 +1563,9 @@ export const EegViewer = ({
           globalFilters={globalFilters}
           fs={provider.fs}
           channelCountByType={channelCountByType}
+          montageChannels={montageChannels}
+          onApplyMontageChannels={applyMontageChannels}
+          montageEditorOpen={montageVisible}
           onApplyGlobalFilters={setGlobalFilters}
           onClose={() => setGlobalFiltersVisible(false)}
         />
