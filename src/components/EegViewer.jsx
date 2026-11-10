@@ -44,7 +44,7 @@ import { useMontageChannels } from '@/hooks/useMontage';
 import { useMontageTemplates } from '@/hooks/useMontageTemplates';
 import { useTimepointSnapshot } from '@/hooks/useTimepointSnapshot';
 import { useRowResize } from '@/hooks/useRowResize';
-import { DEFAULT_GLOBAL_FILTERS } from '@/utils/channelTypes';
+import { DEFAULT_GLOBAL_FILTERS, countChannelsByType } from '@/utils/channelTypes';
 
 import { ELEC_POS_EXTENSIONS, INV_SOLUTIONS_EXTENSIONS } from '@/loaders/eegFormatRegistry';
 import { EegTopoViewer } from '@/components/EegTopoViewer';
@@ -418,6 +418,13 @@ export const EegViewer = ({
   // Flags whether are there is currently a global filter or montage active
   const filtersActive = useMemo(() => hasActiveFilters(displayRows), [displayRows]);
   const montageActive = montageChannels.length > 0;
+
+  // Channels per type — the Global Filters window dims types without channels, since their
+  // filter currently affects nothing
+  const channelCountByType = useMemo(
+    () => countChannelsByType(channelNames, channelSettings),
+    [channelNames, channelSettings]
+  );
 
   // visibleChannelCount is clamped inside useEegPlotControls against channelNames.length, which
   // doesn't account for bad channels or montage rows — reclamp against displayRows here too
@@ -1560,6 +1567,7 @@ export const EegViewer = ({
         <EegGlobalFiltersEditor
           globalFilters={globalFilters}
           fs={provider.fs}
+          channelCountByType={channelCountByType}
           onApplyGlobalFilters={setGlobalFilters}
           onClose={() => setGlobalFiltersVisible(false)}
         />

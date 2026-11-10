@@ -18,9 +18,13 @@ const GLOBAL_FILTERS = {
 const FS = 256; // nyquist = 128 Hz
 const NYQUIST = FS / 2;
 
+// No seeg channels, so the seeg row is dimmed
+const CHANNEL_COUNT_BY_TYPE = { eeg: 19, seeg: 0, other: 2 };
+
 const defaultProps = {
   globalFilters: GLOBAL_FILTERS,
   fs: FS,
+  channelCountByType: CHANNEL_COUNT_BY_TYPE,
   onApplyGlobalFilters: vi.fn(),
   onClose: vi.fn(),
 };
@@ -49,6 +53,21 @@ describe('EegGlobalFiltersEditor', () => {
       expect(screen.getByTestId('global-highPass-seeg')).toHaveValue(1);
       expect(screen.getByTestId('global-lowPass-seeg')).toHaveValue(null); // off
       expect(screen.getByTestId('global-notch-other')).toHaveValue(null); // off
+    });
+
+    it("shows each type's channel count next to its label", () => {
+      render(<EegGlobalFiltersEditor {...defaultProps} />);
+      expect(screen.getByTestId('global-filters-row-eeg')).toHaveTextContent('EEG (19 ch)');
+      expect(screen.getByTestId('global-filters-row-seeg')).toHaveTextContent('SEEG (0 ch)');
+      expect(screen.getByTestId('global-filters-row-other')).toHaveTextContent('Other (2 ch)');
+    });
+
+    it('dims the rows of types without channels, but keeps their inputs editable', () => {
+      render(<EegGlobalFiltersEditor {...defaultProps} />);
+      expect(screen.getByTestId('global-filters-row-seeg')).toHaveClass('opacity-40');
+      expect(screen.getByTestId('global-filters-row-eeg')).not.toHaveClass('opacity-40');
+      expect(screen.getByTestId('global-filters-row-other')).not.toHaveClass('opacity-40');
+      expect(screen.getByTestId('global-lowPass-seeg')).toBeEnabled();
     });
 
     it('shows the title without * until the draft is edited, and with * after', async () => {

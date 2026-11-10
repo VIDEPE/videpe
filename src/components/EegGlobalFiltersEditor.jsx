@@ -24,6 +24,7 @@ const FILTER_COL_CLASS = 'w-14 shrink-0';
 export function EegGlobalFiltersEditor({
   globalFilters,
   fs, // sampling frequency of the loaded EEG recording
+  channelCountByType, // number of recording channels per type, from countChannelsByType
   onApplyGlobalFilters,
   onClose,
 }) {
@@ -305,15 +306,23 @@ export function EegGlobalFiltersEditor({
           </div>
 
           {/* One row per channel type, in TYPE_ORDER — a type added to TYPE_LIST shows up here
-              automatically */}
+              automatically. A type without channels is dimmed (its filter currently affects
+              nothing) but stays editable, so its filters can be set before channels are
+              switched to that type. */}
           {TYPE_ORDER.map((type) => (
             <div
               key={type}
-              className="flex items-center gap-2 pl-3 pr-1 py-0.5"
+              className={cn(
+                'flex items-center gap-2 pl-3 pr-1 py-0.5',
+                channelCountByType?.[type] === 0 && 'opacity-40'
+              )}
               style={{ borderBottom: `1px solid ${rowDividerColor}` }}
               data-testid={`global-filters-row-${type}`}
             >
-              <span className={cn(TYPE_COL_CLASS, 'truncate text-sm')}>{TYPE_LIST[type]}</span>
+              <span className={cn(TYPE_COL_CLASS, 'truncate text-sm')}>
+                {TYPE_LIST[type]}
+                {channelCountByType && ` (${channelCountByType[type] ?? 0} ch)`}
+              </span>
               {filterColumns.map((column) => (
                 <input
                   key={column.key}
