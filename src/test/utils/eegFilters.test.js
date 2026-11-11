@@ -38,12 +38,12 @@ describe.each([
   ['getHighPassCoeff', getHighPassCoeff],
   ['getLowPassCoeff', getLowPassCoeff],
 ])('%s', (_name, filterCoefFunction) => {
-  it('returns one section per cascade order (default order = 4)', () => {
-    expect(filterCoefFunction(fs, 10)).toHaveLength(4);
+  it('defaults to 2 sections: a 4th-order Butterworth design (each biquad is 2nd order)', () => {
+    expect(filterCoefFunction(fs, 10)).toHaveLength(2);
   });
 
   it('respects an explicit order', () => {
-    expect(filterCoefFunction(fs, 10, 2)).toHaveLength(2);
+    expect(filterCoefFunction(fs, 10, 4)).toHaveLength(4);
   });
 
   it('returns finite, well-formed biquad coefficients', () => {
@@ -60,7 +60,7 @@ describe.each([
 // ─── getBandStopCoeff ────────────────────────────────────────────────────────────────
 
 describe('getBandStopCoeff', () => {
-  it('defaults to a single narrow section, not order=4 like highpass/lowpass', () => {
+  it('defaults to a single narrow section, not order=2 like highpass/lowpass', () => {
     // fili's cascade `order` widens a bandstop's stopband rather than steepening it, so
     // stacking several sections (as highpass/lowpass do) would blow the notch out far past a
     // usable mains-noise width — see the function's own docstring.
@@ -87,12 +87,12 @@ describe('buildFilterSections', () => {
     expect(buildFilterSections(fs, null, null, null)).toEqual([]);
   });
 
-  it('returns 4 sections for a highpass-only row (default order)', () => {
-    expect(buildFilterSections(fs, 1, null, null)).toHaveLength(4);
+  it('returns 2 sections for a highpass-only row (default order)', () => {
+    expect(buildFilterSections(fs, 1, null, null)).toHaveLength(2);
   });
 
-  it('returns 4 sections for a lowpass-only row', () => {
-    expect(buildFilterSections(fs, null, 40, null)).toHaveLength(4);
+  it('returns 2 sections for a lowpass-only row', () => {
+    expect(buildFilterSections(fs, null, 40, null)).toHaveLength(2);
   });
 
   it('returns 1 section for a notch-only row', () => {
@@ -100,7 +100,7 @@ describe('buildFilterSections', () => {
   });
 
   it('concatenates all three cascades when all are set', () => {
-    expect(buildFilterSections(fs, 1, 40, 50)).toHaveLength(9); // 4 + 4 + 1
+    expect(buildFilterSections(fs, 1, 40, 50)).toHaveLength(5); // 2 + 2 + 1
   });
 });
 
