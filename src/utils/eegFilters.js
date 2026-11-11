@@ -5,16 +5,18 @@ import Fili from 'fili';
  *
  * @param {number} fs - Sampling frequency in Hz.
  * @param {number} fc - Cutoff frequency in Hz.
- * @param {number} [order=4] - Number of cascaded biquad sections (fili caps this at 12).
+ * @param {number} [order=2] - Number of cascaded biquad sections (fili caps this at 12). Each
+ *   biquad is 2nd order, so the default 2 is a 4th-order Butterworth design — MNE's IIR
+ *   default; filtfilt then doubles the attenuation (effectively 8th order).
  * @returns {Array<{ z: number[], a: number[], b: number[], a0: number, k: number }>} One coefficient section per cascade stage.
  */
-export function getHighPassCoeff(fs, fc, order = 4) {
+export function getHighPassCoeff(fs, fc, order = 2) {
   //  Instance of a filter coefficient calculator
   const iirCalculator = new Fili.CalcCascades();
 
   // calculate highPass filter coefficients
   return iirCalculator.highpass({
-    order: order, // cascade 4 biquad filters (max: 12)
+    order: order, // number of cascaded biquads, each 2nd order (max: 12)
     characteristic: 'butterworth',
     Fs: fs, // sampling frequency
     Fc: fc, // cutoff frequency / center frequency for bandpass, bandstop, peak
@@ -30,16 +32,18 @@ export function getHighPassCoeff(fs, fc, order = 4) {
  *
  * @param {number} fs - Sampling frequency in Hz.
  * @param {number} fc - Cutoff frequency in Hz.
- * @param {number} [order=4] - Number of cascaded biquad sections (fili caps this at 12).
+ * @param {number} [order=2] - Number of cascaded biquad sections (fili caps this at 12). Each
+ *   biquad is 2nd order, so the default 2 is a 4th-order Butterworth design — MNE's IIR
+ *   default; filtfilt then doubles the attenuation (effectively 8th order).
  * @returns {Array<{ z: number[], a: number[], b: number[], a0: number, k: number }>} One coefficient section per cascade stage.
  */
-export function getLowPassCoeff(fs, fc, order = 4) {
+export function getLowPassCoeff(fs, fc, order = 2) {
   //  Instance of a filter coefficient calculator
   const iirCalculator = new Fili.CalcCascades();
 
   // calculate lowPass filter coefficients
   return iirCalculator.lowpass({
-    order: order, // cascade 4 biquad filters (max: 12)
+    order: order, // number of cascaded biquads, each 2nd order (max: 12)
     characteristic: 'butterworth',
     Fs: fs, // sampling frequency
     Fc: fc, // cutoff frequency / center frequency for bandpass, bandstop, peak
@@ -55,7 +59,7 @@ export function getLowPassCoeff(fs, fc, order = 4) {
  * highpass/lowpass, fili's cascade `order` widens a bandstop's stopband rather than steepening
  * it (cascading several BW=1 bandstop sections was measured to span ~20-120Hz around a 50Hz
  * center — far too broad for a mains notch), so this defaults to a single narrow-BW section
- * instead of inheriting the highpass/lowpass order=4 default. order=1, BW=0.1 measured at
+ * instead of inheriting the highpass/lowpass order=2 default. order=1, BW=0.1 measured at
  * ~3Hz wide at -3dB around a 50Hz center, close to the ~1.7-2Hz mains-notch target.
  *
  * @param {number} fs - Sampling frequency in Hz.
@@ -207,4 +211,148 @@ export function applyMontageRowFilter(samples, row, fs, window) {
   if (sections.length === 0) return samples; // nothing to filter — skip building a default window too
   const resolvedWindow = window ?? getTukeyWindow(samples.length + fs, 0.1);
   return applyFilterSections(samples, sections, resolvedWindow);
+}
+
+/**
+ * Resolves one montage row's effective highPass/lowPass/notch settings by combining the row's
+ * own values with the global filters for the row's channel type. A row value of `null` means
+ * "follow global"; any set value (including 0) is a channel-specific exception that wins over
+ * the global one. Each field resolves on its own, so a row with only its own highPass still
+ * follows the global lowPass and notch.
+ *
+ * The caller looks up the channel type and passes only that type's entry, e.g. for a
+ * globalFilters of:
+ *   {
+ *     eeg:   { highPass: 0.5, lowPass: 70, notch: 50 },
+ *     seeg:  { highPass: null, lowPass: null, notch: null },
+ *     other: { highPass: null, lowPass: null, notch: null },
+ *   }
+ * an EEG row is resolved with `resolveRowFilters(row, globalFilters.eeg)`.
+ *
+ * @param {{highPass: number|null, lowPass: number|null, notch: number|null}} row - A montage
+ *   row; `null` on a field means "follow the global setting". Other row fields are ignored.
+ * @param {{highPass: number|null, lowPass: number|null, notch: number|null}|undefined} typeFilters -
+ *   The global filters for the row's channel type (`globalFilters[type]`), or `undefined` for
+ *   a type without global filters, in which case only the row's own values apply.
+ * @returns {{highPass: number|null, lowPass: number|null, notch: number|null}} The effective
+ *   settings, ready for buildFilterSections; `null` on a field means that filter is off.
+ */
+export function resolveRowFilters(row, typeFilters) {
+  // row.highPass ?? falls through only when row.highPass is null/undefined
+  // typeFilters? if typeFilters is undefined then ?? null turns that undefined into null,
+  // so it always defaults to null
+  return {
+    highPass: row.highPass ?? typeFilters?.highPass ?? null,
+    lowPass: row.lowPass ?? typeFilters?.lowPass ?? null,
+    notch: row.notch ?? typeFilters?.notch ?? null,
+  };
+}
+
+/**
+ * Whether any of the given rows has at least one filter on — used to mark the Filters button
+ * as active. Pass the resolved display rows (after resolveRowFilters), so both the global
+ * filters and a montage row's own exceptions count. Only `null` means off; any number,
+ * including 0, counts as on, since buildFilterSections applies it too.
+ *
+ * @param {Array<{highPass: number|null, lowPass: number|null, notch: number|null}>} rows -
+ *   The resolved display rows; other row fields are ignored.
+ * @returns {boolean} `true` if any row has a highPass, lowPass or notch set; `false` for an
+ *   empty array or when every filter is off.
+ */
+export function hasActiveFilters(rows) {
+  return rows.some((row) => row.highPass != null || row.lowPass != null || row.notch != null);
+}
+
+/**
+ * How many samples a filter needs on each side of a sample before its edge transient has died
+ * out there — used to filter only a short segment around one time point (see
+ * filterChannelsAtSample) instead of the whole buffer.
+ *
+ * A filter's transient decays at a rate proportional to its cutoff (about 2.4 × fc for the
+ * 4th-order Butterworth), so the lowest cutoff that is set takes longest: 5 / that cutoff
+ * seconds, e.g. 10 s for a 0.5 Hz high-pass. That leaves the large DC offset of real EEG, which
+ * the segment edge turns into a step, well below a microvolt. Never less than 1 second: the
+ * notch's narrow band decays slower than 5 / f suggests (about 0.4 s to 1 % at 50 Hz).
+ *
+ * @param {{highPass: number|null, lowPass: number|null, notch: number|null}|undefined} typeFilters -
+ *   The global filters for one channel type (`globalFilters[type]`), or `undefined` for a type
+ *   without global filters; `null` on a field means that filter is off.
+ * @param {number} fs - Sampling frequency in Hz.
+ * @returns {number} Samples needed on each side of the sample; `fs` (1 second) when no filter
+ *   is set, `Infinity` for a cutoff of 0 (the caller caps it at the buffer edges).
+ */
+export function getSettlingSampleCount(typeFilters, fs) {
+  const frequencies = [typeFilters?.highPass, typeFilters?.lowPass, typeFilters?.notch].filter(
+    (v) => v != null
+  );
+  // Math.min() of an empty list is Infinity, so 5 / Infinity = 0 → no filters falls to the 1 s minimum
+  const lowestFreq = Math.min(...frequencies);
+
+  const marginLengthSeconds = Math.max(1, 5 / lowestFreq); // 5/lowest freq used as window (10s for 0.5Hz), with min 1s
+  return Math.ceil(marginLengthSeconds * fs); // return settling margin length in samples
+}
+
+/**
+ * Filters every channel with the global filters of its type and returns the filtered value at
+ * one sample — for the topography, connectome and ESI, which need one value per channel at the
+ * clicked time point. Instead of the whole buffer, only a segment of getSettlingSampleCount
+ * samples on each side is filtered (cut short at the buffer edges), which is milliseconds
+ * instead of seconds. The result matches filtering the full buffer to well below a microvolt;
+ * when the segment reaches both buffer edges it is the full buffer, so the match is exact.
+ *
+ * Montage rows' own filters don't apply here: these views use no montage, and need every
+ * channel of a type filtered the same way for a consistent spatial map and common average.
+ * The values are not referenced — the caller applies the common average afterwards, which gives
+ * the same result as filtering referenced data, since both steps are linear.
+ *
+ * @param {Array<Float32Array|number[]|null>} channels - The raw channel buffer.
+ * @param {number} sampleIndex - The sample to return, as an index into each channel.
+ * @param {(string|undefined)[]} channelTypes - One channel type per `channels` index;
+ *   `undefined` is treated as 'eeg', the default type for a channel without settings.
+ * @param {Record<string, {highPass: number|null, lowPass: number|null, notch: number|null}>} globalFilters -
+ *   The global filters per channel type.
+ * @param {number} fs - Sampling frequency in Hz.
+ * @returns {number[]} One filtered value per channel; the raw value for a type without filters,
+ *   0 for a missing channel or sample.
+ */
+export function filterChannelsAtSample(channels, sampleIndex, channelTypes, globalFilters, fs) {
+  return channels.map((channel, index) => {
+    const value = channel?.[sampleIndex];
+    if (value === undefined) return 0; // missing channel or sample
+
+    const typeFilters = globalFilters[channelTypes[index] ?? 'eeg'];
+    if (!typeFilters || !hasActiveFilters([typeFilters])) return value; // nothing to filter — skip the slice too
+
+    // filter only the segment around sampleIndex, cut short at the buffer edges
+    const settlingSampleCount = getSettlingSampleCount(typeFilters, fs);
+    const start = Math.max(0, sampleIndex - settlingSampleCount);
+    const end = Math.min(channel.length, sampleIndex + settlingSampleCount + 1);
+    const filtered = applyMontageRowFilter(channel.slice(start, end), typeFilters, fs);
+    return filtered[sampleIndex - start]; // the filtered value at sampleIndex
+  });
+}
+
+/**
+ * Formats one channel type's filters as a short label in the clinical band notation, e.g.
+ * '0.5–40 Hz, notch 50 Hz' — shown in the topography window, so it's clear which filters its
+ * voltages went through, short enough for several types to fit on one line.
+ * Only `null` means off, so a filter set to 0 is listed too (buildFilterSections applies it).
+ *
+ * @param {{highPass: number|null, lowPass: number|null, notch: number|null}|undefined} typeFilters -
+ *   The global filters for one channel type, or `undefined` for a type without global filters.
+ * @returns {string} The pass band ('0.5–40 Hz', or '> 0.5 Hz' / '< 40 Hz' with one edge),
+ *   then the notch ('notch 50 Hz'), joined by ', '; 'unfiltered' when no filter is set.
+ */
+export function formatFilterSummary(typeFilters) {
+  const highPass = typeFilters?.highPass ?? null;
+  const lowPass = typeFilters?.lowPass ?? null;
+  const notch = typeFilters?.notch ?? null;
+
+  const parts = [];
+  // pass band: both edges as a band, one edge as "above"/"below" that cutoff
+  if (highPass !== null && lowPass !== null) parts.push(`${highPass}–${lowPass} Hz`);
+  else if (highPass !== null) parts.push(`> ${highPass} Hz`);
+  else if (lowPass !== null) parts.push(`< ${lowPass} Hz`);
+  if (notch !== null) parts.push(`notch ${notch} Hz`);
+  return parts.length > 0 ? parts.join(', ') : 'unfiltered';
 }

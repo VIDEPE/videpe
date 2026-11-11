@@ -295,6 +295,12 @@ export const AboutPage = () => {
                     high-channel-count recordings stay smooth
                   </li>
                   <li>
+                    <strong>Frequency filters</strong> — set high-pass, low-pass, and mains notch
+                    (zero-phase Butterworth) per channel type (EEG, SEEG, Other) or per individual
+                    channel. The per-type filters also apply to the topography, 3D connectome and
+                    ESI
+                  </li>
+                  <li>
                     <strong>Stacked view</strong> — overlay all visible channels on one plot; traces
                     fade as the count grows and the hovered channel is named
                   </li>
@@ -354,8 +360,9 @@ export const AboutPage = () => {
                     own colours; the waveform shows exactly those rows
                   </li>
                   <li>
-                    <strong>Filtering</strong> — per-row high-pass, low-pass, and mains notch
-                    (zero-phase Butterworth)
+                    <strong>Per-row filters</strong> — give a row its own high-pass, low-pass, or
+                    notch to override the global filter of its channel type (e.g. for an ECG
+                    channel); empty fields show the global value greyed out
                   </li>
                   <li>
                     <strong>Bulk edits</strong> — set a value for every row at once from its column
@@ -375,7 +382,8 @@ export const AboutPage = () => {
                   </li>
                   <li>
                     <strong>Import/export</strong> — load AnyWave or Cartool montages
-                    (auto-detected), save as AnyWave with filters included
+                    (auto-detected), save as AnyWave with each row's effective filters (its own or
+                    the global ones) included
                   </li>
                 </ul>
               </div>

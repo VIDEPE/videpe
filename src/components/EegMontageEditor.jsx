@@ -11,6 +11,7 @@ import {
 import { parseMontageText } from '@/loaders/parseMontageText';
 import { toAnyWaveMontage } from '@/loaders/toMontageAnyWave';
 import { downloadTextFile } from '@/utils/fileDownload';
+import { TYPE_LIST, TYPE_ORDER } from '@/utils/channelTypes';
 import { cn } from '@/utils/utils';
 import {
   Plus,
@@ -23,6 +24,7 @@ import {
   ArrowUpWideNarrow,
   ArrowDownWideNarrow,
 } from 'lucide-react';
+import { resolveRowFilters } from '../utils/eegFilters';
 
 // ─── Window sizing constants ────────────────────────────────────────────────
 // Default/minimum window size in px — default matches the previous fixed w-96 h-80 (24rem x 20rem)
@@ -34,14 +36,6 @@ const DEFAULT_SPLIT_PERCENT = 27;
 const RESIZE_DIRECTIONS = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
 
 // ─── EEG Montage settings ────────────────────────────────────────
-const TYPE_LIST = {
-  eeg: 'EEG',
-  seeg: 'SEEG',
-  other: 'Other',
-};
-// Canonical grouping order for Sort by Type — clinical convention (eeg, then seeg, then
-// other), not alphabetical (which would separate seeg from eeg).
-const TYPE_ORDER = Object.keys(TYPE_LIST);
 // Preset options offered by each row's Color <select>. A loaded montage file (AnyWave) can
 // carry any CSS color keyword, not just these — see the color <select> below, which injects
 // an extra option for a row's current color when it isn't one of these presets.
@@ -62,7 +56,7 @@ const PRESET_COLORS = [
 
 // ─── Shared styling settings ────────────────────────────────────────
 // Shared title styling — keeps panes titles visually consistent, with the same height (TrafficLightButtons are 16px tall).
-const PANEL_TITLE_CLASS = 'h-5 flex items-center text-xs font-medium leading-none text-header';
+const PANEL_TITLE_CLASS = 'h-5 flex items-center text-xs font-medium leading-none text-heading';
 // Shared Channel column sizing for both row lists' header and rows — flex-1 so it fills
 // leftover width, min-w so it stops shrinking there and the other columns scroll instead.
 const CHANNEL_NAME_COL_CLASS = 'flex-1 min-w-8';
@@ -79,6 +73,8 @@ const MONTAGE_TYPE_COL_CLASS = 'w-13 shrink-0';
 const REF_COL_CLASS = 'w-18 shrink-0';
 const COLOR_COL_CLASS = 'w-20 shrink-0';
 const FILTER_COL_CLASS = 'w-14 shrink-0';
+// Per-row filter inputs — placeholder shows the global value, greyed so it reads as inherited
+const FILTER_INPUT_CLASS = 'text-xs bg-surface placeholder:text-foreground/30';
 const CLEAR_COL_CLASS = 'w-4 shrink-0';
 
 export function EegMontageEditor({
@@ -93,6 +89,7 @@ export function EegMontageEditor({
   montageChannels, // Array<{id, channel, reference, color}> — live state owned by EegViewer/useMontageChannels
   onApplyMontageChannels, // (Array<{id, channel, reference, color}>) => void — commits the draft on Apply/OK
   fs, // sampling frequency of the loaded EEG recording
+  globalFilters, // Record<type, {highPass, lowPass, notch}> — live global filters owned by EegViewer, shown as placeholders in rows without their own value
 }) {
   const { isDarkMode } = useTheme();
   const channelDividerColor = isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
@@ -122,6 +119,21 @@ export function EegMontageEditor({
   // here naturally re-snapshots on every open with no extra reset effect needed. Row edits
   // only ever touch these drafts; nothing reaches the live state in EegViewer until Apply/OK
   // explicitly commits it.
+  //
+  // draftChannelSettings — per recording channel (the channel-selection pane), keyed by name:
+  //   { [channelName]: { type: 'eeg' | 'seeg' | 'other', bad: boolean } }
+  //   A channel's type and bad flag live here, not on the montage rows, so every row that
+  //   uses the channel follows it.
+  //
+  // draftMontageChannels — the ordered montage rows (the montage settings pane), one per
+  // displayed trace; several rows may share a channel:
+  //   [{ id, channel, reference, color, highPass, lowPass, notch }]
+  //   - id: unique per row (crypto.randomUUID), so rows sharing a channel stay distinct
+  //   - channel: the channel name plotted on this row
+  //   - reference: another channel name, 'average' / 'median', or null (no reference)
+  //   - color: a CSS color, or null for the theme default
+  //   - highPass / lowPass / notch: Hz, or null to follow the global filter of the
+  //     channel's type (see resolveRowFilters)
   const [draftChannelSettings, setDraftChannelSettings] = useState(() => channelSettings);
   const [draftMontageChannels, setDraftMontageChannels] = useState(() => montageChannels);
 
@@ -364,9 +376,15 @@ export function EegMontageEditor({
   // Exports the current draft as AnyWave XML, regardless of whether it was built by hand
   // or loaded from either supported file format — Save always emits this one format.
   const handleSaveMontage = useCallback(() => {
-    const xml = toAnyWaveMontage(draftMontageChannels, draftChannelSettings);
+    // Export the effective filters: a row without its own value gets its type's global one
+    const resolvedRows = draftMontageChannels.map((row) => {
+      const type = draftChannelSettings[row.channel]?.type ?? 'eeg';
+      return { ...row, ...resolveRowFilters(row, globalFilters?.[type]) };
+    });
+
+    const xml = toAnyWaveMontage(resolvedRows, draftChannelSettings);
     downloadTextFile(xml, 'montage.mtg', 'text/xml');
-  }, [draftMontageChannels, draftChannelSettings]);
+  }, [draftMontageChannels, draftChannelSettings, globalFilters]);
 
   // The live channelSettings/montageChannels props only ever change via a prior Apply/OK (or
   // the seeding effects in useChannelSettings/useMontageChannels) — never by draft edits — so
@@ -730,14 +748,14 @@ export function EegMontageEditor({
         <div className="flex-1 min-h-0 overflow-x-auto">
           <div className="h-full flex flex-col w-max min-w-full">
             <div
-              className="flex-1 min-h-0 pb-4 overflow-y-auto border-header"
+              className="flex-1 min-h-0 pb-4 overflow-y-auto"
               data-testid="channel-list"
               onClick={handleChannelPaneBackgroundClick}
             >
               {/* Column headers — sticky inside the row scroll container, so the scrollbar
                   shrinks both by the same amount and they can't drift out of alignment. */}
               <div
-                className="sticky top-0 z-10 flex items-end gap-2 px-1 py-1 text-xs font-medium text-header border-b-2 border-border bg-background"
+                className="sticky top-0 z-10 flex items-end gap-2 px-1 py-1 text-xs font-medium text-heading border-b-2 border-border bg-background"
                 onClick={handleChannelPaneBackgroundClick}
               >
                 <span className={cn(CHANNEL_NAME_COL_CLASS, 'cursor-default')}>Channel</span>
@@ -756,7 +774,7 @@ export function EegMontageEditor({
                   <span className="cursor-default">Type</span>
                   <div className="flex items-center gap-1">
                     <select
-                      className="flex-1 min-w-0 text-xs border border-border rounded bg-surface"
+                      className="flex-1 min-w-0 text-xs font-normal text-foreground border border-border rounded bg-surface"
                       data-testid="bulk-type-select"
                       value={bulkType}
                       onChange={(e) => setBulkType(e.target.value)}
@@ -928,9 +946,11 @@ export function EegMontageEditor({
         >
           Add ALL
         </button>
+        {/* Outlined, unlike the filled Add buttons — same style as the Global Filters
+            window's Clear all, so clearing reads as a secondary action */}
         <button
           type="button"
-          className="button"
+          className="text-xs border border-border rounded-full px-2 py-1 bg-surface hover:bg-background cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
           data-testid="clear-all-button"
           onClick={handleClearAllMontageRows}
           disabled={draftMontageChannels.length === 0}
@@ -1007,14 +1027,14 @@ export function EegMontageEditor({
         <div className="flex-1 min-h-0 overflow-x-auto">
           <div className="h-full flex flex-col w-max min-w-full">
             <div
-              className="flex-1 min-h-0 pb-4 overflow-y-auto border-header"
+              className="flex-1 min-h-0 pb-4 overflow-y-auto"
               data-testid="montage-row-list"
               onClick={handleMontagePaneBackgroundClick}
             >
               {/* Column headers — sticky inside the row scroll container, so the scrollbar
                   shrinks both by the same amount and they can't drift out of alignment. */}
               <div
-                className="sticky top-0 z-10 flex items-end gap-2 pl-3 pr-1 py-1 text-xs font-medium text-header border-b-2 border-border bg-background"
+                className="sticky top-0 z-10 flex items-end gap-2 pl-3 pr-1 py-1 text-xs font-medium text-heading border-b-2 border-border bg-background"
                 onClick={handleMontagePaneBackgroundClick}
               >
                 {/* <span> has no real `disabled` attribute — it's guarded here instead by
@@ -1065,7 +1085,7 @@ export function EegMontageEditor({
                   <span className="text-center cursor-default">Ref</span>
                   <div className="flex items-center gap-1">
                     <select
-                      className="flex-1 min-w-0 text-xs border border-border rounded bg-surface"
+                      className="flex-1 min-w-0 text-xs font-normal text-foreground border border-border rounded bg-surface"
                       data-testid="bulk-reference-select"
                       disabled={draftMontageChannels.length === 0}
                       value={bulkReference}
@@ -1097,7 +1117,7 @@ export function EegMontageEditor({
                   <span className="cursor-default">Color</span>
                   <div className="flex items-center gap-1">
                     <select
-                      className="flex-1 min-w-0 text-xs border border-border rounded bg-surface"
+                      className="flex-1 min-w-0 text-xs font-normal text-foreground border border-border rounded bg-surface"
                       data-testid="bulk-color-select"
                       disabled={draftMontageChannels.length === 0}
                       value={bulkColor}
@@ -1137,7 +1157,7 @@ export function EegMontageEditor({
                       type="number"
                       placeholder="Hz"
                       aria-label="Set all rows' High Pass filter frequency"
-                      className="flex-1 min-w-0 text-xs border border-border rounded bg-surface"
+                      className="flex-1 min-w-0 text-xs font-normal text-foreground border border-border rounded bg-surface"
                       data-testid="bulk-highpass-input"
                       disabled={draftMontageChannels.length === 0}
                       min={0}
@@ -1173,7 +1193,7 @@ export function EegMontageEditor({
                       type="number"
                       placeholder="Hz"
                       aria-label="Set all rows' Low Pass filter frequency"
-                      className="flex-1 min-w-0 text-xs border border-border rounded bg-surface"
+                      className="flex-1 min-w-0 text-xs font-normal text-foreground border border-border rounded bg-surface"
                       data-testid="bulk-lowpass-input"
                       disabled={draftMontageChannels.length === 0}
                       min={0}
@@ -1209,7 +1229,7 @@ export function EegMontageEditor({
                       type="number"
                       placeholder="Hz"
                       aria-label="Set all rows' Notch filter frequency"
-                      className="flex-1 min-w-0 text-xs border border-border rounded bg-surface"
+                      className="flex-1 min-w-0 text-xs font-normal text-foreground border border-border rounded bg-surface"
                       data-testid="bulk-notch-input"
                       disabled={draftMontageChannels.length === 0}
                       min={0}
@@ -1236,7 +1256,7 @@ export function EegMontageEditor({
                 <div className={cn(CLEAR_COL_CLASS, 'flex flex-col items-center gap-0.5')}>
                   <button
                     type="button"
-                    className="shrink-0 w-4 h-4 flex items-center justify-center disabled:opacity-40 text-header hover:text-alert cursor-pointer"
+                    className="shrink-0 w-4 h-4 flex items-center justify-center disabled:opacity-40 text-heading hover:text-alert cursor-pointer"
                     data-testid="clear-all-header-button"
                     title={
                       draftMontageChannels.length === 0
@@ -1251,7 +1271,7 @@ export function EegMontageEditor({
                 </div>
               </div>
               {draftMontageChannels.length === 0 && (
-                <p className="max-w-sm text-xs text-header pl-3 pr-1 py-2">
+                <p className="max-w-sm text-xs text-heading pl-3 pr-1 py-2">
                   {`No montage rows yet — select channel(s) in the Channel Selection pane (${isPanesSwapped ? 'right' : 'left'})
               and use the + / Add buttons to add them to the montage row list (${isPanesSwapped ? 'left' : 'right'}).`}
                 </p>
@@ -1279,6 +1299,7 @@ export function EegMontageEditor({
                 const channelType = isChannelMissing
                   ? null
                   : (draftChannelSettings[row.channel]?.type ?? 'eeg');
+                const typeFilters = channelType ? globalFilters?.[channelType] : undefined;
                 return (
                   <div
                     key={row.id}
@@ -1400,6 +1421,7 @@ export function EegMontageEditor({
                     <input
                       data-testid={`montage-highpass-${row.id}`}
                       type="number"
+                      placeholder={typeFilters?.highPass ?? undefined}
                       value={row.highPass ?? ''}
                       disabled={isChannelMissing}
                       min={0}
@@ -1420,12 +1442,13 @@ export function EegMontageEditor({
                         if (clamped !== row.highPass) setDraftMontageRowHighPass(row.id, clamped);
                       }}
                       aria-label="High Pass filter frequency"
-                      className={cn(FILTER_COL_CLASS, 'text-xs bg-surface')}
+                      className={cn(FILTER_COL_CLASS, FILTER_INPUT_CLASS)}
                     />
                     {/* Channel LPF */}
                     <input
                       data-testid={`montage-lowpass-${row.id}`}
                       type="number"
+                      placeholder={typeFilters?.lowPass ?? undefined}
                       value={row.lowPass ?? ''}
                       disabled={isChannelMissing}
                       min={Number.isFinite(row.highPass) ? row.highPass : 0} // lowPass can never be lower than high pass
@@ -1444,12 +1467,13 @@ export function EegMontageEditor({
                         if (clamped !== row.lowPass) setDraftMontageRowLowPass(row.id, clamped);
                       }}
                       aria-label="Low Pass filter frequency"
-                      className={cn(FILTER_COL_CLASS, 'text-xs bg-surface')}
+                      className={cn(FILTER_COL_CLASS, FILTER_INPUT_CLASS)}
                     />
                     {/* Channel Notch */}
                     <input
                       data-testid={`montage-notch-${row.id}`}
                       type="number"
+                      placeholder={typeFilters?.notch ?? undefined}
                       value={row.notch ?? ''}
                       disabled={isChannelMissing}
                       min={0} // lowPass can never be lower than high pass
@@ -1468,7 +1492,7 @@ export function EegMontageEditor({
                         if (clamped !== row.notch) setDraftMontageRowNotch(row.id, clamped);
                       }}
                       aria-label="Notch filter frequency"
-                      className={cn(FILTER_COL_CLASS, 'text-xs bg-surface')}
+                      className={cn(FILTER_COL_CLASS, FILTER_INPUT_CLASS)}
                     />
 
                     {/* Remove row */}
@@ -1476,7 +1500,7 @@ export function EegMontageEditor({
                       type="button"
                       className={cn(
                         CLEAR_COL_CLASS,
-                        'flex items-center justify-center text-header hover:text-alert cursor-pointer'
+                        'flex items-center justify-center text-heading hover:text-alert cursor-pointer'
                       )}
                       data-testid={`remove-row-${row.id}`}
                       title={`Remove ${row.channel} from the montage`}
@@ -1671,11 +1695,11 @@ export function EegMontageEditor({
           <div className="flex flex-col gap-3 p-4 max-w-xs rounded-lg border border-border bg-surface shadow-lg">
             <div className="flex flex-col gap-1">
               <p className="text-sm font-medium text-heading">Keep monopolar electrodes?</p>
-              <p className="text-xs text-header">
+              <p className="text-xs text-heading">
                 Keep contacts without adjacent channels as unreferenced ("monopolar") instead of
                 bipolar.
               </p>
-              <p className="text-xs font-bold text-header">Not recommended.</p>
+              <p className="text-xs font-bold text-heading">Not recommended.</p>
             </div>
             <div className="flex justify-end gap-2">
               <button

@@ -1,0 +1,476 @@
+import { useRef, useMemo, useState, useCallback } from 'react';
+import { Check } from 'lucide-react';
+
+import { useTheme } from '@/hooks/useTheme';
+import { TrafficLightButtons } from '@/components/TrafficLightButtons';
+import { TYPE_LIST, TYPE_ORDER, DEFAULT_GLOBAL_FILTERS } from '@/utils/channelTypes';
+import { hasActiveFilters } from '@/utils/eegFilters';
+import { cn } from '@/utils/utils';
+
+// ─── Window sizing constants ────────────────────────────────────────────────
+// Default/minimum window size in px — much smaller than the montage editor, since this window
+// only holds one row per channel type
+const START_WINDOW_POS = { x: 40, y: 50 };
+const DEFAULT_WINDOW_SIZE = { width: 385, height: 300 };
+const MIN_WINDOW_WIDTH = 300;
+const MIN_WINDOW_HEIGHT = 245;
+const RESIZE_DIRECTIONS = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
+
+// ─── Shared styling settings ────────────────────────────────────────
+// Shared column-width classes — the header cell (with its bulk "set all" control) and each
+// type row's own input use the exact same class, so the columns line up.
+// Type has a fixed width so Channels sits right next to it; Channels takes up the free space,
+// which keeps the filter columns on the right
+const TYPE_COL_CLASS = 'w-12 shrink-0';
+const COUNT_COL_CLASS = 'flex-1 min-w-14';
+const FILTER_COL_CLASS = 'w-14 shrink-0';
+
+export function EegGlobalFiltersEditor({
+  globalFilters,
+  fs, // sampling frequency of the loaded EEG recording
+  channelCountByType, // number of recording channels per type, from countChannelsByType
+  montageChannels = [], // live montage rows owned by EegViewer — to count/reset their own filters
+  onApplyMontageChannels, // (rows) => void — commits the "Reset to global" on Apply/OK
+  montageEditorOpen = false, // the montage editor's own draft would overwrite a reset, so it's disabled then
+  onApplyGlobalFilters,
+  onClose,
+}) {
+  const { isDarkMode } = useTheme();
+  const rowDividerColor = isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
+  const nyquist = fs / 2;
+
+  // ─── Refs ───────────────────────────────────────────────────────────────────
+  const dragOffset = useRef(null);
+
+  // ─── State ──────────────────────────────────────────────────────────────────
+  const [isMaximized, setIsMaximized] = useState(false);
+  const [position, setPosition] = useState({ x: START_WINDOW_POS.x, y: START_WINDOW_POS.y });
+  const [size, setSize] = useState(DEFAULT_WINDOW_SIZE);
+
+  // Draft globalFilters — this component remounts fresh every time it's opened (EegViewer
+  // conditionally renders it), so seeding draft state from the live props here naturally
+  // re-snapshots on every open with no extra reset effect needed. Edits only ever touch this
+  // draft; nothing reaches the live state in EegViewer until Apply/OK explicitly commits it.
+  const [draftGlobalFilters, setDraftGlobalFilters] = useState(() => globalFilters);
+
+  // Montage rows with their own filter values (exceptions that win over the global filters),
+  // and whether "Reset to global" is pending — part of the draft, so it only clears those
+  // rows' own values on Apply/OK and Cancel drops it.
+  const overrideCount = montageChannels.filter((row) => hasActiveFilters([row])).length;
+  const [resetRowFilters, setResetRowFilters] = useState(false);
+
+  // Whether the draft differs from what was last applied — marks the title with * and
+  // highlights Apply, same as the montage editor.
+  const isModified = useMemo(
+    () => resetRowFilters || JSON.stringify(draftGlobalFilters) !== JSON.stringify(globalFilters),
+    [resetRowFilters, draftGlobalFilters, globalFilters]
+  );
+
+  // ─── Handlers ───────────────────────────────────────────────────────────────
+
+  // Per-type draft setters — one per filter, keyed by channel type
+  const setDraftFilterHighPass = useCallback((type, highPass) => {
+    setDraftGlobalFilters((prev) => ({ ...prev, [type]: { ...prev[type], highPass } }));
+  }, []);
+
+  const setDraftFilterLowPass = useCallback((type, lowPass) => {
+    setDraftGlobalFilters((prev) => ({ ...prev, [type]: { ...prev[type], lowPass } }));
+  }, []);
+
+  const setDraftFilterNotch = useCallback((type, notch) => {
+    setDraftGlobalFilters((prev) => ({ ...prev, [type]: { ...prev[type], notch } }));
+  }, []);
+
+  const handleApply = useCallback(() => {
+    onApplyGlobalFilters(draftGlobalFilters);
+    if (resetRowFilters) {
+      // Clear only the rows' own filter values (null = follow global); keep their other fields
+      onApplyMontageChannels(
+        montageChannels.map((row) => ({ ...row, highPass: null, lowPass: null, notch: null }))
+      );
+      setResetRowFilters(false);
+    }
+  }, [
+    draftGlobalFilters,
+    onApplyGlobalFilters,
+    resetRowFilters,
+    montageChannels,
+    onApplyMontageChannels,
+  ]);
+
+  const handleOk = useCallback(() => {
+    handleApply();
+    onClose();
+  }, [handleApply, onClose]);
+
+  // Bulk "set all" filter controls — each of the three applies independently (its own
+  // checkmark button, inline under its column header), not as one combined action. A blank
+  // field clears that one setting (off) for every type. A typed value is clamped per type by
+  // the column's own clamp, the same bounds as the per-type inputs on blur.
+  const [bulkHighPass, setBulkHighPass] = useState('');
+  const [bulkLowPass, setBulkLowPass] = useState('');
+  const [bulkNotch, setBulkNotch] = useState('');
+
+  // Applies one column's bulk value to every type (see the bulk comment above)
+  const handleSetAll = (column) => {
+    // Blank field = clear this setting (off) for every type; don't clamp it, or null becomes 0
+    if (column.bulkValue === '') {
+      TYPE_ORDER.forEach((type) => column.setDraft(type, null));
+      return;
+    }
+    // Otherwise clamp per type, against that type's own other filters
+    const value = Number(column.bulkValue);
+    TYPE_ORDER.forEach((type) =>
+      column.setDraft(type, column.clamp(value, draftGlobalFilters[type]))
+    );
+  };
+
+  // ─── Window drag/resize ───────────────────────────────────────────────────────────────
+  // Drag the floating window by its title bar. Position is clamped to the viewport so the
+  // window (and its title bar drag handle) can never be dragged out of view and get stranded.
+  const handleDragStart = useCallback(
+    (e) => {
+      dragOffset.current = { x: e.clientX - position.x, y: e.clientY - position.y };
+      const onMove = (e) => {
+        const maxX = Math.max(0, window.innerWidth - size.width);
+        const maxY = Math.max(0, window.innerHeight - size.height);
+        setPosition({
+          x: Math.min(Math.max(e.clientX - dragOffset.current.x, 0), maxX),
+          y: Math.min(Math.max(e.clientY - dragOffset.current.y, 0), maxY),
+        });
+      };
+      const onUp = () => {
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+      };
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+    },
+    [position, size]
+  );
+
+  // Resize the floating window by dragging an edge or corner. direction is a combination of
+  // 'n'/'s'/'e'/'w' identifying which edges move; dragging n/w also shifts position so the
+  // opposite edge stays anchored in place, matching how OS window resizing behaves.
+  const handleResizeStart = useCallback(
+    (e, direction) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const startWidth = size.width;
+      const startHeight = size.height;
+      const startPosition = position;
+
+      const onMove = (e) => {
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        const nextSize = { width: startWidth, height: startHeight };
+        const nextPosition = { ...startPosition };
+
+        if (direction.includes('e')) nextSize.width = Math.max(MIN_WINDOW_WIDTH, startWidth + dx);
+        if (direction.includes('s'))
+          nextSize.height = Math.max(MIN_WINDOW_HEIGHT, startHeight + dy);
+        if (direction.includes('w')) {
+          nextSize.width = Math.max(MIN_WINDOW_WIDTH, startWidth - dx);
+          nextPosition.x = startPosition.x + (startWidth - nextSize.width);
+        }
+        if (direction.includes('n')) {
+          nextSize.height = Math.max(MIN_WINDOW_HEIGHT, startHeight - dy);
+          nextPosition.y = startPosition.y + (startHeight - nextSize.height);
+        }
+
+        setSize(nextSize);
+        setPosition(nextPosition);
+      };
+      const onUp = () => {
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+      };
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+    },
+    [size, position]
+  );
+
+  // ─── Render helpers ─────────────────────────────────────────────────────────
+  const resizeCursor = {
+    n: 'cursor-ns-resize',
+    s: 'cursor-ns-resize',
+    e: 'cursor-ew-resize',
+    w: 'cursor-ew-resize',
+    ne: 'cursor-nesw-resize',
+    sw: 'cursor-nesw-resize',
+    nw: 'cursor-nwse-resize',
+    se: 'cursor-nwse-resize',
+  };
+
+  // Edge handles run the full length of their side; corner handles are small squares
+  // layered on top so diagonal resizing takes priority right at the corners.
+  const resizePosition = {
+    n: 'inset-x-0 top-0 h-1.5',
+    s: 'inset-x-0 bottom-0 h-1.5',
+    e: 'inset-y-0 right-0 w-1.5',
+    w: 'inset-y-0 left-0 w-1.5',
+    ne: 'top-0 right-0 w-2.5 h-2.5',
+    nw: 'top-0 left-0 w-2.5 h-2.5',
+    se: 'bottom-0 right-0 w-2.5 h-2.5',
+    sw: 'bottom-0 left-0 w-2.5 h-2.5',
+  };
+
+  // The three filter columns share the same header layout (label + bulk input + checkmark)
+  // and differ only in their state, setter and clamp rule, so they're described once here
+  // and mapped over in both the header and the type rows.
+  const filterColumns = [
+    {
+      key: 'highPass',
+      label: 'High Pass',
+      bulkValue: bulkHighPass,
+      setBulkValue: setBulkHighPass,
+      setDraft: setDraftFilterHighPass,
+      // highPass may not exceed its own lowPass (or nyquist when lowPass is off)
+      clamp: (value, typeFilters) => Math.min(Math.max(0, value), typeFilters?.lowPass ?? nyquist),
+    },
+    {
+      key: 'lowPass',
+      label: 'Low Pass',
+      bulkValue: bulkLowPass,
+      setBulkValue: setBulkLowPass,
+      setDraft: setDraftFilterLowPass,
+      // lowPass may not be lower than its own highPass or higher than nyquist
+      clamp: (value, typeFilters) => Math.min(Math.max(typeFilters?.highPass ?? 0, value), nyquist),
+    },
+    {
+      key: 'notch',
+      label: 'Notch',
+      bulkValue: bulkNotch,
+      setBulkValue: setBulkNotch,
+      setDraft: setDraftFilterNotch,
+      // notch can't be smaller than 0 or higher than nyquist
+      clamp: (value) => Math.min(Math.max(0, value), nyquist),
+    },
+  ];
+
+  // ─── Render ─────────────────────────────────────────────────────────────────
+  return (
+    <div
+      className={
+        isMaximized
+          ? 'fixed inset-0 z-50 flex flex-col bg-surface'
+          : 'fixed z-50 flex flex-col rounded-lg border border-border bg-surface'
+      }
+      style={
+        isMaximized
+          ? { boxShadow: 'none' }
+          : {
+              left: position.x,
+              top: position.y,
+              width: size.width,
+              height: size.height,
+              boxShadow: 'var(--c-shadow)',
+            }
+      }
+    >
+      {/* Title bar — drag handle; explicit bg-surface so NiiVue's black canvas doesn't bleed through */}
+      <div
+        data-testid="global-filters-title-bar"
+        className="flex items-center justify-between px-2 py-1 border-b border-border cursor-grab select-none shrink-0 bg-surface"
+        onMouseDown={handleDragStart}
+      >
+        <span className="text-sm font-medium text-heading">
+          {isModified ? 'Global EEG Filters *' : 'Global EEG Filters'}
+        </span>
+        <TrafficLightButtons
+          onMaximize={() => setIsMaximized((v) => !v)}
+          isMaximized={isMaximized}
+          onClose={onClose}
+        />
+      </div>
+
+      {/* Header + one row per channel type — bg-background inside a bg-surface padding, so the
+          surrounding surface shows as a border around the list, like the montage row list. */}
+      <div className="flex-1 min-h-0 flex flex-col p-2">
+        <div className="flex-1 min-h-0 overflow-auto bg-background">
+          {/* Column headers — sticky so they stay visible if the window is made very short */}
+          <div className="sticky top-0 z-10 flex items-end gap-2 pl-3 pr-1 py-1 text-xs font-medium text-heading border-b-2 border-border bg-background">
+            <span className={cn(TYPE_COL_CLASS, 'cursor-default')}>Type</span>
+            <span
+              className={cn(COUNT_COL_CLASS, 'cursor-default')}
+              title="Number of recording channels of this type"
+            >
+              Channels
+            </span>
+            {/* High Pass / Low Pass / Notch — each applies independently: type a value in
+                that column and click its own checkmark. A blank field clears that one setting
+                (off) for every type. */}
+            {filterColumns.map((column) => (
+              <div
+                key={column.key}
+                className={cn(FILTER_COL_CLASS, 'flex flex-col gap-0.5')}
+                title={`${column.label} filter frequency`}
+              >
+                <span className="text-center cursor-default">{column.label}</span>
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    placeholder="Hz"
+                    aria-label={`Set all types' ${column.label} filter frequency`}
+                    className="flex-1 min-w-0 text-xs font-normal text-foreground border border-border rounded bg-surface"
+                    data-testid={`bulk-${column.key}-input`}
+                    min={0}
+                    max={nyquist}
+                    step="any"
+                    value={column.bulkValue}
+                    onChange={(e) => column.setBulkValue(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="shrink-0 w-4 h-4 rounded-full bg-primary text-background flex items-center justify-center disabled:opacity-40 cursor-pointer"
+                    data-testid={`bulk-${column.key}-apply-button`}
+                    title={`Set every type's ${column.label} to this value`}
+                    onClick={() => handleSetAll(column)}
+                  >
+                    <Check size={10} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* One row per channel type, in TYPE_ORDER — a type added to TYPE_LIST shows up here
+              automatically. A type without channels is dimmed (its filter currently affects
+              nothing) but stays editable, so its filters can be set before channels are
+              switched to that type. */}
+          {TYPE_ORDER.map((type) => (
+            <div
+              key={type}
+              className={cn(
+                'flex items-center gap-2 pl-3 pr-1 py-0.5',
+                channelCountByType?.[type] === 0 && 'opacity-40'
+              )}
+              style={{ borderBottom: `1px solid ${rowDividerColor}` }}
+              data-testid={`global-filters-row-${type}`}
+            >
+              <span className={cn(TYPE_COL_CLASS, 'truncate text-sm')}>{TYPE_LIST[type]}</span>
+              <span
+                className={cn(COUNT_COL_CLASS, 'text-xs')}
+                data-testid={`global-filters-count-${type}`}
+              >
+                {channelCountByType?.[type] ?? '–'}
+              </span>
+              {filterColumns.map((column) => (
+                <input
+                  key={column.key}
+                  type="number"
+                  data-testid={`global-${column.key}-${type}`}
+                  aria-label={`${TYPE_LIST[type]} ${column.label} filter frequency`}
+                  className={cn(FILTER_COL_CLASS, 'text-xs bg-surface')}
+                  min={0}
+                  max={nyquist}
+                  step="any"
+                  value={draftGlobalFilters[type]?.[column.key] ?? ''}
+                  onChange={(e) =>
+                    column.setDraft(type, e.target.value ? Number(e.target.value) : null)
+                  }
+                  // Clamped on blur, not per keystroke, so typing e.g. "100" isn't cut off at "1" first
+                  onBlur={() => {
+                    const value = draftGlobalFilters[type]?.[column.key];
+                    if (value == null) return; // blank = off, don't clamp it to 0
+                    column.setDraft(type, column.clamp(value, draftGlobalFilters[type]));
+                  }}
+                />
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Montage rows with their own filters — these win over the global values above, so
+          say so here, with a draft "Reset to global" that clears their own values on Apply. */}
+      {overrideCount > 0 && (
+        <div
+          className="shrink-0 flex items-center justify-between gap-2 px-3 py-1 text-xs border-t border-border bg-surface"
+          data-testid="row-filter-overrides"
+        >
+          <span>
+            {overrideCount} montage {overrideCount === 1 ? 'row has' : 'rows have'} custom filters
+          </span>
+          {/* Once clicked, the button is replaced in place by a pending note of the same size
+              (same padding and border, dashed), so the line keeps its height and nothing shifts */}
+          {resetRowFilters ? (
+            <span
+              className="shrink-0 border border-dashed border-border rounded-full px-2 py-0.5 text-foreground/40"
+              data-testid="reset-row-filters-pending"
+              title="Cancel to keep the rows' own filters"
+            >
+              Resets on Apply/OK
+            </span>
+          ) : (
+            <button
+              type="button"
+              className="shrink-0 text-xs border border-border rounded-full px-2 py-0.5 bg-surface hover:bg-background disabled:opacity-40 disabled:cursor-not-allowed"
+              data-testid="reset-row-filters-button"
+              title={
+                montageEditorOpen
+                  ? 'Close the montage editor to reset its rows to the global filters'
+                  : 'Clear the rows’ own filters on Apply, so they follow the global filters'
+              }
+              disabled={montageEditorOpen}
+              onClick={() => setResetRowFilters(true)}
+            >
+              Reset to global
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Footer — Apply/OK commit the draft to EegViewer's live globalFilters; Cancel (and
+          the title bar's red X, via onClose) discard it by simply closing without committing.
+          Clear all sits on the left, apart from the commit buttons, and only edits the draft. */}
+      <div className="shrink-0 flex items-center justify-end gap-2 px-3 py-2 border-t border-border bg-surface">
+        <button
+          type="button"
+          className="mr-auto text-xs border border-border rounded-full px-2 py-1 bg-surface hover:bg-background"
+          data-testid="clear-all-filters-button"
+          title="Turn every global filter off (the montage rows' own filters stay)"
+          onClick={() => setDraftGlobalFilters(DEFAULT_GLOBAL_FILTERS)}
+        >
+          Clear all
+        </button>
+        <button type="button" className="button" onClick={handleOk}>
+          OK
+        </button>
+        <button
+          type="button"
+          className="text-xs border border-border rounded-full px-2 py-1 bg-surface hover:bg-background"
+          onClick={onClose}
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          className={
+            isModified
+              ? 'button'
+              : 'text-xs border border-border rounded-full px-2 py-1 bg-surface hover:bg-background'
+          }
+          onClick={handleApply}
+        >
+          Apply
+        </button>
+      </div>
+
+      {/* Resize handles — hidden while maximized since the window already fills the screen.
+          Rendered last so they paint above the title/footer content and stay grabbable at the edges. */}
+      {!isMaximized &&
+        RESIZE_DIRECTIONS.map((direction) => (
+          <div
+            key={direction}
+            data-testid={`global-filters-resize-${direction}`}
+            className={`absolute ${resizePosition[direction]} ${resizeCursor[direction]}`}
+            onMouseDown={(e) => handleResizeStart(e, direction)}
+          />
+        ))}
+    </div>
+  );
+}

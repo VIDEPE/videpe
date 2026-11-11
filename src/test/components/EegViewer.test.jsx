@@ -2,7 +2,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, within, fireEvent, act, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { EegViewer } from '@/components/EegViewer';
+import { EegTopoViewer } from '@/components/EegTopoViewer'; // the vi.fn mock below
 import { parseAnyWaveMontage } from '@/loaders/parseMontageAnywave';
+import { DEFAULT_GLOBAL_FILTERS } from '@/utils/channelTypes';
 
 // capturedClickHandler stores the 'click' listener attached to u.over inside onCreate,
 // so tests can fire a simulated click without a real uPlot instance.
@@ -724,6 +726,15 @@ describe('EegViewer — topography wiring', () => {
     await enableTopoAndClick();
     // MOCK_TSV has 2 labels matching the test channel names (EEG1, EEG2); total is 3
     expect(screen.getByText(/2\s*\/\s*3\s*channels mapped/i)).toBeTruthy();
+  });
+
+  it('passes the global filters, channel counts and montage row filter flag to EegTopoViewer for its filter row', async () => {
+    await renderViewer();
+    await enableTopoAndClick();
+    const props = EegTopoViewer.mock.calls.at(-1)[0];
+    expect(props.globalFilters).toEqual(DEFAULT_GLOBAL_FILTERS);
+    expect(props.channelCountByType).toEqual(expect.objectContaining({ eeg: expect.any(Number) }));
+    expect(props.hasMontageRowFilters).toBe(false); // no montage rows yet
   });
 });
 
@@ -2934,5 +2945,29 @@ describe('EegViewer — clicking a channel label moves the NiiVue cursor', () =>
       pos: expect.objectContaining({ x: -29, y: 84, z: -7 }),
       clickId: 2,
     });
+  });
+});
+
+describe('EegViewer — Filters and Montage buttons show when they are in effect', () => {
+  it('marks the Filters button inactive by default, and active once a global filter is applied', async () => {
+    await renderViewer();
+    const filtersButton = screen.getByRole('button', { name: 'Filters' });
+    expect(filtersButton).toHaveAttribute('data-active', 'false');
+
+    await userEvent.click(filtersButton);
+    await userEvent.type(screen.getByTestId('global-highPass-eeg'), '1');
+    await userEvent.click(screen.getByRole('button', { name: 'OK' }));
+
+    expect(filtersButton).toHaveAttribute('data-active', 'true');
+  });
+
+  it('marks the Montage button inactive with no montage, and active once a template is picked', async () => {
+    await renderViewer();
+    const montageButton = screen.getByRole('button', { name: 'Montage' });
+    expect(montageButton).toHaveAttribute('data-active', 'false');
+
+    await userEvent.selectOptions(screen.getByTestId('montage-template-select'), 'average');
+
+    expect(montageButton).toHaveAttribute('data-active', 'true');
   });
 });

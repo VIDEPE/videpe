@@ -1,7 +1,8 @@
 import { parseElectrodeContactName } from './intracranialDetection';
 import { normalizeChannelName } from './eegTopographyUtils';
-import { getTukeyWindow, applyMontageRowFilter } from './eegFilters';
+import { getTukeyWindow, applyMontageRowFilter, resolveRowFilters } from './eegFilters';
 import { yieldToMain } from './yieldToMain';
+import { DEFAULT_GLOBAL_FILTERS } from './channelTypes';
 
 // Once a filtering pass has worked this long without pausing, it yields to the browser — keeps
 // each uninterrupted block comfortably under one frame (~16ms) so the app stays responsive
@@ -9,29 +10,29 @@ const FILTER_FRAME_BUDGET_MS = 8;
 
 // ─── EEG channel referencing ──────────────────────────────────────────────────────────
 //
-// Two independent pipelines re-reference EEG channels against the same shared
-// average/median series (computed once from non-bad channels), but apply it differently:
+// Two independent pipelines re-reference EEG channels, each in its own way:
 //
-//   raw channels + channelSettings (bad flags)
-//           │
-//           ▼
-//      filter non-bad
-//           │
-//           ▼
-//   computeReferenceSeries(nonBad) → { average, median }   ← computed ONCE (only the
-//           │                              │                   series in use — see
-//           │                              │                   getNeededReferenceSeries)
-//           │                              │
-//           ▼                              ▼
-//   deriveMontageRowSamples          applyReferenceSeries(channels, series.average)
-//   (subtract from ONE row's channel,   (subtract from ALL channels — always the average,
-//    per-row reference/mode)             unconditionally, via useTimepointSnapshot)
-//           │                              │
-//           ▼                              ▼
-//      waveform plot                topoVoltages / connectome / ESI
+//              raw channels + channelSettings (bad flags)
+//                 │                                │
+//                 ▼                                ▼
+//   computeReferenceSeries(nonBad)        filterChannelsAtSample (eegFilters.js)
+//   → { average, median } over the        (each channel, only around the clicked
+//   whole buffer, computed ONCE (only      sample, with its type's global filters)
+//   the series in use — see                        │
+//   getNeededReferenceSeries)                      ▼
+//                 │                        subtract the average of the good
+//                 ▼                        channels at that one sample
+//   deriveMontageRowSamples               (always, via useTimepointSnapshot)
+//   (subtract from ONE row's channel,              │
+//    per-row reference/mode), then filter          │
+//                 │                                │
+//                 ▼                                ▼
+//            waveform plot             topoVoltages / connectome / ESI
 //
 // Neither side knows about the other's output — montage rows never feed topography/
 // connectome/ESI, which always uses the common-average reference (never user-selectable).
+// The snapshot filters before referencing, so it can't use the raw average series; the
+// result is the same as referencing first, since both steps are linear.
 
 /**
  * Computes the shared reference series everything below subtracts from channels set to
@@ -161,34 +162,19 @@ function selectKthSmallest(values, k) {
  * Decides which reference series are actually used right now, so computeReferenceSeries
  * can skip the rest.
  *
+ * Only the montage rows use these series — the topography/connectome/ESI snapshot takes its
+ * own average at the clicked sample (see useTimepointSnapshot).
+ *
  * @param {{ referenceMode: 'average'|'median'|null }[]} displayRows - from buildMontageDisplayRows.
- * @param {boolean} isSnapshotShown - whether a timepoint snapshot (topography/connectome/ESI)
- *   is shown; those always use the common average reference.
  * @returns {{ needsAverage: boolean, needsMedian: boolean }}
  */
-export function getNeededReferenceSeries(displayRows, isSnapshotShown) {
+export function getNeededReferenceSeries(displayRows) {
   return {
-    // needsAverage (boolean): needed when a snapshot is shown (it always uses the average) or any row references Avg
-    needsAverage: isSnapshotShown || displayRows.some((row) => row.referenceMode === 'average'),
+    // needsAverage (boolean): needed only when any row references Avg
+    needsAverage: displayRows.some((row) => row.referenceMode === 'average'),
     // needsMedian (boolean): needed only when any row references Med
     needsMedian: displayRows.some((row) => row.referenceMode === 'median'),
   };
-}
-
-/**
- * Subtracts an already-computed reference series (see computeReferenceSeries above)
- * from every channel — the "apply to ALL channels" half of the diagram above, used by
- * applyMontage to re-reference the whole buffer for topography/connectome/ESI.
- *
- * @param {number[][]} channels - one array of samples per channel.
- * @param {number[]|null} series - the reference series to subtract (`average` or `median`
- *   from computeReferenceSeries), or null when there was nothing to reference against, in
- *   which case `channels` is returned unchanged rather than subtracting nothing meaningful.
- * @returns {number[][]} `channels`, each re-referenced against `series`.
- */
-export function applyReferenceSeries(channels, series) {
-  if (!series) return channels;
-  return channels.map((chan) => chan.map((value, iSamp) => value - series[iSamp]));
 }
 
 // Reference values a montage row can carry besides a real channel name — resolved against
@@ -278,21 +264,46 @@ export function remapMontageToRecording({ rows, channelTypes }, channelNames, ch
  * loaded montage file) name a channel not in channelNames — indexOf would return -1 there,
  * which deriveMontageRowSamples would crash on.
  *
+ * Also resolves each row's effective filters (see resolveRowFilters): a montage row's own
+ * highPass/lowPass/notch value wins, and every unset one (all of them, for the fallback rows
+ * without a montage) comes from the global filters of the row's channel type. A bipolar row
+ * uses its channel's type, not its reference's.
+ *
  * @param {string[]} channelNames - the recording's channel names.
- * @param {Object.<string, {bad?: boolean}>} channelSettings - per-channel settings, keyed
- *   by channel name; only `bad` is read here.
- * @param {{id, channel: string, reference: string|null, color: string|null}[]} montageChannels -
- *   the configured montage rows, or `[]` to fall back to one row per non-bad channel.
+ * @param {Object.<string, {bad?: boolean, type?: string}>} channelSettings - per-channel
+ *   settings, keyed by channel name; `bad` drops rows, `type` picks the global filters
+ *   (eeg when unset).
+ * @param {{
+ *   id,
+ *   channel: string,
+ *   reference: string|null,
+ *   color: string|null,
+ *   highPass?: number|null,
+ *   lowPass?: number|null,
+ *   notch?: number|null
+ * }[]} montageChannels - the configured montage rows, or `[]` to fall back to one row per
+ *   non-bad channel. A `null`/missing filter value means "follow the global filter".
+ * @param {Object.<string, {highPass: number|null, lowPass: number|null, notch: number|null}>} [globalFilters] -
+ *   the global filters per channel type (see DEFAULT_GLOBAL_FILTERS, the default: all off).
  * @returns {{
  *   id: string,
  *   name: string,
  *   channelIndex: number,
  *   referenceIndex: number|null,
  *   referenceMode: 'average'|'median'|null,
- *   color: string|null
- * }[]}
+ *   color: string|null,
+ *   highPass: number|null,
+ *   lowPass: number|null,
+ *   notch: number|null
+ * }[]} the display rows; `highPass`/`lowPass`/`notch` are the effective settings in Hz
+ *   (`null` = off), ready for filterMontageRows.
  */
-export function buildMontageDisplayRows(channelNames, channelSettings, montageChannels) {
+export function buildMontageDisplayRows(
+  channelNames,
+  channelSettings,
+  montageChannels,
+  globalFilters = DEFAULT_GLOBAL_FILTERS
+) {
   // No montage set => return all non-bad channel names
   if (montageChannels.length === 0) {
     return channelNames
@@ -303,9 +314,11 @@ export function buildMontageDisplayRows(channelNames, channelSettings, montageCh
         referenceIndex: null, // channel index of the reference (if reference not n/a, average or median)
         referenceMode: null, // if reference is average / median, this field will indicate so
         color: null, // without montage the channels don't have a colour set
-        highPass: null, // no highPass filter set without montage (null indicates off)
-        lowPass: null, // no lowPass filter set without montage (null indicates off)
-        notch: null, // no bandstop filter set without montage (null indicates off)
+        // no montage row, so nothing overrides the global filters: they apply for this channel's type (eeg when unset)
+        ...resolveRowFilters(
+          { highPass: null, lowPass: null, notch: null },
+          globalFilters[channelSettings[name]?.type ?? 'eeg']
+        ),
       }))
       .filter(({ name }) => !channelSettings[name]?.bad);
   }
@@ -322,6 +335,7 @@ export function buildMontageDisplayRows(channelNames, channelSettings, montageCh
       //   if row.reference === 'average'/'median': [channel] - Avg / Med
       .map((row) => {
         const isSpecialReference = SPECIAL_REFERENCES.includes(row.reference);
+        const type = channelSettings[row.channel]?.type ?? 'eeg'; // the channel's type (not the reference's), default to eeg when unset
         return {
           id: row.id,
           name: row.reference
@@ -332,9 +346,8 @@ export function buildMontageDisplayRows(channelNames, channelSettings, montageCh
             row.reference && !isSpecialReference ? channelNames.indexOf(row.reference) : null,
           referenceMode: isSpecialReference ? row.reference : null,
           color: row.color,
-          highPass: row.highPass ?? null, // highPass frequency to filters buffered signal (null when not set)
-          lowPass: row.lowPass ?? null, // lowPass frequency to filters buffered signal (null when not set)
-          notch: row.notch ?? null, // bandstop frequency to filters buffered signal (null when not set)
+          // effective highPass/lowPass/notch (Hz, null = off): the row's own value, else the global one for its type
+          ...resolveRowFilters(row, globalFilters[type]),
         };
       })
   );

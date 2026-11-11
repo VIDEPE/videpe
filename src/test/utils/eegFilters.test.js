@@ -8,6 +8,11 @@ import {
   applyFilterSections,
   applyMontageRowFilter,
   getTukeyWindow,
+  resolveRowFilters,
+  hasActiveFilters,
+  getSettlingSampleCount,
+  filterChannelsAtSample,
+  formatFilterSummary,
 } from '@/utils/eegFilters';
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
@@ -16,6 +21,12 @@ const fs = 256;
 const n = 1024;
 const time = Array.from({ length: n }, (_, i) => i / fs);
 const sine = (freq) => time.map((t) => Math.sin(2 * Math.PI * freq * t));
+
+const globalFilters = {
+  eeg: { highPass: 0.5, lowPass: 70, notch: 50 },
+  seeg: { highPass: null, lowPass: null, notch: null },
+  other: { highPass: null, lowPass: null, notch: null },
+};
 
 // RMS-based amplitude estimate over the middle half of the signal, so edge transients (fili's
 // filtfilt has no padding of its own — see applyFilterSections's docstring) don't skew the reading.
@@ -30,12 +41,12 @@ describe.each([
   ['getHighPassCoeff', getHighPassCoeff],
   ['getLowPassCoeff', getLowPassCoeff],
 ])('%s', (_name, filterCoefFunction) => {
-  it('returns one section per cascade order (default order = 4)', () => {
-    expect(filterCoefFunction(fs, 10)).toHaveLength(4);
+  it('defaults to 2 sections: a 4th-order Butterworth design (each biquad is 2nd order)', () => {
+    expect(filterCoefFunction(fs, 10)).toHaveLength(2);
   });
 
   it('respects an explicit order', () => {
-    expect(filterCoefFunction(fs, 10, 2)).toHaveLength(2);
+    expect(filterCoefFunction(fs, 10, 4)).toHaveLength(4);
   });
 
   it('returns finite, well-formed biquad coefficients', () => {
@@ -52,7 +63,7 @@ describe.each([
 // ─── getBandStopCoeff ────────────────────────────────────────────────────────────────
 
 describe('getBandStopCoeff', () => {
-  it('defaults to a single narrow section, not order=4 like highpass/lowpass', () => {
+  it('defaults to a single narrow section, not order=2 like highpass/lowpass', () => {
     // fili's cascade `order` widens a bandstop's stopband rather than steepening it, so
     // stacking several sections (as highpass/lowpass do) would blow the notch out far past a
     // usable mains-noise width — see the function's own docstring.
@@ -79,12 +90,12 @@ describe('buildFilterSections', () => {
     expect(buildFilterSections(fs, null, null, null)).toEqual([]);
   });
 
-  it('returns 4 sections for a highpass-only row (default order)', () => {
-    expect(buildFilterSections(fs, 1, null, null)).toHaveLength(4);
+  it('returns 2 sections for a highpass-only row (default order)', () => {
+    expect(buildFilterSections(fs, 1, null, null)).toHaveLength(2);
   });
 
-  it('returns 4 sections for a lowpass-only row', () => {
-    expect(buildFilterSections(fs, null, 40, null)).toHaveLength(4);
+  it('returns 2 sections for a lowpass-only row', () => {
+    expect(buildFilterSections(fs, null, 40, null)).toHaveLength(2);
   });
 
   it('returns 1 section for a notch-only row', () => {
@@ -92,7 +103,7 @@ describe('buildFilterSections', () => {
   });
 
   it('concatenates all three cascades when all are set', () => {
-    expect(buildFilterSections(fs, 1, 40, 50)).toHaveLength(9); // 4 + 4 + 1
+    expect(buildFilterSections(fs, 1, 40, 50)).toHaveLength(5); // 2 + 2 + 1
   });
 });
 
@@ -236,5 +247,203 @@ describe('getTukeyWindow', () => {
     expect(window[0]).toBeCloseTo(0, 6);
     expect(window[window.length - 1]).toBeCloseTo(0, 6);
     window.forEach((value, i) => expect(value).toBeCloseTo(window[window.length - 1 - i], 6));
+  });
+});
+
+// ─── resolveRowFilters ──────────────────────────────────────────────────────────────────
+describe('resolveRowFilters', () => {
+  it('returns the global values when all three are null on the row', () => {
+    const row = { highPass: null, lowPass: null, notch: null };
+    const result = resolveRowFilters(row, globalFilters.eeg);
+    // toEqual (contents), not toBe (same object) — the resolver may return a fresh object
+    expect(result).toEqual({ highPass: 0.5, lowPass: 70, notch: 50 });
+  });
+
+  it('returns the row values and ignores the global values when all three are set on the row', () => {
+    const row = { highPass: 1, lowPass: 40, notch: 60 };
+    const result = resolveRowFilters(row, globalFilters.eeg);
+    expect(result).toEqual({ highPass: 1, lowPass: 40, notch: 60 });
+  });
+
+  it('resolves each field on its own when the row is mixed', () => {
+    // only highPass is a channel-specific exception; lowPass/notch follow the global setting
+    const row = { highPass: 1, lowPass: null, notch: null };
+    const result = resolveRowFilters(row, globalFilters.eeg);
+    expect(result).toEqual({ highPass: 1, lowPass: 70, notch: 50 });
+  });
+
+  it('returns the row values (null where unset) without crashing when typeFilters is undefined', () => {
+    // e.g. a channel whose type isn't in TYPE_LIST, so globalFilters[type] is undefined
+    const row = { highPass: 1, lowPass: null, notch: null };
+    const result = resolveRowFilters(row, undefined);
+    expect(result).toEqual({ highPass: 1, lowPass: null, notch: null });
+  });
+
+  it('keeps a row value of 0 instead of falling through to the global value', () => {
+    // 0 is falsy: `row.highPass || global` would wrongly return 0.5 here, `??` keeps 0
+    const row = { highPass: 0, lowPass: null, notch: null };
+    const result = resolveRowFilters(row, globalFilters.eeg);
+    expect(result).toEqual({ highPass: 0, lowPass: 70, notch: 50 });
+  });
+});
+
+// ─── hasActiveFilters ───────────────────────────────────────────────────────────────────
+describe('hasActiveFilters', () => {
+  const OFF = { highPass: null, lowPass: null, notch: null };
+
+  it('returns false for no rows', () => {
+    expect(hasActiveFilters([])).toBe(false);
+  });
+
+  it('returns false when every filter on every row is off', () => {
+    expect(hasActiveFilters([OFF, OFF])).toBe(false);
+  });
+
+  it.each(['highPass', 'lowPass', 'notch'])(
+    'returns true when one row has only a %s set',
+    (key) => {
+      expect(hasActiveFilters([OFF, { ...OFF, [key]: 50 }])).toBe(true);
+    }
+  );
+
+  it('counts 0 as on, since only null means off', () => {
+    expect(hasActiveFilters([{ ...OFF, lowPass: 0 }])).toBe(true);
+  });
+});
+
+// ─── getSettlingMargin ──────────────────────────────────────────────────────────────────
+describe('getSettlingMargin', () => {
+  const OFF = { highPass: null, lowPass: null, notch: null };
+
+  it('returns 1 second of samples when no filter is set', () => {
+    expect(getSettlingSampleCount(OFF, fs)).toBe(fs);
+  });
+
+  it('returns 5 / highPass seconds of samples for a low high-pass cutoff', () => {
+    // 0.5 Hz → 10 s
+    expect(getSettlingSampleCount({ ...OFF, highPass: 0.5 }, fs)).toBe(10 * fs);
+  });
+
+  it('returns 5 / lowPass seconds of samples for a low low-pass cutoff', () => {
+    // 0.5 Hz → 10 s
+    expect(getSettlingSampleCount({ ...OFF, lowPass: 0.5 }, fs)).toBe(10 * fs);
+  });
+
+  it('uses the lowest cutoff that is set', () => {
+    // 0.25 Hz high-pass is the lowest → 20 s
+    expect(getSettlingSampleCount({ highPass: 0.25, lowPass: 40, notch: 50 }, fs)).toBe(20 * fs);
+  });
+
+  it('never returns less than 1 second, even for high cutoffs', () => {
+    // 5 / 40 Hz = 0.125 s, raised to the 1 s minimum — the notch needs it, as its narrow band decays slower than 5 / f
+    expect(getSettlingSampleCount({ ...OFF, lowPass: 40, notch: 50 }, fs)).toBe(fs);
+    expect(getSettlingSampleCount({ ...OFF, highPass: 10 }, fs)).toBe(fs);
+  });
+
+  it('returns 1 second when typeFilters is undefined (a type without global filters)', () => {
+    expect(getSettlingSampleCount(undefined, fs)).toBe(fs);
+  });
+});
+
+// ─── filterChannelsAtSample ─────────────────────────────────────────────────────────────
+describe('filterChannelsAtSample', () => {
+  // 60 s with a large DC offset (as in real EEG), a 10 Hz signal, a slow 0.1 Hz drift and 50 Hz line noise
+  const longN = 60 * fs;
+  const dcOffset = 1000;
+  const fSignal = 10;
+  const fDrift = 0.1;
+  const fLineNoise = 50;
+  const longChannel = Array.from(
+    { length: longN },
+    (_, i) =>
+      dcOffset +
+      Math.sin((2 * Math.PI * fSignal * i) / fs) +
+      5 * Math.sin((2 * Math.PI * fDrift * i) / fs) +
+      2 * Math.sin((2 * Math.PI * fLineNoise * i) / fs)
+  );
+
+  it('returns the raw values when the channel type has no filters set', () => {
+    const result = filterChannelsAtSample([longChannel], 100, ['seeg'], globalFilters, fs);
+    expect(result).toEqual([longChannel[100]]);
+  });
+
+  it('filters each channel with the global filters of its own type', () => {
+    const index = longN / 2;
+    const [eegValue, seegValue] = filterChannelsAtSample(
+      [longChannel, longChannel],
+      index,
+      ['eeg', 'seeg'],
+      globalFilters,
+      fs
+    );
+    const fullEeg = applyMontageRowFilter(longChannel, globalFilters.eeg, fs);
+    expect(Math.abs(eegValue - fullEeg[index])).toBeLessThan(0.01);
+    expect(seegValue).toBe(longChannel[index]); // seeg has no filters set, so stays raw
+  });
+
+  it.each([
+    ['the centre', longN / 2],
+    ['an off-centre sample', longN / 2 + 37],
+    ['a sample near the buffer start (segment clipped)', 3000],
+  ])('matches filtering the full buffer at %s', (_label, index) => {
+    const [value] = filterChannelsAtSample([longChannel], index, ['eeg'], globalFilters, fs);
+    const full = applyMontageRowFilter(longChannel, globalFilters.eeg, fs);
+    expect(Math.abs(value - full[index])).toBeLessThan(0.01);
+  });
+
+  it('matches the full-buffer filter exactly when the buffer is shorter than the margins', () => {
+    // 4 s buffer < 2 × 10 s margin, so the segment is the whole buffer
+    const index = 500;
+    const [value] = filterChannelsAtSample([sine(10)], index, ['eeg'], globalFilters, fs);
+    const full = applyMontageRowFilter(sine(10), globalFilters.eeg, fs);
+    expect(value).toBeCloseTo(full[index], 10);
+  });
+
+  it('uses the eeg filters for a channel without a type', () => {
+    // channelTypes come from channelSettings[name]?.type, which is undefined for an unset channel
+    const index = longN / 2;
+    const [untyped] = filterChannelsAtSample([longChannel], index, [undefined], globalFilters, fs);
+    const [eeg] = filterChannelsAtSample([longChannel], index, ['eeg'], globalFilters, fs);
+    expect(untyped).toBe(eeg);
+  });
+
+  it('returns 0 for a missing channel or sample', () => {
+    const result = filterChannelsAtSample(
+      [null, [1, 2, 3]],
+      10,
+      ['eeg', 'seeg'],
+      globalFilters,
+      fs
+    );
+    expect(result).toEqual([0, 0]);
+  });
+});
+
+// ─── formatFilterSummary ────────────────────────────────────────────────────────────────
+describe('formatFilterSummary', () => {
+  const OFF = { highPass: null, lowPass: null, notch: null };
+
+  it('writes high-pass + low-pass as a band, followed by the notch', () => {
+    expect(formatFilterSummary({ highPass: 0.5, lowPass: 40, notch: 50 })).toBe(
+      '0.5–40 Hz, notch 50 Hz'
+    );
+  });
+
+  it('writes a high-pass alone as "> cutoff" and a low-pass alone as "< cutoff"', () => {
+    expect(formatFilterSummary({ ...OFF, highPass: 1 })).toBe('> 1 Hz');
+    expect(formatFilterSummary({ ...OFF, lowPass: 40 })).toBe('< 40 Hz');
+  });
+
+  it('writes a notch alone without a band', () => {
+    expect(formatFilterSummary({ ...OFF, notch: 50 })).toBe('notch 50 Hz');
+  });
+
+  it('shows a filter set to 0, since only null means off', () => {
+    expect(formatFilterSummary({ ...OFF, highPass: 0 })).toBe('> 0 Hz');
+  });
+
+  it('returns "unfiltered" when every filter is off or typeFilters is undefined', () => {
+    expect(formatFilterSummary(OFF)).toBe('unfiltered');
+    expect(formatFilterSummary(undefined)).toBe('unfiltered');
   });
 });

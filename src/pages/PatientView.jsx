@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Info } from 'lucide-react';
-import { Niivue } from '@niivue/niivue';
+import { Niivue, DRAG_MODE } from '@niivue/niivue';
 import toast from 'react-hot-toast';
 // Components
 import { FullWidthLayout } from '../components/FullWidthLayout';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { ResearchUseBadge } from '../components/VidepeLogo';
+import { VidepeTitle } from '../components/VidepeTitle';
 import { EegViewer } from '../components/EegViewer';
 import { NiiViewer } from '../components/NiiViewer';
 import { SplitPane } from '../components/SplitPane';
@@ -34,7 +35,7 @@ import neuxelecLogo from '@/assets/neuxelec_logo.ico';
 
 // Shared title styling — keeps "Neuroimaging" and the toggle's labels visually
 // consistent, and both header bars the same height (TrafficLightButtons are 16px tall).
-const PANEL_TITLE_CLASS = 'h-7 flex items-center text-xl font-medium leading-none text-header';
+const PANEL_TITLE_CLASS = 'h-7 flex items-center text-xl font-medium leading-none text-heading';
 const PANEL_SUBTITLE_CLASS = 'text-xs font-medium text-foreground pl-2';
 
 // Everything the initial EEG dropzone handles: recordings, electrode positions and inverse
@@ -200,6 +201,10 @@ export const PatientView = () => {
       isOrientCube: true,
       dragAndDropEnabled: false,
       show3Dcrosshair: true,
+      // Right-drag zooms the 2D slices around the crosshair (up/down) instead of NiiVue's default
+      // contrast windowing. Only here: the topography viewer is a 3D render only, where the
+      // scroll wheel already zooms.
+      dragMode: DRAG_MODE.slicer3D,
     });
   }
 
@@ -337,9 +342,16 @@ export const PatientView = () => {
           )}
           {/* Normal VIDEPE Top button layout (Back + Demo buttons) */}
           {shanoirSession ? (
-            /* Launched from Shanoir: the Shanoir logo instead of the demo/reset button */
-            <div className="flex flex-col items-start gap-2 pt-2">
-              <img src={shanoirLogo} alt="Shanoir logo" className="app-logo h-7 w-auto" />
+            /* Launched from Shanoir: the Shanoir logo instead of the demo/reset button.
+               max-w-none on the logos: Tailwind's base img max-width: 100% makes the grid count an
+               image as 0 wide when sizing the column, so it overlapped the title column's badge.
+               flex-wrap: on narrow screens the text moves below the logo instead of widening the page */
+            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 pt-2">
+              <img
+                src={shanoirLogo}
+                alt="Shanoir logo"
+                className="app-logo h-7 w-auto max-w-none"
+              />
               <span className="text-xs text-foreground">
                 Examination ID: {shanoirSession.examinationId}
               </span>
@@ -349,16 +361,19 @@ export const PatientView = () => {
                logo, as the Shanoir logo is reserved for the official Shanoir collaboration.
                Only NeuXelec has its own logo: an icon without the name in it, so the name stays,
                and no app-logo class, as that would invert the logo's colors in dark mode */
-            <div className="flex flex-col items-start gap-1 pt-2">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pt-2">
+              {/* No flex-wrap: the logo and "Opened from …" always stay side by side */}
               <div className="flex items-center gap-2">
                 {hostAppSession.appName === 'NeuXelec' && (
-                  <img src={neuxelecLogo} alt="NeuXelec logo" className="h-7 w-auto" />
+                  <img src={neuxelecLogo} alt="NeuXelec logo" className="h-7 w-auto max-w-none" />
                 )}
-                <span className="text-xs font-semibold text-foreground">
+                <span className="text-xs font-bold text-foreground">
                   Opened from {hostAppSession.appName}
                 </span>
               </div>
-              {hostAppTitle && <span className="text-xs text-foreground">{hostAppTitle}</span>}
+              {hostAppTitle && (
+                <span className="text-xs text-foreground italic">{hostAppTitle}</span>
+              )}
             </div>
           ) : (
             /* Normal VIDEPE: Load Demo / Reset button */
@@ -390,14 +405,10 @@ export const PatientView = () => {
 
         {/* Center column: title, centered on the screen because the side columns are equally wide */}
         <div className="flex flex-col items-center justify-center py-2 text-center select-none pointer-events-none">
-          <h1 className="!mb-3">VIDEPE</h1>
-          <p className="text-sm text-foreground/70 py-2">
-            <span className="font-bold">V</span>isualization & <span className="font-bold">I</span>
-            ntegration of <span className="font-bold">D</span>ata for{' '}
-            <span className="font-bold">E</span>pilepsy <span className="font-bold">P</span>
-            resurgical <span className="font-bold">E</span>valuation
-          </p>
-          <ResearchUseBadge />
+          {/* revealFrom="xl": the opened title also needs room for the side columns' content */}
+          <VidepeTitle revealFrom="lg" className="!mb-2" />{' '}
+          {/* ! is needed to overwrite the H1 class margins */}
+          <ResearchUseBadge className="pb-0.5" />
         </div>
 
         {/* Right column: ThemeToggle rendered inline (not fixed) — top bar never scrolls so fixed isn't needed,

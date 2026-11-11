@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import {
   computeReferenceSeries,
   getNeededReferenceSeries,
-  applyReferenceSeries,
   buildMontageDisplayRows,
   deriveMontageRowSamples,
   compareChannelNamesNaturally,
@@ -188,92 +187,32 @@ describe('computeReferenceSeries', () => {
 describe('getNeededReferenceSeries', () => {
   const row = (referenceMode) => ({ referenceMode });
 
-  it('needs neither series when no row uses Avg/Med and no snapshot is shown', () => {
-    expect(getNeededReferenceSeries([row(null), row(null)], false)).toEqual({
+  it('needs neither series when no row uses Avg/Med', () => {
+    expect(getNeededReferenceSeries([row(null), row(null)])).toEqual({
       needsAverage: false,
       needsMedian: false,
     });
   });
 
   it('needs the average when a row uses the average reference', () => {
-    expect(getNeededReferenceSeries([row(null), row('average')], false)).toEqual({
+    expect(getNeededReferenceSeries([row(null), row('average')])).toEqual({
       needsAverage: true,
       needsMedian: false,
     });
   });
 
   it('needs the median when a row uses the median reference', () => {
-    expect(getNeededReferenceSeries([row('median')], false)).toEqual({
+    expect(getNeededReferenceSeries([row('median')])).toEqual({
       needsAverage: false,
       needsMedian: true,
     });
   });
 
-  it('needs the average when a timepoint snapshot (topography/connectome/ESI) is shown', () => {
-    expect(getNeededReferenceSeries([row(null)], true)).toEqual({
-      needsAverage: true,
-      needsMedian: false,
-    });
-  });
-
   it('needs both when rows use both references', () => {
-    expect(getNeededReferenceSeries([row('average'), row('median')], false)).toEqual({
+    expect(getNeededReferenceSeries([row('average'), row('median')])).toEqual({
       needsAverage: true,
       needsMedian: true,
     });
-  });
-});
-
-// ---------------------------------------------------------------------------
-// applyReferenceSeries
-// ---------------------------------------------------------------------------
-
-describe('applyReferenceSeries', () => {
-  it('subtracts the series from every channel elementwise', () => {
-    const channels = [
-      [1, 2, 3],
-      [3, 4, 5],
-      [5, 6, 7],
-    ];
-    const series = [3, 4, 5]; // the average series for the channels above
-    const out = applyReferenceSeries(channels, series);
-    expect(out[0]).toEqual([-2, -2, -2]);
-    expect(out[1]).toEqual([0, 0, 0]);
-    expect(out[2]).toEqual([2, 2, 2]);
-  });
-
-  it('each sample sums to (approximately) zero across channels when the series is their own average', () => {
-    const channels = [
-      [1, 2, 3],
-      [4, 5, 6],
-      [10, 1, 8],
-    ];
-    const { average } = computeReferenceSeries(channels);
-    const out = applyReferenceSeries(channels, average);
-    for (let iSamp = 0; iSamp < 3; iSamp++) {
-      const sum = out.reduce((acc, chan) => acc + chan[iSamp], 0);
-      expect(sum).toBeCloseTo(0);
-    }
-  });
-
-  it('returns the channels unchanged when the series is null (nothing to reference against)', () => {
-    const channels = [
-      [1, 2],
-      [3, 4],
-    ];
-    expect(applyReferenceSeries(channels, null)).toBe(channels);
-  });
-
-  it('does not mutate the input', () => {
-    const channels = [
-      [1, 2],
-      [3, 4],
-    ];
-    applyReferenceSeries(channels, [1, 1]);
-    expect(channels).toEqual([
-      [1, 2],
-      [3, 4],
-    ]);
   });
 });
 
@@ -284,6 +223,19 @@ describe('applyReferenceSeries', () => {
 describe('buildMontageDisplayRows', () => {
   const channelNames = ['EEG1', 'EEG2', 'EEG3'];
   const noneBad = { EEG1: { bad: false }, EEG2: { bad: false }, EEG3: { bad: false } };
+
+  // filter tests: one channel per type, so a wrong type lookup shows up as wrong filter values
+  const mixedChannelNames = ['Fp1', 'LA1', 'ECG'];
+  const mixedTypes = {
+    Fp1: { bad: false, type: 'eeg' },
+    LA1: { bad: false, type: 'seeg' },
+    ECG: { bad: false, type: 'other' },
+  };
+  const globalFilters = {
+    eeg: { highPass: 0.5, lowPass: 70, notch: 50 },
+    seeg: { highPass: 1, lowPass: 200, notch: 50 },
+    other: { highPass: 5, lowPass: 40, notch: null },
+  };
 
   it('falls back to one row per non-bad channel, in order, when there are no montage rows', () => {
     const rows = buildMontageDisplayRows(channelNames, noneBad, []);
@@ -462,6 +414,104 @@ describe('buildMontageDisplayRows', () => {
     ];
     const rows = buildMontageDisplayRows(channelNames, noneBad, montageChannels);
     expect(rows.map((r) => r.id)).toEqual(['row-2']);
+  });
+
+  // ─── global filters ────────────────────────────────────────────────────────
+
+  it('gives each fallback row its own channel type global filters when there are no montage rows', () => {
+    const rows = buildMontageDisplayRows(mixedChannelNames, mixedTypes, [], globalFilters);
+    expect(rows).toMatchObject([
+      { name: 'Fp1', highPass: 0.5, lowPass: 70, notch: 50 }, // eeg
+      { name: 'LA1', highPass: 1, lowPass: 200, notch: 50 }, // seeg
+      { name: 'ECG', highPass: 5, lowPass: 40, notch: null }, // other
+    ]);
+  });
+
+  it('gives a montage row without its own filters the global filters of its channel type', () => {
+    const montageChannels = [
+      {
+        id: 'row-1',
+        channel: 'LA1',
+        reference: null,
+        color: null,
+        highPass: null,
+        lowPass: null,
+        notch: null,
+      },
+    ];
+    const rows = buildMontageDisplayRows(
+      mixedChannelNames,
+      mixedTypes,
+      montageChannels,
+      globalFilters
+    );
+    expect(rows[0]).toMatchObject({ highPass: 1, lowPass: 200, notch: 50 }); // seeg
+  });
+
+  it('keeps a montage row own filter value and takes the unset ones from its channel type', () => {
+    // only lowPass is a channel-specific exception; highPass/notch follow the global "other" filters
+    const montageChannels = [
+      {
+        id: 'row-1',
+        channel: 'ECG',
+        reference: null,
+        color: null,
+        highPass: null,
+        lowPass: 30,
+        notch: null,
+      },
+    ];
+    const rows = buildMontageDisplayRows(
+      mixedChannelNames,
+      mixedTypes,
+      montageChannels,
+      globalFilters
+    );
+    expect(rows[0]).toMatchObject({ highPass: 5, lowPass: 30, notch: null });
+  });
+
+  it('uses the channel type, not the reference type, for a bipolar row across types', () => {
+    // unusual but allowed: the row follows its channel's type (eeg), not the reference's (other)
+    const montageChannels = [
+      {
+        id: 'row-1',
+        channel: 'Fp1',
+        reference: 'ECG',
+        color: null,
+        highPass: null,
+        lowPass: null,
+        notch: null,
+      },
+    ];
+    const rows = buildMontageDisplayRows(
+      mixedChannelNames,
+      mixedTypes,
+      montageChannels,
+      globalFilters
+    );
+    expect(rows[0]).toMatchObject({ highPass: 0.5, lowPass: 70, notch: 50 }); // eeg
+  });
+
+  it('falls back to the eeg global filters for a channel without a type', () => {
+    const untyped = { ...mixedTypes, ECG: { bad: false } }; // no type set
+    const montageChannels = [
+      {
+        id: 'row-1',
+        channel: 'ECG',
+        reference: null,
+        color: null,
+        highPass: null,
+        lowPass: null,
+        notch: null,
+      },
+    ];
+    const rows = buildMontageDisplayRows(
+      mixedChannelNames,
+      untyped,
+      montageChannels,
+      globalFilters
+    );
+    expect(rows[0]).toMatchObject({ highPass: 0.5, lowPass: 70, notch: 50 }); // eeg
   });
 });
 
