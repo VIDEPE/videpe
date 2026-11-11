@@ -370,8 +370,9 @@ export const EegViewer = ({
   // ones, which were never eligible to match a scalp position template in the first place).
   const eegChannelCount = channelCountByType.eeg;
 
-  // One channelSettings type per channelNames index — lets ESI reject a channel it needs
-  // that's itself typed SEEG, even if its name happens to match (see channelSnapshot below).
+  // One channelSettings type per channelNames index — the snapshot (see useTimepointSnapshot
+  // below) filters each channel with its type's global filters, and ESI rejects a channel it
+  // needs that's itself typed SEEG, even if its name happens to match.
   const channelTypes = useMemo(
     () => channelNames.map((name) => channelSettings[name]?.type),
     [channelNames, channelSettings]
@@ -381,6 +382,14 @@ export const EegViewer = ({
   useEffect(() => {
     onChannelTypesChange?.(channelTypes);
   }, [channelTypes, onChannelTypesChange]);
+
+  // One bad flag per channelNames index — the snapshot (see useTimepointSnapshot below) leaves
+  // bad channels out of its common average. Memoized, like channelTypes: a new array on every
+  // render would re-fire the ESI snapshot on every render.
+  const badChannelFlags = useMemo(
+    () => channelNames.map((name) => !!channelSettings[name]?.bad),
+    [channelNames, channelSettings]
+  );
 
   // ─── Montage + filters ──────────────────────────────────────────────────────
   // Bundled montage templates that fit this recording (see useMontageTemplates), listed in
@@ -592,7 +601,8 @@ export const EegViewer = ({
   );
   const { topoVoltages, topoVoltagesByChannel: rawTopoVoltagesByChannel } = useTimepointSnapshot({
     channels,
-    referenceSeries,
+    badChannelFlags,
+    globalFilters,
     topoTimepoint,
     timestamps,
     fs: provider.fs,
