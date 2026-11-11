@@ -24,6 +24,7 @@ import {
   ArrowUpWideNarrow,
   ArrowDownWideNarrow,
 } from 'lucide-react';
+import { resolveRowFilters } from '../utils/eegFilters';
 
 // ─── Window sizing constants ────────────────────────────────────────────────
 // Default/minimum window size in px — default matches the previous fixed w-96 h-80 (24rem x 20rem)
@@ -118,6 +119,21 @@ export function EegMontageEditor({
   // here naturally re-snapshots on every open with no extra reset effect needed. Row edits
   // only ever touch these drafts; nothing reaches the live state in EegViewer until Apply/OK
   // explicitly commits it.
+  //
+  // draftChannelSettings — per recording channel (the channel-selection pane), keyed by name:
+  //   { [channelName]: { type: 'eeg' | 'seeg' | 'other', bad: boolean } }
+  //   A channel's type and bad flag live here, not on the montage rows, so every row that
+  //   uses the channel follows it.
+  //
+  // draftMontageChannels — the ordered montage rows (the montage settings pane), one per
+  // displayed trace; several rows may share a channel:
+  //   [{ id, channel, reference, color, highPass, lowPass, notch }]
+  //   - id: unique per row (crypto.randomUUID), so rows sharing a channel stay distinct
+  //   - channel: the channel name plotted on this row
+  //   - reference: another channel name, 'average' / 'median', or null (no reference)
+  //   - color: a CSS color, or null for the theme default
+  //   - highPass / lowPass / notch: Hz, or null to follow the global filter of the
+  //     channel's type (see resolveRowFilters)
   const [draftChannelSettings, setDraftChannelSettings] = useState(() => channelSettings);
   const [draftMontageChannels, setDraftMontageChannels] = useState(() => montageChannels);
 
@@ -360,9 +376,15 @@ export function EegMontageEditor({
   // Exports the current draft as AnyWave XML, regardless of whether it was built by hand
   // or loaded from either supported file format — Save always emits this one format.
   const handleSaveMontage = useCallback(() => {
-    const xml = toAnyWaveMontage(draftMontageChannels, draftChannelSettings);
+    // Export the effective filters: a row without its own value gets its type's global one
+    const resolvedRows = draftMontageChannels.map((row) => {
+      const type = draftChannelSettings[row.channel]?.type ?? 'eeg';
+      return { ...row, ...resolveRowFilters(row, globalFilters?.[type]) };
+    });
+
+    const xml = toAnyWaveMontage(resolvedRows, draftChannelSettings);
     downloadTextFile(xml, 'montage.mtg', 'text/xml');
-  }, [draftMontageChannels, draftChannelSettings]);
+  }, [draftMontageChannels, draftChannelSettings, globalFilters]);
 
   // The live channelSettings/montageChannels props only ever change via a prior Apply/OK (or
   // the seeding effects in useChannelSettings/useMontageChannels) — never by draft edits — so

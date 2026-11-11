@@ -1705,6 +1705,48 @@ describe('EegMontageEditor', () => {
       expect(xml).toContain('<Channel name="FP3">');
     });
 
+    // Save exports the effective (resolved) filters per row: a row without its own value
+    // writes the global filter of its channel type, so the file filters the same as the viewer
+    describe('Save writes the resolved filters', () => {
+      // The <filters .../> element of one channel in the saved XML
+      const savedFilters = (channel) => {
+        const xml = downloadTextFile.mock.calls[0][0];
+        return xml.match(new RegExp(`<Channel name="${channel}">[\\s\\S]*?(<filters [^>]*/>)`))[1];
+      };
+
+      it("writes the global filters of each row's channel type for a row without its own", async () => {
+        render(<EegMontageEditor {...defaultProps} />);
+        await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+        // FP1 is eeg; FP3 is seeg, whose lowPass and notch are off (-1 and 0 in AnyWave)
+        expect(savedFilters('FP1')).toBe('<filters highPass="0.5" lowPass="70" notch="50"/>');
+        expect(savedFilters('FP3')).toBe('<filters highPass="1" lowPass="-1" notch="0"/>');
+      });
+
+      it("writes a row's own value over the global one, per field", async () => {
+        const montageChannels = [{ ...MONTAGE_CHANNELS[0], highPass: 2 }]; // FP1, eeg
+        render(<EegMontageEditor {...defaultProps} montageChannels={montageChannels} />);
+        await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+        expect(savedFilters('FP1')).toBe('<filters highPass="2" lowPass="70" notch="50"/>');
+      });
+
+      it("uses the draft channel type: FP3 switched to eeg saves eeg's global filters", async () => {
+        render(<EegMontageEditor {...defaultProps} />);
+        await userEvent.selectOptions(screen.getByTestId('channel-type-FP3'), 'eeg');
+        await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+        expect(savedFilters('FP3')).toBe('<filters highPass="0.5" lowPass="70" notch="50"/>');
+      });
+
+      it('writes all filters off when there are no global filters and no own values', async () => {
+        render(<EegMontageEditor {...defaultProps} globalFilters={undefined} />);
+        await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+        expect(savedFilters('FP1')).toBe('<filters highPass="-1" lowPass="-1" notch="0"/>');
+      });
+    });
+
     it("a row with a non-preset color (e.g. an AnyWave import's 'darkblue') renders as the select's actual selected value", async () => {
       const montageChannels = [{ id: 'FP1', channel: 'FP1', reference: null, color: 'darkblue' }];
       render(<EegMontageEditor {...defaultProps} montageChannels={montageChannels} />);
