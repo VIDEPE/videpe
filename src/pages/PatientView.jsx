@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Info } from 'lucide-react';
-import { Niivue } from '@niivue/niivue';
+import { Niivue, DRAG_MODE } from '@niivue/niivue';
 import toast from 'react-hot-toast';
 // Components
 import { FullWidthLayout } from '../components/FullWidthLayout';
@@ -201,6 +201,10 @@ export const PatientView = () => {
       isOrientCube: true,
       dragAndDropEnabled: false,
       show3Dcrosshair: true,
+      // Right-drag zooms the 2D slices around the crosshair (up/down) instead of NiiVue's default
+      // contrast windowing. Only here: the topography viewer is a 3D render only, where the
+      // scroll wheel already zooms.
+      dragMode: DRAG_MODE.slicer3D,
     });
   }
 
