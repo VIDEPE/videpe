@@ -5,16 +5,18 @@ import Fili from 'fili';
  *
  * @param {number} fs - Sampling frequency in Hz.
  * @param {number} fc - Cutoff frequency in Hz.
- * @param {number} [order=4] - Number of cascaded biquad sections (fili caps this at 12).
+ * @param {number} [order=2] - Number of cascaded biquad sections (fili caps this at 12). Each
+ *   biquad is 2nd order, so the default 2 is a 4th-order Butterworth design — MNE's IIR
+ *   default; filtfilt then doubles the attenuation (effectively 8th order).
  * @returns {Array<{ z: number[], a: number[], b: number[], a0: number, k: number }>} One coefficient section per cascade stage.
  */
-export function getHighPassCoeff(fs, fc, order = 4) {
+export function getHighPassCoeff(fs, fc, order = 2) {
   //  Instance of a filter coefficient calculator
   const iirCalculator = new Fili.CalcCascades();
 
   // calculate highPass filter coefficients
   return iirCalculator.highpass({
-    order: order, // cascade 4 biquad filters (max: 12)
+    order: order, // number of cascaded biquads, each 2nd order (max: 12)
     characteristic: 'butterworth',
     Fs: fs, // sampling frequency
     Fc: fc, // cutoff frequency / center frequency for bandpass, bandstop, peak
@@ -30,16 +32,18 @@ export function getHighPassCoeff(fs, fc, order = 4) {
  *
  * @param {number} fs - Sampling frequency in Hz.
  * @param {number} fc - Cutoff frequency in Hz.
- * @param {number} [order=4] - Number of cascaded biquad sections (fili caps this at 12).
+ * @param {number} [order=2] - Number of cascaded biquad sections (fili caps this at 12). Each
+ *   biquad is 2nd order, so the default 2 is a 4th-order Butterworth design — MNE's IIR
+ *   default; filtfilt then doubles the attenuation (effectively 8th order).
  * @returns {Array<{ z: number[], a: number[], b: number[], a0: number, k: number }>} One coefficient section per cascade stage.
  */
-export function getLowPassCoeff(fs, fc, order = 4) {
+export function getLowPassCoeff(fs, fc, order = 2) {
   //  Instance of a filter coefficient calculator
   const iirCalculator = new Fili.CalcCascades();
 
   // calculate lowPass filter coefficients
   return iirCalculator.lowpass({
-    order: order, // cascade 4 biquad filters (max: 12)
+    order: order, // number of cascaded biquads, each 2nd order (max: 12)
     characteristic: 'butterworth',
     Fs: fs, // sampling frequency
     Fc: fc, // cutoff frequency / center frequency for bandpass, bandstop, peak
@@ -55,7 +59,7 @@ export function getLowPassCoeff(fs, fc, order = 4) {
  * highpass/lowpass, fili's cascade `order` widens a bandstop's stopband rather than steepening
  * it (cascading several BW=1 bandstop sections was measured to span ~20-120Hz around a 50Hz
  * center — far too broad for a mains notch), so this defaults to a single narrow-BW section
- * instead of inheriting the highpass/lowpass order=4 default. order=1, BW=0.1 measured at
+ * instead of inheriting the highpass/lowpass order=2 default. order=1, BW=0.1 measured at
  * ~3Hz wide at -3dB around a 50Hz center, close to the ~1.7-2Hz mains-notch target.
  *
  * @param {number} fs - Sampling frequency in Hz.
