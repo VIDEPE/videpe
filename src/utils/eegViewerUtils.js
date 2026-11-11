@@ -177,22 +177,6 @@ export function getNeededReferenceSeries(displayRows) {
   };
 }
 
-/**
- * Subtracts an already-computed reference series (see computeReferenceSeries above)
- * from every channel — the "apply to ALL channels" half of the diagram above, used by
- * applyMontage to re-reference the whole buffer for topography/connectome/ESI.
- *
- * @param {number[][]} channels - one array of samples per channel.
- * @param {number[]|null} series - the reference series to subtract (`average` or `median`
- *   from computeReferenceSeries), or null when there was nothing to reference against, in
- *   which case `channels` is returned unchanged rather than subtracting nothing meaningful.
- * @returns {number[][]} `channels`, each re-referenced against `series`.
- */
-export function applyReferenceSeries(channels, series) {
-  if (!series) return channels;
-  return channels.map((chan) => chan.map((value, iSamp) => value - series[iSamp]));
-}
-
 // Reference values a montage row can carry besides a real channel name — resolved against
 // computeReferenceSeries's shared series, not a channel index (see deriveMontageRowSamples).
 const REFERENCE_LABELS = { average: 'Avg', median: 'Med' };
