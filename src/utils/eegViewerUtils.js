@@ -1,7 +1,8 @@
 import { parseElectrodeContactName } from './intracranialDetection';
 import { normalizeChannelName } from './eegTopographyUtils';
-import { getTukeyWindow, applyMontageRowFilter } from './eegFilters';
+import { getTukeyWindow, applyMontageRowFilter, resolveRowFilters } from './eegFilters';
 import { yieldToMain } from './yieldToMain';
+import { DEFAULT_GLOBAL_FILTERS } from './channelTypes';
 
 // Once a filtering pass has worked this long without pausing, it yields to the browser — keeps
 // each uninterrupted block comfortably under one frame (~16ms) so the app stays responsive
@@ -278,21 +279,46 @@ export function remapMontageToRecording({ rows, channelTypes }, channelNames, ch
  * loaded montage file) name a channel not in channelNames — indexOf would return -1 there,
  * which deriveMontageRowSamples would crash on.
  *
+ * Also resolves each row's effective filters (see resolveRowFilters): a montage row's own
+ * highPass/lowPass/notch value wins, and every unset one (all of them, for the fallback rows
+ * without a montage) comes from the global filters of the row's channel type. A bipolar row
+ * uses its channel's type, not its reference's.
+ *
  * @param {string[]} channelNames - the recording's channel names.
- * @param {Object.<string, {bad?: boolean}>} channelSettings - per-channel settings, keyed
- *   by channel name; only `bad` is read here.
- * @param {{id, channel: string, reference: string|null, color: string|null}[]} montageChannels -
- *   the configured montage rows, or `[]` to fall back to one row per non-bad channel.
+ * @param {Object.<string, {bad?: boolean, type?: string}>} channelSettings - per-channel
+ *   settings, keyed by channel name; `bad` drops rows, `type` picks the global filters
+ *   (eeg when unset).
+ * @param {{
+ *   id,
+ *   channel: string,
+ *   reference: string|null,
+ *   color: string|null,
+ *   highPass?: number|null,
+ *   lowPass?: number|null,
+ *   notch?: number|null
+ * }[]} montageChannels - the configured montage rows, or `[]` to fall back to one row per
+ *   non-bad channel. A `null`/missing filter value means "follow the global filter".
+ * @param {Object.<string, {highPass: number|null, lowPass: number|null, notch: number|null}>} [globalFilters] -
+ *   the global filters per channel type (see DEFAULT_GLOBAL_FILTERS, the default: all off).
  * @returns {{
  *   id: string,
  *   name: string,
  *   channelIndex: number,
  *   referenceIndex: number|null,
  *   referenceMode: 'average'|'median'|null,
- *   color: string|null
- * }[]}
+ *   color: string|null,
+ *   highPass: number|null,
+ *   lowPass: number|null,
+ *   notch: number|null
+ * }[]} the display rows; `highPass`/`lowPass`/`notch` are the effective settings in Hz
+ *   (`null` = off), ready for filterMontageRows.
  */
-export function buildMontageDisplayRows(channelNames, channelSettings, montageChannels) {
+export function buildMontageDisplayRows(
+  channelNames,
+  channelSettings,
+  montageChannels,
+  globalFilters = DEFAULT_GLOBAL_FILTERS
+) {
   // No montage set => return all non-bad channel names
   if (montageChannels.length === 0) {
     return channelNames
@@ -303,9 +329,11 @@ export function buildMontageDisplayRows(channelNames, channelSettings, montageCh
         referenceIndex: null, // channel index of the reference (if reference not n/a, average or median)
         referenceMode: null, // if reference is average / median, this field will indicate so
         color: null, // without montage the channels don't have a colour set
-        highPass: null, // no highPass filter set without montage (null indicates off)
-        lowPass: null, // no lowPass filter set without montage (null indicates off)
-        notch: null, // no bandstop filter set without montage (null indicates off)
+        // no montage row, so nothing overrides the global filters: they apply for this channel's type (eeg when unset)
+        ...resolveRowFilters(
+          { highPass: null, lowPass: null, notch: null },
+          globalFilters[channelSettings[name]?.type ?? 'eeg']
+        ),
       }))
       .filter(({ name }) => !channelSettings[name]?.bad);
   }
@@ -322,6 +350,7 @@ export function buildMontageDisplayRows(channelNames, channelSettings, montageCh
       //   if row.reference === 'average'/'median': [channel] - Avg / Med
       .map((row) => {
         const isSpecialReference = SPECIAL_REFERENCES.includes(row.reference);
+        const type = channelSettings[row.channel]?.type ?? 'eeg'; // the channel's type (not the reference's), default to eeg when unset
         return {
           id: row.id,
           name: row.reference
@@ -332,9 +361,8 @@ export function buildMontageDisplayRows(channelNames, channelSettings, montageCh
             row.reference && !isSpecialReference ? channelNames.indexOf(row.reference) : null,
           referenceMode: isSpecialReference ? row.reference : null,
           color: row.color,
-          highPass: row.highPass ?? null, // highPass frequency to filters buffered signal (null when not set)
-          lowPass: row.lowPass ?? null, // lowPass frequency to filters buffered signal (null when not set)
-          notch: row.notch ?? null, // bandstop frequency to filters buffered signal (null when not set)
+          // effective highPass/lowPass/notch (Hz, null = off): the row's own value, else the global one for its type
+          ...resolveRowFilters(row, globalFilters[type]),
         };
       })
   );

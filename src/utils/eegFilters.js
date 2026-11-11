@@ -208,3 +208,53 @@ export function applyMontageRowFilter(samples, row, fs, window) {
   const resolvedWindow = window ?? getTukeyWindow(samples.length + fs, 0.1);
   return applyFilterSections(samples, sections, resolvedWindow);
 }
+
+/**
+ * Resolves one montage row's effective highPass/lowPass/notch settings by combining the row's
+ * own values with the global filters for the row's channel type. A row value of `null` means
+ * "follow global"; any set value (including 0) is a channel-specific exception that wins over
+ * the global one. Each field resolves on its own, so a row with only its own highPass still
+ * follows the global lowPass and notch.
+ *
+ * The caller looks up the channel type and passes only that type's entry, e.g. for a
+ * globalFilters of:
+ *   {
+ *     eeg:   { highPass: 0.5, lowPass: 70, notch: 50 },
+ *     seeg:  { highPass: null, lowPass: null, notch: null },
+ *     other: { highPass: null, lowPass: null, notch: null },
+ *   }
+ * an EEG row is resolved with `resolveRowFilters(row, globalFilters.eeg)`.
+ *
+ * @param {{highPass: number|null, lowPass: number|null, notch: number|null}} row - A montage
+ *   row; `null` on a field means "follow the global setting". Other row fields are ignored.
+ * @param {{highPass: number|null, lowPass: number|null, notch: number|null}|undefined} typeFilters -
+ *   The global filters for the row's channel type (`globalFilters[type]`), or `undefined` for
+ *   a type without global filters, in which case only the row's own values apply.
+ * @returns {{highPass: number|null, lowPass: number|null, notch: number|null}} The effective
+ *   settings, ready for buildFilterSections; `null` on a field means that filter is off.
+ */
+export function resolveRowFilters(row, typeFilters) {
+  // row.highPass ?? falls through only when row.highPass is null/undefined
+  // typeFilters? if typeFilters is undefined then ?? null turns that undefined into null,
+  // so it always defaults to null
+  return {
+    highPass: row.highPass ?? typeFilters?.highPass ?? null,
+    lowPass: row.lowPass ?? typeFilters?.lowPass ?? null,
+    notch: row.notch ?? typeFilters?.notch ?? null,
+  };
+}
+
+/**
+ * Whether any of the given rows has at least one filter on — used to mark the Filters button
+ * as active. Pass the resolved display rows (after resolveRowFilters), so both the global
+ * filters and a montage row's own exceptions count. Only `null` means off; any number,
+ * including 0, counts as on, since buildFilterSections applies it too.
+ *
+ * @param {Array<{highPass: number|null, lowPass: number|null, notch: number|null}>} rows -
+ *   The resolved display rows; other row fields are ignored.
+ * @returns {boolean} `true` if any row has a highPass, lowPass or notch set; `false` for an
+ *   empty array or when every filter is off.
+ */
+export function hasActiveFilters(rows) {
+  return rows.some((row) => row.highPass != null || row.lowPass != null || row.notch != null);
+}

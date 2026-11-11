@@ -39,14 +39,15 @@ High-performance multichannel viewer built on [uPlot](https://github.com/leeoniy
   - Interactive timeline scrubber for fast navigation across the full recording
   - Keyboard navigation — arrow keys for range/panning, Page Up/Down and Space for window jumps, Home/End to jump to the start/end
   - Configurable number of simultaneously visible channels.
+  - Global frequency filters — high-pass, low-pass and mains notch (zero-phase Butterworth) per channel type (EEG, SEEG, Other), set from the Filters button.
 - **Built for big recordings** — only part of the file is kept in memory, and drawing and filtering run in the background, so hour-long, high-channel-count recordings stay smooth
 
 - **Montage Editor** — a dedicated window for channel selection, re-referencing and building custom EEG montages.
   - Re-reference on the fly or select preset montage (e.g. double banana)
   - Select and flag channels (bad-channel, per-channel type)
   - Build referenced or bipolar montage rows with custom per-row colors, reorder and sort them, and the waveform view switches to showing exactly those rows.
-  - Per-row frequency filtering — high-pass, low-pass and mains notch (zero-phase Butterworth), set per row or for all rows at once from the column headers.
-  - Import montage files in AnyWave (XML) or Cartool (plain-text) format — auto-detected from file content — and export back out as AnyWave XML (filter settings included).
+  - Per-row filter overrides — a row's own high-pass, low-pass or notch wins over the global filter of its channel type (e.g. for an ECG channel); empty fields show the global value greyed out.
+  - Import montage files in AnyWave (XML) or Cartool (plain-text) format — auto-detected from file content — and export back out as AnyWave XML, with each row's effective filters (its own or the global ones) included.
 
 - EEG topography — a resizable panel showing a 3D voltage map at the selected time point using [NiiVue](https://niivue.com/) mesh rendering
   - Automatically selects the best-matching bundled electrode-position template; load custom positions via `.elc` or `*_electrodes.tsv` (BIDS specifications) file

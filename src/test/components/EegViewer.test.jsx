@@ -2936,3 +2936,27 @@ describe('EegViewer — clicking a channel label moves the NiiVue cursor', () =>
     });
   });
 });
+
+describe('EegViewer — Filters and Montage buttons show when they are in effect', () => {
+  it('marks the Filters button inactive by default, and active once a global filter is applied', async () => {
+    await renderViewer();
+    const filtersButton = screen.getByRole('button', { name: 'Filters' });
+    expect(filtersButton).toHaveAttribute('data-active', 'false');
+
+    await userEvent.click(filtersButton);
+    await userEvent.type(screen.getByTestId('global-highPass-eeg'), '1');
+    await userEvent.click(screen.getByRole('button', { name: 'OK' }));
+
+    expect(filtersButton).toHaveAttribute('data-active', 'true');
+  });
+
+  it('marks the Montage button inactive with no montage, and active once a template is picked', async () => {
+    await renderViewer();
+    const montageButton = screen.getByRole('button', { name: 'Montage' });
+    expect(montageButton).toHaveAttribute('data-active', 'false');
+
+    await userEvent.selectOptions(screen.getByTestId('montage-template-select'), 'average');
+
+    expect(montageButton).toHaveAttribute('data-active', 'true');
+  });
+});
