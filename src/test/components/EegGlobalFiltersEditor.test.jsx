@@ -414,7 +414,13 @@ describe('EegGlobalFiltersEditor', () => {
 
     it('disables Reset to global while the montage editor is open, since its draft would overwrite the reset', () => {
       render(<EegGlobalFiltersEditor {...defaultProps} montageEditorOpen />);
-      expect(screen.getByTestId('reset-row-filters-button')).toBeDisabled();
+      const button = screen.getByTestId('reset-row-filters-button');
+      expect(button).toBeDisabled();
+      // the tooltip says why it's disabled
+      expect(button).toHaveAttribute(
+        'title',
+        'Close the montage editor to reset its rows to the global filters'
+      );
     });
 
     it('replaces the Reset to global button with a pending note once clicked', async () => {
