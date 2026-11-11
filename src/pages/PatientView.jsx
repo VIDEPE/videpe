@@ -35,7 +35,7 @@ import neuxelecLogo from '@/assets/neuxelec_logo.ico';
 
 // Shared title styling — keeps "Neuroimaging" and the toggle's labels visually
 // consistent, and both header bars the same height (TrafficLightButtons are 16px tall).
-const PANEL_TITLE_CLASS = 'h-7 flex items-center text-xl font-medium leading-none text-header';
+const PANEL_TITLE_CLASS = 'h-7 flex items-center text-xl font-medium leading-none text-heading';
 const PANEL_SUBTITLE_CLASS = 'text-xs font-medium text-foreground pl-2';
 
 // Everything the initial EEG dropzone handles: recordings, electrode positions and inverse

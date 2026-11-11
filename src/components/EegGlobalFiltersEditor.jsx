@@ -292,7 +292,7 @@ export function EegGlobalFiltersEditor({
       <div className="flex-1 min-h-0 flex flex-col p-2">
         <div className="flex-1 min-h-0 overflow-auto bg-background">
           {/* Column headers — sticky so they stay visible if the window is made very short */}
-          <div className="sticky top-0 z-10 flex items-end gap-2 pl-3 pr-1 py-1 text-xs font-medium text-header border-b-2 border-border bg-background">
+          <div className="sticky top-0 z-10 flex items-end gap-2 pl-3 pr-1 py-1 text-xs font-medium text-heading border-b-2 border-border bg-background">
             <span className={cn(TYPE_COL_CLASS, 'cursor-default')}>Type</span>
             <span
               className={cn(COUNT_COL_CLASS, 'cursor-default')}
@@ -315,7 +315,7 @@ export function EegGlobalFiltersEditor({
                     type="number"
                     placeholder="Hz"
                     aria-label={`Set all types' ${column.label} filter frequency`}
-                    className="flex-1 min-w-0 text-xs border border-border rounded bg-surface"
+                    className="flex-1 min-w-0 text-xs font-normal text-foreground border border-border rounded bg-surface"
                     data-testid={`bulk-${column.key}-input`}
                     min={0}
                     max={nyquist}
