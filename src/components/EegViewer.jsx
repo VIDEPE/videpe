@@ -429,6 +429,9 @@ export const EegViewer = ({
   // Flags whether are there is currently a global filter or montage active
   const filtersActive = useMemo(() => hasActiveFilters(displayRows), [displayRows]);
   const montageActive = montageChannels.length > 0;
+  // Whether any montage row has its own filters — those only change the traces, so the
+  // topography window notes that they're not applied to it (raw rows: null = follows global)
+  const hasMontageRowFilters = useMemo(() => hasActiveFilters(montageChannels), [montageChannels]);
 
   // visibleChannelCount is clamped inside useEegPlotControls against channelNames.length, which
   // doesn't account for bad channels or montage rows — reclamp against displayRows here too
@@ -1560,6 +1563,9 @@ export const EegViewer = ({
           customFileName={customElecPosFileName}
           isIntracranial={majorityIsSeeg}
           hasEegChannels={hasEegChannels}
+          globalFilters={globalFilters}
+          channelCountByType={channelCountByType}
+          hasMontageRowFilters={hasMontageRowFilters}
         />
       )}
       {/* Floating EEG Global Filters Editor */}

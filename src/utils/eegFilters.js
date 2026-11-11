@@ -331,3 +331,28 @@ export function filterChannelsAtSample(channels, sampleIndex, channelTypes, glob
     return filtered[sampleIndex - start]; // the filtered value at sampleIndex
   });
 }
+
+/**
+ * Formats one channel type's filters as a short label in the clinical band notation, e.g.
+ * '0.5–40 Hz, notch 50 Hz' — shown in the topography window, so it's clear which filters its
+ * voltages went through, short enough for several types to fit on one line.
+ * Only `null` means off, so a filter set to 0 is listed too (buildFilterSections applies it).
+ *
+ * @param {{highPass: number|null, lowPass: number|null, notch: number|null}|undefined} typeFilters -
+ *   The global filters for one channel type, or `undefined` for a type without global filters.
+ * @returns {string} The pass band ('0.5–40 Hz', or '> 0.5 Hz' / '< 40 Hz' with one edge),
+ *   then the notch ('notch 50 Hz'), joined by ', '; 'unfiltered' when no filter is set.
+ */
+export function formatFilterSummary(typeFilters) {
+  const highPass = typeFilters?.highPass ?? null;
+  const lowPass = typeFilters?.lowPass ?? null;
+  const notch = typeFilters?.notch ?? null;
+
+  const parts = [];
+  // pass band: both edges as a band, one edge as "above"/"below" that cutoff
+  if (highPass !== null && lowPass !== null) parts.push(`${highPass}–${lowPass} Hz`);
+  else if (highPass !== null) parts.push(`> ${highPass} Hz`);
+  else if (lowPass !== null) parts.push(`< ${lowPass} Hz`);
+  if (notch !== null) parts.push(`notch ${notch} Hz`);
+  return parts.length > 0 ? parts.join(', ') : 'unfiltered';
+}

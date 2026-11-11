@@ -25,6 +25,8 @@ import {
 import { EyeDashed } from 'lucide-react';
 import { EegMatrixViewer } from './EegMatrixViewer';
 import { cn } from '@/utils/utils';
+import { TYPE_LIST, TYPE_ORDER } from '@/utils/channelTypes';
+import { formatFilterSummary } from '@/utils/eegFilters';
 
 // ─── Electrode marker layer builder ────────────────────────────────────────
 
@@ -102,6 +104,9 @@ export function EegTopoViewer({
   channelTypes,
   voltagesByChannel,
   customFileName = null, // filename (no extension) of the loaded custom positions file — owned by PatientView, passed down
+  globalFilters, // Record<type, {highPass, lowPass, notch}> — the filters the voltages went through; no filter row without it
+  channelCountByType, // Record<type, number> — only types with channels are listed in the filter row
+  hasMontageRowFilters = false, // whether any montage row has its own filters, which don't apply here
 }) {
   // ─── Refs ───────────────────────────────────────────────────────────────────
   const canvasRef = useRef(null);
@@ -122,6 +127,22 @@ export function EegTopoViewer({
   // every channel is retyped away from EEG in the Montage Editor) instead of leaving a dead
   // tab selected — and remembers the user's mesh choice if EEG channels reappear later.
   const activeView = hasEegChannels ? selectedView : 'matrix';
+
+  // Filter row entries, shown as 'Global Filters: EEG 0.5–40 Hz, notch 50 Hz | SEEG unfiltered' —
+  // only the types that have channels, since a type's filters affect nothing without them.
+  // "Global" matches the Global EEG Filters window, where these are set. null hides the row.
+  const filterEntries =
+    globalFilters && channelCountByType
+      ? TYPE_ORDER.filter((type) => channelCountByType[type] > 0).map((type) => ({
+          type,
+          label: TYPE_LIST[type],
+          summary: formatFilterSummary(globalFilters[type]),
+        }))
+      : null;
+  // Same text as one string, for the tooltip
+  const filterSummary = filterEntries
+    ? `Global Filters: ${filterEntries.map((entry) => `${entry.label} ${entry.summary}`).join(' | ')}`
+    : null;
 
   // ─── Hooks: NiiVue lifecycle ──────────────────────────────────────────────────
   // Initialise NiiVue once on mount — skipped entirely when there are no EEG-typed channels,
@@ -451,6 +472,39 @@ export function EegTopoViewer({
           </div>
         )}
       </div>
+
+      {/* Filter row — on both tabs, since the mesh and the matrix show the same filtered
+          voltages. Montage rows' own filters don't apply here (see useTimepointSnapshot), so a
+          note says so when there are any, instead of the map silently differing from the traces. */}
+      {filterSummary !== null && (
+        <div
+          data-testid="topo-filter-summary"
+          className="flex items-center justify-between gap-2 px-2 py-1 text-xs border-t border-border shrink-0 bg-surface"
+        >
+          <span
+            className="min-w-0 truncate text-foreground/60 cursor-help"
+            title={`${filterSummary}\nThe topography, 3D connectome and ESI use the Global EEG Filters of each channel's type.`}
+          >
+            Global Filters:
+            {/* type names in the heading colour, so 'EEG notch 50 Hz' doesn't read as one phrase */}
+            {filterEntries.map((entry, index) => (
+              <span key={entry.type}>
+                {index > 0 && ' |'} <span className="text-heading">{entry.label}</span>{' '}
+                {entry.summary}
+              </span>
+            ))}
+          </span>
+          {hasMontageRowFilters && (
+            <span
+              data-testid="topo-montage-filters-note"
+              className="shrink-0 text-alert cursor-help"
+              title={`Montage rows' own filters only change the traces.\nThe topography, 3D connectome and ESI use the Global EEG Filters, so every channel of a type is filtered the same way.\nSet the filters there to apply them here too.`}
+            >
+              Montage row filters not applied
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Footer + electrode source row — position-file matching only means anything for the
           3D mesh (the matrix is purely channel-name-derived, no position file involved), so

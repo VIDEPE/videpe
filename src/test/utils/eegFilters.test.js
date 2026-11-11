@@ -12,6 +12,7 @@ import {
   hasActiveFilters,
   getSettlingSampleCount,
   filterChannelsAtSample,
+  formatFilterSummary,
 } from '@/utils/eegFilters';
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
@@ -415,5 +416,34 @@ describe('filterChannelsAtSample', () => {
       fs
     );
     expect(result).toEqual([0, 0]);
+  });
+});
+
+// ─── formatFilterSummary ────────────────────────────────────────────────────────────────
+describe('formatFilterSummary', () => {
+  const OFF = { highPass: null, lowPass: null, notch: null };
+
+  it('writes high-pass + low-pass as a band, followed by the notch', () => {
+    expect(formatFilterSummary({ highPass: 0.5, lowPass: 40, notch: 50 })).toBe(
+      '0.5–40 Hz, notch 50 Hz'
+    );
+  });
+
+  it('writes a high-pass alone as "> cutoff" and a low-pass alone as "< cutoff"', () => {
+    expect(formatFilterSummary({ ...OFF, highPass: 1 })).toBe('> 1 Hz');
+    expect(formatFilterSummary({ ...OFF, lowPass: 40 })).toBe('< 40 Hz');
+  });
+
+  it('writes a notch alone without a band', () => {
+    expect(formatFilterSummary({ ...OFF, notch: 50 })).toBe('notch 50 Hz');
+  });
+
+  it('shows a filter set to 0, since only null means off', () => {
+    expect(formatFilterSummary({ ...OFF, highPass: 0 })).toBe('> 0 Hz');
+  });
+
+  it('returns "unfiltered" when every filter is off or typeFilters is undefined', () => {
+    expect(formatFilterSummary(OFF)).toBe('unfiltered');
+    expect(formatFilterSummary(undefined)).toBe('unfiltered');
   });
 });

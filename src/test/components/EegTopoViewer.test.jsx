@@ -740,4 +740,60 @@ describe('EegTopoViewer', () => {
       expect(screen.getByTestId('topo-tab-matrix')).toHaveAttribute('aria-selected', 'true');
     });
   });
+
+  describe('filter summary', () => {
+    const OFF = { highPass: null, lowPass: null, notch: null };
+    const filterProps = {
+      ...defaultProps,
+      globalFilters: {
+        eeg: { highPass: 0.5, lowPass: 40, notch: 50 },
+        seeg: OFF,
+        other: OFF,
+      },
+      channelCountByType: { eeg: 19, seeg: 8, other: 0 },
+      hasMontageRowFilters: false,
+    };
+
+    it('shows the global filters of every channel type that has channels', async () => {
+      await act(async () => render(<EegTopoViewer {...filterProps} />));
+      const summary = screen.getByTestId('topo-filter-summary');
+      expect(summary).toHaveTextContent(
+        'Global Filters: EEG 0.5–40 Hz, notch 50 Hz | SEEG unfiltered'
+      );
+      expect(summary).not.toHaveTextContent('Other'); // no channels of that type
+    });
+
+    it('also shows on the matrix tab, which uses the same filtered voltages', async () => {
+      await act(async () =>
+        render(
+          <EegTopoViewer
+            {...filterProps}
+            isIntracranial
+            channelNames={['B1']}
+            voltagesByChannel={[1]}
+          />
+        )
+      );
+      expect(screen.getByTestId('eeg-matrix-viewer')).toBeTruthy();
+      expect(screen.getByTestId('topo-filter-summary')).toBeTruthy();
+    });
+
+    it('notes that montage row filters are not applied when montage rows have their own filters', async () => {
+      await act(async () => render(<EegTopoViewer {...filterProps} hasMontageRowFilters />));
+      const note = screen.getByTestId('topo-montage-filters-note');
+      expect(note).toHaveTextContent(/montage row filters not applied/i);
+      // the tooltip points to where these views do get their filters from
+      expect(note).toHaveAttribute('title', expect.stringMatching(/Global EEG Filters/));
+    });
+
+    it('shows no montage note when no montage row has its own filters', async () => {
+      await act(async () => render(<EegTopoViewer {...filterProps} />));
+      expect(screen.queryByTestId('topo-montage-filters-note')).toBeNull();
+    });
+
+    it('shows no filter summary when no global filters are passed', async () => {
+      await act(async () => render(<EegTopoViewer {...defaultProps} />));
+      expect(screen.queryByTestId('topo-filter-summary')).toBeNull();
+    });
+  });
 });
