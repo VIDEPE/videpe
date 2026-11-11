@@ -494,14 +494,11 @@ export const EegViewer = ({
 
   // ─── Signal pipeline: reference → filter → downsample ───────────────────────
   // Average/median reference series (see the diagram atop eegViewerUtils.js), computed once
-  // from the non-bad channels and shared by the montage rows and the topography/connectome/
-  // ESI snapshot. Only the series in use are computed: median for Med rows, average for Avg
-  // rows or once a plot click has set a snapshot timepoint. Booleans as memo dependencies,
-  // so montage edits that don't change which references are used don't recompute.
-  const { needsAverage, needsMedian } = getNeededReferenceSeries(
-    displayRows,
-    topoTimepoint !== null
-  );
+  // from the non-bad channels for the montage rows — the topography/connectome/ESI snapshot
+  // takes its own average of the filtered channels (see useTimepointSnapshot). Only the series
+  // in use are computed: median for Med rows, average for Avg rows. Booleans as memo
+  // dependencies, so montage edits that don't change which references are used don't recompute.
+  const { needsAverage, needsMedian } = getNeededReferenceSeries(displayRows);
   const referenceSeries = useMemo(() => {
     if (!channels) return null;
     const nonBadChannels = channels.filter(

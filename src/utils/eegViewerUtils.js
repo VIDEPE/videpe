@@ -10,29 +10,29 @@ const FILTER_FRAME_BUDGET_MS = 8;
 
 // ─── EEG channel referencing ──────────────────────────────────────────────────────────
 //
-// Two independent pipelines re-reference EEG channels against the same shared
-// average/median series (computed once from non-bad channels), but apply it differently:
+// Two independent pipelines re-reference EEG channels, each in its own way:
 //
-//   raw channels + channelSettings (bad flags)
-//           │
-//           ▼
-//      filter non-bad
-//           │
-//           ▼
-//   computeReferenceSeries(nonBad) → { average, median }   ← computed ONCE (only the
-//           │                              │                   series in use — see
-//           │                              │                   getNeededReferenceSeries)
-//           │                              │
-//           ▼                              ▼
-//   deriveMontageRowSamples          applyReferenceSeries(channels, series.average)
-//   (subtract from ONE row's channel,   (subtract from ALL channels — always the average,
-//    per-row reference/mode)             unconditionally, via useTimepointSnapshot)
-//           │                              │
-//           ▼                              ▼
-//      waveform plot                topoVoltages / connectome / ESI
+//              raw channels + channelSettings (bad flags)
+//                 │                                │
+//                 ▼                                ▼
+//   computeReferenceSeries(nonBad)        filterChannelsAtSample (eegFilters.js)
+//   → { average, median } over the        (each channel, only around the clicked
+//   whole buffer, computed ONCE (only      sample, with its type's global filters)
+//   the series in use — see                        │
+//   getNeededReferenceSeries)                      ▼
+//                 │                        subtract the average of the good
+//                 ▼                        channels at that one sample
+//   deriveMontageRowSamples               (always, via useTimepointSnapshot)
+//   (subtract from ONE row's channel,              │
+//    per-row reference/mode), then filter          │
+//                 │                                │
+//                 ▼                                ▼
+//            waveform plot             topoVoltages / connectome / ESI
 //
 // Neither side knows about the other's output — montage rows never feed topography/
 // connectome/ESI, which always uses the common-average reference (never user-selectable).
+// The snapshot filters before referencing, so it can't use the raw average series; the
+// result is the same as referencing first, since both steps are linear.
 
 /**
  * Computes the shared reference series everything below subtracts from channels set to
@@ -162,15 +162,16 @@ function selectKthSmallest(values, k) {
  * Decides which reference series are actually used right now, so computeReferenceSeries
  * can skip the rest.
  *
+ * Only the montage rows use these series — the topography/connectome/ESI snapshot takes its
+ * own average at the clicked sample (see useTimepointSnapshot).
+ *
  * @param {{ referenceMode: 'average'|'median'|null }[]} displayRows - from buildMontageDisplayRows.
- * @param {boolean} isSnapshotShown - whether a timepoint snapshot (topography/connectome/ESI)
- *   is shown; those always use the common average reference.
  * @returns {{ needsAverage: boolean, needsMedian: boolean }}
  */
-export function getNeededReferenceSeries(displayRows, isSnapshotShown) {
+export function getNeededReferenceSeries(displayRows) {
   return {
-    // needsAverage (boolean): needed when a snapshot is shown (it always uses the average) or any row references Avg
-    needsAverage: isSnapshotShown || displayRows.some((row) => row.referenceMode === 'average'),
+    // needsAverage (boolean): needed only when any row references Avg
+    needsAverage: displayRows.some((row) => row.referenceMode === 'average'),
     // needsMedian (boolean): needed only when any row references Med
     needsMedian: displayRows.some((row) => row.referenceMode === 'median'),
   };
