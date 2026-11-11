@@ -10,12 +10,12 @@ Each row can have three filters: a high-pass, a low-pass and a mains notch. Each
 
 The values come from two places:
 
-| Setting             | Where it's set                         | Applies to                  | Stored in                                                                                                              |
-| ------------------- | -------------------------------------- | --------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| Global filters      | Filters button → Global Filters window | Every row of a channel type | `globalFilters` state in `EegViewer`                                                                                   |
-| A row's own filters | Montage Editor, per montage row        | That one row only           | `highPass` / `lowPass` / `notch` on each row of the `montageChannels` state in `EegViewer` (from `useMontageChannels`) |
+| Setting             | Where it's set                         | Applies to                                                             | Stored in                                                                                                              |
+| ------------------- | -------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Global filters      | Filters button → Global Filters window | Every row of a channel type, and the topography, 3D connectome and ESI | `globalFilters` state in `EegViewer`                                                                                   |
+| A row's own filters | Montage Editor, per montage row        | That one row's trace only                                              | `highPass` / `lowPass` / `notch` on each row of the `montageChannels` state in `EegViewer` (from `useMontageChannels`) |
 
-The global filters are the standard way to filter. A row's own filters can be used if the user wants to set custom settings per row, e.g. a different high-pass on an ECG row with stronger baseline drift than others.
+The global filters are the standard way to filter. A row's own filters can be used if the user wants to set custom settings per row, e.g. a different high-pass on an ECG row with stronger baseline drift than others. A row's own filters only change that row's trace, not the topography, connectome or ESI (see [Filtering for the topography, connectome and ESI](#filtering-for-the-topography-connectome-and-esi)).
 
 ### Drafts
 
@@ -82,7 +82,38 @@ Per buffered stretch of the recording, `EegViewer` runs:
 
 Filtering re-runs when the data, the display rows or the reference series change. Because the resolved filter values are part of the display rows, changing a global filter or a row's own filter re-filters too.
 
-**Note:** The filters currently only affect the EEG traces. The topography, the 3D connectome and ESI take their voltages at the selected time point from the raw, unfiltered buffer (`channels`, via `useTimepointSnapshot`). Passing the filtered data to them is the next planned feature.
+## Filtering for the topography, connectome and ESI
+
+The topography (3D mesh and matrix), the 3D connectome and ESI need one voltage per channel at the clicked time point, not traces. `useTimepointSnapshot` computes these with `filterChannelsAtSample` (`src/utils/eegFilters.js`), separately from the montage rows above.
+
+### Global filters only
+
+Each channel is filtered with the global filters of its type. A montage row's own filters don't apply, for three reasons:
+
+- **These views don't use a montage.** They work per channel, always with the common average reference, so there is no montage row to take filters from.
+- **A channel can be in several montage rows,** e.g. once with and once without a reference, each with different filters. There is no clear choice which one to use.
+- **The map must be filtered the same way everywhere.** If a few channels had their own high-pass, the map and the common average would mix differently filtered signals and could distort the spatial pattern. Global filters are the same for every channel of a type by design.
+
+The UI tells the user, so a montage with its own filters doesn't silently differ from the map (see [Showing that filters are active](#showing-that-filters-are-active)).
+
+### Only a segment around the clicked time point
+
+Filtering every channel's full buffer would double the filtering work on every buffer load, even when no one looks at the map. Instead, `filterChannelsAtSample` filters only a segment around the clicked sample, which takes milliseconds:
+
+- **Segment length.** `getSettlingSampleCount` gives the samples needed on each side: `max(1 s, 5 / lowest cutoff)`, so 10 s for a 0.5 Hz high-pass. A filter's edge transient decays at a rate proportional to its cutoff (about 2.4 × fc for the 4th-order Butterworth), so the lowest cutoff takes longest. 5 / fc lets even a large DC offset, which the segment edge turns into a step, decay to well below a microvolt. The notch's narrow band decays slower than 5 / f suggests, so the minimum is 1 s.
+- **The Tukey window isn't enough.** It removes the sudden jump at the edge, which keeps the low-pass and notch quiet. But the resulting ramp is still slow change, which a high-pass responds to with a transient. Only distance from the edge helps against that. With a 0.5 Hz high-pass and a 1000 µV offset, the error at the clicked sample is 85 µV with a 1 s margin and 0.001 µV with 10 s.
+- **Cut short at the buffer edges.** When the segment reaches both edges, it is the full buffer, so the result is exactly the same as filtering the trace.
+- **A cutoff of 0** gives an infinite margin, which is capped at the buffer, so the full buffer is filtered.
+- **Types without filters are skipped,** returning the raw value without slicing.
+
+### Filter first, then reference
+
+The common average is taken after filtering, from the filtered values of the good (non-bad) channels at that one sample. Both steps are linear, so this gives the same result as filtering referenced data. The snapshot can't reuse the montage rows' average series (`referenceSeries.average`), because that is the average of the raw channels. When EEG and SEEG have different filters, that's not the same as the average of the filtered channels. The average series is therefore only computed for montage rows with the Avg reference (`getNeededReferenceSeries`).
+
+### When it updates
+
+- **The topography** updates whenever its inputs change, including a new buffer.
+- **ESI** (through `onChannelSnapshotChange`) updates on a click, and when the global filters, the bad channels or the channel types change, but not on a buffer refresh alone. That would cause rapid re-renders that interrupt the topography's mesh loading.
 
 ## Input rules
 
@@ -101,8 +132,8 @@ The bulk "set all" control above each column in the Global Filters window clamps
 
 | Action                                           | Effect                                                                                                                                                                 |
 | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Change a global filter                           | Every row of that type without its own value for that filter follows. Rows with their own value don't change.                                                          |
-| Give a row its own value                         | Only that row and that filter change. Its other filters still follow global.                                                                                           |
+| Change a global filter                           | Every row of that type without its own value for that filter follows. Rows with their own value don't change. The topography, connectome and ESI always follow.        |
+| Give a row its own value                         | Only that row's trace and that filter change. Its other filters still follow global. The topography, connectome and ESI don't change.                                  |
 | Change a channel's type                          | All rows of that channel switch to the new type's global filters. In the montage editor, the placeholders follow the draft type right away.                            |
 | Clear all (Global Filters window)                | All global filters off, in the draft. The rows' own filters stay.                                                                                                      |
 | Reset to global (Global Filters window)          | Clears every montage row's own filters on Apply/OK, so all rows follow global. Disabled while the montage editor is open, because its draft would overwrite the reset. |
@@ -120,15 +151,19 @@ Two consequences to be aware of:
 - **The Filters button** is filled when at least one displayed row is filtered (`hasActiveFilters` on the resolved display rows), and outlined otherwise. So a row's own filter lights it up even when every global filter is off, and a global filter for a type without channels doesn't.
 - **The Montage button** is filled when a montage is set.
 - **The Global Filters window** lists how many montage rows have their own filters, with "Reset to global" next to it, so the user can see why the Filters button is lit when the global values are empty.
+- **The topography window** has a filter row on both tabs, e.g. "Global Filters: EEG 0.5–40 Hz, notch 50 Hz | SEEG unfiltered" (`formatFilterSummary`). It lists only types with channels, in the clinical band notation. When montage rows have their own filters, a red "Montage row filters not applied" note appears, and its tooltip points the user to the Global Filters window. This covers the case where someone sets filters only in the Montage Editor and expects the map to match the traces.
 
 ## Code
 
-| What                                                         | Where                                                                   |
-| ------------------------------------------------------------ | ----------------------------------------------------------------------- |
-| Coefficients, cascade, filtfilt, Tukey window                | `src/utils/eegFilters.js`                                               |
-| `resolveRowFilters`, `hasActiveFilters`                      | `src/utils/eegFilters.js`                                               |
-| `TYPE_LIST`, `DEFAULT_GLOBAL_FILTERS`, `countChannelsByType` | `src/utils/channelTypes.js`                                             |
-| `buildMontageDisplayRows`, `filterMontageRows`               | `src/utils/eegViewerUtils.js`                                           |
-| Global Filters window                                        | `src/components/EegGlobalFiltersEditor.jsx`                             |
-| Per-row filters, placeholders, AnyWave save                  | `src/components/EegMontageEditor.jsx`                                   |
-| AnyWave read/write                                           | `src/loaders/parseMontageAnywave.js`, `src/loaders/toMontageAnyWave.js` |
+| What                                                                      | Where                                                                   |
+| ------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Coefficients, cascade, filtfilt, Tukey window                             | `src/utils/eegFilters.js`                                               |
+| `resolveRowFilters`, `hasActiveFilters`                                   | `src/utils/eegFilters.js`                                               |
+| `filterChannelsAtSample`, `getSettlingSampleCount`, `formatFilterSummary` | `src/utils/eegFilters.js`                                               |
+| Filtered, average-referenced snapshot for topography/connectome/ESI       | `src/hooks/useTimepointSnapshot.js`                                     |
+| Filter row in the topography window                                       | `src/components/EegTopoViewer.jsx`                                      |
+| `TYPE_LIST`, `DEFAULT_GLOBAL_FILTERS`, `countChannelsByType`              | `src/utils/channelTypes.js`                                             |
+| `buildMontageDisplayRows`, `filterMontageRows`                            | `src/utils/eegViewerUtils.js`                                           |
+| Global Filters window                                                     | `src/components/EegGlobalFiltersEditor.jsx`                             |
+| Per-row filters, placeholders, AnyWave save                               | `src/components/EegMontageEditor.jsx`                                   |
+| AnyWave read/write                                                        | `src/loaders/parseMontageAnywave.js`, `src/loaders/toMontageAnyWave.js` |
