@@ -11,7 +11,7 @@ const renderPatientView = () =>
     </MemoryRouter>
   );
 import toast from 'react-hot-toast';
-import { Niivue } from '@niivue/niivue';
+import { Niivue, DRAG_MODE } from '@niivue/niivue';
 import { dicomLoader } from '@niivue/dicom-loader';
 import { checkEegFiles, detectAndLoadEEG } from '@/loaders/eegFormatRegistry';
 import { parseInverseSolutionFieldtrip } from '@/loaders/parseInverseSolutionFieldtrip';
@@ -346,6 +346,25 @@ const getNiiOnFiles = () => {
 
 const getDemoResetButton = () =>
   screen.getByRole('button', { name: /^(load demo|reset|loading…)$/i });
+
+describe('PatientView — NiiVue instances', () => {
+  beforeEach(() => {
+    Niivue.mockClear();
+  });
+
+  it('makes a right-drag zoom the slices (slicer3D) in the Neuroimaging viewer', () => {
+    renderPatientView();
+    // first instance: NiiViewer (created before the topography's, see PatientView)
+    expect(Niivue.mock.calls[0][0]).toEqual(
+      expect.objectContaining({ dragMode: DRAG_MODE.slicer3D })
+    );
+  });
+
+  it("leaves the topography viewer's drag mode at NiiVue's default (3D render only, scroll zooms)", () => {
+    renderPatientView();
+    expect(Niivue.mock.calls[1][0]).not.toHaveProperty('dragMode');
+  });
+});
 
 describe('PatientView — button label', () => {
   beforeEach(() => {
