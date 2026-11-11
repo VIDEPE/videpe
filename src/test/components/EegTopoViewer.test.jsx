@@ -89,7 +89,10 @@ describe('EegTopoViewer', () => {
 
   it('shows matched vs total EEG channel count in the footer', async () => {
     await act(async () => render(<EegTopoViewer {...defaultProps} />));
-    expect(screen.getByText(/2\s*\/\s*10\s*EEG channels mapped/i)).toBeTruthy();
+    // count and label are separate spans (count in the data colour, label muted)
+    expect(screen.getByTestId('topo-mapped-count')).toHaveTextContent(
+      /2\s*\/\s*10\s*EEG channels mapped/i
+    );
   });
 
   it('labels the colorbar with its unit, since NiiVue draws it without one', async () => {
@@ -339,7 +342,15 @@ describe('EegTopoViewer', () => {
           />
         )
       );
-      expect(screen.getByText(/default: standard 10-20/i)).toBeTruthy();
+      // label and name are separate spans (label muted, name in the data colour)
+      expect(screen.getByTestId('topo-electrode-source')).toHaveTextContent(
+        /default: standard 10-20/i
+      );
+      // the tooltip says where the positions come from
+      expect(screen.getByTestId('topo-electrode-source')).toHaveAttribute(
+        'title',
+        expect.stringMatching(/built-in template "Standard 10-20"/)
+      );
     });
 
     it('shows the customFileName prop when isStandardElectrodes is false', async () => {

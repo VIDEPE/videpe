@@ -473,6 +473,10 @@ export function EegTopoViewer({
         )}
       </div>
 
+      {/* Bottom rows share one colour scheme: labels/groupers text-foreground/60, data
+          text-foreground, clickable = data colour + underline (hover:text-heading), warnings
+          text-alert. Headers (the active tab) are text-heading. */}
+
       {/* Filter row — on both tabs, since the mesh and the matrix show the same filtered
           voltages. Montage rows' own filters don't apply here (see useTimepointSnapshot), so a
           note says so when there are any, instead of the map silently differing from the traces. */}
@@ -486,11 +490,11 @@ export function EegTopoViewer({
             title={`${filterSummary}\nThe topography, 3D connectome and ESI use the Global EEG Filters of each channel's type.`}
           >
             Global Filters:
-            {/* type names in the heading colour, so 'EEG notch 50 Hz' doesn't read as one phrase */}
+            {/* type names are groupers (muted), the values data — so 'EEG notch 50 Hz' doesn't read as one phrase */}
             {filterEntries.map((entry, index) => (
               <span key={entry.type}>
-                {index > 0 && ' |'} <span className="text-heading">{entry.label}</span>{' '}
-                {entry.summary}
+                {index > 0 && ' |'} {entry.label}{' '}
+                <span className="text-foreground">{entry.summary}</span>
               </span>
             ))}
           </span>
@@ -514,24 +518,37 @@ export function EegTopoViewer({
           {/* Footer — explicit bg-surface for the same reason as the title bar */}
           <div className="flex items-center justify-between px-2 py-1 text-xs border-t border-border shrink-0 bg-surface">
             <span
-              className="text-foreground cursor-help"
+              data-testid="topo-mapped-count"
+              className="text-foreground/60 cursor-help"
               title={`${matched.length} out of ${totalChannels} EEG channels could be identified with the electrode position template below.\nUse custom electrode position file or adapt EEG channel naming to the template to increase the amount.`}
             >
-              {matched.length} / {totalChannels} EEG channels mapped
+              <span className="text-foreground">
+                {matched.length} / {totalChannels}
+              </span>{' '}
+              EEG channels mapped
             </span>
           </div>
 
           {/* Electrode source row */}
           <div className="flex items-center justify-between px-2 py-1 text-xs border-t border-border shrink-0 bg-surface">
-            <span className="text-foreground/60">
-              {isStandardElectrodes
-                ? `Default: ${standardTemplateLabel}`
-                : (customFileName ?? 'Custom')}
+            <span
+              data-testid="topo-electrode-source"
+              className="text-foreground/60 cursor-help"
+              title={
+                isStandardElectrodes
+                  ? `Electrode positions from the built-in template "${standardTemplateLabel}" — the best match for this recording's channel names.\nUse custom positions to load your own .elc or .tsv file.`
+                  : `Electrode positions from the loaded file "${customFileName ?? 'Custom'}".\nUse custom positions to load a different .elc or .tsv file.`
+              }
+            >
+              {isStandardElectrodes && 'Default: '}
+              <span className="text-foreground">
+                {isStandardElectrodes ? standardTemplateLabel : (customFileName ?? 'Custom')}
+              </span>
             </span>
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="text-foreground/60 hover:text-heading cursor-pointer underline underline-offset-2"
+              className="text-foreground hover:text-heading cursor-pointer underline underline-offset-2"
               aria-label="Click to browse file to use custom defined electrode positions"
               title="Click to browse file to use custom defined electrode positions"
             >
