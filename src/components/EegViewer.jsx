@@ -370,8 +370,9 @@ export const EegViewer = ({
   // ones, which were never eligible to match a scalp position template in the first place).
   const eegChannelCount = channelCountByType.eeg;
 
-  // One channelSettings type per channelNames index — lets ESI reject a channel it needs
-  // that's itself typed SEEG, even if its name happens to match (see channelSnapshot below).
+  // One channelSettings type per channelNames index — the snapshot (see useTimepointSnapshot
+  // below) filters each channel with its type's global filters, and ESI rejects a channel it
+  // needs that's itself typed SEEG, even if its name happens to match.
   const channelTypes = useMemo(
     () => channelNames.map((name) => channelSettings[name]?.type),
     [channelNames, channelSettings]
@@ -381,6 +382,14 @@ export const EegViewer = ({
   useEffect(() => {
     onChannelTypesChange?.(channelTypes);
   }, [channelTypes, onChannelTypesChange]);
+
+  // One bad flag per channelNames index — the snapshot (see useTimepointSnapshot below) leaves
+  // bad channels out of its common average. Memoized, like channelTypes: a new array on every
+  // render would re-fire the ESI snapshot on every render.
+  const badChannelFlags = useMemo(
+    () => channelNames.map((name) => !!channelSettings[name]?.bad),
+    [channelNames, channelSettings]
+  );
 
   // ─── Montage + filters ──────────────────────────────────────────────────────
   // Bundled montage templates that fit this recording (see useMontageTemplates), listed in
@@ -420,6 +429,9 @@ export const EegViewer = ({
   // Flags whether are there is currently a global filter or montage active
   const filtersActive = useMemo(() => hasActiveFilters(displayRows), [displayRows]);
   const montageActive = montageChannels.length > 0;
+  // Whether any montage row has its own filters — those only change the traces, so the
+  // topography window notes that they're not applied to it (raw rows: null = follows global)
+  const hasMontageRowFilters = useMemo(() => hasActiveFilters(montageChannels), [montageChannels]);
 
   // visibleChannelCount is clamped inside useEegPlotControls against channelNames.length, which
   // doesn't account for bad channels or montage rows — reclamp against displayRows here too
@@ -485,14 +497,11 @@ export const EegViewer = ({
 
   // ─── Signal pipeline: reference → filter → downsample ───────────────────────
   // Average/median reference series (see the diagram atop eegViewerUtils.js), computed once
-  // from the non-bad channels and shared by the montage rows and the topography/connectome/
-  // ESI snapshot. Only the series in use are computed: median for Med rows, average for Avg
-  // rows or once a plot click has set a snapshot timepoint. Booleans as memo dependencies,
-  // so montage edits that don't change which references are used don't recompute.
-  const { needsAverage, needsMedian } = getNeededReferenceSeries(
-    displayRows,
-    topoTimepoint !== null
-  );
+  // from the non-bad channels for the montage rows — the topography/connectome/ESI snapshot
+  // takes its own average of the filtered channels (see useTimepointSnapshot). Only the series
+  // in use are computed: median for Med rows, average for Avg rows. Booleans as memo
+  // dependencies, so montage edits that don't change which references are used don't recompute.
+  const { needsAverage, needsMedian } = getNeededReferenceSeries(displayRows);
   const referenceSeries = useMemo(() => {
     if (!channels) return null;
     const nonBadChannels = channels.filter(
@@ -592,7 +601,8 @@ export const EegViewer = ({
   );
   const { topoVoltages, topoVoltagesByChannel: rawTopoVoltagesByChannel } = useTimepointSnapshot({
     channels,
-    referenceSeries,
+    badChannelFlags,
+    globalFilters,
     topoTimepoint,
     timestamps,
     fs: provider.fs,
@@ -1553,6 +1563,9 @@ export const EegViewer = ({
           customFileName={customElecPosFileName}
           isIntracranial={majorityIsSeeg}
           hasEegChannels={hasEegChannels}
+          globalFilters={globalFilters}
+          channelCountByType={channelCountByType}
+          hasMontageRowFilters={hasMontageRowFilters}
         />
       )}
       {/* Floating EEG Global Filters Editor */}

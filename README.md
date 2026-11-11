@@ -39,7 +39,7 @@ High-performance multichannel viewer built on [uPlot](https://github.com/leeoniy
   - Interactive timeline scrubber for fast navigation across the full recording
   - Keyboard navigation — arrow keys for range/panning, Page Up/Down and Space for window jumps, Home/End to jump to the start/end
   - Configurable number of simultaneously visible channels.
-  - Global frequency filters — high-pass, low-pass and mains notch (zero-phase Butterworth) per channel type (EEG, SEEG, Other), set from the Filters button.
+  - Global frequency filters — high-pass, low-pass and mains notch (zero-phase Butterworth) per channel type (EEG, SEEG, Other), set from the Filters button. They also apply to the topography, 3D connectome and ESI.
 - **Built for big recordings** — only part of the file is kept in memory, and drawing and filtering run in the background, so hour-long, high-channel-count recordings stay smooth
 
 - **Montage Editor** — a dedicated window for channel selection, re-referencing and building custom EEG montages.

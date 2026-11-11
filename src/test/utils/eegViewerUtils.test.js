@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import {
   computeReferenceSeries,
   getNeededReferenceSeries,
-  applyReferenceSeries,
   buildMontageDisplayRows,
   deriveMontageRowSamples,
   compareChannelNamesNaturally,
@@ -188,92 +187,32 @@ describe('computeReferenceSeries', () => {
 describe('getNeededReferenceSeries', () => {
   const row = (referenceMode) => ({ referenceMode });
 
-  it('needs neither series when no row uses Avg/Med and no snapshot is shown', () => {
-    expect(getNeededReferenceSeries([row(null), row(null)], false)).toEqual({
+  it('needs neither series when no row uses Avg/Med', () => {
+    expect(getNeededReferenceSeries([row(null), row(null)])).toEqual({
       needsAverage: false,
       needsMedian: false,
     });
   });
 
   it('needs the average when a row uses the average reference', () => {
-    expect(getNeededReferenceSeries([row(null), row('average')], false)).toEqual({
+    expect(getNeededReferenceSeries([row(null), row('average')])).toEqual({
       needsAverage: true,
       needsMedian: false,
     });
   });
 
   it('needs the median when a row uses the median reference', () => {
-    expect(getNeededReferenceSeries([row('median')], false)).toEqual({
+    expect(getNeededReferenceSeries([row('median')])).toEqual({
       needsAverage: false,
       needsMedian: true,
     });
   });
 
-  it('needs the average when a timepoint snapshot (topography/connectome/ESI) is shown', () => {
-    expect(getNeededReferenceSeries([row(null)], true)).toEqual({
-      needsAverage: true,
-      needsMedian: false,
-    });
-  });
-
   it('needs both when rows use both references', () => {
-    expect(getNeededReferenceSeries([row('average'), row('median')], false)).toEqual({
+    expect(getNeededReferenceSeries([row('average'), row('median')])).toEqual({
       needsAverage: true,
       needsMedian: true,
     });
-  });
-});
-
-// ---------------------------------------------------------------------------
-// applyReferenceSeries
-// ---------------------------------------------------------------------------
-
-describe('applyReferenceSeries', () => {
-  it('subtracts the series from every channel elementwise', () => {
-    const channels = [
-      [1, 2, 3],
-      [3, 4, 5],
-      [5, 6, 7],
-    ];
-    const series = [3, 4, 5]; // the average series for the channels above
-    const out = applyReferenceSeries(channels, series);
-    expect(out[0]).toEqual([-2, -2, -2]);
-    expect(out[1]).toEqual([0, 0, 0]);
-    expect(out[2]).toEqual([2, 2, 2]);
-  });
-
-  it('each sample sums to (approximately) zero across channels when the series is their own average', () => {
-    const channels = [
-      [1, 2, 3],
-      [4, 5, 6],
-      [10, 1, 8],
-    ];
-    const { average } = computeReferenceSeries(channels);
-    const out = applyReferenceSeries(channels, average);
-    for (let iSamp = 0; iSamp < 3; iSamp++) {
-      const sum = out.reduce((acc, chan) => acc + chan[iSamp], 0);
-      expect(sum).toBeCloseTo(0);
-    }
-  });
-
-  it('returns the channels unchanged when the series is null (nothing to reference against)', () => {
-    const channels = [
-      [1, 2],
-      [3, 4],
-    ];
-    expect(applyReferenceSeries(channels, null)).toBe(channels);
-  });
-
-  it('does not mutate the input', () => {
-    const channels = [
-      [1, 2],
-      [3, 4],
-    ];
-    applyReferenceSeries(channels, [1, 1]);
-    expect(channels).toEqual([
-      [1, 2],
-      [3, 4],
-    ]);
   });
 });
 

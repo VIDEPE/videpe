@@ -56,7 +56,7 @@ const PRESET_COLORS = [
 
 // ─── Shared styling settings ────────────────────────────────────────
 // Shared title styling — keeps panes titles visually consistent, with the same height (TrafficLightButtons are 16px tall).
-const PANEL_TITLE_CLASS = 'h-5 flex items-center text-xs font-medium leading-none text-header';
+const PANEL_TITLE_CLASS = 'h-5 flex items-center text-xs font-medium leading-none text-heading';
 // Shared Channel column sizing for both row lists' header and rows — flex-1 so it fills
 // leftover width, min-w so it stops shrinking there and the other columns scroll instead.
 const CHANNEL_NAME_COL_CLASS = 'flex-1 min-w-8';
@@ -748,14 +748,14 @@ export function EegMontageEditor({
         <div className="flex-1 min-h-0 overflow-x-auto">
           <div className="h-full flex flex-col w-max min-w-full">
             <div
-              className="flex-1 min-h-0 pb-4 overflow-y-auto border-header"
+              className="flex-1 min-h-0 pb-4 overflow-y-auto"
               data-testid="channel-list"
               onClick={handleChannelPaneBackgroundClick}
             >
               {/* Column headers — sticky inside the row scroll container, so the scrollbar
                   shrinks both by the same amount and they can't drift out of alignment. */}
               <div
-                className="sticky top-0 z-10 flex items-end gap-2 px-1 py-1 text-xs font-medium text-header border-b-2 border-border bg-background"
+                className="sticky top-0 z-10 flex items-end gap-2 px-1 py-1 text-xs font-medium text-heading border-b-2 border-border bg-background"
                 onClick={handleChannelPaneBackgroundClick}
               >
                 <span className={cn(CHANNEL_NAME_COL_CLASS, 'cursor-default')}>Channel</span>
@@ -774,7 +774,7 @@ export function EegMontageEditor({
                   <span className="cursor-default">Type</span>
                   <div className="flex items-center gap-1">
                     <select
-                      className="flex-1 min-w-0 text-xs border border-border rounded bg-surface"
+                      className="flex-1 min-w-0 text-xs font-normal text-foreground border border-border rounded bg-surface"
                       data-testid="bulk-type-select"
                       value={bulkType}
                       onChange={(e) => setBulkType(e.target.value)}
@@ -1027,14 +1027,14 @@ export function EegMontageEditor({
         <div className="flex-1 min-h-0 overflow-x-auto">
           <div className="h-full flex flex-col w-max min-w-full">
             <div
-              className="flex-1 min-h-0 pb-4 overflow-y-auto border-header"
+              className="flex-1 min-h-0 pb-4 overflow-y-auto"
               data-testid="montage-row-list"
               onClick={handleMontagePaneBackgroundClick}
             >
               {/* Column headers — sticky inside the row scroll container, so the scrollbar
                   shrinks both by the same amount and they can't drift out of alignment. */}
               <div
-                className="sticky top-0 z-10 flex items-end gap-2 pl-3 pr-1 py-1 text-xs font-medium text-header border-b-2 border-border bg-background"
+                className="sticky top-0 z-10 flex items-end gap-2 pl-3 pr-1 py-1 text-xs font-medium text-heading border-b-2 border-border bg-background"
                 onClick={handleMontagePaneBackgroundClick}
               >
                 {/* <span> has no real `disabled` attribute — it's guarded here instead by
@@ -1085,7 +1085,7 @@ export function EegMontageEditor({
                   <span className="text-center cursor-default">Ref</span>
                   <div className="flex items-center gap-1">
                     <select
-                      className="flex-1 min-w-0 text-xs border border-border rounded bg-surface"
+                      className="flex-1 min-w-0 text-xs font-normal text-foreground border border-border rounded bg-surface"
                       data-testid="bulk-reference-select"
                       disabled={draftMontageChannels.length === 0}
                       value={bulkReference}
@@ -1117,7 +1117,7 @@ export function EegMontageEditor({
                   <span className="cursor-default">Color</span>
                   <div className="flex items-center gap-1">
                     <select
-                      className="flex-1 min-w-0 text-xs border border-border rounded bg-surface"
+                      className="flex-1 min-w-0 text-xs font-normal text-foreground border border-border rounded bg-surface"
                       data-testid="bulk-color-select"
                       disabled={draftMontageChannels.length === 0}
                       value={bulkColor}
@@ -1157,7 +1157,7 @@ export function EegMontageEditor({
                       type="number"
                       placeholder="Hz"
                       aria-label="Set all rows' High Pass filter frequency"
-                      className="flex-1 min-w-0 text-xs border border-border rounded bg-surface"
+                      className="flex-1 min-w-0 text-xs font-normal text-foreground border border-border rounded bg-surface"
                       data-testid="bulk-highpass-input"
                       disabled={draftMontageChannels.length === 0}
                       min={0}
@@ -1193,7 +1193,7 @@ export function EegMontageEditor({
                       type="number"
                       placeholder="Hz"
                       aria-label="Set all rows' Low Pass filter frequency"
-                      className="flex-1 min-w-0 text-xs border border-border rounded bg-surface"
+                      className="flex-1 min-w-0 text-xs font-normal text-foreground border border-border rounded bg-surface"
                       data-testid="bulk-lowpass-input"
                       disabled={draftMontageChannels.length === 0}
                       min={0}
@@ -1229,7 +1229,7 @@ export function EegMontageEditor({
                       type="number"
                       placeholder="Hz"
                       aria-label="Set all rows' Notch filter frequency"
-                      className="flex-1 min-w-0 text-xs border border-border rounded bg-surface"
+                      className="flex-1 min-w-0 text-xs font-normal text-foreground border border-border rounded bg-surface"
                       data-testid="bulk-notch-input"
                       disabled={draftMontageChannels.length === 0}
                       min={0}
@@ -1256,7 +1256,7 @@ export function EegMontageEditor({
                 <div className={cn(CLEAR_COL_CLASS, 'flex flex-col items-center gap-0.5')}>
                   <button
                     type="button"
-                    className="shrink-0 w-4 h-4 flex items-center justify-center disabled:opacity-40 text-header hover:text-alert cursor-pointer"
+                    className="shrink-0 w-4 h-4 flex items-center justify-center disabled:opacity-40 text-heading hover:text-alert cursor-pointer"
                     data-testid="clear-all-header-button"
                     title={
                       draftMontageChannels.length === 0
@@ -1271,7 +1271,7 @@ export function EegMontageEditor({
                 </div>
               </div>
               {draftMontageChannels.length === 0 && (
-                <p className="max-w-sm text-xs text-header pl-3 pr-1 py-2">
+                <p className="max-w-sm text-xs text-heading pl-3 pr-1 py-2">
                   {`No montage rows yet — select channel(s) in the Channel Selection pane (${isPanesSwapped ? 'right' : 'left'})
               and use the + / Add buttons to add them to the montage row list (${isPanesSwapped ? 'left' : 'right'}).`}
                 </p>
@@ -1500,7 +1500,7 @@ export function EegMontageEditor({
                       type="button"
                       className={cn(
                         CLEAR_COL_CLASS,
-                        'flex items-center justify-center text-header hover:text-alert cursor-pointer'
+                        'flex items-center justify-center text-heading hover:text-alert cursor-pointer'
                       )}
                       data-testid={`remove-row-${row.id}`}
                       title={`Remove ${row.channel} from the montage`}
@@ -1695,11 +1695,11 @@ export function EegMontageEditor({
           <div className="flex flex-col gap-3 p-4 max-w-xs rounded-lg border border-border bg-surface shadow-lg">
             <div className="flex flex-col gap-1">
               <p className="text-sm font-medium text-heading">Keep monopolar electrodes?</p>
-              <p className="text-xs text-header">
+              <p className="text-xs text-heading">
                 Keep contacts without adjacent channels as unreferenced ("monopolar") instead of
                 bipolar.
               </p>
-              <p className="text-xs font-bold text-header">Not recommended.</p>
+              <p className="text-xs font-bold text-heading">Not recommended.</p>
             </div>
             <div className="flex justify-end gap-2">
               <button
