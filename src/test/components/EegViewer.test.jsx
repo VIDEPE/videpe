@@ -1104,6 +1104,61 @@ describe('EegViewer — timeline scrubber', () => {
     expect(parseFloat(thumb().style.left)).toBeCloseTo(16.67, 1);
   });
 
+  it('shows a time preview outside the current window and hides it over the window', async () => {
+    await renderViewer();
+    vi.spyOn(scrubber(), 'getBoundingClientRect').mockReturnValue({
+      left: 0,
+      width: 300,
+      top: 0,
+      bottom: 12,
+      right: 300,
+      height: 12,
+    });
+
+    fireEvent.mouseMove(scrubber(), { clientX: 150 });
+    expect(within(scrubber()).queryByRole('tooltip')).not.toBeInTheDocument();
+
+    // At 250px (25 seconds), the selected window clamps to 10–30 seconds; its midpoint is 20.
+    fireEvent.mouseMove(scrubber(), { clientX: 250 });
+    expect(within(scrubber()).getByRole('tooltip')).toHaveTextContent('20.0 s');
+
+    fireEvent.mouseDown(scrubber(), { clientX: 250 });
+    expect(parseFloat(thumb().style.left)).toBeCloseTo(33.33, 1);
+    expect(within(scrubber()).queryByRole('tooltip')).not.toBeInTheDocument();
+  });
+
+  it('clamps the hovered time window to the recording end', async () => {
+    await renderViewer();
+    vi.spyOn(scrubber(), 'getBoundingClientRect').mockReturnValue({
+      left: 0,
+      width: 300,
+      top: 0,
+      bottom: 12,
+      right: 300,
+      height: 12,
+    });
+
+    fireEvent.mouseMove(scrubber(), { clientX: 300 });
+    expect(within(scrubber()).getByRole('tooltip')).toHaveTextContent('20.0 s');
+  });
+
+  it('clears the preview when the pointer leaves the scrubber', async () => {
+    await renderViewer();
+    vi.spyOn(scrubber(), 'getBoundingClientRect').mockReturnValue({
+      left: 0,
+      width: 300,
+      top: 0,
+      bottom: 12,
+      right: 300,
+      height: 12,
+    });
+
+    fireEvent.mouseMove(scrubber(), { clientX: 300 });
+    expect(within(scrubber()).getByRole('tooltip')).toBeInTheDocument();
+    fireEvent.mouseLeave(scrubber());
+    expect(within(scrubber()).queryByRole('tooltip')).not.toBeInTheDocument();
+  });
+
   it('dragging the thumb moves the window forward', async () => {
     await renderViewer();
     mockScrubberWidth(scrubber());

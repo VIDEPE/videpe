@@ -58,7 +58,7 @@ const Y_AXIS_WIDTH = 80; // px for the y-axis area (channel name + tick space) �
 const PLOT_RIGHT_PAD = 20; // px right padding — must match in both channel plots and x-axis strip so ticks align
 const OVERDRAW = 2; // canvas height multiplier — peaks bleed ±50% into adjacent lanes instead of clipping
 const STACKED_OPACITY_START_PCT = 80; // opacity at the minimum stacked count (2 channels) — already translucent rather than fully opaque
-const STACKED_OPACITY_FLOOR_PCT = 3; // minimum per-trace opacity in the stacked overlay
+const STACKED_OPACITY_FLOOR_PCT = 15; // minimum per-trace opacity in the stacked overlay
 const STACKED_OPACITY_HALF_LIFE = 5; // channels (beyond the minimum stacked count of 2) needed to decay halfway from STACKED_OPACITY_START_PCT to the floor — higher = slower initial drop
 const X_AXIS_GRID_SPACE = 60; // Min px between vertical gridlines — shared by the channel plots and the x-axis =>uPlot uses it to pick an increment (1,2,5,10,etc)
 const MIN_CHANNEL_AREA_HEIGHT = 120; // px floor for the channel-plot scroll area. Below this the whole viewer overflows and the pane's scroll container takes over (mirrors NiiViewer's MIN_CANVAS_HEIGHT) instead of letting the x-axis/scrubber/controls/dropzone overlap
@@ -207,6 +207,7 @@ export const EegViewer = ({
   const syncKey = 'eeg-sync'; // shared across all channels to link their interactions
 
   const tMax = provider.tMax; // total time span of the recording, in seconds
+  const [scrubberHover, setScrubberHover] = useState(null);
 
   // ─── Layout + plot controls ─────────────────────────────────────────────────
   // Container measurement — plotWidth feeds uPlot options, channelAreaHeight drives plotHeight below
@@ -647,6 +648,33 @@ export const EegViewer = ({
   }, [topoHasContent, onTopoHasContentChange]);
 
   // ─── Keyboard + focus ───────────────────────────────────────────────────────
+
+  const getScrubberWindowAtPosition = (clientX) => {
+    const bar = scrubberRef.current?.getBoundingClientRect();
+    if (!bar || bar.width <= 0 || tMax <= 0) return null;
+    const ratio = (clientX - bar.left) / bar.width;
+    const start = Math.max(0, Math.min(tMax - windowSize, ratio * tMax - windowSize / 2));
+    return {
+      start,
+      midpoint: start + windowSize / 2,
+      position: clientX - bar.left,
+    };
+  };
+
+  const updateScrubberHover = (clientX) => {
+    const bar = scrubberRef.current?.getBoundingClientRect();
+    if (!bar || bar.width <= 0 || tMax <= 0) {
+      setScrubberHover(null);
+      return;
+    }
+    const hoveredTime = ((clientX - bar.left) / bar.width) * tMax;
+    if (hoveredTime >= startTime && hoveredTime <= startTime + windowSize) {
+      setScrubberHover(null);
+      return;
+    }
+    setScrubberHover(getScrubberWindowAtPosition(clientX));
+  };
+
   // Clicking anywhere in the viewer (other than a button/input) moves keyboard focus to the
   // container so the shortcuts above become active, without stealing focus from form controls
   const viewerRef = useRef(null);
@@ -1289,12 +1317,12 @@ export const EegViewer = ({
                   ref={scrubberRef}
                   data-testid="timeline-scrubber"
                   className="relative h-3 bg-surface cursor-pointer"
+                  onMouseMove={(e) => updateScrubberHover(e.clientX)}
+                  onMouseLeave={() => setScrubberHover(null)}
                   onMouseDown={(e) => {
-                    const bar = scrubberRef.current.getBoundingClientRect();
-                    const ratio = (e.clientX - bar.left) / bar.width;
-                    setStartTime(
-                      Math.max(0, Math.min(tMax - windowSize, ratio * tMax - windowSize / 2))
-                    );
+                    const preview = getScrubberWindowAtPosition(e.clientX);
+                    if (preview) setStartTime(preview.start);
+                    setScrubberHover(null);
                   }}
                 >
                   {/* Timeline thumb. left/width are clamped so the thumb can never extend past
@@ -1325,6 +1353,15 @@ export const EegViewer = ({
                       onMouseDown={(e) => startDrag(e, 'resize-right')}
                     />
                   </div>
+                  {scrubberHover && (
+                    <div
+                      role="tooltip"
+                      className="absolute bottom-full z-10 mb-1 -translate-x-1/2 whitespace-nowrap rounded border border-border bg-surface px-2 py-1 text-xs text-foreground shadow-[var(--c-shadow)] pointer-events-none"
+                      style={{ left: scrubberHover.position }}
+                    >
+                      {scrubberHover.midpoint.toFixed(1)} s
+                    </div>
+                  )}
                 </div>
               </div>
             )}
