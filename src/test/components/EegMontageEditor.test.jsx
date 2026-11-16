@@ -1793,6 +1793,140 @@ describe('EegMontageEditor', () => {
       });
     });
 
+    // Load is the inverse of Save above: filters shared by every row of a type become that
+    // type's global filters (see extractGlobalFilters). Like the rows, they're a draft: shown
+    // as the rows' placeholders, committed on Apply/OK, discarded on Cancel.
+    describe('Load recognises global filters', () => {
+      // FP1 and FP2 (both EEG) share all three filters; FP3 (seeg) isn't in the file
+      const filtersFile = (fp2LowPass = 40) =>
+        new File(
+          [
+            `<!DOCTYPE AnyWaveMontage>
+<Montage>
+	<Channel name="FP1">
+		<type>EEG</type>
+		<reference></reference>
+		<color></color>
+		<filters highPass="2" lowPass="40" notch="60"/>
+	</Channel>
+	<Channel name="FP2">
+		<type>EEG</type>
+		<reference>FP1</reference>
+		<color></color>
+		<filters highPass="2" lowPass="${fp2LowPass}" notch="60"/>
+	</Channel>
+</Montage>`,
+          ],
+          'filters.mtg'
+        );
+
+      // Loaded rows get fresh random ids, so their filter inputs are found by list order
+      const filterInputs = (field) => screen.getAllByTestId(new RegExp(`^montage-${field}-`));
+
+      it('shows the shared filters as the global placeholders, and leaves the rows own values empty', async () => {
+        render(<EegMontageEditor {...defaultProps} />);
+        await userEvent.upload(screen.getByTestId('montage-file-input'), filtersFile());
+
+        for (const [field, value] of [
+          ['highpass', '2'],
+          ['lowpass', '40'],
+          ['notch', '60'],
+        ]) {
+          filterInputs(field).forEach((input) => {
+            expect(input).toHaveValue(null);
+            expect(input).toHaveAttribute('placeholder', value);
+          });
+        }
+      });
+
+      it('keeps a filter that differs between rows of a type on the rows, per field', async () => {
+        render(<EegMontageEditor {...defaultProps} />);
+        await userEvent.upload(screen.getByTestId('montage-file-input'), filtersFile(30));
+
+        // low-pass differs (40 vs 30): stays on the rows; eeg's global low-pass is unchanged
+        expect(filterInputs('lowpass').map((input) => input.value)).toEqual(['40', '30']);
+        expect(filterInputs('lowpass')[0]).toHaveAttribute('placeholder', '70');
+        // high-pass is shared: lifted to the global filters
+        expect(filterInputs('highpass')[0]).toHaveValue(null);
+        expect(filterInputs('highpass')[0]).toHaveAttribute('placeholder', '2');
+      });
+
+      it('OK commits the loaded global filters, keeping the settings the file has no say over', async () => {
+        const onApplyGlobalFilters = vi.fn();
+        const onApplyMontageChannels = vi.fn();
+        // notchHarmonics isn't part of the .mtg format, so loading a file must keep it
+        const globalFilters = {
+          ...GLOBAL_FILTERS,
+          eeg: { ...GLOBAL_FILTERS.eeg, notchHarmonics: true },
+        };
+        render(
+          <EegMontageEditor
+            {...defaultProps}
+            globalFilters={globalFilters}
+            onApplyGlobalFilters={onApplyGlobalFilters}
+            onApplyMontageChannels={onApplyMontageChannels}
+          />
+        );
+        await userEvent.upload(screen.getByTestId('montage-file-input'), filtersFile());
+        await userEvent.click(screen.getByRole('button', { name: 'OK' }));
+
+        expect(onApplyGlobalFilters).toHaveBeenCalledWith({
+          ...GLOBAL_FILTERS, // seeg and other untouched: the file has no rows of those types
+          eeg: { highPass: 2, lowPass: 40, notch: 60, notchHarmonics: true },
+        });
+        // the committed rows follow the new global filters instead of carrying their own
+        const committedRows = onApplyMontageChannels.mock.calls[0][0];
+        committedRows.forEach((row) =>
+          expect(row).toMatchObject({ highPass: null, lowPass: null, notch: null })
+        );
+      });
+
+      it('Cancel discards the loaded global filters', async () => {
+        const onApplyGlobalFilters = vi.fn();
+        render(<EegMontageEditor {...defaultProps} onApplyGlobalFilters={onApplyGlobalFilters} />);
+        await userEvent.upload(screen.getByTestId('montage-file-input'), filtersFile());
+        await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+        expect(onApplyGlobalFilters).not.toHaveBeenCalled();
+      });
+
+      // Every new globalFilters object makes the viewer re-filter all channels, so Apply/OK
+      // shouldn't hand over an unchanged copy
+      it('does not commit global filters on Apply when nothing changed them', async () => {
+        const onApplyGlobalFilters = vi.fn();
+        render(<EegMontageEditor {...defaultProps} onApplyGlobalFilters={onApplyGlobalFilters} />);
+        await userEvent.click(screen.getByTestId('channel-bad-FP1'));
+        await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+        expect(onApplyGlobalFilters).not.toHaveBeenCalled();
+      });
+
+      it('leaves the global filters as they were after loading a file without filters', async () => {
+        const onApplyGlobalFilters = vi.fn();
+        render(<EegMontageEditor {...defaultProps} onApplyGlobalFilters={onApplyGlobalFilters} />);
+        await userEvent.upload(
+          screen.getByTestId('montage-file-input'),
+          new File([CARTOOL_FILE_TEXT], 'custom.mtg')
+        );
+
+        expect(filterInputs('highpass')[0]).toHaveAttribute('placeholder', '0.5'); // FP1, eeg
+        await userEvent.click(screen.getByRole('button', { name: 'OK' }));
+        expect(onApplyGlobalFilters).not.toHaveBeenCalled();
+      });
+
+      it('saving right after loading writes the same filters back', async () => {
+        render(<EegMontageEditor {...defaultProps} />);
+        await userEvent.upload(screen.getByTestId('montage-file-input'), filtersFile());
+        await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+        const xml = downloadTextFile.mock.calls[0][0];
+        expect(xml.match(/<filters [^>]*\/>/g)).toEqual([
+          '<filters highPass="2" lowPass="40" notch="60"/>',
+          '<filters highPass="2" lowPass="40" notch="60"/>',
+        ]);
+      });
+    });
+
     it("a row with a non-preset color (e.g. an AnyWave import's 'darkblue') renders as the select's actual selected value", async () => {
       const montageChannels = [{ id: 'FP1', channel: 'FP1', reference: null, color: 'darkblue' }];
       render(<EegMontageEditor {...defaultProps} montageChannels={montageChannels} />);

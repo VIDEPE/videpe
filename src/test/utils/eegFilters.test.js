@@ -9,6 +9,7 @@ import {
   applyMontageRowFilter,
   getTukeyWindow,
   resolveRowFilters,
+  extractGlobalFilters,
   hasActiveFilters,
   getSettlingSampleCount,
   filterChannelsAtSample,
@@ -352,6 +353,123 @@ describe('resolveRowFilters', () => {
     const row = { highPass: null, lowPass: null, notch: 60 }; // the row's own notch also gets the type's harmonics
     const result = resolveRowFilters(row, { ...globalFilters.eeg, notchHarmonics: true });
     expect(result.notchHarmonics).toBe(true);
+  });
+});
+
+// ─── extractGlobalFilters ───────────────────────────────────────────────────────────────
+// The inverse of Save's resolving (see resolveRowFilters): a loaded montage file carries every
+// row's effective filters, so a value shared by all rows of one channel type is recognised as
+// that type's global filter. Each field is checked on its own, like resolveRowFilters resolves
+// each field on its own.
+describe('extractGlobalFilters', () => {
+  // One montage row with its own filters; other row fields must pass through untouched
+  const row = (channel, highPass, lowPass, notch) => ({
+    id: `row-${channel}`,
+    channel,
+    reference: null,
+    color: 'red',
+    highPass,
+    lowPass,
+    notch,
+  });
+
+  const channelSettings = {
+    Fp1: { type: 'eeg', bad: false },
+    Fp2: { type: 'eeg', bad: false },
+    O1: { type: 'eeg', bad: false },
+    A1: { type: 'seeg', bad: false },
+    A2: { type: 'seeg', bad: false },
+  };
+
+  it('lifts filters shared by every row of a type to that type, and clears them on the rows', () => {
+    const rows = [row('Fp1', 0.5, 70, 50), row('Fp2', 0.5, 70, 50)];
+    const result = extractGlobalFilters(rows, channelSettings);
+
+    expect(result.globalFilters).toEqual({ eeg: { highPass: 0.5, lowPass: 70, notch: 50 } });
+    expect(result.rows).toEqual([row('Fp1', null, null, null), row('Fp2', null, null, null)]);
+  });
+
+  it('checks each field on its own: a deviating low-pass stays on the rows, the rest is lifted', () => {
+    // e.g. an ECG lead typed eeg with its own low-pass
+    const rows = [row('Fp1', 0.5, 70, 50), row('Fp2', 0.5, 70, 50), row('O1', 0.5, 30, 50)];
+    const result = extractGlobalFilters(rows, channelSettings);
+
+    expect(result.globalFilters).toEqual({ eeg: { highPass: 0.5, notch: 50 } });
+    expect(result.rows).toEqual([
+      row('Fp1', null, 70, null),
+      row('Fp2', null, 70, null),
+      row('O1', null, 30, null),
+    ]);
+  });
+
+  it('checks each channel type separately', () => {
+    const rows = [row('Fp1', 0.5, 70, 50), row('A1', 1, 300, 50), row('A2', 1, 300, 50)];
+    const result = extractGlobalFilters(rows, channelSettings);
+
+    expect(result.globalFilters).toEqual({
+      eeg: { highPass: 0.5, lowPass: 70, notch: 50 },
+      seeg: { highPass: 1, lowPass: 300, notch: 50 },
+    });
+    expect(result.rows.every((r) => r.highPass === null && r.lowPass === null)).toBe(true);
+  });
+
+  // Off and "follow global" are both null on a row, so a uniform null can't say which was
+  // meant. Lifting it would reset the global filters of every montage without filters in its
+  // file (Cartool files, the bundled templates) — so it's left alone.
+  it('leaves a field that is off (null) on every row alone, instead of turning that global filter off', () => {
+    const rows = [row('Fp1', 0.5, null, null), row('Fp2', 0.5, null, null)];
+    const result = extractGlobalFilters(rows, channelSettings);
+
+    expect(result.globalFilters).toEqual({ eeg: { highPass: 0.5 } });
+    expect(result.rows).toEqual([row('Fp1', null, null, null), row('Fp2', null, null, null)]);
+  });
+
+  it('returns no global filters and unchanged rows for a montage without filters', () => {
+    const rows = [row('Fp1', null, null, null), row('A1', null, null, null)];
+    const result = extractGlobalFilters(rows, channelSettings);
+
+    expect(result.globalFilters).toEqual({});
+    expect(result.rows).toEqual(rows);
+  });
+
+  it('does not lift a field that is set on some rows of a type and off on others', () => {
+    const rows = [row('Fp1', 0.5, 70, 50), row('Fp2', null, 70, 50)];
+    const result = extractGlobalFilters(rows, channelSettings);
+
+    expect(result.globalFilters).toEqual({ eeg: { lowPass: 70, notch: 50 } });
+    expect(result.rows).toEqual([row('Fp1', 0.5, null, null), row('Fp2', null, null, null)]);
+  });
+
+  it('lifts a filter shared by a single row of its type too', () => {
+    const rows = [row('Fp1', 0.5, 70, 50), row('A1', 1, null, null)];
+    const result = extractGlobalFilters(rows, channelSettings);
+
+    expect(result.globalFilters.seeg).toEqual({ highPass: 1 });
+    expect(result.rows[1]).toEqual(row('A1', null, null, null));
+  });
+
+  it('counts 0 as a set value, like the rest of the filter code', () => {
+    const rows = [row('Fp1', 0, null, null), row('Fp2', 0, null, null)];
+    expect(extractGlobalFilters(rows, channelSettings).globalFilters).toEqual({
+      eeg: { highPass: 0 },
+    });
+  });
+
+  it('treats a channel without settings as eeg, the same fallback the display rows use', () => {
+    const rows = [row('Fp1', 0.5, null, null), row('NotInSettings', 0.5, null, null)];
+    const result = extractGlobalFilters(rows, channelSettings);
+
+    expect(result.globalFilters).toEqual({ eeg: { highPass: 0.5 } });
+  });
+
+  it('does not change the rows it was given', () => {
+    const rows = [row('Fp1', 0.5, 70, 50), row('Fp2', 0.5, 70, 50)];
+    extractGlobalFilters(rows, channelSettings);
+    expect(rows).toEqual([row('Fp1', 0.5, 70, 50), row('Fp2', 0.5, 70, 50)]);
+  });
+
+  it('handles an empty montage', () => {
+    expect(extractGlobalFilters([], channelSettings)).toEqual({ rows: [], globalFilters: {} });
   });
 });
 
