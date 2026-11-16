@@ -1830,12 +1830,39 @@ describe('EegViewer — customElectrodes prop', () => {
 });
 
 describe('EegViewer — persistent electrode position dropzone', () => {
-  it('renders a dropzone for electrode positions and inverse solution even while the topography window is closed', async () => {
+  it('renders a dropzone for electrode positions, inverse solution and montage even while the topography window is closed', async () => {
     await renderViewer();
     expect(screen.queryByTestId('eeg-topo-viewer')).toBeNull();
     expect(
-      screen.getByText('Browse or drop electrode positions / inverse solution')
+      screen.getByText('Browse or drop electrode positions / inverse solution / montage')
     ).toBeInTheDocument();
+  });
+
+  it('calls onMontageFile with a dropped .mtg file, without rejecting it as unsupported', async () => {
+    const { default: toast } = await import('react-hot-toast');
+    toast.error.mockClear();
+    const onMontageFile = vi.fn();
+    const provider = makeProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        onMontageFile={onMontageFile}
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const mtgFile = new File(['<Montage/>'], 'my_montage.mtg');
+    const zone = screen
+      .getByText('Browse or drop electrode positions / inverse solution / montage')
+      .closest('div[class]');
+    fireEvent.drop(zone, { dataTransfer: { files: [mtgFile] } });
+
+    expect(onMontageFile).toHaveBeenCalledWith(mtgFile);
+    expect(toast.error).not.toHaveBeenCalled();
   });
 
   it('calls onElecPosFile with the dropped .elc file', async () => {
@@ -2225,7 +2252,7 @@ describe('EegViewer — persistent electrode position dropzone', () => {
     // rather than the browser's own file-picker filtering.
     const niiFile = new File(['binary'], 'sub-01_T1w.nii');
     const zone = screen
-      .getByText('Browse or drop electrode positions / inverse solution')
+      .getByText('Browse or drop electrode positions / inverse solution / montage')
       .closest('div[class]');
     fireEvent.drop(zone, { dataTransfer: { files: [niiFile] } });
 
@@ -2708,6 +2735,100 @@ describe('EegViewer — file-backed montage templates', () => {
     );
     // the row itself is dropped from the display since its reference channel doesn't exist
     expect(screen.queryByText('EEG1 - EEG9')).toBeNull();
+  });
+});
+
+// A montage file dropped in a dropzone (see useEegFileIntake) arrives as the droppedMontage
+// prop — already parsed, but still in the file's own channel spelling.
+describe('EegViewer — dropped montage files', () => {
+  // Written in lowercase to check it's converted to the recording's spelling (EEG1, EEG2)
+  const MTG_TEXT = `<!DOCTYPE AnyWaveMontage>
+<Montage>
+	<Channel name="eeg1">
+		<type>SEEG</type>
+		<reference></reference>
+		<color></color>
+	</Channel>
+	<Channel name="eeg2">
+		<type>EEG</type>
+		<reference>eeg1</reference>
+		<color></color>
+	</Channel>
+</Montage>`;
+
+  const makeDroppedMontage = (fileName = 'my_montage.mtg') => ({
+    fileName,
+    ...parseAnyWaveMontage(MTG_TEXT),
+  });
+
+  const flush = () =>
+    act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+  it('applies a montage that was dropped before the viewer mounted', async () => {
+    const provider = makeProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        droppedMontage={makeDroppedMontage()}
+      />
+    );
+    await flush();
+
+    expect(screen.getByText('EEG1')).toBeTruthy();
+    expect(screen.getByText('EEG2 - EEG1')).toBeTruthy();
+    expect(screen.queryByText('EEG3')).toBeNull();
+
+    // channel types from the file are patched in too
+    await userEvent.click(screen.getByRole('button', { name: 'Montage' }));
+    expect(screen.getByTestId('channel-type-EEG1')).toHaveValue('seeg');
+  });
+
+  it('applies a new montage dropped while the viewer is open', async () => {
+    const provider = makeProvider();
+    const { rerender } = render(
+      <EegViewer provider={provider} channelNames={provider.channelNames} />
+    );
+    await flush();
+    expect(screen.getByText('EEG3')).toBeTruthy();
+
+    rerender(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        droppedMontage={makeDroppedMontage()}
+      />
+    );
+
+    expect(screen.getByText('EEG2 - EEG1')).toBeTruthy();
+    expect(screen.queryByText('EEG3')).toBeNull();
+  });
+
+  it('does not re-apply the same dropped montage over a later edit', async () => {
+    const provider = makeProvider();
+    const droppedMontage = makeDroppedMontage();
+    const { rerender } = render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        droppedMontage={droppedMontage}
+      />
+    );
+    await flush();
+
+    await userEvent.selectOptions(screen.getByTestId('montage-template-select'), 'average');
+    rerender(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        droppedMontage={droppedMontage}
+      />
+    );
+
+    channelNames.forEach((name) => expect(screen.getByText(`${name} - Avg`)).toBeTruthy());
   });
 });
 

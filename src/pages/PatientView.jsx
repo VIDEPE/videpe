@@ -20,6 +20,7 @@ import {
   EEG_FORMAT_EXTENSIONS,
   ELEC_POS_EXTENSIONS,
   INV_SOLUTIONS_EXTENSIONS,
+  MONTAGE_EXTENSIONS,
   SUPPORTED_EEG_FORMATS,
 } from '../loaders/eegFormatRegistry';
 // Hooks
@@ -39,16 +40,18 @@ import neuxelecLogo from '@/assets/neuxelec_logo.ico';
 const PANEL_TITLE_CLASS = 'h-7 flex items-center text-xl font-medium leading-none text-heading';
 const PANEL_SUBTITLE_CLASS = 'text-xs font-medium text-foreground pl-2';
 
-// Everything the initial EEG dropzone handles: recordings, electrode positions and inverse
-// solutions. Built from the registry, so the file picker never falls behind a newly added format.
+// Everything the initial EEG dropzone handles: recordings, electrode positions, inverse
+// solutions and montages. Built from the registry, so the file picker never falls behind a
+// newly added format.
 const EEG_DROPZONE_ACCEPTED_FORMATS = [
   ...EEG_FORMAT_EXTENSIONS,
   ...ELEC_POS_EXTENSIONS,
   ...INV_SOLUTIONS_EXTENSIONS,
+  ...MONTAGE_EXTENSIONS,
 ].join(',');
 
 // What the initial EEG dropzone lists: one row per recording format (from the registry, so a new
-// format is listed automatically), then electrode positions and inverse solutions
+// format is listed automatically), then electrode positions, inverse solutions and montages
 const EEG_DROPZONE_DESCRIPTION = [
   ...SUPPORTED_EEG_FORMATS.map((format) => ({
     label: `${format.name}:`,
@@ -56,6 +59,7 @@ const EEG_DROPZONE_DESCRIPTION = [
   })),
   { label: 'Electrode Positions:', value: '.elc + .tsv' },
   { label: 'Inverse Solution:', value: '.mat (FieldTrip)' },
+  { label: 'Montage:', value: '.mtg (AnyWave, Cartool)' },
 ];
 
 export const PatientView = () => {
@@ -118,7 +122,9 @@ export const PatientView = () => {
     eegHint,
     customElectrodes,
     customElecPosFileName,
+    droppedMontage,
     handleElecPosFile,
+    handleMontageFile,
     handleEegFiles,
     resetIntake,
   } = useEegFileIntake({
@@ -453,8 +459,10 @@ export const PatientView = () => {
               esiChannelTotalCount={esiChannelTotalCount}
               isEsiChannelMatchGoodForLed={isEsiChannelMatchGoodForLed}
               esiSeegChannelNames={esiSeegChannelNames}
+              droppedMontage={droppedMontage}
               onElecPosFile={handleElecPosFile}
               onInverseSolutionFile={handleInverseSolutionFile}
+              onMontageFile={handleMontageFile}
               onElectrodeSnapshotChange={setElectrodeSnapshot}
               onChannelSnapshotChange={setChannelSnapshot}
               onChannelTypesChange={setChannelTypes}
@@ -472,7 +480,7 @@ export const PatientView = () => {
                 accepted_formats={EEG_DROPZONE_ACCEPTED_FORMATS}
                 label={'Drop EEG files'}
                 description={EEG_DROPZONE_DESCRIPTION}
-                // Registered electrode-position/inverse-solution files ride along in the same checkmark list as pending EEG files.
+                // Registered electrode-position/inverse-solution/montage files ride along in the same checkmark list as pending EEG files.
                 pendingFiles={[
                   ...pendingEegFiles.map((f) => ({ name: `EEG Recording: ${f.name}` })),
                   ...(customElecPosFileName
@@ -481,6 +489,7 @@ export const PatientView = () => {
                   ...(inverseSolutionFileName
                     ? [{ name: `Inverse solution: ${inverseSolutionFileName}` }]
                     : []),
+                  ...(droppedMontage ? [{ name: `Montage: ${droppedMontage.fileName}` }] : []),
                 ]}
                 hint={eegHint}
                 className="h-full min-h-48"
