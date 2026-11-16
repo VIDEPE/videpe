@@ -22,7 +22,7 @@ const datasetLabel = (dataset) => ({
  * each dataset is one zip, and its files simply follow the dataset's route:
  * - EEG: only the first EEG dataset is loaded. The EEG intake keeps one file per extension,
  *   so combining two recordings could pair one run's .vhdr with another run's .eeg.
- *   Electrode positions and inverse solutions attached to the examination (extra-data)
+ *   Electrode positions, inverse solutions and montages attached to the examination (extra-data)
  *   are added to the EEG files.
  * - Imaging (MR, PET, …): every dataset is loaded; each becomes one or more layers.
  * - Anything else is not downloaded, and is reported back in `skippedDatasets`.
@@ -45,7 +45,7 @@ const datasetLabel = (dataset) => ({
  *   - `eegDataset`: the EEG dataset that was loaded, or null if the examination has none (or
  *     its recording is in a format VIDEPE can't read).
  *   - `eegFiles`: files for useEegFileIntake's handleEegFiles (recording, electrode
- *     positions, inverse solutions).
+ *     positions, inverse solutions, montages).
  *   - `imagingFiles`: files for filesToLayers (NIfTI/MGH volumes, GIFTI meshes).
  *   - `skippedDatasets`: datasets not loaded, with the reason, so the caller can tell the user.
  * @throws {Error} when any request or unzip fails.
@@ -84,7 +84,7 @@ export async function fetchShanoirExamination({ client, examinationId, signal })
     }))
   );
 
-  // Extra-data (electrode positions, inverse solutions) only matters alongside a recording
+  // Extra-data (electrode positions, inverse solutions, montages) only matters alongside a recording
   // Note these are names (not file!), but since these are not zipped these can be checked if
   // they can be used before downloading, unlike the zip files
   const extraDataNames = eegDataset
@@ -117,7 +117,7 @@ export async function fetchShanoirExamination({ client, examinationId, signal })
   };
 
   // bundle eegFiles
-  // Without a recording there is nothing to show: electrode positions and inverse solutions
+  // Without a recording there is nothing to show: electrode positions, inverse solutions and montages
   // (from the zip or the extra-data) only mean something alongside one.
   const eegIntakeFiles = selectEegIntakeFiles(eegDatasetFiles);
   const isEegLoadable = hasEegRecording(eegIntakeFiles);

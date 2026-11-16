@@ -22,7 +22,7 @@ import { isEegRecordingFile, sortFilesByViewer } from '@/utils/launchFiles';
  * }>} the sorted files:
  *   - `title`: what the host app calls this launch (e.g. a patient code), or null.
  *   - `eegFiles`: files for useEegFileIntake's handleEegFiles (recording, electrode
- *     positions, inverse solutions).
+ *     positions, inverse solutions, montages).
  *   - `imagingFiles`: files for filesToLayers (NIfTI/MGH volumes, GIFTI meshes).
  *   - `skippedFiles`: names of the files not downloaded, so the caller can tell the user.
  *   - `eegName`: the name of the EEG recording file (e.g. 'rest.edf'), for the EEG panel

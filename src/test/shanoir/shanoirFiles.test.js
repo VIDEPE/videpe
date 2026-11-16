@@ -31,11 +31,12 @@ describe('classifyDataset', () => {
 });
 
 describe('selectExtraDataFileNames', () => {
-  it('keeps electrode positions and inverse solutions, as base file names', () => {
+  it('keeps electrode positions, inverse solutions and montages, as base file names', () => {
     const paths = [
       '/var/datasets-data/examination-7/sub-01_ses-01_electrodes.tsv',
       'C:\\data\\exam-7\\positions.elc',
       'sub-01_inversefilters.mat',
+      '/var/datasets-data/examination-7/DoubleBanana.mtg',
       '/var/datasets-data/examination-7/report.pdf',
       '/var/datasets-data/examination-7/sub-01_ses-01_scans.tsv',
     ];
@@ -43,6 +44,7 @@ describe('selectExtraDataFileNames', () => {
       'sub-01_ses-01_electrodes.tsv',
       'positions.elc',
       'sub-01_inversefilters.mat',
+      'DoubleBanana.mtg',
     ]);
   });
 

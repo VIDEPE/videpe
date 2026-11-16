@@ -1,4 +1,8 @@
-import { EEG_FORMAT_EXTENSIONS, INV_SOLUTIONS_EXTENSIONS } from '@/loaders/eegFormatRegistry';
+import {
+  EEG_FORMAT_EXTENSIONS,
+  INV_SOLUTIONS_EXTENSIONS,
+  MONTAGE_EXTENSIONS,
+} from '@/loaders/eegFormatRegistry';
 
 // Decides which viewer gets each file when VIDEPE is launched by another app (Shanoir, or a
 // host app such as a local Python app), which hands over its files in one batch. In the
@@ -19,10 +23,15 @@ const IMAGING_EXTENSIONS = ['.nii', '.nii.gz', '.mgh', '.mgz', '.gii'];
 export const isElectrodePositionFile = (name) => /(\.elc|_electrodes\.tsv)$/i.test(name);
 export const isInverseSolutionFile = (name) =>
   INV_SOLUTIONS_EXTENSIONS.some((ext) => name.toLowerCase().endsWith(ext));
+export const isMontageFile = (name) =>
+  MONTAGE_EXTENSIONS.some((ext) => name.toLowerCase().endsWith(ext));
 export const isEegRecordingFile = (name) =>
   EEG_FORMAT_EXTENSIONS.some((ext) => name.toLowerCase().endsWith(ext));
 const isEegIntakeFile = (name) =>
-  isEegRecordingFile(name) || isElectrodePositionFile(name) || isInverseSolutionFile(name);
+  isEegRecordingFile(name) ||
+  isElectrodePositionFile(name) ||
+  isInverseSolutionFile(name) ||
+  isMontageFile(name);
 const isImagingFile = (name) => IMAGING_EXTENSIONS.some((ext) => name.toLowerCase().endsWith(ext));
 
 // Base file name of a path — paths (e.g. Shanoir's) can use either separator.
@@ -30,7 +39,7 @@ export const baseName = (path) => path.split(/[\\/]/).pop();
 
 /**
  * Picks the files the EEG intake (useEegFileIntake's handleEegFiles) should receive: the
- * recording itself, electrode positions and inverse solutions. Everything else (e.g. the
+ * recording itself, electrode positions, inverse solutions and montages. Everything else (e.g. the
  * BrainVision .vmrk marker file, BIDS sidecars) is dropped, so it doesn't show up as
  * "Unsupported file" or get parsed as electrode positions.
  *
@@ -91,7 +100,8 @@ export function selectImagingFiles(files) {
  * @param {T[]} files - Files, or anything else with a file name.
  * @returns {{ eegFiles: T[], imagingFiles: T[], skippedFiles: T[] }} every file in
  *   exactly one group, each in the original order:
- *   - `eegFiles`: for the EEG intake (recording, electrode positions, inverse solutions).
+ *   - `eegFiles`: for the EEG intake (recording, electrode positions, inverse solutions,
+ *     montages).
  *   - `imagingFiles`: for filesToLayers (volumes and surface meshes).
  *   - `skippedFiles`: files neither viewer opens (e.g. an EEGLAB .set, a BIDS sidecar, the
  *     BrainVision .vmrk marker file).

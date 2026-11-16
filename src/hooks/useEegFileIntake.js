@@ -5,11 +5,13 @@ import {
   checkEegFiles,
   ELEC_POS_EXTENSIONS,
   INV_SOLUTIONS_EXTENSIONS,
+  MONTAGE_EXTENSIONS,
   EEG_FORMAT_EXTENSIONS,
   SUPPORTED_EEG_FORMATS_TEXT,
   getEegFormatName,
 } from '../loaders/eegFormatRegistry';
 import { parseElectrodePositionFile } from '../loaders/parseElectrodePositionFile';
+import { parseMontageText } from '../loaders/parseMontageText';
 import { findDuplicateChannelNames } from '../utils/eegTopographyUtils';
 
 /**
@@ -25,6 +27,8 @@ import { findDuplicateChannelNames } from '../utils/eegTopographyUtils';
  * sync across the several places that can supply/replace them (this dropzone,
  * EegViewer's own persistent dropzone, and the topography popup's "use custom
  * positions" button) — all three call handleElecPosFile.
+ * Montage files are owned here for the same reason: one can be dropped before EegViewer
+ * exists. This hook only parses them; EegViewer applies each new one to the recording.
  *
  * @param {Object} params
  * @param {(eeg: object) => void} params.setEeg
@@ -48,11 +52,16 @@ import { findDuplicateChannelNames } from '../utils/eegTopographyUtils';
  *     electrode positions, or an empty array if none have been loaded.
  *   - `customElecPosFileName` (string|null) — the filename (without extension) of the
  *     electrode-position file that produced `customElectrodes`, or `null` if none.
+ *   - `droppedMontage` ({fileName, rows, channelTypes}|null) — the last montage file
+ *     dropped, parsed (see parseMontageText) but still in the file's own channel spelling,
+ *     or `null` if none. A new object per drop, so EegViewer can tell a new drop apart.
  *   - `handleElecPosFile` (file: File) => Promise<void> — parses a single
  *     electrode-position file and, if valid, makes it the active custom electrode set.
+ *   - `handleMontageFile` (file: File) => Promise<void> — parses a single montage file
+ *     and, if valid, makes it the `droppedMontage`.
  *   - `handleEegFiles` (newFiles: FileList|File[]) => Promise<void> — the main entry
  *     point: routes one drop/selection's worth of files (EEG recording files, electrode
- *     positions, inverse solutions, or any mix) to the right handling logic.
+ *     positions, inverse solutions, montages, or any mix) to the right handling logic.
  *   - `resetIntake` () => void — clears all state owned by this hook (pending files,
  *     hint, custom electrodes) back to its initial empty state.
  */
@@ -61,6 +70,7 @@ export function useEegFileIntake({ setEeg, setIsLoading, onInverseSolutionFile }
   const [eegHint, setEegHint] = useState(null);
   const [customElectrodes, setCustomElectrodes] = useState([]); // [{label,x,y,z}]
   const [customElecPosFileName, setCustomElecPosFileName] = useState(null);
+  const [droppedMontage, setDroppedMontage] = useState(null); // {fileName, rows, channelTypes}
 
   /**
    * Parses one electrode-position file and, if it contains any usable positions, makes it
@@ -89,8 +99,26 @@ export function useEegFileIntake({ setEeg, setIsLoading, onInverseSolutionFile }
   }, []);
 
   /**
-   * Processes a batch of files dropped/selected at the EEG dropzone. Electrode-position
-   * and inverse-solution files are split out and routed to their own handlers first;
+   * Parses one montage file (AnyWave or Cartool .mtg) and, if valid, makes it the
+   * `droppedMontage` for EegViewer to apply. Parsed here rather than in EegViewer so an
+   * invalid file is reported right away, even when no recording is loaded yet.
+   *
+   * @param {File} file - the dropped/selected .mtg file.
+   * @returns {Promise<void>} Resolves once parsing finishes and state/toast have been updated.
+   */
+  const handleMontageFile = useCallback(async (file) => {
+    try {
+      const { rows, channelTypes } = parseMontageText(await file.text());
+      setDroppedMontage({ fileName: file.name, rows, channelTypes });
+    } catch (err) {
+      // Leaves the previous montage as it was, same as the montage editor's Load button
+      toast.error(`Error loading montage file:\n${err.message}`);
+    }
+  }, []);
+
+  /**
+   * Processes a batch of files dropped/selected at the EEG dropzone. Electrode-position,
+   * inverse-solution and montage files are split out and routed to their own handlers first;
    * anything left is checked against known EEG recording formats. If the accumulated
    * files (this batch plus whatever was already pending from an earlier drop) complete
    * a format, the recording is parsed and loaded; if only part of a format is present,
@@ -138,9 +166,20 @@ export function useEegFileIntake({ setEeg, setIsLoading, onInverseSolutionFile }
         }
       }
 
-      // Exclude electrode position and inverse filter files from EEG format detection — they are handled separately above. The remaining files are checked for EEG formats.
+      // Detect and handle montage files
+      const montageFiles = allFiles.filter((f) =>
+        MONTAGE_EXTENSIONS.some((ext) => f.name.toLowerCase().endsWith(ext))
+      );
+      if (montageFiles.length > 0) {
+        await handleMontageFile(montageFiles[montageFiles.length - 1]); // keep only the last if multiple were dropped at once
+        if (montageFiles.length > 1) {
+          toast('Multiple montage files loaded => using the latest.', { icon: '⚠️' });
+        }
+      }
+
+      // Exclude electrode position, inverse filter and montage files from EEG format detection — they are handled separately above. The remaining files are checked for EEG formats.
       const remainingFiles = allFiles.filter(
-        (f) => !elecPosFiles.includes(f) && !invFiltFiles.includes(f)
+        (f) => !elecPosFiles.includes(f) && !invFiltFiles.includes(f) && !montageFiles.includes(f)
       );
       // Anything left whose extension doesn't belong to a supported EEG format (e.g. an
       // imaging volume meant for the Neuroimaging panel) is rejected outright
@@ -156,7 +195,7 @@ export function useEegFileIntake({ setEeg, setIsLoading, onInverseSolutionFile }
         );
       }
 
-      if (eegFiles.length === 0) return isEegSet; // pure electrode-position/inv-filter/unsupported drop — nothing else to do
+      if (eegFiles.length === 0) return isEegSet; // pure electrode-position/inv-filter/montage/unsupported drop — nothing else to do
 
       // All files of one recording belong to the same format. A drop with files of several
       // formats (e.g. .vhdr + .edf) is ambiguous — which recording is meant? — so its recording
@@ -234,11 +273,18 @@ export function useEegFileIntake({ setEeg, setIsLoading, onInverseSolutionFile }
       }
       return isEegSet;
     },
-    [pendingEegFiles, handleElecPosFile, onInverseSolutionFile, setEeg, setIsLoading]
+    [
+      pendingEegFiles,
+      handleElecPosFile,
+      handleMontageFile,
+      onInverseSolutionFile,
+      setEeg,
+      setIsLoading,
+    ]
   );
 
   /**
-   * Clears the pending-file queue, the hint, and the custom electrode positions —
+   * Clears the pending-file queue, the hint, the custom electrode positions and the montage —
    * returning this hook's state to what it was before any files were dropped. Does not
    * touch the loaded `eeg` recording itself: that state is owned by the caller
    * (PatientView), since it's shared with useEsiMontage, so the caller is responsible
@@ -251,6 +297,7 @@ export function useEegFileIntake({ setEeg, setIsLoading, onInverseSolutionFile }
     setEegHint(null);
     setCustomElectrodes([]);
     setCustomElecPosFileName(null);
+    setDroppedMontage(null);
   }, []);
 
   return {
@@ -258,7 +305,9 @@ export function useEegFileIntake({ setEeg, setIsLoading, onInverseSolutionFile }
     eegHint,
     customElectrodes,
     customElecPosFileName,
+    droppedMontage,
     handleElecPosFile,
+    handleMontageFile,
     handleEegFiles,
     resetIntake,
   };

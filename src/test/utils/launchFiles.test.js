@@ -16,8 +16,10 @@ describe('hasEegRecording', () => {
     expect(hasEegRecording([file('rec.edf')])).toBe(true);
   });
 
-  it('is false for electrode positions or an inverse solution without a recording', () => {
-    expect(hasEegRecording([file('sub-01_electrodes.tsv'), file('inv.mat')])).toBe(false);
+  it('is false for electrode positions, an inverse solution or a montage without a recording', () => {
+    expect(
+      hasEegRecording([file('sub-01_electrodes.tsv'), file('inv.mat'), file('montage.mtg')])
+    ).toBe(false);
   });
 
   it('is false for a recording format VIDEPE cannot read', () => {
@@ -37,13 +39,14 @@ describe('listFileExtensions', () => {
 });
 
 describe('selectEegIntakeFiles', () => {
-  it('keeps the recording, electrode positions and inverse solution', () => {
+  it('keeps the recording, electrode positions, inverse solution and montage', () => {
     const files = [
       file('sub-01_task-rest_eeg.vhdr'),
       file('sub-01_task-rest_eeg.eeg'),
       file('sub-01_task-rest_eeg_electrodes.tsv'),
       file('positions.elc'),
       file('sub-01_inversefilters.mat'),
+      file('DoubleBanana.mtg'),
     ];
     expect(names(selectEegIntakeFiles(files))).toEqual(names(files));
   });
@@ -65,8 +68,12 @@ describe('selectEegIntakeFiles', () => {
   });
 
   it('is case-insensitive', () => {
-    const files = [file('REC.VHDR'), file('Sub-01_Electrodes.TSV')];
-    expect(names(selectEegIntakeFiles(files))).toEqual(['REC.VHDR', 'Sub-01_Electrodes.TSV']);
+    const files = [file('REC.VHDR'), file('Sub-01_Electrodes.TSV'), file('Montage.MTG')];
+    expect(names(selectEegIntakeFiles(files))).toEqual([
+      'REC.VHDR',
+      'Sub-01_Electrodes.TSV',
+      'Montage.MTG',
+    ]);
   });
 });
 
@@ -109,9 +116,16 @@ describe('sortFilesByViewer', () => {
       file('sub-01_electrodes.tsv'),
       file('lh.pial.gii'),
       file('inv.mat'),
+      file('montage.mtg'),
     ];
     const { eegFiles, imagingFiles, skippedFiles } = sortFilesByViewer(files);
-    expect(names(eegFiles)).toEqual(['rec.vhdr', 'rec.eeg', 'sub-01_electrodes.tsv', 'inv.mat']);
+    expect(names(eegFiles)).toEqual([
+      'rec.vhdr',
+      'rec.eeg',
+      'sub-01_electrodes.tsv',
+      'inv.mat',
+      'montage.mtg',
+    ]);
     expect(names(imagingFiles)).toEqual(['sub-01_T1w.nii.gz', 'lh.pial.gii']);
     expect(skippedFiles).toEqual([]);
   });
