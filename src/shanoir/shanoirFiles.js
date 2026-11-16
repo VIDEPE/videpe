@@ -1,4 +1,9 @@
-import { baseName, isElectrodePositionFile, isInverseSolutionFile } from '@/utils/launchFiles';
+import {
+  baseName,
+  isElectrodePositionFile,
+  isInverseSolutionFile,
+  isMontageFile,
+} from '@/utils/launchFiles';
 
 // Decides which Shanoir datasets and files VIDEPE loads, and where they go. Sorting the
 // downloaded files themselves is shared with the host-app mode, in src/utils/launchFiles.js.
@@ -21,7 +26,7 @@ export function classifyDataset(dataset) {
 
 /**
  * Picks the examination extra-data files (attached to the examination in Shanoir) that
- * VIDEPE loads: electrode positions and inverse solutions.
+ * VIDEPE loads: electrode positions, inverse solutions and montages.
  *
  * @param {string[]|undefined} paths - ExaminationDTO.extraDataFilePathList.
  * @returns {string[]} base file names, as expected by the extra-data download endpoint.
@@ -29,5 +34,7 @@ export function classifyDataset(dataset) {
 export function selectExtraDataFileNames(paths) {
   return (paths ?? [])
     .map(baseName)
-    .filter((name) => isElectrodePositionFile(name) || isInverseSolutionFile(name));
+    .filter(
+      (name) => isElectrodePositionFile(name) || isInverseSolutionFile(name) || isMontageFile(name)
+    );
 }

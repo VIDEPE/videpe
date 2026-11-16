@@ -28,12 +28,12 @@ The viewer host proxies the datasets API (as it already does for /dicomweb/), so
 
 All requests are `GET` with `Authorization: Bearer <access token>`, under `/shanoir-ng/datasets`. VIDEPE never writes to Shanoir.
 
-| Request                                                        | Purpose                                                                                            |
-| -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `examinations/{examinationId}`                                 | the examination's `extraDataFilePathList` (attached electrode positions, inverse solution)         |
-| `datasets/examination/{examinationId}`                         | the examination's datasets, routed by `type` (`Eeg` → EEG viewer, `Mr`, `Pet`, … → imaging viewer) |
-| `datasets/download/{datasetId}?format=nii`                     | each dataset as a ZIP (imaging converted to NIfTI; EEG returned as imported)                       |
-| `examinations/extra-data-download/{examinationId}/{fileName}/` | selected extra-data files (`*_electrodes.tsv`, `.elc`, `.mat`)                                     |
+| Request                                                        | Purpose                                                                                             |
+| -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `examinations/{examinationId}`                                 | the examination's `extraDataFilePathList` (attached electrode positions, inverse solution, montage) |
+| `datasets/examination/{examinationId}`                         | the examination's datasets, routed by `type` (`Eeg` → EEG viewer, `Mr`, `Pet`, … → imaging viewer)  |
+| `datasets/download/{datasetId}?format=nii`                     | each dataset as a ZIP (imaging converted to NIfTI; EEG returned as imported)                        |
+| `examinations/extra-data-download/{examinationId}/{fileName}/` | selected extra-data files (`*_electrodes.tsv`, `.elc`, `.mat`, `.mtg`)                              |
 
 Only the first EEG dataset of an examination is loaded; any others, and unsupported dataset types, are listed to the user as skipped.
 
