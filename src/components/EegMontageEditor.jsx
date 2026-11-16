@@ -1300,6 +1300,10 @@ export function EegMontageEditor({
                   ? null
                   : (draftChannelSettings[row.channel]?.type ?? 'eeg');
                 const typeFilters = channelType ? globalFilters?.[channelType] : undefined;
+                // The type's notch harmonics apply to this row whenever it has a notch, its own
+                // or the global one — rows have no harmonics setting of their own
+                const notchHarmonicsApply =
+                  typeFilters?.notchHarmonics === true && (row.notch ?? typeFilters?.notch) != null;
                 return (
                   <div
                     key={row.id}
@@ -1469,11 +1473,21 @@ export function EegMontageEditor({
                       aria-label="Low Pass filter frequency"
                       className={cn(FILTER_COL_CLASS, FILTER_INPUT_CLASS)}
                     />
-                    {/* Channel Notch */}
+                    {/* Channel Notch — a "+h" after the global value, and a tooltip, when the
+                        type also notches the harmonics (set in the Global EEG Filters window) */}
                     <input
                       data-testid={`montage-notch-${row.id}`}
                       type="number"
-                      placeholder={typeFilters?.notch ?? undefined}
+                      placeholder={
+                        typeFilters?.notch == null
+                          ? undefined
+                          : `${typeFilters.notch}${notchHarmonicsApply ? '+h' : ''}`
+                      }
+                      title={
+                        notchHarmonicsApply
+                          ? 'Also notches the 2nd and 3rd harmonic (set per type in Global EEG Filters)'
+                          : undefined
+                      }
                       value={row.notch ?? ''}
                       disabled={isChannelMissing}
                       min={0} // lowPass can never be lower than high pass

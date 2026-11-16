@@ -57,9 +57,9 @@ const MONTAGE_CHANNELS = CHANNEL_NAMES.map((name) => ({
 // Global filters per type — shown greyed as placeholders in rows without their own value.
 // eeg and seeg differ, and seeg's lowPass is off, so a placeholder from the wrong type fails.
 const GLOBAL_FILTERS = {
-  eeg: { highPass: 0.5, lowPass: 70, notch: 50 },
-  seeg: { highPass: 1, lowPass: null, notch: null },
-  other: { highPass: null, lowPass: null, notch: null },
+  eeg: { highPass: 0.5, lowPass: 70, notch: 50, notchHarmonics: false },
+  seeg: { highPass: 1, lowPass: null, notch: null, notchHarmonics: false },
+  other: { highPass: null, lowPass: null, notch: null, notchHarmonics: false },
 };
 
 const defaultProps = {
@@ -891,6 +891,52 @@ describe('EegMontageEditor', () => {
       const montageChannels = [{ ...MONTAGE_CHANNELS[0], id: 'X', channel: 'MISSING' }];
       render(<EegMontageEditor {...defaultProps} montageChannels={montageChannels} />);
       expect(screen.getByTestId('montage-highpass-X')).not.toHaveAttribute('placeholder');
+    });
+  });
+
+  describe('notch harmonics', () => {
+    // eeg harmonics on; seeg on too, but seeg has no notch to add them to
+    const harmonicsOn = {
+      ...GLOBAL_FILTERS,
+      eeg: { ...GLOBAL_FILTERS.eeg, notchHarmonics: true },
+      seeg: { ...GLOBAL_FILTERS.seeg, notchHarmonics: true },
+    };
+
+    it("marks the notch placeholder with +h when the row's type also notches the harmonics", () => {
+      render(<EegMontageEditor {...defaultProps} globalFilters={harmonicsOn} />);
+      expect(screen.getByTestId('montage-notch-FP1')).toHaveAttribute('placeholder', '50+h'); // eeg
+    });
+
+    it('says in the notch tooltip that the harmonics are notched too, and where to change it', () => {
+      render(<EegMontageEditor {...defaultProps} globalFilters={harmonicsOn} />);
+      const title = screen.getByTestId('montage-notch-FP1').getAttribute('title');
+      expect(title).toMatch(/harmonic/i);
+      expect(title).toMatch(/Global EEG Filters/);
+    });
+
+    it("also shows the tooltip on a row with its own notch, since it gets its type's harmonics", () => {
+      const montageChannels = [{ ...MONTAGE_CHANNELS[0], notch: 60 }]; // FP1, eeg
+      render(
+        <EegMontageEditor
+          {...defaultProps}
+          montageChannels={montageChannels}
+          globalFilters={harmonicsOn}
+        />
+      );
+      expect(screen.getByTestId('montage-notch-FP1')).toHaveAttribute('title');
+    });
+
+    it('shows no harmonics marks when the type has them off', () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      const input = screen.getByTestId('montage-notch-FP1');
+      expect(input).toHaveAttribute('placeholder', '50');
+      expect(input).not.toHaveAttribute('title');
+    });
+
+    it('shows no harmonics marks on a row without any notch, even with the type flag on', () => {
+      render(<EegMontageEditor {...defaultProps} globalFilters={harmonicsOn} />);
+      // FP3 is seeg: harmonics on, but no notch to add them to
+      expect(screen.getByTestId('montage-notch-FP3')).not.toHaveAttribute('title');
     });
   });
 
