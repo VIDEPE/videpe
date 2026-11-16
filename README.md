@@ -47,7 +47,7 @@ High-performance multichannel viewer built on [uPlot](https://github.com/leeoniy
   - Select and flag channels (bad-channel, per-channel type)
   - Build referenced or bipolar montage rows with custom per-row colors, reorder and sort them, and the waveform view switches to showing exactly those rows.
   - Per-row filter overrides — a row's own high-pass, low-pass or notch wins over the global filter of its channel type (e.g. for an ECG channel); empty fields show the global value greyed out.
-  - Import montage files in AnyWave (XML) or Cartool (plain-text) format — auto-detected from file content — and export back out as AnyWave XML, with each row's effective filters (its own or the global ones) included.
+  - Import montage files in AnyWave (XML) or Cartool (plain-text) format — auto-detected from file content, loaded in the editor or by dropping them on the EEG panel — and export back out as AnyWave XML, with each row's effective filters (its own or the global ones) included.
 
 - EEG topography — a resizable panel showing a 3D voltage map at the selected time point using [NiiVue](https://niivue.com/) mesh rendering
   - Automatically selects the best-matching bundled electrode-position template; load custom positions via `.elc` or `*_electrodes.tsv` (BIDS specifications) file
@@ -91,6 +91,7 @@ Hit **Load Demo** to instantly load a synthetic EEG recording, electrode positio
 | ------------------- | ------------------------------------------------------------------------ |
 | EEG                 | BrainVision (`.vhdr` + `.eeg`), EDF/EDF+ (`.edf`), Micromed TRC (`.trc`) |
 | Electrode positions | `.elc`, `*_electrodes.tsv`                                               |
+| Montages            | AnyWave, Cartool (`.mtg`)                                                |
 | Volumes             | NIfTI (`.nii`, `.nii.gz`), MGH/MGZ, GIFTI, PLY, OBJ, DICOM (`.dcm`)      |
 
 ## Tech stack

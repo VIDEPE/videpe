@@ -33,7 +33,7 @@ You can see the result in the EEG viewer: the Electrode Position status LED show
 If your channel names aren't covered, you can still use VIDEPE with your own files as long as the [file format is supported](../README.md#supported-formats):
 
 - **Positions:** load an `.elc` or `*_electrodes.tsv` file. It replaces the template for positions. It doesn't change which montages are offered, because those still depend on the best-matching bundled template relating to the recording channel names.
-- **Montages:** load an AnyWave or Cartool montage file in the Montage Editor. Its names must match the recording's channel names. Differences in spelling are handled, but channel aliases are not applied to loaded files.
+- **Montages:** load an AnyWave or Cartool montage file in the Montage Editor, or drop it on the EEG panel. Its names must match the recording's channel names. Differences in spelling are handled, but channel aliases are not applied to loaded files.
 
 ## Adding a new naming system
 
