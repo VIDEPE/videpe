@@ -5,6 +5,10 @@ import {
   EEG_NODE_POS,
   EEG_NODE_NEG_KEY,
   EEG_NODE_NEG,
+  EEG_NODE_POS_COLORBLIND_KEY,
+  EEG_NODE_POS_COLORBLIND,
+  EEG_NODE_NEG_COLORBLIND_KEY,
+  EEG_NODE_NEG_COLORBLIND,
 } from '@/utils/eegColormaps';
 import { revokeLayerUrls } from '@/utils/NiiViewer.utils';
 
@@ -57,6 +61,8 @@ export function useSharedNiiVueInstance({
     // before the connectome-build effects can ever run on this instance.
     nv.addColormap(EEG_NODE_POS_KEY, EEG_NODE_POS);
     nv.addColormap(EEG_NODE_NEG_KEY, EEG_NODE_NEG);
+    nv.addColormap(EEG_NODE_POS_COLORBLIND_KEY, EEG_NODE_POS_COLORBLIND);
+    nv.addColormap(EEG_NODE_NEG_COLORBLIND_KEY, EEG_NODE_NEG_COLORBLIND);
     nv.attachToCanvas(canvasRef.current);
     // Sync slice type on mount — nv is long-lived and may have been left in RENDER from
     // a previous connectome-only phase. Later changes go through handleSliceTypeChange.

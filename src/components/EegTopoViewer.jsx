@@ -9,21 +9,21 @@ import {
 import {
   EEG_TOPO_COLORMAP_KEY,
   EEG_TOPO_COLORMAP,
-  EEG_TOPO_COLORMAP_COLOURBLIND_KEY,
-  EEG_TOPO_COLORMAP_COLOURBLIND,
+  EEG_TOPO_COLORMAP_COLORBLIND_KEY,
+  EEG_TOPO_COLORMAP_COLORBLIND,
   EEG_NODE_POS_KEY,
   EEG_NODE_POS,
   EEG_NODE_NEG_KEY,
   EEG_NODE_NEG,
-  EEG_NODE_POS_COLOURBLIND_KEY,
-  EEG_NODE_POS_COLOURBLIND,
-  EEG_NODE_NEG_COLOURBLIND_KEY,
-  EEG_NODE_NEG_COLOURBLIND,
+  EEG_NODE_POS_COLORBLIND_KEY,
+  EEG_NODE_POS_COLORBLIND,
+  EEG_NODE_NEG_COLORBLIND_KEY,
+  EEG_NODE_NEG_COLORBLIND,
   EEG_NODE_UNMAPPED_KEY,
   EEG_NODE_UNMAPPED,
 } from '@/utils/eegColormaps';
-import { EyeDashed } from 'lucide-react';
 import { EegMatrixViewer } from './EegMatrixViewer';
+import { useColorBlindMode } from '@/hooks/useColorBlindMode';
 import { cn } from '@/utils/utils';
 import { TYPE_LIST, TYPE_ORDER } from '@/utils/channelTypes';
 import { formatFilterSummary } from '@/utils/eegFilters';
@@ -38,7 +38,7 @@ const MATCHED_NODE_SCALE = 4;
 // Builds the two marker "layers" (unmapped template dots + matched, voltage-coloured dots)
 // as NiiVue connectome meshes and adds them on top of whatever meshes are already loaded.
 // Connectome nodes render as solid spheres positioned in the same mm space as the mesh.
-function addElectrodeMarkers(nv, markers, calMax, colourBlindMode) {
+function addElectrodeMarkers(nv, markers, calMax, colorBlindMode) {
   const unmappedNodes = markers
     .filter((m) => !m.isMatched)
     .map((m) => ({ name: m.label, x: m.x, y: m.y, z: m.z, colorValue: 0, sizeValue: 1 }));
@@ -65,8 +65,8 @@ function addElectrodeMarkers(nv, markers, calMax, colourBlindMode) {
   if (matchedNodes.length > 0) {
     const matchedMesh = nv.loadConnectomeAsMesh({
       name: 'eeg-electrodes-matched',
-      nodeColormap: colourBlindMode ? EEG_NODE_POS_COLOURBLIND_KEY : EEG_NODE_POS_KEY,
-      nodeColormapNegative: colourBlindMode ? EEG_NODE_NEG_COLOURBLIND_KEY : EEG_NODE_NEG_KEY,
+      nodeColormap: colorBlindMode ? EEG_NODE_POS_COLORBLIND_KEY : EEG_NODE_POS_KEY,
+      nodeColormapNegative: colorBlindMode ? EEG_NODE_NEG_COLORBLIND_KEY : EEG_NODE_NEG_KEY,
       nodeMinColor: 0,
       nodeMaxColor: calMax,
       nodeScale: MATCHED_NODE_SCALE,
@@ -118,7 +118,8 @@ export function EegTopoViewer({
   const [isMaximized, setIsMaximized] = useState(false);
   const [position, setPosition] = useState({ x: 80, y: 80 });
   const [size, setSize] = useState(DEFAULT_TOPO_SIZE);
-  const [colourBlindMode, setColourBlindMode] = useState(false);
+  // App-wide colorblind colormap mode, toggled in the PatientView header (ColorBlindToggle)
+  const { isColorBlindMode: colorBlindMode } = useColorBlindMode();
   // Which of the two views (3D mesh / electrode matrix) the user last picked, via the title
   // bar tabs below. Seeded from the majority-SEEG heuristic so the window opens on whichever
   // view is most likely relevant, same as the old auto-switching behaviour.
@@ -152,11 +153,11 @@ export function EegTopoViewer({
     const nv = nvRef.current;
     nv.setSliceType(SLICE_TYPE.RENDER); // force slicetype to render for a 3D view
     nv.addColormap(EEG_TOPO_COLORMAP_KEY, EEG_TOPO_COLORMAP);
-    nv.addColormap(EEG_TOPO_COLORMAP_COLOURBLIND_KEY, EEG_TOPO_COLORMAP_COLOURBLIND);
+    nv.addColormap(EEG_TOPO_COLORMAP_COLORBLIND_KEY, EEG_TOPO_COLORMAP_COLORBLIND);
     nv.addColormap(EEG_NODE_POS_KEY, EEG_NODE_POS);
     nv.addColormap(EEG_NODE_NEG_KEY, EEG_NODE_NEG);
-    nv.addColormap(EEG_NODE_POS_COLOURBLIND_KEY, EEG_NODE_POS_COLOURBLIND);
-    nv.addColormap(EEG_NODE_NEG_COLOURBLIND_KEY, EEG_NODE_NEG_COLOURBLIND);
+    nv.addColormap(EEG_NODE_POS_COLORBLIND_KEY, EEG_NODE_POS_COLORBLIND);
+    nv.addColormap(EEG_NODE_NEG_COLORBLIND_KEY, EEG_NODE_NEG_COLORBLIND);
     nv.addColormap(EEG_NODE_UNMAPPED_KEY, EEG_NODE_UNMAPPED);
     nv.opts.isColorbar = true; // master switch NiiVue checks before drawing any colorbar
     // NiiVue overlays the colorbar on the viewport's bottom edge instead of reserving
@@ -228,7 +229,7 @@ export function EegTopoViewer({
         // Override the auto-created scalar layer's colormap before the mesh is rendered
         if (mesh.layers.length > 0) {
           Object.assign(mesh.layers[0], {
-            colormap: colourBlindMode ? EEG_TOPO_COLORMAP_COLOURBLIND_KEY : EEG_TOPO_COLORMAP_KEY,
+            colormap: colorBlindMode ? EEG_TOPO_COLORMAP_COLORBLIND_KEY : EEG_TOPO_COLORMAP_KEY,
             cal_min: -calMax,
             cal_max: calMax,
             opacity: 1,
@@ -237,7 +238,7 @@ export function EegTopoViewer({
         }
 
         nv.addMesh(mesh);
-        addElectrodeMarkers(nv, markers, calMax, colourBlindMode);
+        addElectrodeMarkers(nv, markers, calMax, colorBlindMode);
         nv.updateGLVolume();
       } catch (err) {
         console.error('[EegTopoViewer] mesh load failed:', err);
@@ -246,7 +247,7 @@ export function EegTopoViewer({
 
     // Generate mesh for current electrode layout and load into NiiVue canvas
     loadMesh();
-  }, [nvRef, electrodeMesh, electrodes, matched, voltages, colourBlindMode, hasEegChannels]);
+  }, [nvRef, electrodeMesh, electrodes, matched, voltages, colorBlindMode, hasEegChannels]);
 
   // ─── Handlers: window drag/resize ──────────────────────────────────────────────
   // Drag the floating window by its title bar. Position is clamped to the viewport so the
@@ -417,18 +418,6 @@ export function EegTopoViewer({
           </button>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          {/* ColourBlind Mode toggle — lives in the title bar (rather than floating over the
-              canvas) so it never obscures the mesh/matrix underneath. */}
-          <button
-            type="button"
-            className="button button-icon-xs"
-            onClick={() => setColourBlindMode(!colourBlindMode)}
-            title="Toggle colourblind colormap for the EEG topography"
-            aria-label="Toggle colourblind colormap for the EEG topography"
-            aria-pressed={colourBlindMode}
-          >
-            <EyeDashed size={14} />
-          </button>
           <TrafficLightButtons
             onMaximize={() => setIsMaximized((v) => !v)}
             isMaximized={isMaximized}
@@ -467,7 +456,7 @@ export function EegTopoViewer({
               channelNames={channelNames}
               voltages={voltagesByChannel}
               channelTypes={channelTypes}
-              colourBlindMode={colourBlindMode}
+              colorBlindMode={colorBlindMode}
             />
           </div>
         )}

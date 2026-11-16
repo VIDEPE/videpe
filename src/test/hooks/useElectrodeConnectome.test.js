@@ -10,7 +10,12 @@ import {
   selectLayerSettings,
   UPDATE_SETTINGS,
 } from '@/state/layerState';
-import { EEG_NODE_POS_KEY, EEG_NODE_NEG_KEY } from '@/utils/eegColormaps';
+import {
+  EEG_NODE_POS_KEY,
+  EEG_NODE_NEG_KEY,
+  EEG_NODE_POS_COLORBLIND_KEY,
+  EEG_NODE_NEG_COLORBLIND_KEY,
+} from '@/utils/eegColormaps';
 
 // This hook is otherwise only exercised indirectly through NiiViewer.test.jsx's
 // 'connectome layer (electrodes)' describe block (same reasoning as useEsiLayer.test.js) —
@@ -54,9 +59,15 @@ function makeNv() {
 // only exists once the hook's own merge effect creates one (the reducer seeds its defaults),
 // same as in the real app; tests that need a specific electrodeDisplayMode drive it afterward
 // via updateElectrodeSettings below, mirroring NiiViewer's handleSettingChange.
-function useHarness({ electrodeLayer, nvRef }) {
+function useHarness({ electrodeLayer, nvRef, colorBlindMode = false }) {
   const [layerState, dispatchLayers] = useReducer(layerReducer, [], initLayerState);
-  const hookResult = useElectrodeConnectome({ electrodeLayer, nvRef, layerState, dispatchLayers });
+  const hookResult = useElectrodeConnectome({
+    electrodeLayer,
+    nvRef,
+    layerState,
+    dispatchLayers,
+    colorBlindMode,
+  });
   return {
     layerState,
     dispatchLayers,
@@ -337,6 +348,64 @@ describe('useElectrodeConnectome', () => {
 
       setShowColorbar(result, false);
       expect(nv.opts.isColorbar).toBe(false);
+    });
+  });
+
+  describe('colorblind mode', () => {
+    it("uses the colorblind node colormaps in 'voltage' mode while colorblind mode is on", () => {
+      const electrodeLayer = makeElectrodeLayer();
+      const { result } = renderHook((props) => useHarness(props), {
+        initialProps: { electrodeLayer, nvRef, colorBlindMode: true },
+      });
+      setDisplayMode(result, 'voltage');
+
+      const call = nv.loadConnectomeAsMesh.mock.calls.at(-1)[0];
+      expect(call.nodeColormap).toBe(EEG_NODE_POS_COLORBLIND_KEY);
+      expect(call.nodeColormapNegative).toBe(EEG_NODE_NEG_COLORBLIND_KEY);
+    });
+
+    it('uses the colorblind colormaps for the voltage colorbar too, so it matches the nodes', () => {
+      const electrodeLayer = makeElectrodeLayer();
+      const { result } = renderHook((props) => useHarness(props), {
+        initialProps: { electrodeLayer, nvRef, colorBlindMode: true },
+      });
+      setDisplayMode(result, 'voltage');
+      setShowColorbar(result, true);
+
+      const call = nv.loadConnectomeAsMesh.mock.calls.at(-1)[0];
+      expect(call.colorbarVisible).toBe(true);
+      expect(call.edgeColormap).toBe(EEG_NODE_POS_COLORBLIND_KEY);
+      expect(call.edgeColormapNegative).toBe(EEG_NODE_NEG_COLORBLIND_KEY);
+    });
+
+    it('keeps the default colormaps for a non-voltage metric, which is not a voltage map', () => {
+      const electrodeLayer = makeElectrodeLayer();
+      const { result } = renderHook((props) => useHarness(props), {
+        initialProps: { electrodeLayer, nvRef, colorBlindMode: true },
+      });
+      setDisplayMode(result, 'spike_count');
+
+      const call = nv.loadConnectomeAsMesh.mock.calls.at(-1)[0];
+      expect(call.nodeColormap).toBe(EEG_NODE_POS_KEY);
+      expect(call.nodeColormapNegative).toBe(EEG_NODE_NEG_KEY);
+    });
+
+    it('rebuilds the mesh with the colorblind colormaps when only colorblind mode changes', () => {
+      const electrodeLayer = makeElectrodeLayer();
+      const { result, rerender } = renderHook((props) => useHarness(props), {
+        initialProps: { electrodeLayer, nvRef, colorBlindMode: false },
+      });
+      setDisplayMode(result, 'voltage');
+      expect(nv.loadConnectomeAsMesh.mock.calls.at(-1)[0].nodeColormap).toBe(EEG_NODE_POS_KEY);
+      const buildsBefore = nv.loadConnectomeAsMesh.mock.calls.length;
+
+      rerender({ electrodeLayer, nvRef, colorBlindMode: true });
+
+      expect(nv.loadConnectomeAsMesh.mock.calls.length).toBeGreaterThan(buildsBefore);
+      expect(nv.loadConnectomeAsMesh.mock.calls.at(-1)[0].nodeColormap).toBe(
+        EEG_NODE_POS_COLORBLIND_KEY
+      );
+      expect(nv.meshes).toHaveLength(1); // the stale mesh was swapped, not stacked
     });
   });
 

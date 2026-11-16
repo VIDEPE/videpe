@@ -315,6 +315,10 @@ vi.mock('@/loaders/parseInverseSolutionFieldtrip', () => ({
   }),
 }));
 vi.mock('@/components/ThemeToggle', () => ({ ThemeToggle: () => null }));
+// Stubbed with a marker so the header test below can see it rendered under the ThemeToggle
+vi.mock('@/components/ColorBlindToggle', () => ({
+  ColorBlindToggle: () => <div data-testid="colorblind-toggle" />,
+}));
 
 // electricalSourceImaging's own computation is covered by its dedicated unit tests
 // (electricalSourceImagingUtils.test.js) — stub it here so PatientView's montage-gating
@@ -363,6 +367,13 @@ describe('PatientView — NiiVue instances', () => {
   it("leaves the topography viewer's drag mode at NiiVue's default (3D render only, scroll zooms)", () => {
     renderPatientView();
     expect(Niivue.mock.calls[1][0]).not.toHaveProperty('dragMode');
+  });
+});
+
+describe('PatientView — header', () => {
+  it('renders the app-wide colorblind toggle in the header', () => {
+    renderPatientView();
+    expect(screen.getByTestId('colorblind-toggle')).toBeInTheDocument();
   });
 });
 
