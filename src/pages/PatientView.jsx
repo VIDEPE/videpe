@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 // Components
 import { FullWidthLayout } from '../components/FullWidthLayout';
 import { ThemeToggle } from '../components/ThemeToggle';
+import { ColorBlindToggle } from '@/components/ColorBlindToggle';
 import { ResearchUseBadge } from '../components/VidepeLogo';
 import { VidepeTitle } from '../components/VidepeTitle';
 import { EegViewer } from '../components/EegViewer';
@@ -412,9 +413,11 @@ export const PatientView = () => {
         </div>
 
         {/* Right column: ThemeToggle rendered inline (not fixed) — top bar never scrolls so fixed isn't needed,
-            and inline keeps it locked to the layout as the window resizes */}
-        <div className="flex justify-end items-start px-5 py-3">
+            and inline keeps it locked to the layout as the window resizes. The app-wide colorblind
+            colormap toggle sits right below it. */}
+        <div className="flex flex-col items-end px-5 py-3">
           <ThemeToggle className="" />
+          <ColorBlindToggle />
         </div>
       </div>
 

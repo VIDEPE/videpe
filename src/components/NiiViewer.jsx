@@ -49,6 +49,7 @@ import { useSharedNiiVueInstance } from '@/hooks/useSharedNiiVueInstance';
 import { useLoadingToast } from '@/hooks/useLoadingToast';
 import { useLayerLoader } from '@/hooks/useLayerLoader';
 import { useElectrodeConnectome } from '@/hooks/useElectrodeConnectome';
+import { useColorBlindMode } from '@/hooks/useColorBlindMode';
 import { useEsiLayer } from '@/hooks/useEsiLayer';
 
 // ─── handleSettingChange dispatch helpers ──────────────────────────────────────
@@ -335,12 +336,15 @@ export const NiiViewer = ({
     onViewReady,
     onLoadError: handleLayerLoadError,
   });
+  // App-wide colorblind colormap mode (PatientView header toggle) — swaps the connectome's voltage colormaps
+  const { isColorBlindMode: colorBlindMode } = useColorBlindMode();
   // Merges the electrode connectome into the card list and builds/rebuilds its mesh.
   const { electrodeMeshRef, clearElectrodeMesh, dismissElectrodeLayer } = useElectrodeConnectome({
     electrodeLayer,
     nvRef,
     layerState,
     dispatchLayers,
+    colorBlindMode,
   });
   // Merges the ESI source-power layer into the card list and builds/rebuilds its mesh or volume.
   const { esiMeshRef, clearEsiMesh, clearEsiVolume, dismissEsiLayer } = useEsiLayer({

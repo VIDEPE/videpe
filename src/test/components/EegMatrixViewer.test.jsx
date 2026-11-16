@@ -15,7 +15,7 @@ describe('EegMatrixViewer', () => {
         channelNames={['B1', 'B2', 'T1']}
         voltages={[1, 2, 3]}
         channelTypes={SEEG_TYPES(3)}
-        colourBlindMode={false}
+        colorBlindMode={false}
       />
     );
     expect(screen.getByTestId('matrix-section-seeg')).toBeInTheDocument();
@@ -30,7 +30,7 @@ describe('EegMatrixViewer', () => {
         channelNames={['Fp1', 'B1']}
         voltages={[1, 2]}
         channelTypes={['eeg', 'seeg']}
-        colourBlindMode={false}
+        colorBlindMode={false}
       />
     );
     const sections = screen.getAllByTestId(/^matrix-section-/);
@@ -46,7 +46,7 @@ describe('EegMatrixViewer', () => {
         channelNames={['E1', 'E2']}
         voltages={[1, 2]}
         channelTypes={EEG_TYPES(2)}
-        colourBlindMode={false}
+        colorBlindMode={false}
       />
     );
     expect(screen.getByTestId('matrix-row-eeg-E-0')).toBeInTheDocument();
@@ -59,7 +59,7 @@ describe('EegMatrixViewer', () => {
         channelNames={channelNames}
         voltages={channelNames.map(() => 0)}
         channelTypes={EEG_TYPES(20)}
-        colourBlindMode={false}
+        colorBlindMode={false}
       />
     );
     expect(screen.getByTestId('matrix-row-eeg-E-0')).toBeInTheDocument(); // contacts 1-16
@@ -79,7 +79,7 @@ describe('EegMatrixViewer', () => {
         channelNames={['B1', 'B2', 'B3', 'T1']}
         voltages={[0, 0, 0, 0]}
         channelTypes={SEEG_TYPES(4)}
-        colourBlindMode={false}
+        colorBlindMode={false}
       />
     );
     // B has 3 contacts, so its row spans columns 1-3.
@@ -97,7 +97,7 @@ describe('EegMatrixViewer', () => {
         channelNames={['B1', 'B3']} // B2 missing, within B's own 1-3 range
         voltages={[1, 3]}
         channelTypes={SEEG_TYPES(2)}
-        colourBlindMode={false}
+        colorBlindMode={false}
       />
     );
     const gapCell = screen.getByTestId('matrix-cell-seeg-B-2');
@@ -112,7 +112,7 @@ describe('EegMatrixViewer', () => {
         channelNames={['B1', 'B2']}
         voltages={[10, -4]}
         channelTypes={SEEG_TYPES(2)}
-        colourBlindMode={false}
+        colorBlindMode={false}
       />
     );
     const calMax = 10; // max(|10|, |-4|)
@@ -130,7 +130,7 @@ describe('EegMatrixViewer', () => {
         channelNames={['Fp1', 'B1']}
         voltages={[1, 100]} // SEEG voltage is 100x the EEG one
         channelTypes={['eeg', 'seeg']}
-        colourBlindMode={false}
+        colorBlindMode={false}
       />
     );
     // The EEG cell's own calMax is 1 (not 100), so it renders at full saturation, not near-white.
@@ -139,13 +139,13 @@ describe('EegMatrixViewer', () => {
     });
   });
 
-  it('uses the colourblind colormap variant when colourBlindMode is true', () => {
+  it('uses the colorblind colormap variant when colorBlindMode is true', () => {
     render(
       <EegMatrixViewer
         channelNames={['B1']}
         voltages={[10]}
         channelTypes={SEEG_TYPES(1)}
-        colourBlindMode={true}
+        colorBlindMode={true}
       />
     );
     expect(screen.getByTestId('matrix-cell-seeg-B-1')).toHaveStyle({
@@ -159,7 +159,7 @@ describe('EegMatrixViewer', () => {
         channelNames={['B1', 'B2']}
         voltages={[]}
         channelTypes={SEEG_TYPES(2)}
-        colourBlindMode={false}
+        colorBlindMode={false}
       />
     );
     expect(screen.getByTestId('matrix-cell-seeg-B-1')).toHaveStyle({
@@ -176,7 +176,7 @@ describe('EegMatrixViewer', () => {
         channelNames={['Fp1', 'Cz']}
         voltages={[1, 2]}
         channelTypes={EEG_TYPES(2)}
-        colourBlindMode={false}
+        colorBlindMode={false}
       />
     );
     // Still just one EEG section — Cz doesn't spawn its own.
@@ -192,7 +192,7 @@ describe('EegMatrixViewer', () => {
         channelNames={['Cz']}
         voltages={[5]}
         channelTypes={EEG_TYPES(1)}
-        colourBlindMode={false}
+        colorBlindMode={false}
       />
     );
     const row = screen.getByTestId('matrix-row-eeg-ungrouped-0');
@@ -206,7 +206,7 @@ describe('EegMatrixViewer', () => {
         channelNames={['Fp1', 'Cz']}
         voltages={[10, -4]}
         channelTypes={EEG_TYPES(2)}
-        colourBlindMode={false}
+        colorBlindMode={false}
       />
     );
     const calMax = 10; // max(|10|, |-4|) across the whole EEG section, grouped + ungrouped
@@ -221,7 +221,7 @@ describe('EegMatrixViewer', () => {
         channelNames={['B1', 'ECG']}
         voltages={[1, 5]}
         channelTypes={['seeg', 'other']}
-        colourBlindMode={false}
+        colorBlindMode={false}
       />
     );
     expect(screen.getByTestId('matrix-section-other')).toBeInTheDocument();
@@ -235,7 +235,7 @@ describe('EegMatrixViewer', () => {
         channelNames={['ECG']}
         voltages={[0]}
         channelTypes={['other']}
-        colourBlindMode={false}
+        colorBlindMode={false}
       />
     );
     expect(screen.queryByTestId('matrix-section-eeg')).not.toBeInTheDocument();
@@ -250,7 +250,7 @@ describe('EegMatrixViewer', () => {
         channelNames={['B1', 'B2']}
         voltages={[1, 2]}
         channelTypes={SEEG_TYPES(2)}
-        colourBlindMode={false}
+        colorBlindMode={false}
       />
     );
     expect(screen.queryByTestId('matrix-section-other')).not.toBeInTheDocument();

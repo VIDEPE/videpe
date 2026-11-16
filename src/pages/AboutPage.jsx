@@ -316,7 +316,7 @@ export const AboutPage = () => {
                       NiiVue
                     </a>
                     : none/average/median reference, blue-white-red colormap with live colorbar and
-                    colour-blind mode, and voltage-coloured electrode markers
+                    colorblind mode, and voltage-colored electrode markers
                   </li>
                   <li>
                     <strong>Electrode positions</strong> — the best-matching bundled template is
@@ -357,7 +357,7 @@ export const AboutPage = () => {
                   </li>
                   <li>
                     <strong>Custom montages</strong> — build referenced or bipolar rows with their
-                    own colours; the waveform shows exactly those rows
+                    own colors; the waveform shows exactly those rows
                   </li>
                   <li>
                     <strong>Per-row filters</strong> — give a row its own high-pass, low-pass, or
@@ -502,7 +502,7 @@ export const AboutPage = () => {
                     <code>*_electrodes.tsv</code> (BIDS specifications) files
                   </li>
                   <li>
-                    <strong>Custom metrics</strong> — colour/size connectome nodes by any extra{' '}
+                    <strong>Custom metrics</strong> — color/size connectome nodes by any extra{' '}
                     <code>.tsv</code> column, not just voltage
                   </li>
                 </ul>

@@ -210,6 +210,13 @@ vi.mock('@niivue/dicom-loader', () => ({
   dicomLoader: vi.fn(),
 }));
 
+// The colorblind mode is app-wide state from ColorBlindProvider — stub it off here rather
+// than wrapping every render in the provider; its effect on the connectome is covered in
+// useElectrodeConnectome.test.js.
+vi.mock('@/hooks/useColorBlindMode', () => ({
+  useColorBlindMode: () => ({ isColorBlindMode: false }),
+}));
+
 describe('syncVolumesAndApplySettings', () => {
   const makeVolume = (url, id) => ({ url, id });
   const makeLayerSetting = (overrides = {}) => ({
