@@ -12,7 +12,10 @@ export const TYPE_ORDER = Object.keys(TYPE_LIST);
 
 // all filters off for every known channel type
 export const DEFAULT_GLOBAL_FILTERS = Object.fromEntries(
-  Object.keys(TYPE_LIST).map((type) => [type, { highPass: null, lowPass: null, notch: null }])
+  Object.keys(TYPE_LIST).map((type) => [
+    type,
+    { highPass: null, lowPass: null, notch: null, notchHarmonics: false },
+  ])
 );
 
 /**

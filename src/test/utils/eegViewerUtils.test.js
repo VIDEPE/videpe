@@ -232,9 +232,9 @@ describe('buildMontageDisplayRows', () => {
     ECG: { bad: false, type: 'other' },
   };
   const globalFilters = {
-    eeg: { highPass: 0.5, lowPass: 70, notch: 50 },
-    seeg: { highPass: 1, lowPass: 200, notch: 50 },
-    other: { highPass: 5, lowPass: 40, notch: null },
+    eeg: { highPass: 0.5, lowPass: 70, notch: 50, notchHarmonics: true },
+    seeg: { highPass: 1, lowPass: 200, notch: 50, notchHarmonics: false },
+    other: { highPass: 5, lowPass: 40, notch: null, notchHarmonics: false },
   };
 
   it('falls back to one row per non-bad channel, in order, when there are no montage rows', () => {
@@ -250,6 +250,7 @@ describe('buildMontageDisplayRows', () => {
         highPass: null,
         lowPass: null,
         notch: null,
+        notchHarmonics: false,
       },
       {
         id: 'EEG2',
@@ -261,6 +262,7 @@ describe('buildMontageDisplayRows', () => {
         highPass: null,
         lowPass: null,
         notch: null,
+        notchHarmonics: false,
       },
       {
         id: 'EEG3',
@@ -272,6 +274,7 @@ describe('buildMontageDisplayRows', () => {
         highPass: null,
         lowPass: null,
         notch: null,
+        notchHarmonics: false,
       },
     ]);
   });
@@ -421,9 +424,9 @@ describe('buildMontageDisplayRows', () => {
   it('gives each fallback row its own channel type global filters when there are no montage rows', () => {
     const rows = buildMontageDisplayRows(mixedChannelNames, mixedTypes, [], globalFilters);
     expect(rows).toMatchObject([
-      { name: 'Fp1', highPass: 0.5, lowPass: 70, notch: 50 }, // eeg
-      { name: 'LA1', highPass: 1, lowPass: 200, notch: 50 }, // seeg
-      { name: 'ECG', highPass: 5, lowPass: 40, notch: null }, // other
+      { name: 'Fp1', highPass: 0.5, lowPass: 70, notch: 50, notchHarmonics: true }, // eeg
+      { name: 'LA1', highPass: 1, lowPass: 200, notch: 50, notchHarmonics: false }, // seeg
+      { name: 'ECG', highPass: 5, lowPass: 40, notch: null, notchHarmonics: false }, // other
     ]);
   });
 
