@@ -415,9 +415,9 @@ export const PatientView = () => {
         {/* Right column: ThemeToggle rendered inline (not fixed) — top bar never scrolls so fixed isn't needed,
             and inline keeps it locked to the layout as the window resizes. The app-wide colorblind
             colormap toggle sits right below it. */}
-        <div className="flex flex-col items-end px-5 py-3">
+        <div className="flex flex-col items-end px-5 pt-3">
           <ThemeToggle className="" />
-          <ColorBlindToggle />
+          <ColorBlindToggle className="-mt-1" />
         </div>
       </div>
 
