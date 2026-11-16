@@ -297,8 +297,8 @@ export const AboutPage = () => {
                   <li>
                     <strong>Frequency filters</strong> — set high-pass, low-pass, and mains notch
                     (zero-phase Butterworth) per channel type (EEG, SEEG, Other) or per individual
-                    channel. The per-type filters also apply to the topography, 3D connectome and
-                    ESI
+                    channel, optionally also notching the 2nd and 3rd harmonic. The per-type filters
+                    also apply to the topography, 3D connectome and ESI
                   </li>
                   <li>
                     <strong>Stacked view</strong> — overlay all visible channels on one plot; traces
