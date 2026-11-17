@@ -268,6 +268,72 @@ export function resolveRowFilters(row, typeFilters) {
 }
 
 /**
+ * Recognises a loaded montage's global filters — the inverse of resolveRowFilters. Save writes
+ * each row's effective filters, so a value shared by every row of a channel type is that type's
+ * global filter. Each field is checked on its own, like resolveRowFilters resolves each field
+ * on its own; a lifted value is cleared from the rows, which then follow the global filter.
+ *
+ * Only set values are lifted: a field that's null on every row (e.g. a montage file without
+ * filters) is left alone, as are types without rows in the montage and `notchHarmonics`, which
+ * montage files don't store. The result is a partial update, to merge into the current global
+ * filters per type, e.g. for rows where every eeg row has high-pass 0.5 and notch 50 but the
+ * low-pass differs:
+ *   { eeg: { highPass: 0.5, notch: 50 } }
+ *
+ * @param {Array<{channel: string, highPass: number|null, lowPass: number|null, notch: number|null}>} rows -
+ *   The montage rows, in the recording's channel spelling (see remapMontageToRecording). Other
+ *   row fields are copied over unchanged.
+ * @param {Record<string, {type: string}>} channelSettings - Per-channel settings, keyed by
+ *   channel name, with the montage's own channel types already applied; a channel without
+ *   settings counts as eeg.
+ * @returns {{clearedRows: Array, extractedGlobalFilters: Record<string, {highPass?: number, lowPass?: number, notch?: number}>}}
+ *   - `clearedRows`: copies of `rows` with every lifted field set to null; `rows` itself is unchanged.
+ *   - `extractedGlobalFilters`: per type, only the lifted fields; a type is listed only when at least one
+ *     field was lifted, so a montage without shared filters gives `{}`.
+ */
+export function extractGlobalFilters(rows, channelSettings) {
+  let extractedGlobalFilters = {};
+  // Each row's channel type, in the same order as rows; a channel without settings counts as
+  // eeg, like in the display rows
+  const rowTypes = rows.map((row) => channelSettings[row.channel]?.type ?? 'eeg');
+  // Only the types that have rows in this montage — the others are left as they are
+  const uniqueTypes = [...new Set(rowTypes)];
+
+  // Extract global filters from montage rows, i.e. filter values when for each type all the
+  // highPass AND/OR lowPass AND/OR notch are the same
+  for (let iType = 0; iType < uniqueTypes.length; iType++) {
+    const type = uniqueTypes[iType];
+    const typeRows = rows.filter((_, iRow) => rowTypes[iRow] === type);
+
+    // Lift a field only when all rows share the same, non-null value. A montage file without
+    // filters (e.g. a bundled template) loads as null on every row, and lifting that would turn
+    // off the user's global filters. Fields not lifted are left out, so they keep their current
+    // global value.
+    const liftedFilters = {};
+    for (const field of ['highPass', 'lowPass', 'notch']) {
+      const values = [...new Set(typeRows.map((row) => row[field]))];
+      if (values.length === 1 && values[0] != null) liftedFilters[field] = values[0];
+    }
+
+    // A type is only listed when it has at least one lifted field, for the same reason
+    if (Object.keys(liftedFilters).length > 0) extractedGlobalFilters[type] = liftedFilters;
+  }
+
+  // If there is a Global Filter value set for a type, then clear filter rows for that type's rows, so
+  // they follow the global filter. Copies each row, so the rows passed in aren't changed.
+  const clearedRows = rows.map((row, iRow) => {
+    const typeFilters = extractedGlobalFilters[rowTypes[iRow]] ?? {};
+    const clearedRow = { ...row }; // create shallow copy to not mutate the original row
+    for (const field of ['highPass', 'lowPass', 'notch']) {
+      if (typeFilters[field] != null) clearedRow[field] = null; // lifted, so follows global now
+    }
+    return clearedRow;
+  });
+
+  return { clearedRows, extractedGlobalFilters };
+}
+
+/**
  * Whether any of the given rows has at least one filter on — used to mark the Filters button
  * as active. Pass the resolved display rows (after resolveRowFilters), so both the global
  * filters and a montage row's own exceptions count. Only `null` means off; any number,
