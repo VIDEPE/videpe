@@ -486,7 +486,7 @@ export const EegViewer = ({
     applyChannelSettings(nextChannelSettings);
 
     // Extract the Global Filters from the template
-    const { rows: clearedRows, extractedGlobalFilters } = extractGlobalFilters(
+    const { clearedRows, extractedGlobalFilters } = extractGlobalFilters(
       template.rows,
       nextChannelSettings
     );
@@ -1641,6 +1641,7 @@ export const EegViewer = ({
           onApplyChannelSettings={applyChannelSettings}
           montageChannels={montageChannels}
           onApplyMontageChannels={applyMontageChannels}
+          onApplyGlobalFilters={setGlobalFilters}
           fs={provider.fs}
           globalFilters={globalFilters}
         />

@@ -286,8 +286,8 @@ export function resolveRowFilters(row, typeFilters) {
  * @param {Record<string, {type: string}>} channelSettings - Per-channel settings, keyed by
  *   channel name, with the montage's own channel types already applied; a channel without
  *   settings counts as eeg.
- * @returns {{rows: Array, extractedGlobalFilters: Record<string, {highPass?: number, lowPass?: number, notch?: number}>}}
- *   - `rows`: copies of `rows` with every lifted field set to null; `rows` itself is unchanged.
+ * @returns {{clearedRows: Array, extractedGlobalFilters: Record<string, {highPass?: number, lowPass?: number, notch?: number}>}}
+ *   - `clearedRows`: copies of `rows` with every lifted field set to null; `rows` itself is unchanged.
  *   - `extractedGlobalFilters`: per type, only the lifted fields; a type is listed only when at least one
  *     field was lifted, so a montage without shared filters gives `{}`.
  */
@@ -330,7 +330,7 @@ export function extractGlobalFilters(rows, channelSettings) {
     return clearedRow;
   });
 
-  return { rows: clearedRows, extractedGlobalFilters };
+  return { clearedRows, extractedGlobalFilters };
 }
 
 /**

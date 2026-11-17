@@ -1890,8 +1890,8 @@ describe('EegMontageEditor', () => {
         expect(onApplyGlobalFilters).not.toHaveBeenCalled();
       });
 
-      // Every new globalFilters object makes the viewer re-filter all channels, so Apply/OK
-      // shouldn't hand over an unchanged copy
+      // Only global filters this window changed itself (through Load) are committed, so an
+      // unchanged copy never overwrites what the Global Filters window applied
       it('does not commit global filters on Apply when nothing changed them', async () => {
         const onApplyGlobalFilters = vi.fn();
         render(<EegMontageEditor {...defaultProps} onApplyGlobalFilters={onApplyGlobalFilters} />);
@@ -1912,6 +1912,52 @@ describe('EegMontageEditor', () => {
         expect(filterInputs('highpass')[0]).toHaveAttribute('placeholder', '0.5'); // FP1, eeg
         await userEvent.click(screen.getByRole('button', { name: 'OK' }));
         expect(onApplyGlobalFilters).not.toHaveBeenCalled();
+      });
+
+      // The Global Filters window can apply new global filters while this window is open
+      it('follows global filters applied elsewhere while open, and OK without a Load leaves them alone', async () => {
+        const onApplyGlobalFilters = vi.fn();
+        const { rerender } = render(
+          <EegMontageEditor {...defaultProps} onApplyGlobalFilters={onApplyGlobalFilters} />
+        );
+        rerender(
+          <EegMontageEditor
+            {...defaultProps}
+            globalFilters={{ ...GLOBAL_FILTERS, eeg: { ...GLOBAL_FILTERS.eeg, highPass: 1.5 } }}
+            onApplyGlobalFilters={onApplyGlobalFilters}
+          />
+        );
+
+        expect(filterInputs('highpass')[0]).toHaveAttribute('placeholder', '1.5'); // FP1, eeg
+        await userEvent.click(screen.getByRole('button', { name: 'OK' }));
+        expect(onApplyGlobalFilters).not.toHaveBeenCalled();
+      });
+
+      it('commits the loaded global filters once, so a second Apply leaves global filters applied elsewhere alone', async () => {
+        const onApplyGlobalFilters = vi.fn();
+        const { rerender } = render(
+          <EegMontageEditor {...defaultProps} onApplyGlobalFilters={onApplyGlobalFilters} />
+        );
+        await userEvent.upload(screen.getByTestId('montage-file-input'), filtersFile());
+        await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+        expect(onApplyGlobalFilters).toHaveBeenCalledTimes(1);
+
+        // The Global Filters window then applies a different eeg high-pass
+        const appliedElsewhere = {
+          ...GLOBAL_FILTERS,
+          eeg: { highPass: 1.5, lowPass: 40, notch: 60, notchHarmonics: false },
+        };
+        rerender(
+          <EegMontageEditor
+            {...defaultProps}
+            globalFilters={appliedElsewhere}
+            onApplyGlobalFilters={onApplyGlobalFilters}
+          />
+        );
+        expect(filterInputs('highpass')[0]).toHaveAttribute('placeholder', '1.5');
+
+        await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+        expect(onApplyGlobalFilters).toHaveBeenCalledTimes(1);
       });
 
       it('saving right after loading writes the same filters back', async () => {

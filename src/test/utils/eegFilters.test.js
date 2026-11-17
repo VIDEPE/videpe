@@ -388,7 +388,10 @@ describe('extractGlobalFilters', () => {
     expect(result.extractedGlobalFilters).toEqual({
       eeg: { highPass: 0.5, lowPass: 70, notch: 50 },
     });
-    expect(result.rows).toEqual([row('Fp1', null, null, null), row('Fp2', null, null, null)]);
+    expect(result.clearedRows).toEqual([
+      row('Fp1', null, null, null),
+      row('Fp2', null, null, null),
+    ]);
   });
 
   it('checks each field on its own: a deviating low-pass stays on the rows, the rest is lifted', () => {
@@ -397,7 +400,7 @@ describe('extractGlobalFilters', () => {
     const result = extractGlobalFilters(rows, channelSettings);
 
     expect(result.extractedGlobalFilters).toEqual({ eeg: { highPass: 0.5, notch: 50 } });
-    expect(result.rows).toEqual([
+    expect(result.clearedRows).toEqual([
       row('Fp1', null, 70, null),
       row('Fp2', null, 70, null),
       row('O1', null, 30, null),
@@ -412,7 +415,7 @@ describe('extractGlobalFilters', () => {
       eeg: { highPass: 0.5, lowPass: 70, notch: 50 },
       seeg: { highPass: 1, lowPass: 300, notch: 50 },
     });
-    expect(result.rows.every((r) => r.highPass === null && r.lowPass === null)).toBe(true);
+    expect(result.clearedRows.every((r) => r.highPass === null && r.lowPass === null)).toBe(true);
   });
 
   // Off and "follow global" are both null on a row, so a uniform null can't say which was
@@ -423,7 +426,10 @@ describe('extractGlobalFilters', () => {
     const result = extractGlobalFilters(rows, channelSettings);
 
     expect(result.extractedGlobalFilters).toEqual({ eeg: { highPass: 0.5 } });
-    expect(result.rows).toEqual([row('Fp1', null, null, null), row('Fp2', null, null, null)]);
+    expect(result.clearedRows).toEqual([
+      row('Fp1', null, null, null),
+      row('Fp2', null, null, null),
+    ]);
   });
 
   it('returns no global filters and unchanged rows for a montage without filters', () => {
@@ -431,7 +437,7 @@ describe('extractGlobalFilters', () => {
     const result = extractGlobalFilters(rows, channelSettings);
 
     expect(result.extractedGlobalFilters).toEqual({});
-    expect(result.rows).toEqual(rows);
+    expect(result.clearedRows).toEqual(rows);
   });
 
   it('does not lift a field that is set on some rows of a type and off on others', () => {
@@ -439,7 +445,7 @@ describe('extractGlobalFilters', () => {
     const result = extractGlobalFilters(rows, channelSettings);
 
     expect(result.extractedGlobalFilters).toEqual({ eeg: { lowPass: 70, notch: 50 } });
-    expect(result.rows).toEqual([row('Fp1', 0.5, null, null), row('Fp2', null, null, null)]);
+    expect(result.clearedRows).toEqual([row('Fp1', 0.5, null, null), row('Fp2', null, null, null)]);
   });
 
   it('lifts a filter shared by a single row of its type too', () => {
@@ -447,7 +453,7 @@ describe('extractGlobalFilters', () => {
     const result = extractGlobalFilters(rows, channelSettings);
 
     expect(result.extractedGlobalFilters.seeg).toEqual({ highPass: 1 });
-    expect(result.rows[1]).toEqual(row('A1', null, null, null));
+    expect(result.clearedRows[1]).toEqual(row('A1', null, null, null));
   });
 
   it('counts 0 as a set value, like the rest of the filter code', () => {
@@ -470,7 +476,7 @@ describe('extractGlobalFilters', () => {
     const result = extractGlobalFilters(rows, channelSettings);
 
     expect(result.extractedGlobalFilters).toEqual({});
-    expect(result.rows).toEqual(rows);
+    expect(result.clearedRows).toEqual(rows);
   });
 
   it('does not change the rows it was given', () => {
@@ -481,7 +487,7 @@ describe('extractGlobalFilters', () => {
 
   it('handles an empty montage', () => {
     expect(extractGlobalFilters([], channelSettings)).toEqual({
-      rows: [],
+      clearedRows: [],
       extractedGlobalFilters: {},
     });
   });
