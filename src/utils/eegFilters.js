@@ -286,13 +286,13 @@ export function resolveRowFilters(row, typeFilters) {
  * @param {Record<string, {type: string}>} channelSettings - Per-channel settings, keyed by
  *   channel name, with the montage's own channel types already applied; a channel without
  *   settings counts as eeg.
- * @returns {{rows: Array, globalFilters: Record<string, {highPass?: number, lowPass?: number, notch?: number}>}}
+ * @returns {{rows: Array, extractedGlobalFilters: Record<string, {highPass?: number, lowPass?: number, notch?: number}>}}
  *   - `rows`: copies of `rows` with every lifted field set to null; `rows` itself is unchanged.
- *   - `globalFilters`: per type, only the lifted fields; a type is listed only when at least one
+ *   - `extractedGlobalFilters`: per type, only the lifted fields; a type is listed only when at least one
  *     field was lifted, so a montage without shared filters gives `{}`.
  */
 export function extractGlobalFilters(rows, channelSettings) {
-  let globalFilters = {};
+  let extractedGlobalFilters = {};
   // Each row's channel type, in the same order as rows; a channel without settings counts as
   // eeg, like in the display rows
   const rowTypes = rows.map((row) => channelSettings[row.channel]?.type ?? 'eeg');
@@ -316,13 +316,13 @@ export function extractGlobalFilters(rows, channelSettings) {
     }
 
     // A type is only listed when it has at least one lifted field, for the same reason
-    if (Object.keys(liftedFilters).length > 0) globalFilters[type] = liftedFilters;
+    if (Object.keys(liftedFilters).length > 0) extractedGlobalFilters[type] = liftedFilters;
   }
 
   // If there is a Global Filter value set for a type, then clear filter rows for that type's rows, so
   // they follow the global filter. Copies each row, so the rows passed in aren't changed.
   const clearedRows = rows.map((row, iRow) => {
-    const typeFilters = globalFilters[rowTypes[iRow]] ?? {};
+    const typeFilters = extractedGlobalFilters[rowTypes[iRow]] ?? {};
     const clearedRow = { ...row }; // create shallow copy to not mutate the original row
     for (const field of ['highPass', 'lowPass', 'notch']) {
       if (typeFilters[field] != null) clearedRow[field] = null; // lifted, so follows global now
@@ -330,7 +330,7 @@ export function extractGlobalFilters(rows, channelSettings) {
     return clearedRow;
   });
 
-  return { rows: clearedRows, globalFilters };
+  return { rows: clearedRows, extractedGlobalFilters };
 }
 
 /**

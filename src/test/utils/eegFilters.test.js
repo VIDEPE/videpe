@@ -385,7 +385,9 @@ describe('extractGlobalFilters', () => {
     const rows = [row('Fp1', 0.5, 70, 50), row('Fp2', 0.5, 70, 50)];
     const result = extractGlobalFilters(rows, channelSettings);
 
-    expect(result.globalFilters).toEqual({ eeg: { highPass: 0.5, lowPass: 70, notch: 50 } });
+    expect(result.extractedGlobalFilters).toEqual({
+      eeg: { highPass: 0.5, lowPass: 70, notch: 50 },
+    });
     expect(result.rows).toEqual([row('Fp1', null, null, null), row('Fp2', null, null, null)]);
   });
 
@@ -394,7 +396,7 @@ describe('extractGlobalFilters', () => {
     const rows = [row('Fp1', 0.5, 70, 50), row('Fp2', 0.5, 70, 50), row('O1', 0.5, 30, 50)];
     const result = extractGlobalFilters(rows, channelSettings);
 
-    expect(result.globalFilters).toEqual({ eeg: { highPass: 0.5, notch: 50 } });
+    expect(result.extractedGlobalFilters).toEqual({ eeg: { highPass: 0.5, notch: 50 } });
     expect(result.rows).toEqual([
       row('Fp1', null, 70, null),
       row('Fp2', null, 70, null),
@@ -406,7 +408,7 @@ describe('extractGlobalFilters', () => {
     const rows = [row('Fp1', 0.5, 70, 50), row('A1', 1, 300, 50), row('A2', 1, 300, 50)];
     const result = extractGlobalFilters(rows, channelSettings);
 
-    expect(result.globalFilters).toEqual({
+    expect(result.extractedGlobalFilters).toEqual({
       eeg: { highPass: 0.5, lowPass: 70, notch: 50 },
       seeg: { highPass: 1, lowPass: 300, notch: 50 },
     });
@@ -420,7 +422,7 @@ describe('extractGlobalFilters', () => {
     const rows = [row('Fp1', 0.5, null, null), row('Fp2', 0.5, null, null)];
     const result = extractGlobalFilters(rows, channelSettings);
 
-    expect(result.globalFilters).toEqual({ eeg: { highPass: 0.5 } });
+    expect(result.extractedGlobalFilters).toEqual({ eeg: { highPass: 0.5 } });
     expect(result.rows).toEqual([row('Fp1', null, null, null), row('Fp2', null, null, null)]);
   });
 
@@ -428,7 +430,7 @@ describe('extractGlobalFilters', () => {
     const rows = [row('Fp1', null, null, null), row('A1', null, null, null)];
     const result = extractGlobalFilters(rows, channelSettings);
 
-    expect(result.globalFilters).toEqual({});
+    expect(result.extractedGlobalFilters).toEqual({});
     expect(result.rows).toEqual(rows);
   });
 
@@ -436,7 +438,7 @@ describe('extractGlobalFilters', () => {
     const rows = [row('Fp1', 0.5, 70, 50), row('Fp2', null, 70, 50)];
     const result = extractGlobalFilters(rows, channelSettings);
 
-    expect(result.globalFilters).toEqual({ eeg: { lowPass: 70, notch: 50 } });
+    expect(result.extractedGlobalFilters).toEqual({ eeg: { lowPass: 70, notch: 50 } });
     expect(result.rows).toEqual([row('Fp1', 0.5, null, null), row('Fp2', null, null, null)]);
   });
 
@@ -444,13 +446,13 @@ describe('extractGlobalFilters', () => {
     const rows = [row('Fp1', 0.5, 70, 50), row('A1', 1, null, null)];
     const result = extractGlobalFilters(rows, channelSettings);
 
-    expect(result.globalFilters.seeg).toEqual({ highPass: 1 });
+    expect(result.extractedGlobalFilters.seeg).toEqual({ highPass: 1 });
     expect(result.rows[1]).toEqual(row('A1', null, null, null));
   });
 
   it('counts 0 as a set value, like the rest of the filter code', () => {
     const rows = [row('Fp1', 0, null, null), row('Fp2', 0, null, null)];
-    expect(extractGlobalFilters(rows, channelSettings).globalFilters).toEqual({
+    expect(extractGlobalFilters(rows, channelSettings).extractedGlobalFilters).toEqual({
       eeg: { highPass: 0 },
     });
   });
@@ -459,7 +461,7 @@ describe('extractGlobalFilters', () => {
     const rows = [row('Fp1', 0.5, null, null), row('NotInSettings', 0.5, null, null)];
     const result = extractGlobalFilters(rows, channelSettings);
 
-    expect(result.globalFilters).toEqual({ eeg: { highPass: 0.5 } });
+    expect(result.extractedGlobalFilters).toEqual({ eeg: { highPass: 0.5 } });
   });
 
   it('counts a channel without settings when checking whether eeg rows share a filter', () => {
@@ -467,7 +469,7 @@ describe('extractGlobalFilters', () => {
     const rows = [row('Fp1', 0.5, null, null), row('NotInSettings', 0.3, null, null)];
     const result = extractGlobalFilters(rows, channelSettings);
 
-    expect(result.globalFilters).toEqual({});
+    expect(result.extractedGlobalFilters).toEqual({});
     expect(result.rows).toEqual(rows);
   });
 
@@ -478,7 +480,10 @@ describe('extractGlobalFilters', () => {
   });
 
   it('handles an empty montage', () => {
-    expect(extractGlobalFilters([], channelSettings)).toEqual({ rows: [], globalFilters: {} });
+    expect(extractGlobalFilters([], channelSettings)).toEqual({
+      rows: [],
+      extractedGlobalFilters: {},
+    });
   });
 });
 

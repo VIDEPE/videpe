@@ -34,7 +34,7 @@ import {
   computeAutoYScale,
   remapMontageToRecording,
 } from '@/utils/eegViewerUtils';
-import { hasActiveFilters } from '@/utils/eegFilters';
+import { hasActiveFilters, extractGlobalFilters } from '@/utils/eegFilters';
 import { useEegBuffer } from '@/loaders/eegBuffer';
 import { useContainerResize } from '@/hooks/useContainerResize';
 import { useEegPlotControls } from '@/hooks/useEegPlotControls';
@@ -477,14 +477,6 @@ export const EegViewer = ({
         );
       }
     }
-
-    // Overwrite the current montage rows with the one from the template
-    applyMontageChannels(
-      template.rows.map((row) => ({
-        id: crypto.randomUUID(),
-        ...row, // this preserves whatever channel, reference and color the fil has per row
-      }))
-    );
     // Patch the type of every channel the template names. A name not in this recording
     // still gets added (harmless — nothing reads channelSettings by iterating its keys).
     const nextChannelSettings = { ...channelSettings };
@@ -492,6 +484,27 @@ export const EegViewer = ({
       nextChannelSettings[name] = { ...nextChannelSettings[name], type };
     }
     applyChannelSettings(nextChannelSettings);
+
+    // Extract the Global Filters from the template
+    const { rows: clearedRows, extractedGlobalFilters } = extractGlobalFilters(
+      template.rows,
+      nextChannelSettings
+    );
+
+    // Overwrite the current montage rows with the one from the template
+    applyMontageChannels(
+      clearedRows.map((row) => ({
+        id: crypto.randomUUID(),
+        ...row, // this preserves whatever channel, reference and color the fil has per row
+      }))
+    );
+
+    // Overwrite the current global filters with the one extracted from the template
+    const nextGlobalFilters = { ...globalFilters };
+    for (const [type, typeFilters] of Object.entries(extractedGlobalFilters)) {
+      nextGlobalFilters[type] = { ...globalFilters[type], ...typeFilters };
+    }
+    setGlobalFilters(nextGlobalFilters);
   };
 
   // Applies a montage file dropped in either dropzone, through the same path as a template:
