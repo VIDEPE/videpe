@@ -90,7 +90,7 @@ export function EegMontageEditor({
   onApplyMontageChannels, // (Array<{id, channel, reference, color}>) => void — commits the draft on Apply/OK
   onApplyGlobalFilters, // (Record<type, {highPass, lowPass, notch, notchHarmonics}>) => void — commits the draft on Apply/OK, only when Load set one
   fs, // sampling frequency of the loaded EEG recording
-  globalFilters, // Record<type, {highPass, lowPass, notch}> — live global filters owned by EegViewer
+  globalFilters, // Record<type, {highPass, lowPass, notch}> — live global filters owned by EegViewer. Shown as placeholders until Load sets a draft
 }) {
   const { isDarkMode } = useTheme();
   const channelDividerColor = isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
