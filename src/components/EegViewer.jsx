@@ -449,57 +449,60 @@ export const EegViewer = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- updateVisibleChannelCount isn't memoized
   }, [visibleChannelCount, displayRows.length]);
 
-  const applyMontageFileTemplate = (template) => {
-    // Warn about any channel/reference the template names that this recording doesn't
+  // Applies a parsed montage file: a bundled template picked in the dropdown, or a file dropped
+  // in a dropzone or passed on launch. `montage` is { name, rows, channelTypes }, already in the
+  // recording's spelling.
+  const applyMontageFile = (montage) => {
+    // Warn about any channel/reference the montage names that this recording doesn't
     // have — those rows still get applied to montageChannels state below (so the dropdown
-    // keeps reflecting "this is the template, as loaded"), but buildMontageDisplayRows
+    // keeps reflecting "this is the montage, as loaded"), but buildMontageDisplayRows
     // silently drops them from the waveform, which otherwise looks like a mystery
     // empty/partial montage.
     const missingNames = new Set();
-    for (const row of template.rows) {
+    for (const row of montage.rows) {
       if (!channelNames.includes(row.channel)) missingNames.add(row.channel);
       if (row.reference && !channelNames.includes(row.reference)) missingNames.add(row.reference);
     }
     if (missingNames.size > 0) {
       if (missingNames.size < 20) {
         toast(
-          `"${template.name}" applied.\nRecording is missing ${missingNames.size} ${missingNames.size > 1 ? 'channels' : 'channel'}.\nIt references: (${[...missingNames].join(', ')}) — these rows won't be shown.`,
+          `"${montage.name}" applied.\nRecording is missing ${missingNames.size} ${missingNames.size > 1 ? 'channels' : 'channel'}.\nIt references: (${[...missingNames].join(', ')}) — these rows won't be shown.`,
           {
             icon: '⚠️',
           }
         );
       } else {
         toast(
-          `"${template.name}" applied.\nRecording is missing ${missingNames.size} channels.\nThese rows won't be shown.`,
+          `"${montage.name}" applied.\nRecording is missing ${missingNames.size} channels.\nThese rows won't be shown.`,
           {
             icon: '⚠️',
           }
         );
       }
     }
-    // Patch the type of every channel the template names. A name not in this recording
+    // Patch the type of every channel the montage names. A name not in this recording
     // still gets added (harmless — nothing reads channelSettings by iterating its keys).
     const nextChannelSettings = { ...channelSettings };
-    for (const [name, type] of Object.entries(template.channelTypes)) {
+    for (const [name, type] of Object.entries(montage.channelTypes)) {
       nextChannelSettings[name] = { ...nextChannelSettings[name], type };
     }
     applyChannelSettings(nextChannelSettings);
 
-    // Extract the Global Filters from the template
+    // Extract the Global Filters from the montage
     const { clearedRows, extractedGlobalFilters } = extractGlobalFilters(
-      template.rows,
+      montage.rows,
       nextChannelSettings
     );
 
-    // Overwrite the current montage rows with the one from the template
+    // Overwrite the current montage rows with the ones from the montage
     applyMontageChannels(
       clearedRows.map((row) => ({
         id: crypto.randomUUID(),
-        ...row, // this preserves whatever channel, reference and color the fil has per row
+        ...row, // this preserves whatever channel, reference and color the file has per row
       }))
     );
 
-    // Overwrite the current global filters with the one extracted from the template
+    // Merge the global filters extracted from the montage into the current ones, per type
     const nextGlobalFilters = { ...globalFilters };
     for (const [type, typeFilters] of Object.entries(extractedGlobalFilters)) {
       nextGlobalFilters[type] = { ...globalFilters[type], ...typeFilters };
@@ -507,7 +510,7 @@ export const EegViewer = ({
     setGlobalFilters(nextGlobalFilters);
   };
 
-  // Applies a montage file dropped in either dropzone, through the same path as a template:
+  // Applies a montage file dropped in either dropzone, through the same path as a bundled template:
   // converted to the recording's spelling first (like the montage editor's Load button), so a
   // file written with Fp1 works on a recording with FP1. Runs on mount too, for a file dropped
   // before this viewer existed. The ref makes sure each drop is applied only once — React's
@@ -516,7 +519,7 @@ export const EegViewer = ({
   useEffect(() => {
     if (!droppedMontage || appliedDroppedMontageRef.current === droppedMontage) return;
     appliedDroppedMontageRef.current = droppedMontage;
-    applyMontageFileTemplate({
+    applyMontageFile({
       name: droppedMontage.fileName,
       ...remapMontageToRecording(droppedMontage, channelNames),
     });
@@ -527,7 +530,7 @@ export const EegViewer = ({
   // (looked up in montageTemplates) or one of the built-in preset strings.
   const applyTemplateSelection = (value) => {
     const template = montageTemplates.find((t) => t.id === value);
-    if (template) applyMontageFileTemplate(template);
+    if (template) applyMontageFile(template);
     else applyMontageTemplate(value);
   };
 
