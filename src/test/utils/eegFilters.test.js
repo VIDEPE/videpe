@@ -462,6 +462,15 @@ describe('extractGlobalFilters', () => {
     expect(result.globalFilters).toEqual({ eeg: { highPass: 0.5 } });
   });
 
+  it('counts a channel without settings when checking whether eeg rows share a filter', () => {
+    // its 0.3 differs from Fp1's 0.5, so nothing is shared, and both rows keep their own value
+    const rows = [row('Fp1', 0.5, null, null), row('NotInSettings', 0.3, null, null)];
+    const result = extractGlobalFilters(rows, channelSettings);
+
+    expect(result.globalFilters).toEqual({});
+    expect(result.rows).toEqual(rows);
+  });
+
   it('does not change the rows it was given', () => {
     const rows = [row('Fp1', 0.5, 70, 50), row('Fp2', 0.5, 70, 50)];
     extractGlobalFilters(rows, channelSettings);
