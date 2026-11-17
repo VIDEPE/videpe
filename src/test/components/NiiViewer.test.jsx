@@ -163,10 +163,16 @@ vi.mock('@niivue/niivue', () => ({
         // mirrors what real NiiVue does — drops the mesh from the existing ones
         instance.meshes = instance.meshes.filter((m) => m !== mesh);
       }),
-      // Real NiiVue fetches each url, parses it into an NVMesh, calls addMesh for each one,
-      // and returns the created mesh objects — mirror the observable parts of that.
+      // Real NiiVue fetches each url, parses it into an NVMesh (an NVConnectome for .jcon/.json),
+      // calls addMesh for each one, and returns the created mesh objects — mirror the observable
+      // parts of that, incl. a stubbed updateMesh (which rebuilds a mesh's buffers).
       addMeshesFromUrl: vi.fn().mockImplementation(async function (meshItems) {
-        const addedMeshes = meshItems.map((item) => ({ ...item, opacity: 1, visible: true }));
+        const addedMeshes = meshItems.map((item) => ({
+          ...item,
+          opacity: 1,
+          visible: true,
+          updateMesh: vi.fn(),
+        }));
         instance.meshes = [...instance.meshes, ...addedMeshes];
         return addedMeshes;
       }),
@@ -446,14 +452,66 @@ describe('syncMeshesAndApplySettings', () => {
       meshes: [],
       // Mirrors the real API: fetches/parses each url, adds the mesh to nv.meshes, returns
       // the created mesh objects in the same order as the input list.
+      // updateMesh is stubbed like the real NVMesh/NVConnectome's, which rebuilds the buffers.
       addMeshesFromUrl: vi.fn().mockImplementation(async (items) => {
-        const added = items.map((item) => ({ ...item, opacity: 1, visible: true }));
+        const added = items.map((item) => ({
+          ...item,
+          opacity: 1,
+          visible: true,
+          updateMesh: vi.fn(),
+        }));
         nv.meshes = [...nv.meshes, ...added];
         return added;
       }),
       updateGLVolume: vi.fn(),
       opts: {},
     };
+  });
+
+  // Connectome files are meshes in nv too — NiiVue's addMeshesFromUrl builds one from a
+  // .jcon/.json (it reads the extension from `name`) — so they share this one load path.
+  describe('file connectomes (.jcon/.json)', () => {
+    const makeConnectomeLayer = (url, name) => ({ url, name, kind: 'connectome' });
+
+    it('loads a connectome through addMeshesFromUrl in the same batch as surface meshes', async () => {
+      await syncMeshesAndApplySettings(
+        nv,
+        [makeMeshLayer('blob:cortex', 'cortex.gii'), makeConnectomeLayer('blob:net', 'net.jcon')],
+        [makeMeshSetting(), makeMeshSetting()],
+        new Map()
+      );
+      expect(nv.addMeshesFromUrl).toHaveBeenCalledWith([
+        { url: 'blob:cortex', name: 'cortex.gii' },
+        { url: 'blob:net', name: 'net.jcon' },
+      ]);
+    });
+
+    it("seeds a new connectome's node/edge size from its settings and rebuilds it, so slider and render agree", async () => {
+      const map = new Map();
+      await syncMeshesAndApplySettings(
+        nv,
+        [makeConnectomeLayer('blob:net', 'net.jcon')],
+        [makeMeshSetting({ nodeScale: 2, edgeScale: 1.5 })],
+        map
+      );
+      const connectome = map.get('blob:net');
+      expect(connectome.nodeScale).toBe(2);
+      expect(connectome.edgeScale).toBe(1.5);
+      expect(connectome.updateMesh).toHaveBeenCalled();
+    });
+
+    it('leaves node/edge size alone on a surface mesh', async () => {
+      const map = new Map();
+      await syncMeshesAndApplySettings(
+        nv,
+        [makeMeshLayer('blob:cortex', 'cortex.gii')],
+        [makeMeshSetting({ nodeScale: 2, edgeScale: 1.5 })],
+        map
+      );
+      const mesh = map.get('blob:cortex');
+      expect(mesh.nodeScale).toBeUndefined();
+      expect(mesh.updateMesh).not.toHaveBeenCalled();
+    });
   });
 
   it('loads new mesh layers via addMeshesFromUrl, forwarding url and name', async () => {
@@ -730,6 +788,19 @@ describe('filesToLayers', () => {
     const [layer] = await filesToLayers([makeFile('head.obj')]);
     expect(layer.kind).toBe('mesh');
   });
+
+  // NiiVue's own isMeshExt also matches JCON/JSON — a connectome file must not be routed down
+  // the surface-mesh path, but tagged as a connectome so it gets the connectome controls.
+  it.each(['network.jcon', 'network.json', 'NETWORK.JCON'])(
+    'tags %s as a connectome layer, not a mesh',
+    async (fileName) => {
+      const [layer] = await filesToLayers([makeFile(fileName)]);
+      expect(layer.kind).toBe('connectome');
+      expect(layer.type).toBe('Connectome');
+      expect(layer.subtype).toBe(fileName.split('.')[0]);
+      expect(layer.url).toMatch(/^blob:/);
+    }
+  );
 
   it('assigns a blob url to a mesh layer, same as an image volume layer', async () => {
     const [layer] = await filesToLayers([makeFile('cortex.gii')]);
@@ -2848,6 +2919,139 @@ describe('NiiViewer', () => {
       expect(
         mriLabel.compareDocumentPosition(connectomeLabel) & Node.DOCUMENT_POSITION_FOLLOWING
       ).toBeTruthy();
+    });
+  });
+
+  describe('connectome layers (loaded from .jcon/.json files)', () => {
+    const fileConnectomeLayer = {
+      url: 'blob:network',
+      name: 'network.jcon',
+      type: 'Connectome',
+      subtype: 'network',
+      kind: 'connectome',
+    };
+
+    // Renders an empty viewer, then drops `fileName` into its own compact drop zone. Returns nv
+    // and the connectome mesh NiiVue built for the file.
+    const dropIntoInternalZone = async (fileName) => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      render(<NiiViewer nvRef={nvRef} layers={[]} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+      const input = document.querySelector('input[type="file"]');
+      await userEvent.upload(input, new File(['{}'], fileName));
+      const nv = nvRef.current;
+      await waitFor(() => expect(nv.addMeshesFromUrl).toHaveBeenCalled());
+      const [mesh] = await nv.addMeshesFromUrl.mock.results.at(-1).value;
+      return { nv, mesh };
+    };
+
+    it.each(['network.jcon', 'network.json'])(
+      'loads a dropped %s as a connectome card, through the file-mesh load path',
+      async (fileName) => {
+        const { nv } = await dropIntoInternalZone(fileName);
+        // name (with its extension) is what makes NiiVue parse it as a connectome
+        expect(nv.addMeshesFromUrl.mock.calls.at(-1)[0][0].name).toBe(fileName);
+        expect(nv.loadVolumes).not.toHaveBeenCalled();
+        expect(screen.getByText('Connectome')).toBeInTheDocument();
+        expect(screen.getByText('- network')).toBeInTheDocument();
+      }
+    );
+
+    it('loads a connectome passed via the layers prop through addMeshesFromUrl', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      render(<NiiViewer nvRef={nvRef} layers={[fileConnectomeLayer]} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      const nv = nvRef.current;
+      expect(nv.addMeshesFromUrl).toHaveBeenCalledWith([
+        { url: 'blob:network', name: 'network.jcon' },
+      ]);
+      expect(nv.loadVolumes).not.toHaveBeenCalled();
+    });
+
+    it('shows the connectome node/edge size controls, but not the electrode-only node metric', async () => {
+      await dropIntoInternalZone('network.jcon');
+      await userEvent.click(screen.getByRole('button', { name: /expand.*connectome - network/i }));
+
+      // A file connectome's nodes/edges live in the file, not on the layer, so the sliders
+      // must stay usable rather than being greyed out as "no nodes/edges"
+      expect(screen.getByRole('slider', { name: /node size slider/i })).not.toHaveAttribute(
+        'data-disabled'
+      );
+      expect(screen.getByRole('slider', { name: /edge size slider/i })).not.toHaveAttribute(
+        'data-disabled'
+      );
+      // Node Metric picks electrode voltages/metrics — meaningless for a file connectome
+      expect(screen.queryByRole('combobox', { name: /electrodeDisplayMode/i })).toBeNull();
+    });
+
+    it("applies a node size change to the file connectome's own mesh", async () => {
+      const { mesh } = await dropIntoInternalZone('network.jcon');
+      await userEvent.click(screen.getByRole('button', { name: /expand.*connectome - network/i }));
+      mesh.updateMesh.mockClear(); // drop the rebuild from the load-time node/edge size seeding
+
+      fireEvent.keyDown(screen.getByRole('slider', { name: /node size slider/i }), {
+        key: 'ArrowRight',
+      });
+
+      expect(mesh.nodeScale).not.toBe(4); // moved off DEFAULT_NODE_SCALE
+      expect(mesh.updateMesh).toHaveBeenCalled();
+    });
+
+    it('hides a file connectome by setting its mesh opacity to 0', async () => {
+      const { mesh } = await dropIntoInternalZone('network.jcon');
+
+      await userEvent.click(screen.getByRole('button', { name: /hide.*connectome - network/i }));
+
+      expect(mesh.opacity).toBe(0);
+    });
+
+    it('removes the connectome mesh from nv when its card is deleted', async () => {
+      const { nv, mesh } = await dropIntoInternalZone('network.jcon');
+
+      await userEvent.click(screen.getByRole('button', { name: /expand.*connectome - network/i }));
+      await userEvent.click(screen.getByRole('button', { name: /close.*connectome - network/i }));
+
+      expect(nv.removeMesh).toHaveBeenCalledWith(mesh);
+      expect(screen.queryByText('Connectome')).not.toBeInTheDocument();
+    });
+
+    it('drops the card and shows a toast naming the file when it fails to load (e.g. invalid JSON)', async () => {
+      const { default: toast } = await import('react-hot-toast');
+      toast.error.mockClear();
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      render(<NiiViewer nvRef={nvRef} layers={[]} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+      // NiiVue's response.json() rejects on a file that isn't valid JSON
+      nvRef.current.addMeshesFromUrl.mockRejectedValueOnce(
+        new SyntaxError('Unexpected token o in JSON')
+      );
+
+      const input = document.querySelector('input[type="file"]');
+      await userEvent.upload(input, new File(['not json'], 'broken.jcon'));
+
+      await waitFor(() =>
+        expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('broken.jcon'))
+      );
+      expect(screen.queryByText('Connectome')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('compact drop zone', () => {
+    it('lists the accepted file types in its label and accepts connectome files', async () => {
+      const { Niivue } = await import('@niivue/niivue');
+      const nvRef = { current: new Niivue() };
+      render(<NiiViewer nvRef={nvRef} layers={[{ type: 'ANAT', url: '/mri.nii' }]} />);
+      await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
+
+      expect(screen.getByText('Browse or drop volumes / meshes / connectomes')).toBeInTheDocument();
+      const accept = document.querySelector('input[type="file"]').accept.split(',');
+      for (const ext of ['.nii', '.nii.gz', '.dcm', '.gii', '.jcon', '.json']) {
+        expect(accept).toContain(ext);
+      }
     });
   });
   describe('esi layer', () => {

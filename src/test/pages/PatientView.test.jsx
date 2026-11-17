@@ -832,6 +832,61 @@ describe('PatientView — imaging file-type detection', () => {
     )[0];
     expect(niiDropZoneProps.accepted_formats).toContain('.dcm');
   });
+
+  it('lists the imaging files by type in the initial dropzone: volumes, meshes, connectomes', () => {
+    renderPatientView();
+    const niiDropZoneProps = FileDropZone.mock.calls.find(
+      ([p]) => p.label === 'Drop imaging files'
+    )[0];
+    // label/value rows, like the EEG dropzone — one row per type, in this order
+    expect(niiDropZoneProps.description.map((row) => row.label)).toEqual([
+      'Volume:',
+      'Mesh:',
+      'Connectome:',
+    ]);
+    expect(niiDropZoneProps.description).toEqual([
+      { label: 'Volume:', value: expect.stringContaining('.nii') },
+      { label: 'Mesh:', value: expect.stringContaining('.gii') },
+      { label: 'Connectome:', value: expect.stringContaining('.jcon') },
+    ]);
+  });
+
+  it('accepts every listed imaging extension at the initial dropzone, incl. connectome files', () => {
+    // the file picker only shows accepted extensions, so a missing one can't be selected by clicking
+    renderPatientView();
+    const niiDropZoneProps = FileDropZone.mock.calls.find(
+      ([p]) => p.label === 'Drop imaging files'
+    )[0];
+    const accepted = niiDropZoneProps.accepted_formats.split(',');
+    for (const ext of [
+      '.nii',
+      '.nii.gz',
+      '.mgh',
+      '.mgz',
+      '.dcm',
+      '.gii',
+      '.ply',
+      '.obj',
+      '.jcon',
+      '.json',
+    ]) {
+      expect(accepted).toContain(ext);
+    }
+  });
+
+  it('passes a dropped .jcon file to NiiViewer as a connectome layer', async () => {
+    renderPatientView();
+
+    await act(async () => {
+      await getNiiOnFiles()([makeFile('network.jcon')]);
+    });
+
+    expect(NiiViewer.mock.lastCall[0].layers).toHaveLength(1);
+    expect(NiiViewer.mock.lastCall[0].layers[0]).toMatchObject({
+      type: 'Connectome',
+      kind: 'connectome',
+    });
+  });
 });
 
 describe('PatientView — imaging load-failure recovery', () => {
