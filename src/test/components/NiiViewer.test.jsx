@@ -500,6 +500,17 @@ describe('syncMeshesAndApplySettings', () => {
       expect(connectome.updateMesh).toHaveBeenCalled();
     });
 
+    it("hides a new connectome's node name labels, which NiiVue would otherwise list for every node", async () => {
+      const map = new Map();
+      await syncMeshesAndApplySettings(
+        nv,
+        [makeConnectomeLayer('blob:net', 'net.jcon')],
+        [makeMeshSetting()],
+        map
+      );
+      expect(map.get('blob:net').showLegend).toBe(false);
+    });
+
     it('leaves node/edge size alone on a surface mesh', async () => {
       const map = new Map();
       await syncMeshesAndApplySettings(

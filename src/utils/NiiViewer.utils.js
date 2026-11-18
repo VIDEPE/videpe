@@ -438,11 +438,14 @@ export async function syncMeshesAndApplySettings(nv, meshLayers, meshLayerSettin
     const mesh = meshMap.get(layer.url);
     if (!mesh) return;
     const setting = meshLayerSettings[index];
-    // A just-loaded connectome is built at the file's node/edge sizes: set the card's sizes and
-    // rebuild it (updateMesh), so slider and render agree. Later slider drags go via handleSettingChange.
+    // A just-loaded connectome is built at the file's node/edge sizes and with its node labels: set
+    // the card's sizes, hide the labels and rebuild it (updateMesh). Later slider drags go via handleSettingChange.
     if (layer.kind === 'connectome' && newLayers.includes(layer)) {
       mesh.nodeScale = setting.nodeScale;
       mesh.edgeScale = setting.edgeScale;
+      // No node name labels: NiiVue lists every node's name, an unreadable wall of text for a
+      // large connectome. Same as the generated connectomes (useElectrodeConnectome/useEsiLayer).
+      mesh.showLegend = false;
       mesh.updateMesh(nv.gl);
     }
 
