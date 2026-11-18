@@ -6,7 +6,7 @@ This guide is for developers working on VIDEPE's EEG filtering. It explains how 
 
 Filters are set per **row**: one trace in the EEG viewer. Without a montage, there is one row per (non-bad) channel. With a montage, each row is a montage row: a channel, optionally minus a reference (another channel, or the average or median), so `Fp1 − F7` is one row. Several montage rows can use the same channel.
 
-Each row can have three filters: a high-pass, a low-pass and a mains notch. Each is a frequency in Hz, or `null` for off.
+Each row can have three filters: a high-pass, a low-pass and a mains notch. Each is a frequency in Hz, or `null` for off. Per channel type, the notch can also remove the 2nd and 3rd mains harmonic (see [Notch harmonics](#notch-harmonics)).
 
 The values come from two places:
 
@@ -21,17 +21,18 @@ The global filters are the standard way to filter. A row's own filters can be us
 
 Neither the Global Filters window nor the Montage Editor edits the live state directly. Each one copies the current settings into a draft when it opens, edits only that draft, and commits it to the live state on Apply or OK:
 
-| Window         | Live state (in `EegViewer`)          | Draft                                          | Committed by                                       |
-| -------------- | ------------------------------------ | ---------------------------------------------- | -------------------------------------------------- |
-| Global Filters | `globalFilters`                      | `draftGlobalFilters`                           | `onApplyGlobalFilters`                             |
-| Montage Editor | `montageChannels`, `channelSettings` | `draftMontageChannels`, `draftChannelSettings` | `onApplyMontageChannels`, `onApplyChannelSettings` |
+| Window         | Live state (in `EegViewer`)                           | Draft                                                                | Committed by                                                               |
+| -------------- | ----------------------------------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| Global Filters | `globalFilters`                                       | `draftGlobalFilters`                                                 | `onApplyGlobalFilters`                                                     |
+| Montage Editor | `montageChannels`, `channelSettings`, `globalFilters` | `draftMontageChannels`, `draftChannelSettings`, `draftGlobalFilters` | `onApplyMontageChannels`, `onApplyChannelSettings`, `onApplyGlobalFilters` |
 
 - **Apply** commits the draft and keeps the window open; **OK** commits and closes; **Cancel** (or the red close button) closes without committing.
 - **A fresh draft on every open.** `EegViewer` only renders a window while it's open, so it remounts each time and seeds its draft from the current live state. No reset logic is needed.
 - **Unsaved changes are marked.** While a draft differs from the live state, the window's title gets a `*` and Apply is highlighted.
 - **Everything in the window is part of the draft,** including the bulk "set all" controls, Clear all and Reset to global. "Reset to global" is a pending flag in the Global Filters window that only clears the rows' own filters (through `onApplyMontageChannels`) on Apply/OK.
 - **The two windows don't share a draft.** That's why "Reset to global" is disabled while the Montage Editor is open: the editor's own draft, committed later, would overwrite the reset.
-- **The montage editor reads the draft type.** Its placeholders and its AnyWave save use the type from `draftChannelSettings`, so they follow a type change before it's applied. The global filters it shows are the live ones, though, not an unapplied draft in the Global Filters window.
+- **The montage editor reads the draft type.** Its placeholders and its AnyWave save use the type from `draftChannelSettings`, so they follow a type change before it's applied. The global filters it shows are the live ones, though, not an unapplied draft in the Global Filters window, until a Load recognises global filters in a file (see the next point).
+- **The montage editor's global-filter draft starts empty.** Unlike its other two drafts, `draftGlobalFilters` is `null` until Load recognises global filters in a file (see [How the settings influence each other](#how-the-settings-influence-each-other)). Only then does Apply/OK commit global filters, after which the draft is `null` again. So the montage editor never commits an unchanged copy over global filters that were applied in the Global Filters window while it was open. Once Load has set the draft, though, the last window to apply wins.
 
 ## How a row's filters are resolved
 
@@ -40,6 +41,7 @@ Neither the Global Filters window nor the Montage Editor edits the live state di
 - **A row's own value wins.** Any number, including 0, overrides the global value.
 - **`null` on the row means "follow global".** The row then gets the global value of its channel type, which may itself be `null` (off).
 - **Each field is resolved on its own.** A row with only its own high-pass still follows the global low-pass and notch.
+- **Notch harmonics always come from the type.** Rows have no harmonics setting of their own, so a row's own notch also gets its type's `notchHarmonics`.
 
 Rules that decide which global filters a row gets:
 
@@ -71,6 +73,17 @@ Further decisions:
 - **Zero-phase.** The cascade runs forward and backward (`filtfilt`), so waveforms aren't shifted in time. This squares the magnitude response: the attenuation in dB doubles, and the cutoff lies at about −6 dB instead of −3 dB.
 - **Edge handling.** `filtfilt` has no padding of its own, and the buffer edges would ring. `applyMontageRowFilter` therefore zero-pads each row by 1 second (split before and after) and multiplies it with a Tukey window (`alpha = 0.1`) before filtering, which softens the jump at the edges. The padding is removed afterwards.
 - **No filter, no work.** A row whose filters are all `null` is returned unchanged, without building a window.
+
+### Notch harmonics
+
+Mains noise usually also shows up at 2 and 3 times its frequency (100 and 150 Hz for 50 Hz mains). With `notchHarmonics` on, `buildFilterSections` adds a bandstop section at 2f and 3f, with the same design as the notch itself.
+
+- **Per channel type, off by default.** The user turns it on deliberately in the Global Filters window ("Notch Harmonics" column). Per type, because SEEG users who look at high-frequency oscillations (ripples, 80–250 Hz) usually want 100 and 150 Hz left intact, while EEG users usually want them removed.
+- **No per-row setting.** A row follows its type, also with its own notch. With one place to set it, the Global Filters window and the Montage Editor can't disagree.
+- **Only below Nyquist.** A harmonic at or above fs / 2 is skipped, because fili's coefficients are unstable there. At fs = 256 Hz, a 50 Hz notch only adds 100 Hz.
+- **Wider at higher frequencies.** `BW: 0.1` is in octaves, so the harmonic notches are ~7 Hz wide at 100 Hz and ~10 Hz at 150 Hz. That's fine for mains harmonics, which wander more than the fundamental.
+- **Also above the low-pass.** A 4th-order low-pass at 70 Hz only damps 100 Hz by about 25 dB with `filtfilt`, which isn't always enough for strong mains noise, so the harmonics are notched regardless of the low-pass.
+- **No longer settling margin needed.** The harmonics are higher than the notch, so they settle faster; `getSettlingSampleCount` only looks at the notch itself.
 
 ## Where filtering runs in the pipeline
 
@@ -123,6 +136,7 @@ Both windows clamp the same way, on blur rather than on every keystroke, so typi
 - **Low-pass:** between its own high-pass (or 0) and the Nyquist frequency.
 - **Notch:** between 0 and the Nyquist frequency.
 - **An empty field is `null` (off),** never clamped to 0.
+- **Notch Harmonics checkbox:** disabled while that type has no notch, since there's nothing to add harmonics to. It keeps its state, so it applies again once a notch is set.
 
 The bulk "set all" control above each column in the Global Filters window clamps per type, against that type's own other filters. An empty bulk field turns that filter off for every type.
 
@@ -130,20 +144,22 @@ The bulk "set all" control above each column in the Global Filters window clamps
 
 ## How the settings influence each other
 
-| Action                                           | Effect                                                                                                                                                                 |
-| ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Change a global filter                           | Every row of that type without its own value for that filter follows. Rows with their own value don't change. The topography, connectome and ESI always follow.        |
-| Give a row its own value                         | Only that row's trace and that filter change. Its other filters still follow global. The topography, connectome and ESI don't change.                                  |
-| Change a channel's type                          | All rows of that channel switch to the new type's global filters. In the montage editor, the placeholders follow the draft type right away.                            |
-| Clear all (Global Filters window)                | All global filters off, in the draft. The rows' own filters stay.                                                                                                      |
-| Reset to global (Global Filters window)          | Clears every montage row's own filters on Apply/OK, so all rows follow global. Disabled while the montage editor is open, because its draft would overwrite the reset. |
-| Save an AnyWave montage                          | Writes each row's **effective** filters (own or global), so the file filters the same as the viewer.                                                                   |
-| Load an AnyWave montage                          | Its filter values become the rows' **own** filters. Off values (`-1` for high/low-pass, `0` for notch) become `null`, so those follow global.                          |
-| Load a Cartool montage or pick a preset template | Rows have no filters of their own, so they follow global.                                                                                                              |
+| Action                                           | Effect                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Change a global filter                           | Every row of that type without its own value for that filter follows. Rows with their own value don't change. The topography, connectome and ESI always follow.                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Give a row its own value                         | Only that row's trace and that filter change. Its other filters still follow global. The topography, connectome and ESI don't change.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| Change a channel's type                          | All rows of that channel switch to the new type's global filters. In the montage editor, the placeholders follow the draft type right away.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Clear all (Global Filters window)                | All global filters off, in the draft. The rows' own filters stay.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| Reset to global (Global Filters window)          | Clears every montage row's own filters on Apply/OK, so all rows follow global. Disabled while the montage editor is open, because its draft would overwrite the reset.                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| Turn on notch harmonics (Global Filters window)  | Every row of that type with a notch (its own or global) also notches 2f and 3f, and so do the topography, connectome and ESI.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| Save an AnyWave montage                          | Writes each row's **effective** filters (own or global), so the file filters the same as the viewer. The notch harmonics aren't saved: the format has a single notch frequency.                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Load an AnyWave montage                          | Per channel type and per filter, a value that every row of that type shares becomes the type's **global** filter, and those rows follow it (`extractGlobalFilters`). A value that differs between rows stays as the rows' **own** filter. Off values (`-1` for high/low-pass, `0` for notch) become `null`, and a filter that's off on every row leaves the global filter as it was, because "off" can't be told apart from "no filters in the file". Dropped or launched files set the global filters right away; Load in the montage editor sets them on Apply/OK. Notch harmonics aren't in the file, so they stay as they were. |
+| Load a Cartool montage or pick a preset template | Rows have no filters of their own, so they follow global.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 
 Two consequences to be aware of:
 
-- **A saved and reloaded montage no longer follows global.** Saving bakes the global values into the file, and loading turns them into the rows' own values. Later changes to the global filters then don't reach those rows. "Reset to global" undoes this.
+- **A saved and reloaded montage follows global again, mostly.** Saving bakes the global values into the file, and loading lifts the values that all rows of a type share back into the global filters. A row that had its own value only stays like that when its value differs from the other rows of its type. A filter that was off globally but set on some rows comes back as those rows' own value.
+- **Loading changes the global filters for every row of that type,** also rows of that type in a montage that isn't shown. That's the point: the file's filters are meant as the global filters.
 - **The montage editor shows what a row inherits.** An empty filter field shows the global value for the row's type as a greyed placeholder.
 
 ## Showing that filters are active
@@ -151,7 +167,8 @@ Two consequences to be aware of:
 - **The Filters button** is filled when at least one displayed row is filtered (`hasActiveFilters` on the resolved display rows), and outlined otherwise. So a row's own filter lights it up even when every global filter is off, and a global filter for a type without channels doesn't.
 - **The Montage button** is filled when a montage is set.
 - **The Global Filters window** lists how many montage rows have their own filters, with "Reset to global" next to it, so the user can see why the Filters button is lit when the global values are empty.
-- **The topography window** has a filter row on both tabs, e.g. "Global Filters: EEG 0.5–40 Hz, notch 50 Hz | SEEG unfiltered" (`formatFilterSummary`). It lists only types with channels, in the clinical band notation. When montage rows have their own filters, a red "Montage row filters not applied" note appears, and its tooltip points the user to the Global Filters window. This covers the case where someone sets filters only in the Montage Editor and expects the map to match the traces.
+- **The topography window** has a filter row on both tabs, e.g. "Global Filters: EEG 0.5–40 Hz, notch 50 Hz + harmonics | SEEG unfiltered" (`formatFilterSummary`). It lists only types with channels, in the clinical band notation. When montage rows have their own filters, a red "Montage row filters not applied" note appears, and its tooltip points the user to the Global Filters window. This covers the case where someone sets filters only in the Montage Editor and expects the map to match the traces.
+- **The Montage Editor** marks a row whose notch also removes the harmonics with "+h" after the global notch placeholder (e.g. "50+h"), and a tooltip that says where it's set.
 
 ## Code
 

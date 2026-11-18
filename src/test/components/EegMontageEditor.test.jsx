@@ -57,9 +57,9 @@ const MONTAGE_CHANNELS = CHANNEL_NAMES.map((name) => ({
 // Global filters per type — shown greyed as placeholders in rows without their own value.
 // eeg and seeg differ, and seeg's lowPass is off, so a placeholder from the wrong type fails.
 const GLOBAL_FILTERS = {
-  eeg: { highPass: 0.5, lowPass: 70, notch: 50 },
-  seeg: { highPass: 1, lowPass: null, notch: null },
-  other: { highPass: null, lowPass: null, notch: null },
+  eeg: { highPass: 0.5, lowPass: 70, notch: 50, notchHarmonics: false },
+  seeg: { highPass: 1, lowPass: null, notch: null, notchHarmonics: false },
+  other: { highPass: null, lowPass: null, notch: null, notchHarmonics: false },
 };
 
 const defaultProps = {
@@ -891,6 +891,52 @@ describe('EegMontageEditor', () => {
       const montageChannels = [{ ...MONTAGE_CHANNELS[0], id: 'X', channel: 'MISSING' }];
       render(<EegMontageEditor {...defaultProps} montageChannels={montageChannels} />);
       expect(screen.getByTestId('montage-highpass-X')).not.toHaveAttribute('placeholder');
+    });
+  });
+
+  describe('notch harmonics', () => {
+    // eeg harmonics on; seeg on too, but seeg has no notch to add them to
+    const harmonicsOn = {
+      ...GLOBAL_FILTERS,
+      eeg: { ...GLOBAL_FILTERS.eeg, notchHarmonics: true },
+      seeg: { ...GLOBAL_FILTERS.seeg, notchHarmonics: true },
+    };
+
+    it("marks the notch placeholder with +h when the row's type also notches the harmonics", () => {
+      render(<EegMontageEditor {...defaultProps} globalFilters={harmonicsOn} />);
+      expect(screen.getByTestId('montage-notch-FP1')).toHaveAttribute('placeholder', '50+h'); // eeg
+    });
+
+    it('says in the notch tooltip that the harmonics are notched too, and where to change it', () => {
+      render(<EegMontageEditor {...defaultProps} globalFilters={harmonicsOn} />);
+      const title = screen.getByTestId('montage-notch-FP1').getAttribute('title');
+      expect(title).toMatch(/harmonic/i);
+      expect(title).toMatch(/Global EEG Filters/);
+    });
+
+    it("also shows the tooltip on a row with its own notch, since it gets its type's harmonics", () => {
+      const montageChannels = [{ ...MONTAGE_CHANNELS[0], notch: 60 }]; // FP1, eeg
+      render(
+        <EegMontageEditor
+          {...defaultProps}
+          montageChannels={montageChannels}
+          globalFilters={harmonicsOn}
+        />
+      );
+      expect(screen.getByTestId('montage-notch-FP1')).toHaveAttribute('title');
+    });
+
+    it('shows no harmonics marks when the type has them off', () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      const input = screen.getByTestId('montage-notch-FP1');
+      expect(input).toHaveAttribute('placeholder', '50');
+      expect(input).not.toHaveAttribute('title');
+    });
+
+    it('shows no harmonics marks on a row without any notch, even with the type flag on', () => {
+      render(<EegMontageEditor {...defaultProps} globalFilters={harmonicsOn} />);
+      // FP3 is seeg: harmonics on, but no notch to add them to
+      expect(screen.getByTestId('montage-notch-FP3')).not.toHaveAttribute('title');
     });
   });
 
@@ -1744,6 +1790,186 @@ describe('EegMontageEditor', () => {
         await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
         expect(savedFilters('FP1')).toBe('<filters highPass="-1" lowPass="-1" notch="0"/>');
+      });
+    });
+
+    // Load is the inverse of Save above: filters shared by every row of a type become that
+    // type's global filters (see extractGlobalFilters). Like the rows, they're a draft: shown
+    // as the rows' placeholders, committed on Apply/OK, discarded on Cancel.
+    describe('Load recognises global filters', () => {
+      // FP1 and FP2 (both EEG) share all three filters; FP3 (seeg) isn't in the file
+      const filtersFile = (fp2LowPass = 40) =>
+        new File(
+          [
+            `<!DOCTYPE AnyWaveMontage>
+<Montage>
+	<Channel name="FP1">
+		<type>EEG</type>
+		<reference></reference>
+		<color></color>
+		<filters highPass="2" lowPass="40" notch="60"/>
+	</Channel>
+	<Channel name="FP2">
+		<type>EEG</type>
+		<reference>FP1</reference>
+		<color></color>
+		<filters highPass="2" lowPass="${fp2LowPass}" notch="60"/>
+	</Channel>
+</Montage>`,
+          ],
+          'filters.mtg'
+        );
+
+      // Loaded rows get fresh random ids, so their filter inputs are found by list order
+      const filterInputs = (field) => screen.getAllByTestId(new RegExp(`^montage-${field}-`));
+
+      it('shows the shared filters as the global placeholders, and leaves the rows own values empty', async () => {
+        render(<EegMontageEditor {...defaultProps} />);
+        await userEvent.upload(screen.getByTestId('montage-file-input'), filtersFile());
+
+        for (const [field, value] of [
+          ['highpass', '2'],
+          ['lowpass', '40'],
+          ['notch', '60'],
+        ]) {
+          filterInputs(field).forEach((input) => {
+            expect(input).toHaveValue(null);
+            expect(input).toHaveAttribute('placeholder', value);
+          });
+        }
+      });
+
+      it('keeps a filter that differs between rows of a type on the rows, per field', async () => {
+        render(<EegMontageEditor {...defaultProps} />);
+        await userEvent.upload(screen.getByTestId('montage-file-input'), filtersFile(30));
+
+        // low-pass differs (40 vs 30): stays on the rows; eeg's global low-pass is unchanged
+        expect(filterInputs('lowpass').map((input) => input.value)).toEqual(['40', '30']);
+        expect(filterInputs('lowpass')[0]).toHaveAttribute('placeholder', '70');
+        // high-pass is shared: lifted to the global filters
+        expect(filterInputs('highpass')[0]).toHaveValue(null);
+        expect(filterInputs('highpass')[0]).toHaveAttribute('placeholder', '2');
+      });
+
+      it('OK commits the loaded global filters, keeping the settings the file has no say over', async () => {
+        const onApplyGlobalFilters = vi.fn();
+        const onApplyMontageChannels = vi.fn();
+        // notchHarmonics isn't part of the .mtg format, so loading a file must keep it
+        const globalFilters = {
+          ...GLOBAL_FILTERS,
+          eeg: { ...GLOBAL_FILTERS.eeg, notchHarmonics: true },
+        };
+        render(
+          <EegMontageEditor
+            {...defaultProps}
+            globalFilters={globalFilters}
+            onApplyGlobalFilters={onApplyGlobalFilters}
+            onApplyMontageChannels={onApplyMontageChannels}
+          />
+        );
+        await userEvent.upload(screen.getByTestId('montage-file-input'), filtersFile());
+        await userEvent.click(screen.getByRole('button', { name: 'OK' }));
+
+        expect(onApplyGlobalFilters).toHaveBeenCalledWith({
+          ...GLOBAL_FILTERS, // seeg and other untouched: the file has no rows of those types
+          eeg: { highPass: 2, lowPass: 40, notch: 60, notchHarmonics: true },
+        });
+        // the committed rows follow the new global filters instead of carrying their own
+        const committedRows = onApplyMontageChannels.mock.calls[0][0];
+        committedRows.forEach((row) =>
+          expect(row).toMatchObject({ highPass: null, lowPass: null, notch: null })
+        );
+      });
+
+      it('Cancel discards the loaded global filters', async () => {
+        const onApplyGlobalFilters = vi.fn();
+        render(<EegMontageEditor {...defaultProps} onApplyGlobalFilters={onApplyGlobalFilters} />);
+        await userEvent.upload(screen.getByTestId('montage-file-input'), filtersFile());
+        await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+        expect(onApplyGlobalFilters).not.toHaveBeenCalled();
+      });
+
+      // Only global filters this window changed itself (through Load) are committed, so an
+      // unchanged copy never overwrites what the Global Filters window applied
+      it('does not commit global filters on Apply when nothing changed them', async () => {
+        const onApplyGlobalFilters = vi.fn();
+        render(<EegMontageEditor {...defaultProps} onApplyGlobalFilters={onApplyGlobalFilters} />);
+        await userEvent.click(screen.getByTestId('channel-bad-FP1'));
+        await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+        expect(onApplyGlobalFilters).not.toHaveBeenCalled();
+      });
+
+      it('leaves the global filters as they were after loading a file without filters', async () => {
+        const onApplyGlobalFilters = vi.fn();
+        render(<EegMontageEditor {...defaultProps} onApplyGlobalFilters={onApplyGlobalFilters} />);
+        await userEvent.upload(
+          screen.getByTestId('montage-file-input'),
+          new File([CARTOOL_FILE_TEXT], 'custom.mtg')
+        );
+
+        expect(filterInputs('highpass')[0]).toHaveAttribute('placeholder', '0.5'); // FP1, eeg
+        await userEvent.click(screen.getByRole('button', { name: 'OK' }));
+        expect(onApplyGlobalFilters).not.toHaveBeenCalled();
+      });
+
+      // The Global Filters window can apply new global filters while this window is open
+      it('follows global filters applied elsewhere while open, and OK without a Load leaves them alone', async () => {
+        const onApplyGlobalFilters = vi.fn();
+        const { rerender } = render(
+          <EegMontageEditor {...defaultProps} onApplyGlobalFilters={onApplyGlobalFilters} />
+        );
+        rerender(
+          <EegMontageEditor
+            {...defaultProps}
+            globalFilters={{ ...GLOBAL_FILTERS, eeg: { ...GLOBAL_FILTERS.eeg, highPass: 1.5 } }}
+            onApplyGlobalFilters={onApplyGlobalFilters}
+          />
+        );
+
+        expect(filterInputs('highpass')[0]).toHaveAttribute('placeholder', '1.5'); // FP1, eeg
+        await userEvent.click(screen.getByRole('button', { name: 'OK' }));
+        expect(onApplyGlobalFilters).not.toHaveBeenCalled();
+      });
+
+      it('commits the loaded global filters once, so a second Apply leaves global filters applied elsewhere alone', async () => {
+        const onApplyGlobalFilters = vi.fn();
+        const { rerender } = render(
+          <EegMontageEditor {...defaultProps} onApplyGlobalFilters={onApplyGlobalFilters} />
+        );
+        await userEvent.upload(screen.getByTestId('montage-file-input'), filtersFile());
+        await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+        expect(onApplyGlobalFilters).toHaveBeenCalledTimes(1);
+
+        // The Global Filters window then applies a different eeg high-pass
+        const appliedElsewhere = {
+          ...GLOBAL_FILTERS,
+          eeg: { highPass: 1.5, lowPass: 40, notch: 60, notchHarmonics: false },
+        };
+        rerender(
+          <EegMontageEditor
+            {...defaultProps}
+            globalFilters={appliedElsewhere}
+            onApplyGlobalFilters={onApplyGlobalFilters}
+          />
+        );
+        expect(filterInputs('highpass')[0]).toHaveAttribute('placeholder', '1.5');
+
+        await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+        expect(onApplyGlobalFilters).toHaveBeenCalledTimes(1);
+      });
+
+      it('saving right after loading writes the same filters back', async () => {
+        render(<EegMontageEditor {...defaultProps} />);
+        await userEvent.upload(screen.getByTestId('montage-file-input'), filtersFile());
+        await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+        const xml = downloadTextFile.mock.calls[0][0];
+        expect(xml.match(/<filters [^>]*\/>/g)).toEqual([
+          '<filters highPass="2" lowPass="40" notch="60"/>',
+          '<filters highPass="2" lowPass="40" notch="60"/>',
+        ]);
       });
     });
 

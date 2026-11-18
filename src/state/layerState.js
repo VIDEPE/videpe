@@ -23,7 +23,7 @@
 //
 // entries — one per layer, in display order (= the ImagingControls card order):
 //   url      — the layer's unique id; every action addresses a layer by it. A blob: url for a
-//              dropped file, a path for demo/Shanoir files (e.g. 'demo_data/sub-synth_T1w.nii.gz'),
+//              dropped file, a path for demo/Shanoir files (e.g. 'demo_data/anat/sub-synth_T1w.nii.gz'),
 //              or a fixed sentinel string for a generated layer ('__electrodes__',
 //              '__esi-source-power__' — see ELECTRODE_LAYER_URL/ESI_LAYER_URL).
 //   layer    — what to show: the data, which the user doesn't edit. Always has
@@ -32,8 +32,9 @@
 //                  { url, name: 'sub-synth_T1w.nii.gz', type: 'MRI', subtype: 'sub-synth_T1w' }
 //                - 'mesh': a surface file (GIFTI/PLY/OBJ…) in nv.meshes
 //                - 'connectome': nodes/edges built into a mesh — the electrodes
-//                  ({ nodes, edges, calMax, metricMax, availableMetrics, hasVoltageSnapshot })
-//                  or the ESI layer in connectome mode ({ nodes, edges: [], boundMin, boundMax })
+//                  ({ nodes, edges, calMax, metricMax, availableMetrics, hasVoltageSnapshot }),
+//                  the ESI layer in connectome mode ({ nodes, edges: [], boundMin, boundMax }),
+//                  or a .jcon/.json file (no nodes/edges here — they're read from its url)
 //                The ESI layer in volume mode is an image volume carrying its raw NIfTI `bytes`.
 //   settings — how to show it: what the user changes on the card. Created by
 //              getInitialLayerSettings, e.g.
@@ -73,6 +74,15 @@ export const UPDATE_SETTINGS = 'UPDATE_SETTINGS'; // { url, patch }
 // LOAD_FILE_LAYERS keeps it when the file layers are replaced.
 const GENERATED_LAYER_URLS = [ELECTRODE_LAYER_URL, ESI_LAYER_URL];
 const isGeneratedLayerUrl = (url) => GENERATED_LAYER_URLS.includes(url);
+
+// A connectome from a .jcon/.json file, not one generated from EEG data (electrodes/ESI): it gets
+// the connectome controls (node/edge size), but no electrode voltages/metrics.
+export const isFileConnectomeLayer = (layer) =>
+  layer?.kind === 'connectome' && !isGeneratedLayerUrl(layer.url);
+
+// A surface mesh or a file connectome (NiiVue reads both as meshes): the layers NiiViewer loads,
+// looks up and deletes itself, via its url→mesh map. Generated connectomes have their own hooks.
+export const isFileMeshLayer = (layer) => layer?.kind === 'mesh' || isFileConnectomeLayer(layer);
 
 // ─── Selectors ──────────────────────────────────────────────────────────────────
 // Read-only helpers that derive values from the state, so callers don't index into it themselves.

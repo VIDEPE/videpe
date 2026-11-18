@@ -2,7 +2,12 @@ import { useRef, useEffect, useCallback } from 'react';
 import { isAnyColorbarActive, ELECTRODE_LAYER_URL } from '@/utils/NiiViewer.utils';
 import { selectEntry, selectLayerSettings, SYNC_GENERATED_LAYER } from '@/state/layerState';
 import { applyElectrodeDisplayMode } from '@/utils/eegTopographyUtils';
-import { EEG_NODE_POS_KEY, EEG_NODE_NEG_KEY } from '@/utils/eegColormaps';
+import {
+  EEG_NODE_POS_KEY,
+  EEG_NODE_NEG_KEY,
+  EEG_NODE_POS_COLORBLIND_KEY,
+  EEG_NODE_NEG_COLORBLIND_KEY,
+} from '@/utils/eegColormaps';
 
 /**
  * Keeps the Electrodes connectome layer in sync with `electrodeLayer`: merges it into the
@@ -20,6 +25,9 @@ import { EEG_NODE_POS_KEY, EEG_NODE_NEG_KEY } from '@/utils/eegColormaps';
  *   this layer's own settings (by sentinel URL) and every layer's colorbar toggle.
  * @param {Function} params.dispatchLayers - layerState's dispatch, sent SYNC_GENERATED_LAYER
  *   whenever `electrodeLayer` changes.
+ * @param {boolean} [params.colorBlindMode=false] - the app-wide colorblind mode (see
+ *   useColorBlindMode); swaps the voltage node colormaps (and their colorbar) for the cividis
+ *   variant. Metric display modes aren't voltage maps and keep the default colormaps.
  * @returns {Object}
  *   - `electrodeMeshRef` — the current mesh in the scene, or null. Read-only outside this
  *     hook; NiiViewer's handleSettingChange uses it to mutate mesh properties directly
@@ -29,7 +37,13 @@ import { EEG_NODE_POS_KEY, EEG_NODE_NEG_KEY } from '@/utils/eegColormaps';
  *   - `dismissElectrodeLayer` — call from handleDeleteLayer so the card-sync effect stops
  *     resurrecting the just-deleted card until a genuinely new `electrodeLayer` arrives.
  */
-export function useElectrodeConnectome({ electrodeLayer, nvRef, layerState, dispatchLayers }) {
+export function useElectrodeConnectome({
+  electrodeLayer,
+  nvRef,
+  layerState,
+  dispatchLayers,
+  colorBlindMode = false,
+}) {
   // ─── Refs ───────────────────────────────────────────────────────────────────
   const electrodeMeshRef = useRef(null); // mesh currently in the scene, if any
   const colorbarOnlyMeshRef = useRef(null); // colorbar-only mesh currently in the scene, if any (see below)
@@ -37,6 +51,7 @@ export function useElectrodeConnectome({ electrodeLayer, nvRef, layerState, disp
   const lastElectrodeDisplayModeRef = useRef(null); // same, for the Electrode Display mode
   const lastElectrodeShowColorbarRef = useRef(null); // same, for this connectome's own showColorbar setting — NOT the nv.opts.isColorbar master switch, which is a scene-wide OR across every layer (volumes included), recomputed below
   const lastElectrodeVisibleRef = useRef(null); // same, for this connectome's own visible setting — hiding the layer must also hide its colorbar-only mesh
+  const lastColorBlindModeRef = useRef(null); // same, for the app-wide colorblind mode — flipping it swaps the voltage colormaps
   // The specific electrodeLayer dismissed via handleDeleteLayer. Not a boolean: electrodeLayer
   // keeps recomputing from live EEG data, so a plain flag could never be un-set — storing the
   // object lets the sync effect tell "still that stale layer" from "genuinely new data" by
@@ -110,15 +125,16 @@ export function useElectrodeConnectome({ electrodeLayer, nvRef, layerState, disp
     const visible = settings.visible;
 
     // — Skip if nothing changed —
-    // Same layer, same display mode, same colorbar toggle, same visibility, and the mesh we
-    // built is still really in nv.meshes — that last check matters because StrictMode's
-    // mount→unmount→remount silently wipes the mesh even though electrodeLayer/displayMode
-    // look unchanged.
+    // Same layer, same display mode, same colorbar toggle, same visibility, same colorblind
+    // mode, and the mesh we built is still really in nv.meshes — that last check matters
+    // because StrictMode's mount→unmount→remount silently wipes the mesh even though
+    // electrodeLayer/displayMode look unchanged.
     if (
       electrodeLayer === lastElectrodeLayerRef.current &&
       electrodeDisplayMode === lastElectrodeDisplayModeRef.current &&
       showColorbar === lastElectrodeShowColorbarRef.current &&
       visible === lastElectrodeVisibleRef.current &&
+      colorBlindMode === lastColorBlindModeRef.current &&
       nv.meshes.includes(electrodeMeshRef.current)
     ) {
       return;
@@ -127,6 +143,7 @@ export function useElectrodeConnectome({ electrodeLayer, nvRef, layerState, disp
     lastElectrodeDisplayModeRef.current = electrodeDisplayMode;
     lastElectrodeShowColorbarRef.current = showColorbar;
     lastElectrodeVisibleRef.current = visible;
+    lastColorBlindModeRef.current = colorBlindMode;
 
     if (electrodeMeshRef.current) nv.removeMesh(electrodeMeshRef.current); // drop the stale mesh first
 
@@ -145,12 +162,17 @@ export function useElectrodeConnectome({ electrodeLayer, nvRef, layerState, disp
       electrodeDisplayMode === 'voltage'
         ? electrodeLayer.calMax
         : (electrodeLayer.metricMax?.[electrodeDisplayMode] ?? 1e-6);
+    // Colorblind mode only swaps the diverging voltage map — metrics aren't voltages and keep
+    // the default white-to-red scale. Shared by the nodes and the colorbar-only mesh below.
+    const useColorBlindColormaps = colorBlindMode && electrodeDisplayMode === 'voltage';
+    const posColormap = useColorBlindColormaps ? EEG_NODE_POS_COLORBLIND_KEY : EEG_NODE_POS_KEY;
+    const negColormap = useColorBlindColormaps ? EEG_NODE_NEG_COLORBLIND_KEY : EEG_NODE_NEG_KEY;
 
     // — Build the mesh and add it to the scene —
     const mesh = nv.loadConnectomeAsMesh({
       name: electrodeLayer.name,
-      nodeColormap: EEG_NODE_POS_KEY,
-      nodeColormapNegative: EEG_NODE_NEG_KEY,
+      nodeColormap: posColormap,
+      nodeColormapNegative: negColormap,
       nodeMinColor: 0,
       nodeMaxColor,
       nodeScale: settings.nodeScale,
@@ -188,8 +210,8 @@ export function useElectrodeConnectome({ electrodeLayer, nvRef, layerState, disp
         name: `${electrodeLayer.name} colorbar`,
         nodeMinColor: 0,
         nodeMaxColor: 1, // unused — this mesh has no nodes to color
-        edgeColormap: EEG_NODE_POS_KEY,
-        edgeColormapNegative: EEG_NODE_NEG_KEY, // lets NiiVue draw a negative bar [-edgeMax, -edgeMin]
+        edgeColormap: posColormap,
+        edgeColormapNegative: negColormap, // lets NiiVue draw a negative bar [-edgeMax, -edgeMin]
         edgeMin: 0,
         edgeMax: nodeMaxColor, // mirrors the real mesh's node color range above
         showLegend: false,
@@ -206,7 +228,7 @@ export function useElectrodeConnectome({ electrodeLayer, nvRef, layerState, disp
     // may also have its own colorbar toggled on.
     nv.opts.isColorbar = isAnyColorbarActive(selectLayerSettings(layerState));
     nv.updateGLVolume();
-  }, [electrodeLayer, layerState, nvRef]);
+  }, [electrodeLayer, layerState, nvRef, colorBlindMode]);
 
   return {
     electrodeMeshRef,

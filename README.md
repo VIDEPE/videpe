@@ -1,6 +1,6 @@
 # VIDEPE
 
-![Version](https://img.shields.io/badge/version-0.24.0-blue)
+![Version](https://img.shields.io/badge/version-0.25.0-blue)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23312820.svg)](https://doi.org/10.5281/zenodo.23312820)
 
 **V**isualization & **I**ntegration of **D**ata for **E**pilepsy **P**resurgical **E**valuation
@@ -39,7 +39,7 @@ High-performance multichannel viewer built on [uPlot](https://github.com/leeoniy
   - Interactive timeline scrubber for fast navigation across the full recording
   - Keyboard navigation — arrow keys for range/panning, Page Up/Down and Space for window jumps, Home/End to jump to the start/end
   - Configurable number of simultaneously visible channels.
-  - Global frequency filters — high-pass, low-pass and mains notch (zero-phase Butterworth) per channel type (EEG, SEEG, Other), set from the Filters button. They also apply to the topography, 3D connectome and ESI.
+  - Global frequency filters — high-pass, low-pass and mains notch (zero-phase Butterworth) per channel type (EEG, SEEG, Other), set from the Filters button, optionally also notching the 2nd and 3rd harmonic. They also apply to the topography, 3D connectome and ESI.
 - **Built for big recordings** — only part of the file is kept in memory, and drawing and filtering run in the background, so hour-long, high-channel-count recordings stay smooth
 
 - **Montage Editor** — a dedicated window for channel selection, re-referencing and building custom EEG montages.
@@ -47,7 +47,7 @@ High-performance multichannel viewer built on [uPlot](https://github.com/leeoniy
   - Select and flag channels (bad-channel, per-channel type)
   - Build referenced or bipolar montage rows with custom per-row colors, reorder and sort them, and the waveform view switches to showing exactly those rows.
   - Per-row filter overrides — a row's own high-pass, low-pass or notch wins over the global filter of its channel type (e.g. for an ECG channel); empty fields show the global value greyed out.
-  - Import montage files in AnyWave (XML) or Cartool (plain-text) format — auto-detected from file content — and export back out as AnyWave XML, with each row's effective filters (its own or the global ones) included.
+  - Import montage files in AnyWave (XML) or Cartool (plain-text) format — auto-detected from file content, loaded in the editor or by dropping them on the EEG panel — and export back out as AnyWave XML, with each row's effective filters (its own or the global ones) included, and global filters saved this way load back as global filters.
 
 - EEG topography — a resizable panel showing a 3D voltage map at the selected time point using [NiiVue](https://niivue.com/) mesh rendering
   - Automatically selects the best-matching bundled electrode-position template; load custom positions via `.elc` or `*_electrodes.tsv` (BIDS specifications) file
@@ -67,16 +67,16 @@ High-performance multichannel viewer built on [uPlot](https://github.com/leeoniy
 Full multiplanar and 3D rendering powered by [NiiVue](https://niivue.com/). Load multiple volumes/meshes simultaneously and adjust each one independently.
 
 - Multi-layer support for e.g. MRI, PET, and SPECT in one view
-- Supports NIfTI (`.nii`, `.nii.gz`), MGH/MGZ, GIFTI, PLY, OBJ, and DICOM (`.dcm`, converted to NIfTI on load via dcm2niix)
+- Supports NIfTI (`.nii`, `.nii.gz`), MGH/MGZ, DICOM (`.dcm`, converted to NIfTI on load via dcm2niix), GIFTI, PLY, OBJ, connectome files (`.jcon`, `.json`), and any other format NiiVue reads
 - Per-layer opacity/mesh xray, colormap, inversion, colorbar and thresholding controls
 - Drag-to-reorder layers, with a modality subtype label shown on each volume
 - Slice view buttons for axial, coronal, sagittal, multiplanar, and 3D render
 - Radiological/neurological convention toggle and clip plane toggle (3D render view only)
-- Adjustable node/edge size for connectome layers (ESI and SEEG electrode connectomes)
+- Adjustable node/edge size for connectome layers (ESI, SEEG electrode and connectome files)
 
 ### Built-in Demo
 
-Hit **Load Demo** to instantly load a synthetic EEG recording, electrode positions and inverse solution alongside aligned MRI volumes. No upload, no account, no wait.
+Hit **EEG Demo** to instantly load a synthetic scalp EEG recording with its electrode positions and inverse solution, or **iEEG Demo** for a synthetic intracranial (SEEG) recording with its electrode positions — both alongside aligned MRI volumes. No upload, no account, no wait.
 
 ### Additional features:
 
@@ -91,7 +91,12 @@ Hit **Load Demo** to instantly load a synthetic EEG recording, electrode positio
 | ------------------- | ------------------------------------------------------------------------ |
 | EEG                 | BrainVision (`.vhdr` + `.eeg`), EDF/EDF+ (`.edf`), Micromed TRC (`.trc`) |
 | Electrode positions | `.elc`, `*_electrodes.tsv`                                               |
-| Volumes             | NIfTI (`.nii`, `.nii.gz`), MGH/MGZ, GIFTI, PLY, OBJ, DICOM (`.dcm`)      |
+| Montages            | AnyWave, Cartool (`.mtg`)                                                |
+| Volumes             | NIfTI (`.nii`, `.nii.gz`), MGH/MGZ, DICOM (`.dcm`)                       |
+| Meshes              | GIFTI (`.gii`), PLY, OBJ                                                 |
+| Connectomes         | NiiVue connectome (`.jcon`, `.json`)                                     |
+
+Other volume and mesh formats NiiVue reads (e.g. `.nrrd`, `.mha`, `.stl`, `.vtk`, `.trk`) load too. See [docs/neuroimaging-viewer.md](docs/neuroimaging-viewer.md) for how the viewer loads imaging files and how to add new formats.
 
 ## Tech stack
 

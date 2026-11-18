@@ -24,7 +24,7 @@ import {
   ArrowUpWideNarrow,
   ArrowDownWideNarrow,
 } from 'lucide-react';
-import { resolveRowFilters } from '../utils/eegFilters';
+import { extractGlobalFilters, resolveRowFilters } from '../utils/eegFilters';
 
 // ─── Window sizing constants ────────────────────────────────────────────────
 // Default/minimum window size in px — default matches the previous fixed w-96 h-80 (24rem x 20rem)
@@ -88,8 +88,9 @@ export function EegMontageEditor({
   onApplyChannelSettings, // (Record<name, {type, bad}>) => void — commits the draft on Apply/OK
   montageChannels, // Array<{id, channel, reference, color}> — live state owned by EegViewer/useMontageChannels
   onApplyMontageChannels, // (Array<{id, channel, reference, color}>) => void — commits the draft on Apply/OK
+  onApplyGlobalFilters, // (Record<type, {highPass, lowPass, notch, notchHarmonics}>) => void — commits the draft on Apply/OK, only when Load set one
   fs, // sampling frequency of the loaded EEG recording
-  globalFilters, // Record<type, {highPass, lowPass, notch}> — live global filters owned by EegViewer, shown as placeholders in rows without their own value
+  globalFilters, // Record<type, {highPass, lowPass, notch}> — live global filters owned by EegViewer. Shown as placeholders until Load sets a draft
 }) {
   const { isDarkMode } = useTheme();
   const channelDividerColor = isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
@@ -114,11 +115,11 @@ export function EegMontageEditor({
     []
   );
 
-  // Draft channelSettings/montageChannels — this component remounts fresh every time it's
+  // Draft channelSettings/montageChannels/globalFilters — this component remounts fresh every time it's
   // opened (EegViewer conditionally renders it), so seeding draft state from the live props
   // here naturally re-snapshots on every open with no extra reset effect needed. Row edits
-  // only ever touch these drafts; nothing reaches the live state in EegViewer until Apply/OK
-  // explicitly commits it.
+  // and Load only ever touch these drafts; nothing reaches the live state in EegViewer until
+  // Apply/OK explicitly commits it.
   //
   // draftChannelSettings — per recording channel (the channel-selection pane), keyed by name:
   //   { [channelName]: { type: 'eeg' | 'seeg' | 'other', bad: boolean } }
@@ -134,8 +135,23 @@ export function EegMontageEditor({
   //   - color: a CSS color, or null for the theme default
   //   - highPass / lowPass / notch: Hz, or null to follow the global filter of the
   //     channel's type (see resolveRowFilters)
+  //
+  // draftGlobalFilters — the global filters per channel type, or null:
+  //   { [type]: { highPass, lowPass, notch, notchHarmonics } } | null
+  //   Only Load sets it, when a loaded file's rows of one type share a filter (see
+  //   extractGlobalFilters); the Global Filters window stays where they're edited by hand.
+  //   Unlike the other two drafts it starts as null instead of a copy of the live value, so
+  //   Apply/OK only commits global filters this window changed itself. A copy would also be
+  //   committed when nothing was loaded, undoing whatever the Global Filters window applied
+  //   while this window was open.
+  //
+  // shownGlobalFilters — what the rows' greyed placeholders and Save use: the draft once Load
+  // set one, otherwise the live global filters (so changes from the Global Filters window
+  // show up here straight away).
   const [draftChannelSettings, setDraftChannelSettings] = useState(() => channelSettings);
   const [draftMontageChannels, setDraftMontageChannels] = useState(() => montageChannels);
+  const [draftGlobalFilters, setDraftGlobalFilters] = useState(null);
+  const shownGlobalFilters = draftGlobalFilters ?? globalFilters;
 
   const setDraftChannelType = useCallback((name, type) => {
     setDraftChannelSettings((prev) => ({ ...prev, [name]: { ...prev[name], type } }));
@@ -342,35 +358,52 @@ export function EegMontageEditor({
           parseMontageText(await file.text()),
           channelNames
         );
-        setDraftMontageChannels(
-          rows.map((row) =>
-            makeMontageRow(row.channel, {
-              reference: row.reference,
-              color: row.color,
-              highPass: row.highPass,
-              lowPass: row.lowPass,
-              notch: row.notch,
-            })
-          )
+        // AnyWave files carry a per-channel type alongside each row; patch those in first, so
+        // the global filters below are grouped by the file's types. Cartool files have no type
+        // info, so channelTypes is {} for them and this loop is a no-op, leaving existing types
+        // untouched.
+        const nextDraftChannelSettings = { ...draftChannelSettings };
+        for (const [name, type] of Object.entries(channelTypes)) {
+          nextDraftChannelSettings[name] = { ...nextDraftChannelSettings[name], type };
+        }
+
+        // Extract the global filters from the montage rows and update the rows and global filters accordingly
+        const { clearedRows, extractedGlobalFilters } = extractGlobalFilters(
+          rows,
+          nextDraftChannelSettings
         );
-        // AnyWave files carry a per-channel type alongside each row; patch those into the
-        // channel-selection draft too. Cartool files have no type info, so channelTypes is
-        // {} for them and this loop is a no-op, leaving existing types untouched.
-        setDraftChannelSettings((prev) => {
-          const next = { ...prev };
-          for (const [name, type] of Object.entries(channelTypes)) {
-            next[name] = { ...next[name], type };
+        setDraftChannelSettings(nextDraftChannelSettings);
+
+        // Set the draft montage channels
+        const nextDraftMontageChannels = clearedRows.map((row) =>
+          makeMontageRow(row.channel, {
+            reference: row.reference,
+            color: row.color,
+            highPass: row.highPass,
+            lowPass: row.lowPass,
+            notch: row.notch,
+          })
+        );
+        setDraftMontageChannels(nextDraftMontageChannels);
+
+        // Merge the extracted global filters per type into the ones shown now. Only when the
+        // file had any: a file without them leaves the draft null, so Apply/OK leaves the
+        // live global filters alone.
+        if (Object.keys(extractedGlobalFilters).length > 0) {
+          const nextDraftGlobalFilters = { ...shownGlobalFilters };
+          for (const [type, typeFilters] of Object.entries(extractedGlobalFilters)) {
+            nextDraftGlobalFilters[type] = { ...shownGlobalFilters[type], ...typeFilters };
           }
-          return next;
-        });
+          setDraftGlobalFilters(nextDraftGlobalFilters);
+        }
       } catch (err) {
         // Parse failure (unrecognized/invalid content): surface it and leave the draft as
-        // it was — returning here means neither setDraft* call above ever runs, so there's
+        // it was — returning here means none of the setDraft* calls above ever run, so there's
         // nothing to roll back.
         toast.error(`Error loading montage file:\n${err.message}`);
       }
     },
-    [makeMontageRow, channelNames]
+    [makeMontageRow, channelNames, draftChannelSettings, shownGlobalFilters]
   );
 
   // Exports the current draft as AnyWave XML, regardless of whether it was built by hand
@@ -379,12 +412,12 @@ export function EegMontageEditor({
     // Export the effective filters: a row without its own value gets its type's global one
     const resolvedRows = draftMontageChannels.map((row) => {
       const type = draftChannelSettings[row.channel]?.type ?? 'eeg';
-      return { ...row, ...resolveRowFilters(row, globalFilters?.[type]) };
+      return { ...row, ...resolveRowFilters(row, shownGlobalFilters?.[type]) };
     });
 
     const xml = toAnyWaveMontage(resolvedRows, draftChannelSettings);
     downloadTextFile(xml, 'montage.mtg', 'text/xml');
-  }, [draftMontageChannels, draftChannelSettings, globalFilters]);
+  }, [draftMontageChannels, draftChannelSettings, shownGlobalFilters]);
 
   // The live channelSettings/montageChannels props only ever change via a prior Apply/OK (or
   // the seeding effects in useChannelSettings/useMontageChannels) — never by draft edits — so
@@ -400,7 +433,9 @@ export function EegMontageEditor({
     () => JSON.stringify(draftMontageChannels) !== JSON.stringify(montageChannels),
     [draftMontageChannels, montageChannels]
   );
-  const isModified = isChannelSettingsModified || isMontageModified;
+  // A set global-filters draft always counts as a change: it's only set by Load and cleared
+  // again once applied
+  const isModified = isChannelSettingsModified || isMontageModified || draftGlobalFilters !== null;
 
   // Live preview of what "Create SEEG Bipolar" would build, recomputed as channelNames/
   // draftChannelSettings change. Drives the button's disabled state (nothing to pair => no
@@ -511,6 +546,13 @@ export function EegMontageEditor({
     if (!okToApply()) return false;
     onApplyChannelSettings(draftChannelSettings);
     onApplyMontageChannels(draftMontageChannels);
+    // Only Load sets a global-filters draft; without one, the live global filters are left
+    // alone. Once committed, the draft goes back to null, so a second Apply doesn't commit
+    // it again over changes made in the Global Filters window in between.
+    if (draftGlobalFilters) {
+      onApplyGlobalFilters(draftGlobalFilters);
+      setDraftGlobalFilters(null);
+    }
     return true;
   }, [
     okToApply,
@@ -518,6 +560,8 @@ export function EegMontageEditor({
     onApplyChannelSettings,
     draftMontageChannels,
     onApplyMontageChannels,
+    draftGlobalFilters,
+    onApplyGlobalFilters,
   ]);
 
   const handleOk = useCallback(() => {
@@ -1299,7 +1343,11 @@ export function EegMontageEditor({
                 const channelType = isChannelMissing
                   ? null
                   : (draftChannelSettings[row.channel]?.type ?? 'eeg');
-                const typeFilters = channelType ? globalFilters?.[channelType] : undefined;
+                const typeFilters = channelType ? shownGlobalFilters?.[channelType] : undefined;
+                // The type's notch harmonics apply to this row whenever it has a notch, its own
+                // or the global one — rows have no harmonics setting of their own
+                const notchHarmonicsApply =
+                  typeFilters?.notchHarmonics === true && (row.notch ?? typeFilters?.notch) != null;
                 return (
                   <div
                     key={row.id}
@@ -1469,11 +1517,21 @@ export function EegMontageEditor({
                       aria-label="Low Pass filter frequency"
                       className={cn(FILTER_COL_CLASS, FILTER_INPUT_CLASS)}
                     />
-                    {/* Channel Notch */}
+                    {/* Channel Notch — a "+h" after the global value, and a tooltip, when the
+                        type also notches the harmonics (set in the Global EEG Filters window) */}
                     <input
                       data-testid={`montage-notch-${row.id}`}
                       type="number"
-                      placeholder={typeFilters?.notch ?? undefined}
+                      placeholder={
+                        typeFilters?.notch == null
+                          ? undefined
+                          : `${typeFilters.notch}${notchHarmonicsApply ? '+h' : ''}`
+                      }
+                      title={
+                        notchHarmonicsApply
+                          ? 'Also notches the 2nd and 3rd harmonic (set per type in Global EEG Filters)'
+                          : undefined
+                      }
                       value={row.notch ?? ''}
                       disabled={isChannelMissing}
                       min={0} // lowPass can never be lower than high pass

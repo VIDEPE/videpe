@@ -42,6 +42,14 @@ vi.mock('@niivue/niivue', () => ({
   SLICE_TYPE: { RENDER: 4 },
 }));
 
+// ── Colorblind mode mock ────────────────────────────────────────────────────
+// The colorblind mode is app-wide state from ColorBlindProvider; tests drive it through
+// this mutable object instead of wrapping every render in the provider.
+const colorBlindState = { isColorBlindMode: false };
+vi.mock('@/hooks/useColorBlindMode', () => ({
+  useColorBlindMode: () => ({ isColorBlindMode: colorBlindState.isColorBlindMode }),
+}));
+
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 
 const ELECTRODES = [
@@ -72,6 +80,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockNvInstance.meshes = [];
   mockNvInstance.opts = {};
+  colorBlindState.isColorBlindMode = false;
 });
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -519,70 +528,49 @@ describe('EegTopoViewer', () => {
     });
   });
 
-  describe('colourblind mode', () => {
-    it('renders a colourblind toggle button over the topography canvas', async () => {
+  describe('colorblind mode', () => {
+    it('no longer renders its own colorblind toggle — the app-wide one lives in the PatientView header', async () => {
       await act(async () => render(<EegTopoViewer {...defaultProps} />));
-      expect(screen.getByRole('button', { name: /toggle colourblind colormap/i })).toBeTruthy();
+      expect(screen.queryByRole('button', { name: /colorblind colormap/i })).toBeNull();
     });
 
-    it('is not pressed by default', async () => {
+    it('registers both the default and colorblind colormaps on mount', async () => {
       await act(async () => render(<EegTopoViewer {...defaultProps} />));
-      expect(screen.getByRole('button', { name: /toggle colourblind colormap/i })).toHaveAttribute(
-        'aria-pressed',
-        'false'
-      );
-    });
-
-    it('registers both the default and colourblind colormaps on mount', async () => {
-      await act(async () => render(<EegTopoViewer {...defaultProps} />));
-      // 2 mesh colormaps (default + colourblind) + 5 electrode-marker colormaps
+      // 2 mesh colormaps (default + colorblind) + 5 electrode-marker colormaps
       // (matched pos/neg × 2 palettes, plus 1 flat unmapped colour).
       expect(mockNvInstance.addColormap).toHaveBeenCalledTimes(7);
     });
 
-    it('applies the default colormap key to the mesh layer while colourblind mode is off', async () => {
+    it('applies the default colormap key to the mesh layer while colorblind mode is off', async () => {
       await act(async () => render(<EegTopoViewer {...defaultProps} />));
       const [defaultKey] = mockNvInstance.addColormap.mock.calls[0];
       const addedMesh = mockNvInstance.addMesh.mock.calls[0][0];
       expect(addedMesh.layers[0].colormap).toBe(defaultKey);
     });
 
-    it('switches to the colourblind colormap key and re-presses the button when toggled on', async () => {
+    it('switches to the colorblind colormap key when the shared colorblind mode is on', async () => {
+      colorBlindState.isColorBlindMode = true;
       await act(async () => render(<EegTopoViewer {...defaultProps} />));
-      const [, colourBlindKey] = mockNvInstance.addColormap.mock.calls.map(([key]) => key);
+      const [, colorBlindKey] = mockNvInstance.addColormap.mock.calls.map(([key]) => key);
 
-      await userEvent.click(screen.getByRole('button', { name: /toggle colourblind colormap/i }));
-
-      expect(screen.getByRole('button', { name: /toggle colourblind colormap/i })).toHaveAttribute(
-        'aria-pressed',
-        'true'
-      );
       // The cortex mesh is the only added mesh with a `layers` array — electrode marker
       // layers (added alongside it) are plain connectome mocks without one.
       const cortexCalls = mockNvInstance.addMesh.mock.calls.filter(([m]) => m.layers);
-      expect(cortexCalls.at(-1)[0].layers[0].colormap).toBe(colourBlindKey);
+      expect(cortexCalls.at(-1)[0].layers[0].colormap).toBe(colorBlindKey);
     });
 
-    it('switches back to the default colormap key when toggled off again', async () => {
-      await act(async () => render(<EegTopoViewer {...defaultProps} />));
-      const [defaultKey] = mockNvInstance.addColormap.mock.calls.map(([key]) => key);
-      const toggle = screen.getByRole('button', { name: /toggle colourblind colormap/i });
-
-      await userEvent.click(toggle); // on
-      await userEvent.click(toggle); // off again
-
-      expect(toggle).toHaveAttribute('aria-pressed', 'false');
-      const cortexCalls = mockNvInstance.addMesh.mock.calls.filter(([m]) => m.layers);
-      expect(cortexCalls.at(-1)[0].layers[0].colormap).toBe(defaultKey);
-    });
-
-    it('reloads the mesh when colourblind mode is toggled', async () => {
+    it('reloads the mesh with the colorblind colormap when the shared mode flips on', async () => {
       const { NVMesh } = await import('@niivue/niivue');
-      await act(async () => render(<EegTopoViewer {...defaultProps} />));
+      const { rerender } = await act(async () => render(<EegTopoViewer {...defaultProps} />));
+      const [, colorBlindKey] = mockNvInstance.addColormap.mock.calls.map(([key]) => key);
       expect(NVMesh.loadFromUrl).toHaveBeenCalledTimes(1);
 
-      await userEvent.click(screen.getByRole('button', { name: /toggle colourblind colormap/i }));
+      colorBlindState.isColorBlindMode = true;
+      await act(async () => rerender(<EegTopoViewer {...defaultProps} />));
+
       expect(NVMesh.loadFromUrl).toHaveBeenCalledTimes(2);
+      const cortexCalls = mockNvInstance.addMesh.mock.calls.filter(([m]) => m.layers);
+      expect(cortexCalls.at(-1)[0].layers[0].colormap).toBe(colorBlindKey);
     });
   });
 
@@ -659,11 +647,6 @@ describe('EegTopoViewer', () => {
     it('hides the "Use custom positions" button, since position matching is only meaningful for the mesh', async () => {
       await act(async () => render(<EegTopoViewer {...noEegProps} />));
       expect(screen.queryByRole('button', { name: /use custom.*positions/i })).toBeNull();
-    });
-
-    it('still renders the colourblind toggle button', async () => {
-      await act(async () => render(<EegTopoViewer {...noEegProps} />));
-      expect(screen.getByRole('button', { name: /toggle colourblind colormap/i })).toBeTruthy();
     });
 
     it('falls back to the matrix tab if the mesh tab was active and EEG channels disappear on rerender', async () => {

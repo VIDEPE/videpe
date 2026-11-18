@@ -244,10 +244,11 @@ export const AboutPage = () => {
                 <p className="text-sm mt-1" style={{ color: 'var(--c-foreground)' }}>
                   Want to explore VIDEPE but don't have files on hand?
                   <br />
-                  Hit <strong>Load Demo</strong> on the patient view to instantly load a synthetic
-                  EEG recording with its electrode positions and an eLORETA inverse solution,
-                  alongside an aligned T1-weighted MRI, a white matter mask and the Lausanne 2018
-                  brain atlas
+                  Hit <strong>EEG Demo</strong> on the patient view to instantly load a synthetic
+                  scalp EEG recording with its electrode positions and an eLORETA inverse solution,
+                  or <strong>iEEG Demo</strong> for a synthetic intracranial (SEEG) recording with
+                  its electrode positions — both alongside an aligned T1-weighted MRI, a white
+                  matter mask and the Lausanne 2018 brain atlas
                   <br />— no upload, no account, no wait.
                 </p>
               </div>
@@ -297,8 +298,8 @@ export const AboutPage = () => {
                   <li>
                     <strong>Frequency filters</strong> — set high-pass, low-pass, and mains notch
                     (zero-phase Butterworth) per channel type (EEG, SEEG, Other) or per individual
-                    channel. The per-type filters also apply to the topography, 3D connectome and
-                    ESI
+                    channel, optionally also notching the 2nd and 3rd harmonic. The per-type filters
+                    also apply to the topography, 3D connectome and ESI
                   </li>
                   <li>
                     <strong>Stacked view</strong> — overlay all visible channels on one plot; traces
@@ -316,7 +317,7 @@ export const AboutPage = () => {
                       NiiVue
                     </a>
                     : none/average/median reference, blue-white-red colormap with live colorbar and
-                    colour-blind mode, and voltage-coloured electrode markers
+                    colorblind mode, and voltage-colored electrode markers
                   </li>
                   <li>
                     <strong>Electrode positions</strong> — the best-matching bundled template is
@@ -357,7 +358,7 @@ export const AboutPage = () => {
                   </li>
                   <li>
                     <strong>Custom montages</strong> — build referenced or bipolar rows with their
-                    own colours; the waveform shows exactly those rows
+                    own colors; the waveform shows exactly those rows
                   </li>
                   <li>
                     <strong>Per-row filters</strong> — give a row its own high-pass, low-pass, or
@@ -410,8 +411,9 @@ export const AboutPage = () => {
                   style={{ color: 'var(--c-foreground)' }}
                 >
                   <li>
-                    <strong>Multi-layer</strong> — MRI, PET, SPECT and meshes in one view: NIfTI
-                    (.nii, .nii.gz), MGH/MGZ, GIFTI, PLY, OBJ, and DICOM (converted via dcm2niix)
+                    <strong>Multi-layer</strong> — MRI, PET, SPECT, meshes and connectomes in one
+                    view: NIfTI (.nii, .nii.gz), DICOM, MGH/MGZ, GIFTI, PLY, OBJ, connectomes
+                    (.jcon, .json), and any other format NiiVue reads
                   </li>
                   <li>
                     <strong>Per-layer controls</strong> — opacity/mesh x-ray, colormap, colorbar,
@@ -502,7 +504,7 @@ export const AboutPage = () => {
                     <code>*_electrodes.tsv</code> (BIDS specifications) files
                   </li>
                   <li>
-                    <strong>Custom metrics</strong> — colour/size connectome nodes by any extra{' '}
+                    <strong>Custom metrics</strong> — color/size connectome nodes by any extra{' '}
                     <code>.tsv</code> column, not just voltage
                   </li>
                 </ul>

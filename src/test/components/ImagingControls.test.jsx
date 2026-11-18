@@ -367,7 +367,7 @@ describe('ImagingControls', () => {
             kind: 'connectome',
             type: 'Intracranial',
             subtype: 'Electrodes',
-            url: '__intracranial-electrodes__',
+            url: '__electrodes__',
           },
         ],
         [makeSettings()]
@@ -405,10 +405,10 @@ describe('ImagingControls', () => {
       kind: 'connectome',
       type: 'Intracranial',
       subtype: 'Electrodes',
-      url: '__intracranial-electrodes__',
+      url: '__electrodes__',
     });
 
-    it('does not render Colormap, Invert, or Colorbar controls for a connectome-kind layer', async () => {
+    it('does not render Colormap or Invert controls for a connectome-kind layer', async () => {
       renderControls([makeIntracranialLayer()], [makeSettings()]);
       await userEvent.click(
         screen.getByRole('button', { name: /expand.*intracranial - electrodes/i })
@@ -418,9 +418,21 @@ describe('ImagingControls', () => {
       expect(
         screen.queryByRole('switch', { name: /invert.*intracranial - electrodes/i })
       ).not.toBeInTheDocument();
-      expect(
-        screen.queryByRole('switch', { name: /intracranial - electrodes.*colorbar/i })
-      ).not.toBeInTheDocument();
+    });
+
+    // Only the electrode connectome has a Colorbar toggle (see 'electrode connectome colorbar'
+    // below) — any other connectome, e.g. the ESI one in connectome mode, has none.
+    it('does not render a Colorbar toggle for a connectome other than the electrodes', async () => {
+      const esiConnectome = {
+        kind: 'connectome',
+        type: 'ESI',
+        subtype: 'Source power',
+        url: '__esi-source-power__',
+      };
+      renderControls([esiConnectome], [makeSettings()]);
+      await userEvent.click(screen.getByRole('button', { name: /expand.*esi - source power/i }));
+
+      expect(screen.queryByRole('switch', { name: /colorbar/i })).not.toBeInTheDocument();
     });
 
     it('renders the Mesh Xray slider (not Opacity) and the Delete button for a connectome-kind layer', async () => {
@@ -476,7 +488,7 @@ describe('ImagingControls', () => {
       kind: 'connectome',
       type: 'Intracranial',
       subtype: 'Electrodes',
-      url: '__intracranial-electrodes__',
+      url: '__electrodes__',
     });
 
     // setup does two things: renders one connectome layer and expands it.
@@ -506,7 +518,7 @@ describe('ImagingControls', () => {
       const slider = screen.getByLabelText('Intracranial - Electrodes meshXRay slider');
       slider.focus();
       fireEvent.keyDown(slider, { key: 'ArrowRight' });
-      expect(onSettingChange).toHaveBeenCalledWith('__intracranial-electrodes__', 'meshXRay', 0.51);
+      expect(onSettingChange).toHaveBeenCalledWith('__electrodes__', 'meshXRay', 0.51);
     });
 
     it('number input change calls onSettingChange with rounded 0-1 value', async () => {
@@ -514,7 +526,7 @@ describe('ImagingControls', () => {
       fireEvent.change(screen.getByLabelText('Intracranial - Electrodes meshXRay'), {
         target: { value: '75' },
       });
-      expect(onSettingChange).toHaveBeenCalledWith('__intracranial-electrodes__', 'meshXRay', 0.75);
+      expect(onSettingChange).toHaveBeenCalledWith('__electrodes__', 'meshXRay', 0.75);
     });
 
     it('number input clamps to 0-100 on blur', async () => {
@@ -523,11 +535,7 @@ describe('ImagingControls', () => {
         target: { value: '150' },
       });
       fireEvent.blur(screen.getByLabelText('Intracranial - Electrodes meshXRay'));
-      expect(onSettingChange).toHaveBeenLastCalledWith(
-        '__intracranial-electrodes__',
-        'meshXRay',
-        1
-      );
+      expect(onSettingChange).toHaveBeenLastCalledWith('__electrodes__', 'meshXRay', 1);
     });
 
     it('does not render for an image-volume layer, which shows Opacity instead (regression)', async () => {
@@ -555,7 +563,7 @@ describe('ImagingControls', () => {
       kind: 'connectome',
       type: 'Intracranial',
       subtype: 'Electrodes',
-      url: '__intracranial-electrodes__',
+      url: '__electrodes__',
       nodes: [{ name: 'A1', x: 0, y: 0, z: 0, colorValue: 1, sizeValue: 1 }],
       edges: [{ first: 0, second: 1, colorValue: 1 }],
       ...overrides,
@@ -603,16 +611,12 @@ describe('ImagingControls', () => {
       const nodeSlider = screen.getByLabelText('Intracranial - Electrodes node size slider');
       nodeSlider.focus();
       fireEvent.keyDown(nodeSlider, { key: 'ArrowRight' });
-      expect(onSettingChange).toHaveBeenCalledWith('__intracranial-electrodes__', 'nodeScale', 4.1);
+      expect(onSettingChange).toHaveBeenCalledWith('__electrodes__', 'nodeScale', 4.1);
 
       const edgeSlider = screen.getByLabelText('Intracranial - Electrodes edge size slider');
       edgeSlider.focus();
       fireEvent.keyDown(edgeSlider, { key: 'ArrowRight' });
-      expect(onSettingChange).toHaveBeenCalledWith(
-        '__intracranial-electrodes__',
-        'edgeScale',
-        0.55
-      );
+      expect(onSettingChange).toHaveBeenCalledWith('__electrodes__', 'edgeScale', 0.55);
     });
 
     it('cannot be dragged down to 0 — NiiVue drops the whole mesh render at nodeScale/edgeScale 0', async () => {
@@ -627,27 +631,15 @@ describe('ImagingControls', () => {
       nodeSlider.focus();
       fireEvent.keyDown(nodeSlider, { key: 'Home' });
       expect(nodeSlider).toHaveAttribute('aria-valuemin', '0.1');
-      expect(onSettingChange).toHaveBeenCalledWith('__intracranial-electrodes__', 'nodeScale', 0.1);
-      expect(onSettingChange).not.toHaveBeenCalledWith(
-        '__intracranial-electrodes__',
-        'nodeScale',
-        0
-      );
+      expect(onSettingChange).toHaveBeenCalledWith('__electrodes__', 'nodeScale', 0.1);
+      expect(onSettingChange).not.toHaveBeenCalledWith('__electrodes__', 'nodeScale', 0);
 
       const edgeSlider = screen.getByLabelText('Intracranial - Electrodes edge size slider');
       edgeSlider.focus();
       fireEvent.keyDown(edgeSlider, { key: 'Home' });
       expect(edgeSlider).toHaveAttribute('aria-valuemin', '0.05');
-      expect(onSettingChange).toHaveBeenCalledWith(
-        '__intracranial-electrodes__',
-        'edgeScale',
-        0.05
-      );
-      expect(onSettingChange).not.toHaveBeenCalledWith(
-        '__intracranial-electrodes__',
-        'edgeScale',
-        0
-      );
+      expect(onSettingChange).toHaveBeenCalledWith('__electrodes__', 'edgeScale', 0.05);
+      expect(onSettingChange).not.toHaveBeenCalledWith('__electrodes__', 'edgeScale', 0);
     });
 
     it('disables the Node slider when the connectome has no nodes', async () => {
@@ -712,7 +704,7 @@ describe('ImagingControls', () => {
       kind: 'connectome',
       type: 'Intracranial',
       subtype: 'Electrodes',
-      url: '__intracranial-electrodes__',
+      url: '__electrodes__',
       nodes: [{ name: 'A1', x: 0, y: 0, z: 0, colorValue: 1, sizeValue: 1 }],
       edges: [{ first: 0, second: 1, colorValue: 1 }],
       ...overrides,
@@ -775,11 +767,7 @@ describe('ImagingControls', () => {
         screen.getByRole('button', { name: /expand.*intracranial - electrodes/i })
       );
       doubleClick(screen.getByLabelText('Intracranial - Electrodes meshXRay slider'));
-      expect(onSettingChange).toHaveBeenCalledWith(
-        '__intracranial-electrodes__',
-        'meshXRay',
-        DEFAULT_MESH_XRAY
-      );
+      expect(onSettingChange).toHaveBeenCalledWith('__electrodes__', 'meshXRay', DEFAULT_MESH_XRAY);
     });
 
     it('resets Node Size to DEFAULT_NODE_SCALE (4)', async () => {
@@ -789,7 +777,7 @@ describe('ImagingControls', () => {
         screen.getByRole('button', { name: /expand.*intracranial - electrodes/i })
       );
       doubleClick(screen.getByLabelText('Intracranial - Electrodes node size slider'));
-      expect(onSettingChange).toHaveBeenCalledWith('__intracranial-electrodes__', 'nodeScale', 4);
+      expect(onSettingChange).toHaveBeenCalledWith('__electrodes__', 'nodeScale', 4);
     });
 
     it('resets Edge Size to DEFAULT_EDGE_SCALE (0.5)', async () => {
@@ -799,7 +787,7 @@ describe('ImagingControls', () => {
         screen.getByRole('button', { name: /expand.*intracranial - electrodes/i })
       );
       doubleClick(screen.getByLabelText('Intracranial - Electrodes edge size slider'));
-      expect(onSettingChange).toHaveBeenCalledWith('__intracranial-electrodes__', 'edgeScale', 0.5);
+      expect(onSettingChange).toHaveBeenCalledWith('__electrodes__', 'edgeScale', 0.5);
     });
 
     it('does not reset on a single click', async () => {

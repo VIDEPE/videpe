@@ -9,6 +9,7 @@ import {
   applyMontageRowFilter,
   getTukeyWindow,
   resolveRowFilters,
+  extractGlobalFilters,
   hasActiveFilters,
   getSettlingSampleCount,
   filterChannelsAtSample,
@@ -104,6 +105,68 @@ describe('buildFilterSections', () => {
 
   it('concatenates all three cascades when all are set', () => {
     expect(buildFilterSections(fs, 1, 40, 50)).toHaveLength(5); // 2 + 2 + 1
+  });
+
+  it('adds no harmonic notches by default', () => {
+    expect(buildFilterSections(1000, null, null, 50)).toHaveLength(1);
+  });
+
+  it('adds a notch at 2f and 3f when notchHarmonics is on', () => {
+    expect(buildFilterSections(1000, null, null, 50, true)).toHaveLength(3); // 50, 100, 150 Hz
+  });
+
+  it('skips a harmonic at or above the Nyquist frequency', () => {
+    // fs 256 → Nyquist 128 Hz: 100 Hz fits, 150 Hz doesn't (fili's coefficients would be unstable)
+    expect(buildFilterSections(256, null, null, 50, true)).toHaveLength(2);
+  });
+
+  it('adds nothing for notchHarmonics without a notch', () => {
+    expect(buildFilterSections(1000, null, null, null, true)).toEqual([]);
+  });
+});
+
+describe('applyMontageRowFilter — notch harmonics', () => {
+  // Own sampling rate instead of the file's fs = 256: there, Nyquist is 128 Hz, so the 150 Hz
+  // harmonic would be skipped. At 1000 Hz (Nyquist 500 Hz), both 100 and 150 Hz are filtered.
+  const fsH = 1000;
+  const nH = 4 * fsH; // 4 s of samples
+  // A pure sine with amplitude 1 at `freq` Hz, as test input
+  const sineAt = (freq) =>
+    Array.from({ length: nH }, (_, i) => Math.sin((2 * Math.PI * freq * i) / fsH));
+  // Amplitude of the filtered sine, measured over the middle half only, so the edge
+  // transients of the filter don't count. RMS × √2 turns the RMS of a sine back into its
+  // amplitude: 1 means untouched, 0 means fully removed.
+  const middleAmplitudeH = (samples) => {
+    const mid = samples.slice(Math.floor(nH * 0.25), Math.floor(nH * 0.75));
+    return Math.sqrt(mid.reduce((sum, v) => sum + v * v, 0) / mid.length) * Math.SQRT2;
+  };
+  // A row with only a 50 Hz notch, so any change to the sine comes from the notch(es)
+  const NOTCH_ONLY = { highPass: null, lowPass: null, notch: 50 };
+
+  // 100 Hz = 2f and 150 Hz = 3f of the 50 Hz notch: both should be (nearly) gone
+  it.each([100, 150])('removes the %s Hz harmonic when notchHarmonics is on', (freq) => {
+    const filtered = applyMontageRowFilter(
+      sineAt(freq),
+      { ...NOTCH_ONLY, notchHarmonics: true },
+      fsH
+    );
+    expect(middleAmplitudeH(filtered)).toBeLessThan(0.1); // under 10 % of the input amplitude left
+  });
+
+  // Without the flag only the 50 Hz notch exists, so 100 Hz passes (nearly) untouched
+  it('leaves the 100 Hz harmonic when notchHarmonics is off', () => {
+    const filtered = applyMontageRowFilter(sineAt(100), NOTCH_ONLY, fsH);
+    expect(middleAmplitudeH(filtered)).toBeGreaterThan(0.9); // over 90 % of the input amplitude left
+  });
+
+  // The harmonic notches are narrow: a frequency between 100 and 150 Hz must stay
+  it('leaves a frequency between the harmonics (e.g. 125 Hz) intact', () => {
+    const filtered = applyMontageRowFilter(
+      sineAt(125),
+      { ...NOTCH_ONLY, notchHarmonics: true },
+      fsH
+    );
+    expect(middleAmplitudeH(filtered)).toBeGreaterThan(0.9);
   });
 });
 
@@ -256,34 +319,177 @@ describe('resolveRowFilters', () => {
     const row = { highPass: null, lowPass: null, notch: null };
     const result = resolveRowFilters(row, globalFilters.eeg);
     // toEqual (contents), not toBe (same object) — the resolver may return a fresh object
-    expect(result).toEqual({ highPass: 0.5, lowPass: 70, notch: 50 });
+    expect(result).toEqual({ highPass: 0.5, lowPass: 70, notch: 50, notchHarmonics: false });
   });
 
   it('returns the row values and ignores the global values when all three are set on the row', () => {
     const row = { highPass: 1, lowPass: 40, notch: 60 };
     const result = resolveRowFilters(row, globalFilters.eeg);
-    expect(result).toEqual({ highPass: 1, lowPass: 40, notch: 60 });
+    expect(result).toEqual({ highPass: 1, lowPass: 40, notch: 60, notchHarmonics: false });
   });
 
   it('resolves each field on its own when the row is mixed', () => {
     // only highPass is a channel-specific exception; lowPass/notch follow the global setting
     const row = { highPass: 1, lowPass: null, notch: null };
     const result = resolveRowFilters(row, globalFilters.eeg);
-    expect(result).toEqual({ highPass: 1, lowPass: 70, notch: 50 });
+    expect(result).toEqual({ highPass: 1, lowPass: 70, notch: 50, notchHarmonics: false });
   });
 
   it('returns the row values (null where unset) without crashing when typeFilters is undefined', () => {
     // e.g. a channel whose type isn't in TYPE_LIST, so globalFilters[type] is undefined
     const row = { highPass: 1, lowPass: null, notch: null };
     const result = resolveRowFilters(row, undefined);
-    expect(result).toEqual({ highPass: 1, lowPass: null, notch: null });
+    expect(result).toEqual({ highPass: 1, lowPass: null, notch: null, notchHarmonics: false });
   });
 
   it('keeps a row value of 0 instead of falling through to the global value', () => {
     // 0 is falsy: `row.highPass || global` would wrongly return 0.5 here, `??` keeps 0
     const row = { highPass: 0, lowPass: null, notch: null };
     const result = resolveRowFilters(row, globalFilters.eeg);
-    expect(result).toEqual({ highPass: 0, lowPass: 70, notch: 50 });
+    expect(result).toEqual({ highPass: 0, lowPass: 70, notch: 50, notchHarmonics: false });
+  });
+
+  it("takes notchHarmonics from the type, since rows don't have their own", () => {
+    const row = { highPass: null, lowPass: null, notch: 60 }; // the row's own notch also gets the type's harmonics
+    const result = resolveRowFilters(row, { ...globalFilters.eeg, notchHarmonics: true });
+    expect(result.notchHarmonics).toBe(true);
+  });
+});
+
+// ─── extractGlobalFilters ───────────────────────────────────────────────────────────────
+// The inverse of Save's resolving (see resolveRowFilters): a loaded montage file carries every
+// row's effective filters, so a value shared by all rows of one channel type is recognised as
+// that type's global filter. Each field is checked on its own, like resolveRowFilters resolves
+// each field on its own.
+describe('extractGlobalFilters', () => {
+  // One montage row with its own filters; other row fields must pass through untouched
+  const row = (channel, highPass, lowPass, notch) => ({
+    id: `row-${channel}`,
+    channel,
+    reference: null,
+    color: 'red',
+    highPass,
+    lowPass,
+    notch,
+  });
+
+  const channelSettings = {
+    Fp1: { type: 'eeg', bad: false },
+    Fp2: { type: 'eeg', bad: false },
+    O1: { type: 'eeg', bad: false },
+    A1: { type: 'seeg', bad: false },
+    A2: { type: 'seeg', bad: false },
+  };
+
+  it('lifts filters shared by every row of a type to that type, and clears them on the rows', () => {
+    const rows = [row('Fp1', 0.5, 70, 50), row('Fp2', 0.5, 70, 50)];
+    const result = extractGlobalFilters(rows, channelSettings);
+
+    expect(result.extractedGlobalFilters).toEqual({
+      eeg: { highPass: 0.5, lowPass: 70, notch: 50 },
+    });
+    expect(result.clearedRows).toEqual([
+      row('Fp1', null, null, null),
+      row('Fp2', null, null, null),
+    ]);
+  });
+
+  it('checks each field on its own: a deviating low-pass stays on the rows, the rest is lifted', () => {
+    // e.g. an ECG lead typed eeg with its own low-pass
+    const rows = [row('Fp1', 0.5, 70, 50), row('Fp2', 0.5, 70, 50), row('O1', 0.5, 30, 50)];
+    const result = extractGlobalFilters(rows, channelSettings);
+
+    expect(result.extractedGlobalFilters).toEqual({ eeg: { highPass: 0.5, notch: 50 } });
+    expect(result.clearedRows).toEqual([
+      row('Fp1', null, 70, null),
+      row('Fp2', null, 70, null),
+      row('O1', null, 30, null),
+    ]);
+  });
+
+  it('checks each channel type separately', () => {
+    const rows = [row('Fp1', 0.5, 70, 50), row('A1', 1, 300, 50), row('A2', 1, 300, 50)];
+    const result = extractGlobalFilters(rows, channelSettings);
+
+    expect(result.extractedGlobalFilters).toEqual({
+      eeg: { highPass: 0.5, lowPass: 70, notch: 50 },
+      seeg: { highPass: 1, lowPass: 300, notch: 50 },
+    });
+    expect(result.clearedRows.every((r) => r.highPass === null && r.lowPass === null)).toBe(true);
+  });
+
+  // Off and "follow global" are both null on a row, so a uniform null can't say which was
+  // meant. Lifting it would reset the global filters of every montage without filters in its
+  // file (Cartool files, the bundled templates) — so it's left alone.
+  it('leaves a field that is off (null) on every row alone, instead of turning that global filter off', () => {
+    const rows = [row('Fp1', 0.5, null, null), row('Fp2', 0.5, null, null)];
+    const result = extractGlobalFilters(rows, channelSettings);
+
+    expect(result.extractedGlobalFilters).toEqual({ eeg: { highPass: 0.5 } });
+    expect(result.clearedRows).toEqual([
+      row('Fp1', null, null, null),
+      row('Fp2', null, null, null),
+    ]);
+  });
+
+  it('returns no global filters and unchanged rows for a montage without filters', () => {
+    const rows = [row('Fp1', null, null, null), row('A1', null, null, null)];
+    const result = extractGlobalFilters(rows, channelSettings);
+
+    expect(result.extractedGlobalFilters).toEqual({});
+    expect(result.clearedRows).toEqual(rows);
+  });
+
+  it('does not lift a field that is set on some rows of a type and off on others', () => {
+    const rows = [row('Fp1', 0.5, 70, 50), row('Fp2', null, 70, 50)];
+    const result = extractGlobalFilters(rows, channelSettings);
+
+    expect(result.extractedGlobalFilters).toEqual({ eeg: { lowPass: 70, notch: 50 } });
+    expect(result.clearedRows).toEqual([row('Fp1', 0.5, null, null), row('Fp2', null, null, null)]);
+  });
+
+  it('lifts a filter shared by a single row of its type too', () => {
+    const rows = [row('Fp1', 0.5, 70, 50), row('A1', 1, null, null)];
+    const result = extractGlobalFilters(rows, channelSettings);
+
+    expect(result.extractedGlobalFilters.seeg).toEqual({ highPass: 1 });
+    expect(result.clearedRows[1]).toEqual(row('A1', null, null, null));
+  });
+
+  it('counts 0 as a set value, like the rest of the filter code', () => {
+    const rows = [row('Fp1', 0, null, null), row('Fp2', 0, null, null)];
+    expect(extractGlobalFilters(rows, channelSettings).extractedGlobalFilters).toEqual({
+      eeg: { highPass: 0 },
+    });
+  });
+
+  it('treats a channel without settings as eeg, the same fallback the display rows use', () => {
+    const rows = [row('Fp1', 0.5, null, null), row('NotInSettings', 0.5, null, null)];
+    const result = extractGlobalFilters(rows, channelSettings);
+
+    expect(result.extractedGlobalFilters).toEqual({ eeg: { highPass: 0.5 } });
+  });
+
+  it('counts a channel without settings when checking whether eeg rows share a filter', () => {
+    // its 0.3 differs from Fp1's 0.5, so nothing is shared, and both rows keep their own value
+    const rows = [row('Fp1', 0.5, null, null), row('NotInSettings', 0.3, null, null)];
+    const result = extractGlobalFilters(rows, channelSettings);
+
+    expect(result.extractedGlobalFilters).toEqual({});
+    expect(result.clearedRows).toEqual(rows);
+  });
+
+  it('does not change the rows it was given', () => {
+    const rows = [row('Fp1', 0.5, 70, 50), row('Fp2', 0.5, 70, 50)];
+    extractGlobalFilters(rows, channelSettings);
+    expect(rows).toEqual([row('Fp1', 0.5, 70, 50), row('Fp2', 0.5, 70, 50)]);
+  });
+
+  it('handles an empty montage', () => {
+    expect(extractGlobalFilters([], channelSettings)).toEqual({
+      clearedRows: [],
+      extractedGlobalFilters: {},
+    });
   });
 });
 
@@ -436,6 +642,16 @@ describe('formatFilterSummary', () => {
 
   it('writes a notch alone without a band', () => {
     expect(formatFilterSummary({ ...OFF, notch: 50 })).toBe('notch 50 Hz');
+  });
+
+  it('adds "+ harmonics" to the notch when notchHarmonics is on', () => {
+    expect(
+      formatFilterSummary({ highPass: 0.5, lowPass: 40, notch: 50, notchHarmonics: true })
+    ).toBe('0.5–40 Hz, notch 50 Hz + harmonics');
+  });
+
+  it('ignores notchHarmonics without a notch', () => {
+    expect(formatFilterSummary({ ...OFF, notchHarmonics: true })).toBe('unfiltered');
   });
 
   it('shows a filter set to 0, since only null means off', () => {

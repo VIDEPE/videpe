@@ -585,3 +585,44 @@ export function getRowCrosshairPosition(row, matched) {
     z: (channelPos.z + referencePos.z) / 2,
   };
 }
+
+/**
+ * Formats a timeline position for the scrubber's hover tooltip. Under a minute it stays in
+ * seconds with one decimal (`42.3 s`), matching the x-axis. From one minute on it switches to
+ * a clock (`2:05`, `1:33:50`) — far easier to place in a long recording than `5630 s` — and
+ * keeps the whole seconds as a separate part so the value still lines up with the x-axis after
+ * a jump. The parts are returned separately so the tooltip can show the seconds dimmed.
+ * @param {number} seconds - timeline position in seconds (≥ 0).
+ * @returns {{time: string, seconds: string|null}} e.g. `{time: '42.3 s', seconds: null}`,
+ *   `{time: '2:05', seconds: '125 s'}`, `{time: '1:33:50', seconds: '5630 s'}`.
+ */
+export function formatTimelineTime(seconds) {
+  // Decide the format on the rounded value, so 59.96 s becomes "1:00" rather than "60.0 s"
+  const tenths = Math.round(seconds * 10) / 10;
+  if (tenths < 60) return { time: `${tenths.toFixed(1)} s`, seconds: null };
+
+  // Clock and whole seconds share one rounded value, so they always agree
+  // (and 3599.6 s carries into "1:00:00" instead of "59:60").
+  const whole = Math.round(seconds);
+  const hours = Math.floor(whole / 3600);
+  const minutes = Math.floor((whole % 3600) / 60);
+  const secs = String(whole % 60).padStart(2, '0');
+  const clock =
+    hours > 0 ? `${hours}:${String(minutes).padStart(2, '0')}:${secs}` : `${minutes}:${secs}`;
+  return { time: clock, seconds: `${whole} s` };
+}
+
+/**
+ * Where to center a tooltip so it stays within a bar's ends: on the cursor while it fits, and
+ * stopped at either end once it would stick out past it. A tooltip wider than the bar is
+ * aligned with the bar's start.
+ * @param {number} center - the cursor's x position, in px.
+ * @param {number} width - the tooltip's width, in px.
+ * @param {number} min - x position of the bar's start, in px (same coordinate space as center).
+ * @param {number} max - x position of the bar's end, in px.
+ * @returns {number} the x position to center the tooltip on, in px.
+ */
+export function clampTooltipCenter(center, width, min, max) {
+  const half = width / 2;
+  return Math.max(min + half, Math.min(max - half, center));
+}

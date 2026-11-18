@@ -5,6 +5,10 @@ import {
   EEG_NODE_POS,
   EEG_NODE_NEG_KEY,
   EEG_NODE_NEG,
+  EEG_NODE_POS_COLORBLIND_KEY,
+  EEG_NODE_POS_COLORBLIND,
+  EEG_NODE_NEG_COLORBLIND_KEY,
+  EEG_NODE_NEG_COLORBLIND,
 } from '@/utils/eegColormaps';
 import { revokeLayerUrls } from '@/utils/NiiViewer.utils';
 
@@ -23,8 +27,9 @@ import { revokeLayerUrls } from '@/utils/NiiViewer.utils';
  *   `handleSliceTypeChange`) — this hook only syncs once, on mount.
  * @param {Function} [params.onNiiNvReady] - called once `attachToCanvas` has run, so the caller
  *   can react to the canvas becoming usable.
- * @param {React.RefObject} params.fileMeshesRef - url→NVMesh map for file-loaded surface
- *   meshes; cleared alongside `nv.meshes` on unmount so a later remount starts from empty.
+ * @param {React.RefObject} params.fileMeshesRef - url→NVMesh map for file-loaded meshes (surface
+ *   meshes and file connectomes); cleared alongside `nv.meshes` on unmount so a later remount
+ *   starts from empty.
  * @param {Function} [params.onHas3DExtentChange] - called with `false` on unmount, once `nv`'s
  *   volumes/meshes have actually been cleared — the caller's own has-3D-extent reporting (driven
  *   by `orderedLayers`) can't fire on unmount since its effect body simply stops running, so it
@@ -57,6 +62,8 @@ export function useSharedNiiVueInstance({
     // before the connectome-build effects can ever run on this instance.
     nv.addColormap(EEG_NODE_POS_KEY, EEG_NODE_POS);
     nv.addColormap(EEG_NODE_NEG_KEY, EEG_NODE_NEG);
+    nv.addColormap(EEG_NODE_POS_COLORBLIND_KEY, EEG_NODE_POS_COLORBLIND);
+    nv.addColormap(EEG_NODE_NEG_COLORBLIND_KEY, EEG_NODE_NEG_COLORBLIND);
     nv.attachToCanvas(canvasRef.current);
     // Sync slice type on mount — nv is long-lived and may have been left in RENDER from
     // a previous connectome-only phase. Later changes go through handleSliceTypeChange.

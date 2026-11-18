@@ -1,23 +1,24 @@
 const BASE = `${import.meta.env.BASE_URL}demo_data/`;
 
-// Pretend launch: the files a host app would hand over, as getSession returns them
+// Pretend launch: the files a host app would hand over, as getSession returns them, from their
+// paths in demo_data (BIDS layout). This preview serves the intracranial iEEG demo; the Shanoir
+// preview serves the scalp EEG one, so both demos can be tested through a launch.
 const SESSION = {
-  title: 'Synthetic demo patient',
+  title: 'Synthetic iEEG demo patient',
   files: [
-    'sub-synth_task-rest_desc-spkavgall_eeg.vhdr',
-    'sub-synth_task-rest_desc-spkavgall_eeg.eeg',
-    // .vmrk is not opened by any viewer: skipped before downloading, so its file is never fetched
-    // (and doesn't exist) — shows the "skipped" toast
-    'sub-synth_task-rest_desc-spkavgall_eeg.vmrk',
-    'sub-synth_electrodes.tsv',
-    'sub-synth_desc-eloreta_inversefilters.mat',
-    'sub-synth_T1w.nii.gz',
-    'sub-synth_label-WM_dseg.nii.gz',
-    'sub-synth_atlas-L2018_res-scale1_dseg.nii.gz',
+    'ieeg/sub-synth_task-rest_desc-spkavgall_ieeg.vhdr',
+    'ieeg/sub-synth_task-rest_desc-spkavgall_ieeg.eeg',
+    // .vmrk is not opened by any viewer: skipped before downloading, so its file is never
+    // fetched — shows the "skipped" toast
+    'ieeg/sub-synth_task-rest_desc-spkavgall_ieeg.vmrk',
+    'ieeg/sub-synth_electrodes.tsv',
+    'anat/sub-synth_T1w.nii.gz',
+    'anat/sub-synth_label-WM_dseg.nii.gz',
+    'anat/sub-synth_atlas-L2018_res-scale2_dseg.nii.gz',
     // Unsupported file, like fakeShanoirClient's dummy dataset: also skipped before
     // downloading, so it's never fetched (and doesn't exist)
     'dummy.bak',
-  ].map((name) => ({ name, url: BASE + name })),
+  ].map((path) => ({ name: path.split('/').pop(), url: BASE + path })),
 };
 
 // a Promise that resolves after `ms` milliseconds, so it can be awaited

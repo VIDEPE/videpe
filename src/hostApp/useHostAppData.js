@@ -3,8 +3,8 @@ import { useLaunchData } from '@/hooks/useLaunchData';
 import { fetchHostAppFiles } from '@/hostApp/fetchHostAppFiles';
 
 /**
- * Loads the files of one host-app launch (EEG recording, electrode positions, inverse solution
- * and imaging volumes) into the viewers when VIDEPE is launched from a host app, such as a
+ * Loads the files of one host-app launch (EEG recording, electrode positions, inverse solution,
+ * montage and imaging volumes) into the viewers when VIDEPE is launched from a host app, such as a
  * local Python app. The downloaded files go through the same handlers a manual file drop
  * would use, so the host app's data exercises exactly the same downstream logic (EegViewer,
  * ESI, etc.) as local files.

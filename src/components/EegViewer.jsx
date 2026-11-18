@@ -1,4 +1,5 @@
-﻿import { useRef, useState, useEffect, useMemo, useCallback } from 'react';
+﻿import { useRef, useState, useEffect, useLayoutEffect, useMemo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import UplotReact from 'uplot-react';
 import { cn } from '../utils/utils';
 import toast from 'react-hot-toast';
@@ -32,8 +33,11 @@ import {
   getRowCrosshairPosition,
   filterMontageRows,
   computeAutoYScale,
+  remapMontageToRecording,
+  formatTimelineTime,
+  clampTooltipCenter,
 } from '@/utils/eegViewerUtils';
-import { hasActiveFilters } from '@/utils/eegFilters';
+import { hasActiveFilters, extractGlobalFilters } from '@/utils/eegFilters';
 import { useEegBuffer } from '@/loaders/eegBuffer';
 import { useContainerResize } from '@/hooks/useContainerResize';
 import { useEegPlotControls } from '@/hooks/useEegPlotControls';
@@ -46,7 +50,11 @@ import { useTimepointSnapshot } from '@/hooks/useTimepointSnapshot';
 import { useRowResize } from '@/hooks/useRowResize';
 import { DEFAULT_GLOBAL_FILTERS, countChannelsByType } from '@/utils/channelTypes';
 
-import { ELEC_POS_EXTENSIONS, INV_SOLUTIONS_EXTENSIONS } from '@/loaders/eegFormatRegistry';
+import {
+  ELEC_POS_EXTENSIONS,
+  INV_SOLUTIONS_EXTENSIONS,
+  MONTAGE_EXTENSIONS,
+} from '@/loaders/eegFormatRegistry';
 import { EegTopoViewer } from '@/components/EegTopoViewer';
 import { FileDropZone } from '@/components/FileDropZone';
 import { StatusLed } from '@/components/StatusLed';
@@ -56,9 +64,10 @@ import { EegMontageEditor } from './EegMontageEditor';
 const EEG_LOADING_TOAST_ID = 'eeg-buffer-loading'; // fixed id so the loading/success toasts update in place rather than stacking
 const Y_AXIS_WIDTH = 80; // px for the y-axis area (channel name + tick space) — must match x-axis strip left padding
 const PLOT_RIGHT_PAD = 20; // px right padding — must match in both channel plots and x-axis strip so ticks align
+const TIMELINE_TOOLTIP_GAP = 4; // px between the timeline tooltip's bottom and the scrubber's top edge
 const OVERDRAW = 2; // canvas height multiplier — peaks bleed ±50% into adjacent lanes instead of clipping
 const STACKED_OPACITY_START_PCT = 80; // opacity at the minimum stacked count (2 channels) — already translucent rather than fully opaque
-const STACKED_OPACITY_FLOOR_PCT = 3; // minimum per-trace opacity in the stacked overlay
+const STACKED_OPACITY_FLOOR_PCT = 10; // minimum per-trace opacity in the stacked overlay
 const STACKED_OPACITY_HALF_LIFE = 5; // channels (beyond the minimum stacked count of 2) needed to decay halfway from STACKED_OPACITY_START_PCT to the floor — higher = slower initial drop
 const X_AXIS_GRID_SPACE = 60; // Min px between vertical gridlines — shared by the channel plots and the x-axis =>uPlot uses it to pick an increment (1,2,5,10,etc)
 const MIN_CHANNEL_AREA_HEIGHT = 120; // px floor for the channel-plot scroll area. Below this the whole viewer overflows and the pane's scroll container takes over (mirrors NiiViewer's MIN_CANVAS_HEIGHT) instead of letting the x-axis/scrubber/controls/dropzone overlap
@@ -190,8 +199,10 @@ export const EegViewer = ({
   esiChannelTotalCount, // paired with esiChannelMatchCount for the Inverse Solution status LED
   isEsiChannelMatchGoodForLed = false, // true only for a *full* match — a partial match means ESI can't compute at all
   esiSeegChannelNames = [], // which of the model's own channels are matched by name but themselves typed SEEG — explains an amber/disabled state a bare match count can't
+  droppedMontage = null, // {fileName, rows, channelTypes} — owned by PatientView (useEegFileIntake), the last .mtg file dropped; applied once per new drop
   onElecPosFile,
   onInverseSolutionFile,
+  onMontageFile, // (file: File) — hands a .mtg file dropped here to useEegFileIntake, which parses it into droppedMontage
   onElectrodeSnapshotChange,
   onChannelSnapshotChange,
   onChannelTypesChange, // channelSettings type per channelNames index, independent of any plot click — lets the Inverse Solution LED/ESI toggle react to a montage-editor type edit without waiting for a topo click
@@ -207,6 +218,7 @@ export const EegViewer = ({
   const syncKey = 'eeg-sync'; // shared across all channels to link their interactions
 
   const tMax = provider.tMax; // total time span of the recording, in seconds
+  const [scrubberHover, setScrubberHover] = useState(null);
 
   // ─── Layout + plot controls ─────────────────────────────────────────────────
   // Container measurement — plotWidth feeds uPlot options, channelAreaHeight drives plotHeight below
@@ -442,56 +454,88 @@ export const EegViewer = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- updateVisibleChannelCount isn't memoized
   }, [visibleChannelCount, displayRows.length]);
 
-  const applyMontageFileTemplate = (template) => {
-    // Warn about any channel/reference the template names that this recording doesn't
+  // Applies a parsed montage file: a bundled template picked in the dropdown, or a file dropped
+  // in a dropzone or passed on launch. `montage` is { name, rows, channelTypes }, already in the
+  // recording's spelling.
+  const applyMontageFile = (montage) => {
+    // Warn about any channel/reference the montage names that this recording doesn't
     // have — those rows still get applied to montageChannels state below (so the dropdown
-    // keeps reflecting "this is the template, as loaded"), but buildMontageDisplayRows
+    // keeps reflecting "this is the montage, as loaded"), but buildMontageDisplayRows
     // silently drops them from the waveform, which otherwise looks like a mystery
     // empty/partial montage.
     const missingNames = new Set();
-    for (const row of template.rows) {
+    for (const row of montage.rows) {
       if (!channelNames.includes(row.channel)) missingNames.add(row.channel);
       if (row.reference && !channelNames.includes(row.reference)) missingNames.add(row.reference);
     }
     if (missingNames.size > 0) {
       if (missingNames.size < 20) {
         toast(
-          `"${template.name}" applied.\nRecording is missing ${missingNames.size} ${missingNames.size > 1 ? 'channels' : 'channel'}.\nIt references: (${[...missingNames].join(', ')}) — these rows won't be shown.`,
+          `"${montage.name}" applied.\nRecording is missing ${missingNames.size} ${missingNames.size > 1 ? 'channels' : 'channel'}.\nIt references: (${[...missingNames].join(', ')}) — these rows won't be shown.`,
           {
             icon: '⚠️',
           }
         );
       } else {
         toast(
-          `"${template.name}" applied.\nRecording is missing ${missingNames.size} channels.\nThese rows won't be shown.`,
+          `"${montage.name}" applied.\nRecording is missing ${missingNames.size} channels.\nThese rows won't be shown.`,
           {
             icon: '⚠️',
           }
         );
       }
     }
-
-    // Overwrite the current montage rows with the one from the template
-    applyMontageChannels(
-      template.rows.map((row) => ({
-        id: crypto.randomUUID(),
-        ...row, // this preserves whatever channel, reference and color the fil has per row
-      }))
-    );
-    // Patch the type of every channel the template names. A name not in this recording
+    // Patch the type of every channel the montage names. A name not in this recording
     // still gets added (harmless — nothing reads channelSettings by iterating its keys).
     const nextChannelSettings = { ...channelSettings };
-    for (const [name, type] of Object.entries(template.channelTypes)) {
+    for (const [name, type] of Object.entries(montage.channelTypes)) {
       nextChannelSettings[name] = { ...nextChannelSettings[name], type };
     }
     applyChannelSettings(nextChannelSettings);
+
+    // Extract the Global Filters from the montage
+    const { clearedRows, extractedGlobalFilters } = extractGlobalFilters(
+      montage.rows,
+      nextChannelSettings
+    );
+
+    // Overwrite the current montage rows with the ones from the montage
+    applyMontageChannels(
+      clearedRows.map((row) => ({
+        id: crypto.randomUUID(),
+        ...row, // this preserves whatever channel, reference and color the file has per row
+      }))
+    );
+
+    // Merge the global filters extracted from the montage into the current ones, per type
+    const nextGlobalFilters = { ...globalFilters };
+    for (const [type, typeFilters] of Object.entries(extractedGlobalFilters)) {
+      nextGlobalFilters[type] = { ...globalFilters[type], ...typeFilters };
+    }
+    setGlobalFilters(nextGlobalFilters);
   };
+
+  // Applies a montage file dropped in either dropzone, through the same path as a bundled template:
+  // converted to the recording's spelling first (like the montage editor's Load button), so a
+  // file written with Fp1 works on a recording with FP1. Runs on mount too, for a file dropped
+  // before this viewer existed. The ref makes sure each drop is applied only once — React's
+  // StrictMode re-runs effects in development, which would otherwise repeat the toasts.
+  const appliedDroppedMontageRef = useRef(null);
+  useEffect(() => {
+    if (!droppedMontage || appliedDroppedMontageRef.current === droppedMontage) return;
+    appliedDroppedMontageRef.current = droppedMontage;
+    applyMontageFile({
+      name: droppedMontage.fileName,
+      ...remapMontageToRecording(droppedMontage, channelNames),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- apply once per new drop only, not on every channelNames/channelSettings change
+  }, [droppedMontage]);
 
   // Routes the sidebar template <select>'s value to the right apply function — a template id
   // (looked up in montageTemplates) or one of the built-in preset strings.
   const applyTemplateSelection = (value) => {
     const template = montageTemplates.find((t) => t.id === value);
-    if (template) applyMontageFileTemplate(template);
+    if (template) applyMontageFile(template);
     else applyMontageTemplate(value);
   };
 
@@ -647,6 +691,53 @@ export const EegViewer = ({
   }, [topoHasContent, onTopoHasContentChange]);
 
   // ─── Keyboard + focus ───────────────────────────────────────────────────────
+
+  const getScrubberWindowAtPosition = (clientX) => {
+    const bar = scrubberRef.current?.getBoundingClientRect();
+    if (!bar || bar.width <= 0 || tMax <= 0) return null;
+    const ratio = (clientX - bar.left) / bar.width;
+    const start = Math.max(0, Math.min(tMax - windowSize, ratio * tMax - windowSize / 2));
+    return {
+      start,
+      midpoint: start + windowSize / 2,
+    };
+  };
+
+  const updateScrubberHover = (clientX) => {
+    const bar = scrubberRef.current?.getBoundingClientRect();
+    if (!bar || bar.width <= 0 || tMax <= 0) {
+      setScrubberHover(null);
+      return;
+    }
+    const hoveredTime = ((clientX - bar.left) / bar.width) * tMax;
+    if (hoveredTime >= startTime && hoveredTime <= startTime + windowSize) {
+      setScrubberHover(null);
+      return;
+    }
+    // The tooltip is fixed-positioned (see its render), so it's placed in viewport coordinates —
+    // the cursor plus the scrubber's own edges to keep it within.
+    setScrubberHover({
+      ...getScrubberWindowAtPosition(clientX),
+      clientX,
+      barLeft: bar.left,
+      barRight: bar.right,
+      barTop: bar.top,
+    });
+  };
+
+  // Centers the timeline tooltip on the cursor, but stops it at either end of the scrubber.
+  // Its width is only known once it's rendered, so this runs as a layout effect — after React
+  // writes the DOM but before the browser paints, so the unclamped position is never shown.
+  const timelineTooltipRef = useRef(null);
+  useLayoutEffect(() => {
+    const tooltip = timelineTooltipRef.current;
+    if (!tooltip || !scrubberHover) return;
+    const { clientX, barLeft, barRight } = scrubberHover;
+    const center = clampTooltipCenter(clientX, tooltip.offsetWidth, barLeft, barRight);
+    tooltip.style.left = `${center}px`;
+  }, [scrubberHover]);
+  const timelineTooltipTime = scrubberHover ? formatTimelineTime(scrubberHover.midpoint) : null;
+
   // Clicking anywhere in the viewer (other than a button/input) moves keyboard focus to the
   // container so the shortcuts above become active, without stealing focus from form controls
   const viewerRef = useRef(null);
@@ -1289,12 +1380,12 @@ export const EegViewer = ({
                   ref={scrubberRef}
                   data-testid="timeline-scrubber"
                   className="relative h-3 bg-surface cursor-pointer"
+                  onMouseMove={(e) => updateScrubberHover(e.clientX)}
+                  onMouseLeave={() => setScrubberHover(null)}
                   onMouseDown={(e) => {
-                    const bar = scrubberRef.current.getBoundingClientRect();
-                    const ratio = (e.clientX - bar.left) / bar.width;
-                    setStartTime(
-                      Math.max(0, Math.min(tMax - windowSize, ratio * tMax - windowSize / 2))
-                    );
+                    const preview = getScrubberWindowAtPosition(e.clientX);
+                    if (preview) setStartTime(preview.start);
+                    setScrubberHover(null);
                   }}
                 >
                   {/* Timeline thumb. left/width are clamped so the thumb can never extend past
@@ -1325,6 +1416,32 @@ export const EegViewer = ({
                       onMouseDown={(e) => startDrag(e, 'resize-right')}
                     />
                   </div>
+                  {/* Timeline tooltip: the time a click here would center the window on. Portaled
+                      to <body> and fixed-positioned so it floats over the viewer — inside the
+                      scrubber it stuck out past the panel near the end, added a horizontal
+                      scrollbar and shifted the scrubber away from the cursor (jitter loop).
+                      left is set by the layout effect next to updateScrubberHover. */}
+                  {scrubberHover &&
+                    createPortal(
+                      <div
+                        ref={timelineTooltipRef}
+                        role="tooltip"
+                        data-testid="timeline-tooltip"
+                        className={cn(
+                          'fixed z-50 -translate-x-1/2 -translate-y-full pointer-events-none', // floats above the scrubber, centered on the cursor
+                          'whitespace-nowrap rounded border border-border bg-surface', // card look
+                          'px-1 py-[2px] text-[13px] leading-none text-foreground tabular-nums' // spacing & text — leading-none drops the inherited 1.5 line height (extra space above/below the text); fixed-width digits so the box doesn't jitter while moving
+                        )}
+                        style={{ top: scrubberHover.barTop - TIMELINE_TOOLTIP_GAP }}
+                      >
+                        {timelineTooltipTime.time}
+                        {/* dimmed so the clock reads first; the seconds match the x-axis */}
+                        {timelineTooltipTime.seconds && (
+                          <span className="opacity-60"> ({timelineTooltipTime.seconds})</span>
+                        )}
+                      </div>,
+                      document.body
+                    )}
                 </div>
               </div>
             )}
@@ -1466,7 +1583,8 @@ export const EegViewer = ({
         {/* Persistent electrode-position dropzone — always available once EEG is loaded,
             not just buried in the topography popup. Overwrites whatever positions are
             currently active (fsaverage_1005, or a file loaded via any of the other entry
-            points) — onElecPosFile has no "only if empty" guard. */}
+            points) — onElecPosFile has no "only if empty" guard. A montage file dropped
+            here likewise replaces the current montage (see droppedMontage). */}
         <FileDropZone
           onFiles={(files) => {
             const all = Array.from(files);
@@ -1478,12 +1596,20 @@ export const EegViewer = ({
               ELEC_POS_EXTENSIONS.some((ext) => f.name.toLowerCase().endsWith(ext))
             );
             if (elecFile) onElecPosFile?.(elecFile);
+            const montageFile = all.findLast((f) =>
+              MONTAGE_EXTENSIONS.some((ext) => f.name.toLowerCase().endsWith(ext))
+            );
+            if (montageFile) onMontageFile?.(montageFile);
 
-            // Anything that isn't an electrode-position or inverse-solution file (e.g. an
-            // imaging volume meant for the Neuroimaging panel) would otherwise be silently
-            // swallowed here — surface it instead of leaving the user to wonder why
+            // Anything that isn't an electrode-position, inverse-solution or montage file
+            // (e.g. an imaging volume meant for the Neuroimaging panel) would otherwise be
+            // silently swallowed here — surface it instead of leaving the user to wonder why
             // nothing happened.
-            const recognizedExtensions = [...ELEC_POS_EXTENSIONS, ...INV_SOLUTIONS_EXTENSIONS];
+            const recognizedExtensions = [
+              ...ELEC_POS_EXTENSIONS,
+              ...INV_SOLUTIONS_EXTENSIONS,
+              ...MONTAGE_EXTENSIONS,
+            ];
             const unsupported = all.filter(
               (f) => !recognizedExtensions.some((ext) => f.name.toLowerCase().endsWith(ext))
             );
@@ -1493,12 +1619,12 @@ export const EegViewer = ({
                   .map((f) => f.name)
                   .join(
                     ', '
-                  )}\nExpected electrode positions (.elc, .tsv) or an inverse solution (.mat).`
+                  )}\nExpected electrode positions (.elc, .tsv), an inverse solution (.mat) or a montage (.mtg).`
               );
             }
           }}
-          accepted_formats=".elc,.tsv,.mat"
-          label="Browse or drop electrode positions / inverse solution"
+          accepted_formats=".elc,.tsv,.mat,.mtg"
+          label="Browse or drop electrode positions / inverse solution / montage"
           compact
           className="shrink-0 mb-2 mt-1"
         >
@@ -1596,6 +1722,7 @@ export const EegViewer = ({
           onApplyChannelSettings={applyChannelSettings}
           montageChannels={montageChannels}
           onApplyMontageChannels={applyMontageChannels}
+          onApplyGlobalFilters={setGlobalFilters}
           fs={provider.fs}
           globalFilters={globalFilters}
         />

@@ -29,12 +29,12 @@ describe('interpolateDivergingColor', () => {
     expect(interpolateDivergingColor(5, -10)).toBe('rgb(255, 255, 255)');
   });
 
-  it('uses the cividis end colors in colourblind mode', () => {
+  it('uses the cividis end colors in colorblind mode', () => {
     expect(interpolateDivergingColor(10, 10, true)).toBe('rgb(255, 233, 69)');
     expect(interpolateDivergingColor(-10, 10, true)).toBe('rgb(0, 32, 76)');
   });
 
-  it('still returns white at value 0 in colourblind mode', () => {
+  it('still returns white at value 0 in colorblind mode', () => {
     expect(interpolateDivergingColor(0, 10, true)).toBe('rgb(255, 255, 255)');
   });
 });

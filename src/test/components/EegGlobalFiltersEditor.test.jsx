@@ -10,9 +10,9 @@ vi.mock('@/hooks/useTheme', () => ({
 
 // Different values per type (and some off), so a value landing in the wrong type's row fails
 const GLOBAL_FILTERS = {
-  eeg: { highPass: 0.5, lowPass: 70, notch: 50 },
-  seeg: { highPass: 1, lowPass: null, notch: null },
-  other: { highPass: null, lowPass: null, notch: null },
+  eeg: { highPass: 0.5, lowPass: 70, notch: 50, notchHarmonics: false },
+  seeg: { highPass: 1, lowPass: null, notch: null, notchHarmonics: false },
+  other: { highPass: null, lowPass: null, notch: null, notchHarmonics: false },
 };
 
 const FS = 256; // nyquist = 128 Hz
@@ -147,7 +147,7 @@ describe('EegGlobalFiltersEditor', () => {
 
       expect(onApplyGlobalFilters).toHaveBeenCalledWith({
         ...GLOBAL_FILTERS,
-        seeg: { highPass: 1, lowPass: null, notch: 50 },
+        seeg: { ...GLOBAL_FILTERS.seeg, notch: 50 },
       });
       expect(onClose).not.toHaveBeenCalled();
     });
@@ -167,7 +167,7 @@ describe('EegGlobalFiltersEditor', () => {
 
       expect(onApplyGlobalFilters).toHaveBeenCalledWith({
         ...GLOBAL_FILTERS,
-        other: { highPass: 5, lowPass: null, notch: null },
+        other: { ...GLOBAL_FILTERS.other, highPass: 5 },
       });
       expect(onClose).toHaveBeenCalledOnce();
     });
@@ -182,7 +182,7 @@ describe('EegGlobalFiltersEditor', () => {
 
       expect(onApplyGlobalFilters).toHaveBeenCalledWith({
         ...GLOBAL_FILTERS,
-        eeg: { highPass: 0.5, lowPass: 70, notch: null },
+        eeg: { ...GLOBAL_FILTERS.eeg, notch: null },
       });
     });
   });
@@ -334,6 +334,64 @@ describe('EegGlobalFiltersEditor', () => {
   });
 
   // ─── Clear all ─────────────────────────────────────────────────────────────
+  // ─── Notch harmonics ───────────────────────────────────────────────────────
+  describe('notch harmonics', () => {
+    it('shows an unchecked harmonics checkbox per type by default', () => {
+      render(<EegGlobalFiltersEditor {...defaultProps} />);
+      Object.keys(TYPE_LIST).forEach((type) =>
+        expect(screen.getByTestId(`global-notchHarmonics-${type}`)).not.toBeChecked()
+      );
+    });
+
+    it("turns on only that type's harmonics, committed on Apply", async () => {
+      const onApplyGlobalFilters = vi.fn();
+      render(
+        <EegGlobalFiltersEditor {...defaultProps} onApplyGlobalFilters={onApplyGlobalFilters} />
+      );
+      await userEvent.click(screen.getByTestId('global-notchHarmonics-eeg'));
+      expect(onApplyGlobalFilters).not.toHaveBeenCalled(); // draft only until Apply
+
+      await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+      expect(onApplyGlobalFilters).toHaveBeenCalledWith({
+        ...GLOBAL_FILTERS,
+        eeg: { ...GLOBAL_FILTERS.eeg, notchHarmonics: true },
+      });
+    });
+
+    it('marks the window as modified when toggled', async () => {
+      render(<EegGlobalFiltersEditor {...defaultProps} />);
+      await userEvent.click(screen.getByTestId('global-notchHarmonics-eeg'));
+      expect(screen.getByText('Global EEG Filters *')).toBeInTheDocument();
+    });
+
+    it("is disabled for a type without a notch, since there's nothing to add harmonics to", () => {
+      render(<EegGlobalFiltersEditor {...defaultProps} />);
+      expect(screen.getByTestId('global-notchHarmonics-eeg')).toBeEnabled(); // notch 50
+      expect(screen.getByTestId('global-notchHarmonics-seeg')).toBeDisabled(); // notch off
+    });
+
+    it('is enabled as soon as a notch is typed for that type', async () => {
+      render(<EegGlobalFiltersEditor {...defaultProps} />);
+      await userEvent.type(screen.getByTestId('global-notch-seeg'), '50');
+      expect(screen.getByTestId('global-notchHarmonics-seeg')).toBeEnabled();
+    });
+
+    it('is turned off again by Clear all', async () => {
+      render(
+        <EegGlobalFiltersEditor
+          {...defaultProps}
+          globalFilters={{
+            ...GLOBAL_FILTERS,
+            eeg: { ...GLOBAL_FILTERS.eeg, notchHarmonics: true },
+          }}
+        />
+      );
+      expect(screen.getByTestId('global-notchHarmonics-eeg')).toBeChecked();
+      await userEvent.click(screen.getByTestId('clear-all-filters-button'));
+      expect(screen.getByTestId('global-notchHarmonics-eeg')).not.toBeChecked();
+    });
+  });
+
   describe('Clear all', () => {
     it('clears every global filter of every type in the draft', async () => {
       render(<EegGlobalFiltersEditor {...defaultProps} />);
