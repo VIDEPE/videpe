@@ -1127,6 +1127,25 @@ describe('EegViewer — timeline scrubber', () => {
     expect(within(scrubber()).queryByRole('tooltip')).not.toBeInTheDocument();
   });
 
+  it('clamps the hovered time window to the recording start', async () => {
+    await renderViewer();
+    vi.spyOn(scrubber(), 'getBoundingClientRect').mockReturnValue({
+      left: 0,
+      width: 300,
+      top: 0,
+      bottom: 12,
+      right: 300,
+      height: 12,
+    });
+
+    // The window starts at 0–20 s, so hovering at 0 s would sit inside it and show no preview —
+    // move it to the end (10–30 s) first.
+    fireEvent.mouseDown(scrubber(), { clientX: 300 });
+    // At 0px (0 seconds), the selected window clamps to 0–20 seconds; its midpoint is 10.
+    fireEvent.mouseMove(scrubber(), { clientX: 0 });
+    expect(within(scrubber()).getByRole('tooltip')).toHaveTextContent('10.0 s');
+  });
+
   it('clamps the hovered time window to the recording end', async () => {
     await renderViewer();
     vi.spyOn(scrubber(), 'getBoundingClientRect').mockReturnValue({
