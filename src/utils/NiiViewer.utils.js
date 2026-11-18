@@ -1,4 +1,5 @@
 import { isMeshExt, isDicomExtension } from '@niivue/niivue';
+import { CONNECTOME_EXTENSIONS } from '@/utils/imagingFormats';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -54,6 +55,15 @@ export const DEFAULT_EDGE_SCALE = 0.5;
 // Mesh X-ray default — the starting value for a scene's first mesh/connectome. Exported for the
 // same reason as the scale defaults above: ImagingControls' double-click reset uses it.
 export const DEFAULT_MESH_XRAY = 0.75;
+
+/**
+ * Whether a file is a connectome file (.jcon/.json), by its name's extension.
+ *
+ * @param   {string}   filename  The file's name, e.g. 'network.jcon'
+ * @return  {boolean}            Whether it ends in one of CONNECTOME_EXTENSIONS (case-insensitive)
+ */
+const isConnectomeFileName = (filename) =>
+  CONNECTOME_EXTENSIONS.some((ext) => filename.toLowerCase().endsWith(ext));
 
 // Volumes always render through a fixed 256-entry LUT texture, so a random per-label colormap
 // is capped at 256 distinct labels. Each of the 256 slots gets the color of whichever label
@@ -388,12 +398,13 @@ export async function syncVolumesAndApplySettings(nv, layers, layerSettings) {
 }
 
 /**
- * Loads only new surface meshes into nv (existing ones stay) and applies their opacity/
- * visibility. Meshes carry no colormap/threshold controls (they render with their own
- * baked-in vertex colors), so only opacity/visibility apply.
+ * Loads only new file meshes into nv (existing ones stay) and applies their card settings. Covers
+ * surface meshes (.gii, .ply, …) and connectome files (.jcon/.json): NiiVue reads both as meshes.
+ * Every mesh gets opacity/visibility and the scene-wide X-ray; a just-loaded connectome also gets
+ * the card's node/edge size, since NiiVue builds it at the file's own sizes.
  *
  * @param   {Object}    nv                 The Niivue instance
- * @param   {Object[]}  meshLayers         The surface-mesh layers
+ * @param   {Object[]}  meshLayers         The file-mesh layers: surface meshes and file connectomes
  * @param   {Object[]}  meshLayerSettings  The settings for `meshLayers`, matching them 1:1
  * @param   {Map<string, Object>}  meshMap  The file meshes already in the scene, keyed by their
  *          layer url; new meshes are added to it. Unlike volumes, nv.meshes can't be indexed
@@ -403,35 +414,44 @@ export async function syncVolumesAndApplySettings(nv, layers, layerSettings) {
  * @return  {Promise<void>}                Resolves once the new meshes are loaded and redrawn
  */
 export async function syncMeshesAndApplySettings(nv, meshLayers, meshLayerSettings, meshMap) {
-  if (meshLayers.length === 0) return; // nothing to load or redraw for
+  if (meshLayers.length === 0) return; // no file meshes, so nothing to load or redraw
 
+  // The cards whose mesh isn't in NiiVue yet: meshMap holds every mesh loaded by an earlier sync,
+  // so this skips those instead of loading them twice.
   const newLayers = meshLayers.filter((layer) => !meshMap.has(layer.url));
+
   if (newLayers.length > 0) {
-    // name (with its extension) is essential: the blob: url alone has no extension for NiiVue
-    // to detect the mesh format from, so it's forwarded alongside the url.
+    // NiiVue picks the parser (.gii, .jcon, …) from the name's extension — a blob: url has none.
+    // Resolves to one NiiVue mesh object per layer, in the same order as newLayers.
     const addedMeshes = await nv.addMeshesFromUrl(
       newLayers.map((layer) => ({ url: layer.url, name: layer.name }))
     );
-    // addMeshesFromUrl returns the created meshes in input order — record each by its layer url.
+    // Remember each loaded mesh under its card's url, so later syncs and settings can find it.
     newLayers.forEach((layer, i) => meshMap.set(layer.url, addedMeshes[i]));
-    // Same as syncVolumesAndApplySettings — nv has its own copy now, free the blob: URL.
+    // NiiVue has its own copy of the file data now, so the blob: url's memory can be freed.
     revokeLayerUrls(newLayers);
   }
 
-  // Apply visibility/opacity to every file mesh (0 opacity is how a hidden mesh is
-  // represented, same convention as image volumes and connectome meshes).
+  // Apply each card's settings to its mesh, old and new alike — this runs on every sync. `index`
+  // matches meshLayerSettings, since both follow the card order.
   meshLayers.forEach((layer, index) => {
     const mesh = meshMap.get(layer.url);
     if (!mesh) return;
     const setting = meshLayerSettings[index];
-    mesh.opacity = setting.visible ? setting.opacity : 0;
-    // nv.opts.meshXRay is a scene-global NiiVue option, not a per-mesh property, and NiiVue's
-    // own default (0) doesn't match this app's default (DEFAULT_MESH_XRAY, see getInitialLayerSettings) — apply
-    // it here on load, or the card's slider would show the default while the mesh actually renders
-    // opaque until the user drags the slider once.
+    // A just-loaded connectome is built at the file's node/edge sizes: set the card's sizes and
+    // rebuild it (updateMesh), so slider and render agree. Later slider drags go via handleSettingChange.
+    if (layer.kind === 'connectome' && newLayers.includes(layer)) {
+      mesh.nodeScale = setting.nodeScale;
+      mesh.edgeScale = setting.edgeScale;
+      mesh.updateMesh(nv.gl);
+    }
+
+    mesh.opacity = setting.visible ? setting.opacity : 0; // a hidden card is drawn at opacity 0
+    // meshXRay is one NiiVue option for the whole scene, not per mesh. NiiVue's default is 0, so
+    // it's set here on load, or meshes render opaque while the slider shows DEFAULT_MESH_XRAY.
     nv.opts.meshXRay = setting.meshXRay;
   });
-  nv.updateGLVolume();
+  nv.updateGLVolume(); // redraw once, after every mesh is updated
 }
 
 // ─── Files → layers ─────────────────────────────────────────────────────────
@@ -499,7 +519,8 @@ async function dicomFilesToLayers(dicomFiles) {
 
 /**
  * Convert a FileList (from input or drag-and-drop) to an array of layer objects with
- * { url, name, type, subtype } for image volumes, plus { kind: 'mesh' } for surface meshes.
+ * { url, name, type, subtype } for image volumes, plus { kind: 'mesh' } for surface meshes and
+ * { kind: 'connectome' } for connectome files.
  * DICOM files are converted to NIfTI as a group (see isDicomFile/dicomFilesToLayers).
  *
  * @param   {FileList|File[]}  files  The dropped or selected files
@@ -516,6 +537,18 @@ export async function filesToLayers(files) {
     .map((f) => {
       // NiiVue calls fetch(url) internally, so a blob: URL is needed — a plain filename would resolve as a relative HTTP request
       const url = URL.createObjectURL(f);
+      // Connectome files (.jcon/.json) are nodes + edges that NiiVue loads as a mesh — tagged
+      // kind: 'connectome' so they also get the connectome controls (node/edge size).
+      // Checked first: NiiVue's isMeshExt below matches them too.
+      if (isConnectomeFileName(f.name)) {
+        return {
+          url,
+          name: f.name,
+          type: 'Connectome',
+          subtype: nameWithoutExtension(f.name),
+          kind: 'connectome',
+        };
+      }
       // Surface meshes (GIFTI/PLY/OBJ/STL/…) are rendered as 3D meshes, not sliceable volumes,
       // so they take a different load path in NiiViewer (nv.addMeshesFromUrl vs nv.loadVolumes).
       // Tag them with kind: 'mesh' here so both drop entry points can route them correctly.
