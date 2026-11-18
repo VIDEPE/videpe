@@ -11,7 +11,69 @@ import {
   computeAutoYScale,
   isMontageRowDrawable,
   remapMontageToRecording,
+  formatTimelineTime,
+  clampTooltipCenter,
 } from '@/utils/eegViewerUtils';
+
+// ---------------------------------------------------------------------------
+// formatTimelineTime
+// ---------------------------------------------------------------------------
+
+describe('formatTimelineTime', () => {
+  it('shows times under a minute as seconds with one decimal, with no extra seconds part', () => {
+    expect(formatTimelineTime(0)).toEqual({ time: '0.0 s', seconds: null });
+    expect(formatTimelineTime(42.34)).toEqual({ time: '42.3 s', seconds: null });
+    expect(formatTimelineTime(59.9)).toEqual({ time: '59.9 s', seconds: null });
+  });
+
+  it('switches to m:ss with the whole seconds as a separate part from one minute', () => {
+    expect(formatTimelineTime(60)).toEqual({ time: '1:00', seconds: '60 s' });
+    expect(formatTimelineTime(125)).toEqual({ time: '2:05', seconds: '125 s' });
+    expect(formatTimelineTime(3599)).toEqual({ time: '59:59', seconds: '3599 s' });
+  });
+
+  it('switches to h:mm:ss from one hour', () => {
+    expect(formatTimelineTime(3600)).toEqual({ time: '1:00:00', seconds: '3600 s' });
+    expect(formatTimelineTime(5630)).toEqual({ time: '1:33:50', seconds: '5630 s' });
+  });
+
+  it('rounds up into the next format instead of showing 60.0 s or 59:60', () => {
+    // 59.96 rounds to 60.0 — the minute form says the same thing without an impossible "60.0 s"
+    expect(formatTimelineTime(59.96)).toEqual({ time: '1:00', seconds: '60 s' });
+    // 3599.6 rounds to 3600 whole seconds — carried into the hour instead of "59:60"
+    expect(formatTimelineTime(3599.6)).toEqual({ time: '1:00:00', seconds: '3600 s' });
+  });
+
+  it('keeps the clock and the whole seconds in agreement', () => {
+    // Both parts come from the same rounded whole-second value
+    expect(formatTimelineTime(5629.6)).toEqual({ time: '1:33:50', seconds: '5630 s' });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// clampTooltipCenter
+// ---------------------------------------------------------------------------
+
+describe('clampTooltipCenter', () => {
+  // A 100px-wide tooltip over a bar running from x=200 to x=500
+  it('keeps the tooltip centered on the cursor when it fits', () => {
+    expect(clampTooltipCenter(350, 100, 200, 500)).toBe(350);
+  });
+
+  it('stops the tooltip at the left end of the bar', () => {
+    // Centered at 210 its left edge would sit at 160, past the bar's start at 200
+    expect(clampTooltipCenter(210, 100, 200, 500)).toBe(250);
+  });
+
+  it('stops the tooltip at the right end of the bar', () => {
+    // Centered at 500 its right edge would sit at 550, past the bar's end at 500
+    expect(clampTooltipCenter(500, 100, 200, 500)).toBe(450);
+  });
+
+  it('aligns a tooltip wider than the bar with the bar start', () => {
+    expect(clampTooltipCenter(250, 400, 200, 500)).toBe(400);
+  });
+});
 
 // ---------------------------------------------------------------------------
 // computeAutoYScale

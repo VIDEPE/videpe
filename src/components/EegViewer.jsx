@@ -1,4 +1,5 @@
-﻿import { useRef, useState, useEffect, useMemo, useCallback } from 'react';
+﻿import { useRef, useState, useEffect, useLayoutEffect, useMemo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import UplotReact from 'uplot-react';
 import { cn } from '../utils/utils';
 import toast from 'react-hot-toast';
@@ -33,6 +34,8 @@ import {
   filterMontageRows,
   computeAutoYScale,
   remapMontageToRecording,
+  formatTimelineTime,
+  clampTooltipCenter,
 } from '@/utils/eegViewerUtils';
 import { hasActiveFilters, extractGlobalFilters } from '@/utils/eegFilters';
 import { useEegBuffer } from '@/loaders/eegBuffer';
@@ -61,9 +64,10 @@ import { EegMontageEditor } from './EegMontageEditor';
 const EEG_LOADING_TOAST_ID = 'eeg-buffer-loading'; // fixed id so the loading/success toasts update in place rather than stacking
 const Y_AXIS_WIDTH = 80; // px for the y-axis area (channel name + tick space) — must match x-axis strip left padding
 const PLOT_RIGHT_PAD = 20; // px right padding — must match in both channel plots and x-axis strip so ticks align
+const TIMELINE_TOOLTIP_GAP = 4; // px between the timeline tooltip's bottom and the scrubber's top edge
 const OVERDRAW = 2; // canvas height multiplier — peaks bleed ±50% into adjacent lanes instead of clipping
 const STACKED_OPACITY_START_PCT = 80; // opacity at the minimum stacked count (2 channels) — already translucent rather than fully opaque
-const STACKED_OPACITY_FLOOR_PCT = 3; // minimum per-trace opacity in the stacked overlay
+const STACKED_OPACITY_FLOOR_PCT = 10; // minimum per-trace opacity in the stacked overlay
 const STACKED_OPACITY_HALF_LIFE = 5; // channels (beyond the minimum stacked count of 2) needed to decay halfway from STACKED_OPACITY_START_PCT to the floor — higher = slower initial drop
 const X_AXIS_GRID_SPACE = 60; // Min px between vertical gridlines — shared by the channel plots and the x-axis =>uPlot uses it to pick an increment (1,2,5,10,etc)
 const MIN_CHANNEL_AREA_HEIGHT = 120; // px floor for the channel-plot scroll area. Below this the whole viewer overflows and the pane's scroll container takes over (mirrors NiiViewer's MIN_CANVAS_HEIGHT) instead of letting the x-axis/scrubber/controls/dropzone overlap
@@ -214,6 +218,7 @@ export const EegViewer = ({
   const syncKey = 'eeg-sync'; // shared across all channels to link their interactions
 
   const tMax = provider.tMax; // total time span of the recording, in seconds
+  const [scrubberHover, setScrubberHover] = useState(null);
 
   // ─── Layout + plot controls ─────────────────────────────────────────────────
   // Container measurement — plotWidth feeds uPlot options, channelAreaHeight drives plotHeight below
@@ -686,6 +691,53 @@ export const EegViewer = ({
   }, [topoHasContent, onTopoHasContentChange]);
 
   // ─── Keyboard + focus ───────────────────────────────────────────────────────
+
+  const getScrubberWindowAtPosition = (clientX) => {
+    const bar = scrubberRef.current?.getBoundingClientRect();
+    if (!bar || bar.width <= 0 || tMax <= 0) return null;
+    const ratio = (clientX - bar.left) / bar.width;
+    const start = Math.max(0, Math.min(tMax - windowSize, ratio * tMax - windowSize / 2));
+    return {
+      start,
+      midpoint: start + windowSize / 2,
+    };
+  };
+
+  const updateScrubberHover = (clientX) => {
+    const bar = scrubberRef.current?.getBoundingClientRect();
+    if (!bar || bar.width <= 0 || tMax <= 0) {
+      setScrubberHover(null);
+      return;
+    }
+    const hoveredTime = ((clientX - bar.left) / bar.width) * tMax;
+    if (hoveredTime >= startTime && hoveredTime <= startTime + windowSize) {
+      setScrubberHover(null);
+      return;
+    }
+    // The tooltip is fixed-positioned (see its render), so it's placed in viewport coordinates —
+    // the cursor plus the scrubber's own edges to keep it within.
+    setScrubberHover({
+      ...getScrubberWindowAtPosition(clientX),
+      clientX,
+      barLeft: bar.left,
+      barRight: bar.right,
+      barTop: bar.top,
+    });
+  };
+
+  // Centers the timeline tooltip on the cursor, but stops it at either end of the scrubber.
+  // Its width is only known once it's rendered, so this runs as a layout effect — after React
+  // writes the DOM but before the browser paints, so the unclamped position is never shown.
+  const timelineTooltipRef = useRef(null);
+  useLayoutEffect(() => {
+    const tooltip = timelineTooltipRef.current;
+    if (!tooltip || !scrubberHover) return;
+    const { clientX, barLeft, barRight } = scrubberHover;
+    const center = clampTooltipCenter(clientX, tooltip.offsetWidth, barLeft, barRight);
+    tooltip.style.left = `${center}px`;
+  }, [scrubberHover]);
+  const timelineTooltipTime = scrubberHover ? formatTimelineTime(scrubberHover.midpoint) : null;
+
   // Clicking anywhere in the viewer (other than a button/input) moves keyboard focus to the
   // container so the shortcuts above become active, without stealing focus from form controls
   const viewerRef = useRef(null);
@@ -1328,12 +1380,12 @@ export const EegViewer = ({
                   ref={scrubberRef}
                   data-testid="timeline-scrubber"
                   className="relative h-3 bg-surface cursor-pointer"
+                  onMouseMove={(e) => updateScrubberHover(e.clientX)}
+                  onMouseLeave={() => setScrubberHover(null)}
                   onMouseDown={(e) => {
-                    const bar = scrubberRef.current.getBoundingClientRect();
-                    const ratio = (e.clientX - bar.left) / bar.width;
-                    setStartTime(
-                      Math.max(0, Math.min(tMax - windowSize, ratio * tMax - windowSize / 2))
-                    );
+                    const preview = getScrubberWindowAtPosition(e.clientX);
+                    if (preview) setStartTime(preview.start);
+                    setScrubberHover(null);
                   }}
                 >
                   {/* Timeline thumb. left/width are clamped so the thumb can never extend past
@@ -1364,6 +1416,32 @@ export const EegViewer = ({
                       onMouseDown={(e) => startDrag(e, 'resize-right')}
                     />
                   </div>
+                  {/* Timeline tooltip: the time a click here would center the window on. Portaled
+                      to <body> and fixed-positioned so it floats over the viewer — inside the
+                      scrubber it stuck out past the panel near the end, added a horizontal
+                      scrollbar and shifted the scrubber away from the cursor (jitter loop).
+                      left is set by the layout effect next to updateScrubberHover. */}
+                  {scrubberHover &&
+                    createPortal(
+                      <div
+                        ref={timelineTooltipRef}
+                        role="tooltip"
+                        data-testid="timeline-tooltip"
+                        className={cn(
+                          'fixed z-50 -translate-x-1/2 -translate-y-full pointer-events-none', // floats above the scrubber, centered on the cursor
+                          'whitespace-nowrap rounded border border-border bg-surface', // card look
+                          'px-1 py-[2px] text-[13px] leading-none text-foreground tabular-nums' // spacing & text — leading-none drops the inherited 1.5 line height (extra space above/below the text); fixed-width digits so the box doesn't jitter while moving
+                        )}
+                        style={{ top: scrubberHover.barTop - TIMELINE_TOOLTIP_GAP }}
+                      >
+                        {timelineTooltipTime.time}
+                        {/* dimmed so the clock reads first; the seconds match the x-axis */}
+                        {timelineTooltipTime.seconds && (
+                          <span className="opacity-60"> ({timelineTooltipTime.seconds})</span>
+                        )}
+                      </div>,
+                      document.body
+                    )}
                 </div>
               </div>
             )}
