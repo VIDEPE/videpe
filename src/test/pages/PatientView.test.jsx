@@ -348,8 +348,14 @@ const getImagingOnFiles = () => {
   return calls.at(-1)[0].onFiles;
 };
 
-const getDemoResetButton = () =>
-  screen.getByRole('button', { name: /^(load demo|reset|loading…)$/i });
+// The two demo buttons, shown side by side while nothing is loaded (the clicked one says
+// "Loading…" while its demo loads, see getLoadingButton), and the Reset button that replaces
+// both once data is loaded
+const getEegDemoButton = () => screen.getByRole('button', { name: /^eeg demo$/i });
+const getIeegDemoButton = () => screen.getByRole('button', { name: /^ieeg demo$/i });
+const getLoadingButton = () => screen.getByRole('button', { name: /^loading…$/i });
+const getResetButton = () => screen.getByRole('button', { name: /^reset$/i });
+const queryDemoButtons = () => screen.queryAllByRole('button', { name: /^i?eeg demo$/i });
 
 describe('PatientView — NiiVue instances', () => {
   beforeEach(() => {
@@ -388,7 +394,7 @@ describe('PatientView — button label', () => {
     });
   });
 
-  it('shows "Load Demo" before any data is loaded', () => {
+  it('shows the "EEG Demo" and "iEEG Demo" buttons, and no Reset, before any data is loaded', () => {
     checkEegFiles.mockReturnValue({
       formatName: null,
       complete: false,
@@ -396,7 +402,9 @@ describe('PatientView — button label', () => {
       warning: null,
     });
     renderPatientView();
-    expect(getDemoResetButton()).toHaveTextContent(/load demo/i);
+    expect(getEegDemoButton()).toHaveTextContent(/^eeg demo$/i);
+    expect(getIeegDemoButton()).toHaveTextContent(/^ieeg demo$/i);
+    expect(screen.queryByRole('button', { name: /^reset$/i })).not.toBeInTheDocument();
   });
 
   it('shows "Reset" when there are pending EEG files', async () => {
@@ -412,7 +420,8 @@ describe('PatientView — button label', () => {
       await getEegOnFiles()([makeFile('sub01.vhdr')]);
     });
 
-    expect(getDemoResetButton()).toHaveTextContent(/reset/i);
+    expect(getResetButton()).toBeInTheDocument();
+    expect(queryDemoButtons()).toHaveLength(0);
   });
 
   it('shows "Reset" and renders EegViewer after EEG loads successfully', async () => {
@@ -428,7 +437,8 @@ describe('PatientView — button label', () => {
       await getEegOnFiles()([makeFile('sub01.vhdr'), makeFile('sub01.eeg')]);
     });
 
-    expect(getDemoResetButton()).toHaveTextContent(/reset/i);
+    expect(getResetButton()).toBeInTheDocument();
+    expect(queryDemoButtons()).toHaveLength(0);
     expect(screen.getByTestId('eeg-viewer')).toBeInTheDocument();
   });
 });
@@ -450,7 +460,7 @@ describe('PatientView — reset', () => {
     });
   });
 
-  it('clicking Reset returns to "Load Demo" and removes EegViewer', async () => {
+  it('clicking Reset brings back both demo buttons and removes EegViewer', async () => {
     const user = userEvent.setup();
     renderPatientView();
 
@@ -458,9 +468,9 @@ describe('PatientView — reset', () => {
       await getEegOnFiles()([makeFile('sub01.vhdr'), makeFile('sub01.eeg')]);
     });
 
-    await user.click(getDemoResetButton()); // Reset
+    await user.click(getResetButton());
 
-    expect(getDemoResetButton()).toHaveTextContent(/load demo/i);
+    expect(queryDemoButtons()).toHaveLength(2);
     expect(screen.queryByTestId('eeg-viewer')).not.toBeInTheDocument();
   });
 });
@@ -667,9 +677,12 @@ describe('PatientView — demo loading', () => {
   // put the real fetch back, so the stub doesn't leak into tests outside this block
   afterEach(() => vi.unstubAllGlobals());
 
-  it('loads the demo recording as Files through detectAndLoadEEG, like a file drop', async () => {
+  // Where a bundled demo file is fetched from: the BIDS-style demo_data folder in /public
+  const demoUrl = (path) => `${import.meta.env.BASE_URL}demo_data/${path}`;
+
+  it('loads the EEG demo recording from demo_data/eeg as Files through detectAndLoadEEG, like a file drop', async () => {
     renderPatientView();
-    fireEvent.click(screen.getByRole('button', { name: /load demo/i }));
+    fireEvent.click(getEegDemoButton());
 
     await waitFor(() => expect(detectAndLoadEEG).toHaveBeenCalled());
     const files = detectAndLoadEEG.mock.lastCall[0];
@@ -678,28 +691,30 @@ describe('PatientView — demo loading', () => {
       'sub-synth_task-rest_desc-spkavgall_eeg.vhdr',
       'sub-synth_task-rest_desc-spkavgall_eeg.eeg',
     ]);
+    expect(fetch).toHaveBeenCalledWith(demoUrl('eeg/sub-synth_task-rest_desc-spkavgall_eeg.vhdr'));
   });
 
-  it('loads demo electrode positions and inverse solution, forwarding them to EegViewer', async () => {
+  it('loads the EEG demo electrode positions and inverse solution, forwarding them to EegViewer', async () => {
     renderPatientView();
-    fireEvent.click(screen.getByRole('button', { name: /load demo/i }));
+    fireEvent.click(getEegDemoButton());
 
     await waitFor(() => {
       expect(screen.getByTestId('eeg-custom-electrodes-count')).toHaveTextContent('2');
     });
     expect(screen.getByTestId('eeg-custom-filename')).toHaveTextContent('sub-synth_electrodes');
+    expect(fetch).toHaveBeenCalledWith(demoUrl('eeg/sub-synth_electrodes.tsv'));
     expect(parseInverseSolutionFieldtrip).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'sub-synth_desc-eloreta_inversefilters.mat' })
     );
   });
 
-  it('passes demo volumes with correct type and subtype to NiiViewer', async () => {
+  it('passes the EEG demo volumes (T1w, white matter, scale 2 atlas) to NiiViewer', async () => {
     renderPatientView();
 
     // fireEvent instead of userEvent — handleLoadDemo never fully resolves because the mocked
     // NiiViewer and EegViewer never call onViewReady, so Promise.all([eegReady, niiReady]) hangs.
     // waitFor flushes pending microtasks between retries, letting setVolumes fire.
-    fireEvent.click(screen.getByRole('button', { name: /load demo/i }));
+    fireEvent.click(getEegDemoButton());
 
     await waitFor(() => {
       expect(NiiViewer).toHaveBeenCalled();
@@ -707,17 +722,70 @@ describe('PatientView — demo loading', () => {
     });
 
     const layers = NiiViewer.mock.lastCall[0].layers;
+    expect(layers[0]).toMatchObject({
+      url: 'demo_data/anat/sub-synth_T1w.nii.gz',
+      type: 'ANAT',
+      subtype: 'sub-synth_T1w',
+    });
+    expect(layers[1]).toMatchObject({
+      url: 'demo_data/anat/sub-synth_label-WM_dseg.nii.gz',
+      type: 'DSEG',
+      subtype: 'sub-synth_label-WM_dseg',
+    });
+    expect(layers[2]).toMatchObject({
+      url: 'demo_data/anat/sub-synth_atlas-L2018_res-scale2_dseg.nii.gz',
+      type: 'DSEG',
+      subtype: 'sub-synth_atlas-L2018_res-scale2_dseg',
+    });
+  });
+
+  it('loads the iEEG demo recording and electrode positions from demo_data/ieeg', async () => {
+    renderPatientView();
+    fireEvent.click(getIeegDemoButton());
+
+    await waitFor(() => expect(detectAndLoadEEG).toHaveBeenCalled());
+    expect(detectAndLoadEEG.mock.lastCall[0].map((f) => f.name)).toEqual([
+      'sub-synth_task-rest_desc-spkavgall_ieeg.vhdr',
+      'sub-synth_task-rest_desc-spkavgall_ieeg.eeg',
+    ]);
+    await waitFor(() => {
+      expect(screen.getByTestId('eeg-custom-electrodes-count')).toHaveTextContent('2');
+    });
+    expect(fetch).toHaveBeenCalledWith(demoUrl('ieeg/sub-synth_electrodes.tsv'));
+  });
+
+  it('loads no inverse solution for the iEEG demo, as it has none', async () => {
+    renderPatientView();
+    fireEvent.click(getIeegDemoButton());
+
+    await waitFor(() => {
+      expect(NiiViewer.mock.lastCall?.[0].layers).toHaveLength(3);
+    });
+    expect(parseInverseSolutionFieldtrip).not.toHaveBeenCalled();
+    expect(fetch).not.toHaveBeenCalledWith(expect.stringMatching(/\.mat$/));
+  });
+
+  it('passes the iEEG demo volumes (T1w, white matter, scale 2 atlas) to NiiViewer', async () => {
+    renderPatientView();
+    fireEvent.click(getIeegDemoButton());
+
+    await waitFor(() => {
+      expect(NiiViewer.mock.lastCall?.[0].layers).toHaveLength(3);
+    });
+
+    const layers = NiiViewer.mock.lastCall[0].layers;
     expect(layers[0]).toMatchObject({ type: 'ANAT', subtype: 'sub-synth_T1w' });
     expect(layers[1]).toMatchObject({ type: 'DSEG', subtype: 'sub-synth_label-WM_dseg' });
     expect(layers[2]).toMatchObject({
+      url: 'demo_data/anat/sub-synth_atlas-L2018_res-scale2_dseg.nii.gz',
       type: 'DSEG',
-      subtype: 'sub-synth_atlas-L2018_res-scale1_dseg',
+      subtype: 'sub-synth_atlas-L2018_res-scale2_dseg',
     });
   });
 
   it('renders both EegViewer and NiiViewer once demo data is loaded', async () => {
     renderPatientView();
-    fireEvent.click(screen.getByRole('button', { name: /load demo/i }));
+    fireEvent.click(getEegDemoButton());
 
     await waitFor(() => {
       expect(screen.getByTestId('eeg-viewer')).toBeInTheDocument();
@@ -725,26 +793,31 @@ describe('PatientView — demo loading', () => {
     });
   });
 
-  it('shows loading indicator and disables button while demo loads', async () => {
+  it('shows "Loading…" on the clicked demo button and disables both while it loads', async () => {
     renderPatientView();
-    fireEvent.click(screen.getByRole('button', { name: /load demo/i }));
+    fireEvent.click(getIeegDemoButton());
 
     await waitFor(() => {
-      expect(getDemoResetButton()).toHaveTextContent(/loading/i);
-      expect(getDemoResetButton()).toBeDisabled();
+      // only the clicked iEEG button says "Loading…": the EEG one keeps its label, so it's
+      // clear which demo is loading
+      expect(screen.queryByRole('button', { name: /^ieeg demo$/i })).not.toBeInTheDocument();
+      expect(getLoadingButton()).toBeDisabled();
+      expect(getEegDemoButton()).toBeDisabled();
     });
   });
 
-  it('resets to "Load Demo" when demo data fails to load', async () => {
+  it('brings back both demo buttons when demo data fails to load', async () => {
     const { default: toast } = await import('react-hot-toast');
     // Swallow the rejection like the real toast.promise does, so it doesn't leak as an unhandled rejection
     toast.promise.mockImplementationOnce((p) => p.catch(() => {}));
 
     detectAndLoadEEG.mockRejectedValueOnce(new Error('Network error'));
     renderPatientView();
-    fireEvent.click(screen.getByRole('button', { name: /load demo/i }));
+    fireEvent.click(getEegDemoButton());
 
-    await waitFor(() => expect(getDemoResetButton()).toHaveTextContent(/load demo/i));
+    await waitFor(() => expect(getEegDemoButton()).toHaveTextContent(/^eeg demo$/i));
+    expect(getEegDemoButton()).toBeEnabled();
+    expect(getIeegDemoButton()).toBeEnabled();
     expect(screen.queryByTestId('nii-viewer')).not.toBeInTheDocument();
   });
 });
@@ -1148,7 +1221,7 @@ describe('PatientView — electrode position files', () => {
     });
     expect(EegViewer.mock.lastCall[0].customElectrodes).toHaveLength(2);
 
-    await userEvent.click(getDemoResetButton()); // Reset
+    await userEvent.click(getResetButton());
     await act(async () => {
       await getEegOnFiles()([makeFile('sub02.vhdr'), makeFile('sub02.eeg')]);
     });
@@ -1446,7 +1519,7 @@ describe('PatientView — intracranial connectome layer', () => {
     await userEvent.click(screen.getByTestId('trigger-intracranial-change'));
     expect(screen.getByTestId('nii-viewer')).toBeInTheDocument();
 
-    await userEvent.click(getDemoResetButton()); // Reset
+    await userEvent.click(getResetButton());
 
     expect(screen.queryByTestId('nii-viewer')).not.toBeInTheDocument();
   });
@@ -1828,7 +1901,7 @@ describe('PatientView — top bar when opened from Shanoir', () => {
     renderPatientView();
     expect(screen.getByRole('link', { name: /back/i })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /about videpe/i })).not.toBeInTheDocument();
-    expect(getDemoResetButton()).toBeInTheDocument();
+    expect(queryDemoButtons()).toHaveLength(2);
   });
 
   it('replaces Back with an About link that opens plain VIDEPE in a new tab', () => {
@@ -1847,7 +1920,7 @@ describe('PatientView — top bar when opened from Shanoir', () => {
     expect(screen.getByAltText(/shanoir/i)).toBeInTheDocument();
     expect(screen.getByText(/examination id: 42/i)).toBeInTheDocument();
     expect(
-      screen.queryByRole('button', { name: /^(load demo|reset|loading…)$/i })
+      screen.queryByRole('button', { name: /^(i?eeg demo|reset|loading…)$/i })
     ).not.toBeInTheDocument();
   });
 });
