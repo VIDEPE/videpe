@@ -1058,6 +1058,8 @@ describe('EegViewer — timeline scrubber', () => {
   // tMax=30, windowSize=20 (initial), startTime=0 (initial)
   const scrubber = () => screen.getByTestId('timeline-scrubber');
   const thumb = () => screen.getByTestId('timeline-thumb');
+  // Found by test id, not role — the keyboard-shortcuts help is a role="tooltip" as well
+  const scrubberTooltip = () => screen.queryByTestId('timeline-tooltip');
 
   const mockScrubberWidth = (el, width = 300) =>
     Object.defineProperty(el, 'offsetWidth', { configurable: true, value: width });
@@ -1116,15 +1118,15 @@ describe('EegViewer — timeline scrubber', () => {
     });
 
     fireEvent.mouseMove(scrubber(), { clientX: 150 });
-    expect(within(scrubber()).queryByRole('tooltip')).not.toBeInTheDocument();
+    expect(scrubberTooltip()).not.toBeInTheDocument();
 
     // At 250px (25 seconds), the selected window clamps to 10–30 seconds; its midpoint is 20.
     fireEvent.mouseMove(scrubber(), { clientX: 250 });
-    expect(within(scrubber()).getByRole('tooltip')).toHaveTextContent('20.0 s');
+    expect(scrubberTooltip()).toHaveTextContent('20.0 s');
 
     fireEvent.mouseDown(scrubber(), { clientX: 250 });
     expect(parseFloat(thumb().style.left)).toBeCloseTo(33.33, 1);
-    expect(within(scrubber()).queryByRole('tooltip')).not.toBeInTheDocument();
+    expect(scrubberTooltip()).not.toBeInTheDocument();
   });
 
   it('clamps the hovered time window to the recording start', async () => {
@@ -1143,7 +1145,7 @@ describe('EegViewer — timeline scrubber', () => {
     fireEvent.mouseDown(scrubber(), { clientX: 300 });
     // At 0px (0 seconds), the selected window clamps to 0–20 seconds; its midpoint is 10.
     fireEvent.mouseMove(scrubber(), { clientX: 0 });
-    expect(within(scrubber()).getByRole('tooltip')).toHaveTextContent('10.0 s');
+    expect(scrubberTooltip()).toHaveTextContent('10.0 s');
   });
 
   it('clamps the hovered time window to the recording end', async () => {
@@ -1158,7 +1160,7 @@ describe('EegViewer — timeline scrubber', () => {
     });
 
     fireEvent.mouseMove(scrubber(), { clientX: 300 });
-    expect(within(scrubber()).getByRole('tooltip')).toHaveTextContent('20.0 s');
+    expect(scrubberTooltip()).toHaveTextContent('20.0 s');
   });
 
   it('clears the preview when the pointer leaves the scrubber', async () => {
@@ -1173,9 +1175,64 @@ describe('EegViewer — timeline scrubber', () => {
     });
 
     fireEvent.mouseMove(scrubber(), { clientX: 300 });
-    expect(within(scrubber()).getByRole('tooltip')).toBeInTheDocument();
+    expect(scrubberTooltip()).toBeInTheDocument();
     fireEvent.mouseLeave(scrubber());
-    expect(within(scrubber()).queryByRole('tooltip')).not.toBeInTheDocument();
+    expect(scrubberTooltip()).not.toBeInTheDocument();
+  });
+
+  it('floats the preview above the page instead of inside the scrubber', async () => {
+    // Regression: rendered inside the scrubber, a preview near the end stuck out past the panel,
+    // added a horizontal scrollbar and shifted the scrubber away from the cursor (jitter loop).
+    await renderViewer();
+    vi.spyOn(scrubber(), 'getBoundingClientRect').mockReturnValue({
+      left: 0,
+      width: 300,
+      top: 100,
+      bottom: 112,
+      right: 300,
+      height: 12,
+    });
+
+    fireEvent.mouseMove(scrubber(), { clientX: 300 });
+    expect(scrubber()).not.toContainElement(scrubberTooltip());
+    expect(scrubberTooltip()).toHaveClass('fixed');
+    expect(scrubberTooltip().style.top).toBe('96px'); // 4px above the scrubber's top edge
+  });
+
+  it('keeps the preview within the scrubber ends', async () => {
+    await renderViewer();
+    vi.spyOn(scrubber(), 'getBoundingClientRect').mockReturnValue({
+      left: 0,
+      width: 300,
+      top: 0,
+      bottom: 12,
+      right: 300,
+      height: 12,
+    });
+    // jsdom lays nothing out, so give the preview a width to clamp with
+    const widthSpy = vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(80);
+
+    // Centered on the cursor at 300px, an 80px preview would end at 340px — clamped to end at 300
+    fireEvent.mouseMove(scrubber(), { clientX: 300 });
+    expect(scrubberTooltip().style.left).toBe('260px');
+    widthSpy.mockRestore();
+  });
+
+  it('dims the whole-seconds part of the preview', async () => {
+    // Long enough recording for a preview past the one-minute mark
+    await renderViewer(makeProvider(300));
+    vi.spyOn(scrubber(), 'getBoundingClientRect').mockReturnValue({
+      left: 0,
+      width: 300,
+      top: 0,
+      bottom: 12,
+      right: 300,
+      height: 12,
+    });
+
+    fireEvent.mouseMove(scrubber(), { clientX: 150 });
+    expect(scrubberTooltip()).toHaveTextContent('2:30 (150 s)');
+    expect(within(scrubberTooltip()).getByText('(150 s)')).toHaveClass('opacity-60');
   });
 
   it('dragging the thumb moves the window forward', async () => {
