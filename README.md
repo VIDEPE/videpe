@@ -67,12 +67,12 @@ High-performance multichannel viewer built on [uPlot](https://github.com/leeoniy
 Full multiplanar and 3D rendering powered by [NiiVue](https://niivue.com/). Load multiple volumes/meshes simultaneously and adjust each one independently.
 
 - Multi-layer support for e.g. MRI, PET, and SPECT in one view
-- Supports NIfTI (`.nii`, `.nii.gz`), MGH/MGZ, GIFTI, PLY, OBJ, and DICOM (`.dcm`, converted to NIfTI on load via dcm2niix)
+- Supports NIfTI (`.nii`, `.nii.gz`), MGH/MGZ, DICOM (`.dcm`, converted to NIfTI on load via dcm2niix), GIFTI, PLY, OBJ, connectome files (`.jcon`, `.json`), and any other format NiiVue reads
 - Per-layer opacity/mesh xray, colormap, inversion, colorbar and thresholding controls
 - Drag-to-reorder layers, with a modality subtype label shown on each volume
 - Slice view buttons for axial, coronal, sagittal, multiplanar, and 3D render
 - Radiological/neurological convention toggle and clip plane toggle (3D render view only)
-- Adjustable node/edge size for connectome layers (ESI and SEEG electrode connectomes)
+- Adjustable node/edge size for connectome layers (ESI, SEEG electrode and connectome files)
 
 ### Built-in Demo
 
@@ -92,7 +92,11 @@ Hit **Load Demo** to instantly load a synthetic EEG recording, electrode positio
 | EEG                 | BrainVision (`.vhdr` + `.eeg`), EDF/EDF+ (`.edf`), Micromed TRC (`.trc`) |
 | Electrode positions | `.elc`, `*_electrodes.tsv`                                               |
 | Montages            | AnyWave, Cartool (`.mtg`)                                                |
-| Volumes             | NIfTI (`.nii`, `.nii.gz`), MGH/MGZ, GIFTI, PLY, OBJ, DICOM (`.dcm`)      |
+| Volumes             | NIfTI (`.nii`, `.nii.gz`), MGH/MGZ, DICOM (`.dcm`)                       |
+| Meshes              | GIFTI (`.gii`), PLY, OBJ                                                 |
+| Connectomes         | NiiVue connectome (`.jcon`, `.json`)                                     |
+
+Other volume and mesh formats NiiVue reads (e.g. `.nrrd`, `.mha`, `.stl`, `.vtk`, `.trk`) load too. See [docs/neuroimaging-viewer.md](docs/neuroimaging-viewer.md) for how the viewer loads imaging files and how to add new formats.
 
 ## Tech stack
 
