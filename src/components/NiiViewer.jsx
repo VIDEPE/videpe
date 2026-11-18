@@ -222,7 +222,7 @@ export const NiiViewer = ({
   // alone can't distinguish success from failure (it's just "in flight" vs "not"), so this is
   // what tells useLoadingToast below not to show its misleading "Imaging data loaded!" success
   // toast right alongside the real error toast(s) for the same failure. Reset to false whenever
-  // a new `layers` prop load starts (see the effect below) or handleNiiFiles starts a new
+  // a new `layers` prop load starts (see the effect below) or handleImagingFiles starts a new
   // internal-dropzone load, then flipped true by whichever failure branch actually hits.
   const [hasLoadError, setHasLoadError] = useState(false);
   const [activeSliceType, setActiveSliceType] = useState(SLICE_TYPE.MULTIPLANAR);
@@ -433,7 +433,7 @@ export const NiiViewer = ({
   );
 
   // Loads files dropped into this component's own drop zone, appending them alongside whatever's already loaded.
-  const handleNiiFiles = async (files) => {
+  const handleImagingFiles = async (files) => {
     if (!nvRef.current) return;
     setIsLoading(true);
     setHasLoadError(false); // this internal-dropzone path never touches `layers`, so the effect above won't reset it
@@ -441,7 +441,7 @@ export const NiiViewer = ({
     try {
       // A dropped .dcm file runs dcm2niix conversion inside filesToLayers, which can reject on
       // corrupt/unsupported data — every other format just wraps the File in a blob: URL and
-      // can't fail. PatientView's own handleNiiFiles guards the same call for the same reason.
+      // can't fail. PatientView's own handleImagingFiles guards the same call for the same reason.
       newLayers = await filesToLayers(files);
     } catch (err) {
       setHasLoadError(true);
@@ -675,7 +675,7 @@ export const NiiViewer = ({
         {/* No accepted_formats: NiiVue reads dozens of formats beyond the listed ones, and an
             accept list would hide those in the file picker (see src/utils/imagingFormats.js). */}
         <FileDropZone
-          onFiles={handleNiiFiles}
+          onFiles={handleImagingFiles}
           label="Browse or drop volumes / meshes / connectomes"
           compact
         />

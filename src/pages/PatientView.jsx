@@ -258,7 +258,7 @@ export const PatientView = () => {
 
   // Handler for when imaging files are dropped or selected. It reads the files as ArrayBuffers and prepares them for visualization, updating state accordingly.
   // NiiViewer shows its own loading/success toast once mounted, so this just sets layers and surfaces errors.
-  const handleNiiFiles = async (files) => {
+  const handleImagingFiles = async (files) => {
     setIsLoading(true);
     try {
       const result = await filesToLayers(files);
@@ -519,7 +519,7 @@ export const PatientView = () => {
               {/* No accepted_formats: NiiVue reads dozens of formats beyond the listed ones, and an
                   accept list would hide those in the file picker. The description says so. */}
               <FileDropZone
-                onFiles={handleNiiFiles}
+                onFiles={handleImagingFiles}
                 label="Drop imaging files"
                 description={IMAGING_DROPZONE_DESCRIPTION}
                 className="h-full min-h-48"
