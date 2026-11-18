@@ -33,6 +33,7 @@ import {
   filterMontageRows,
   computeAutoYScale,
   remapMontageToRecording,
+  formatTimelineTime,
 } from '@/utils/eegViewerUtils';
 import { hasActiveFilters, extractGlobalFilters } from '@/utils/eegFilters';
 import { useEegBuffer } from '@/loaders/eegBuffer';
@@ -1395,10 +1396,10 @@ export const EegViewer = ({
                   {scrubberHover && (
                     <div
                       role="tooltip"
-                      className="absolute bottom-full z-10 mb-1 -translate-x-1/2 whitespace-nowrap rounded border border-border bg-surface px-2 py-1 text-xs text-foreground shadow-[var(--c-shadow)] pointer-events-none"
+                      className="absolute bottom-full z-10 mb-1 -translate-x-1/2 whitespace-nowrap rounded border border-border bg-surface px-1 py-1 text-xs text-foreground pointer-events-none"
                       style={{ left: scrubberHover.position }}
                     >
-                      {scrubberHover.midpoint.toFixed(1)} s
+                      {formatTimelineTime(scrubberHover.midpoint)}
                     </div>
                   )}
                 </div>
