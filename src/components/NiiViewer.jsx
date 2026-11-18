@@ -701,10 +701,11 @@ export const NiiViewer = ({
           onReorder={handleReorder}
           onDeleteLayer={handleDeleteLayer}
         />
+        {/* No accepted_formats: NiiVue reads dozens of formats beyond the listed ones, and an
+            accept list would hide those in the file picker (see src/utils/imagingFormats.js). */}
         <FileDropZone
           onFiles={handleNiiFiles}
-          accepted_formats=".nii,.nii.gz,.mgh,.mgz,.gii,.ply,.obj,.dcm"
-          label="Drop additional files"
+          label="Browse or drop volumes / meshes / connectomes"
           compact
         />
       </div>

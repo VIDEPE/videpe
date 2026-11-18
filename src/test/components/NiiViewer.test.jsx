@@ -1709,7 +1709,7 @@ describe('NiiViewer', () => {
       const nvRef = { current: new Niivue() };
       // layers prop never changes here — the connectome is what keeps the component
       // mounted, and the new volume below arrives only through the component's own
-      // "Drop additional files" zone, bypassing `layers` entirely.
+      // compact drop zone, bypassing `layers` entirely.
       render(<NiiViewer nvRef={nvRef} layers={[]} electrodeLayer={makeIntracranialLayer()} />);
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
       expect(screen.getByRole('button', { name: 'Axial view' })).toBeDisabled();
@@ -3041,17 +3041,15 @@ describe('NiiViewer', () => {
   });
 
   describe('compact drop zone', () => {
-    it('lists the accepted file types in its label and accepts connectome files', async () => {
+    it('lists the file types in its label and lets the file picker show every file', async () => {
       const { Niivue } = await import('@niivue/niivue');
       const nvRef = { current: new Niivue() };
       render(<NiiViewer nvRef={nvRef} layers={[{ type: 'ANAT', url: '/mri.nii' }]} />);
       await waitFor(() => expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument());
 
       expect(screen.getByText('Browse or drop volumes / meshes / connectomes')).toBeInTheDocument();
-      const accept = document.querySelector('input[type="file"]').accept.split(',');
-      for (const ext of ['.nii', '.nii.gz', '.dcm', '.gii', '.jcon', '.json']) {
-        expect(accept).toContain(ext);
-      }
+      // no accept list: NiiVue reads far more formats than any list here would name
+      expect(document.querySelector('input[type="file"]')).not.toHaveAttribute('accept');
     });
   });
   describe('esi layer', () => {

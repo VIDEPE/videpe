@@ -15,6 +15,7 @@ import { SplitPane } from '../components/SplitPane';
 import { FileDropZone } from '../components/FileDropZone';
 // Utils
 import { filesToLayers, rotateViews } from '../utils/NiiViewer.utils';
+import { IMAGING_DROPZONE_DESCRIPTION } from '@/utils/imagingFormats';
 import { buildElectrodeLayer } from '../utils/eegTopographyUtils';
 import {
   EEG_FORMAT_EXTENSIONS,
@@ -515,11 +516,12 @@ export const PatientView = () => {
             />
           ) : (
             <div className="h-full p-2">
+              {/* No accepted_formats: NiiVue reads dozens of formats beyond the listed ones, and an
+                  accept list would hide those in the file picker. The description says so. */}
               <FileDropZone
                 onFiles={handleNiiFiles}
-                accepted_formats=".nii,.nii.gz,.mgh,.mgz,.gii,.ply,.obj,.dcm"
                 label="Drop imaging files"
-                description="Volumes: NIfTI, MGH, DICOM, GIFTI, PLY, OBJ, …"
+                description={IMAGING_DROPZONE_DESCRIPTION}
                 className="h-full min-h-48"
               />
             </div>

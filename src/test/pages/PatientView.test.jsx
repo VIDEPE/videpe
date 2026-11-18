@@ -825,53 +825,35 @@ describe('PatientView — imaging file-type detection', () => {
     expect(NiiViewer.mock.lastCall[0].layers[0].type).toBe('ANAT');
   });
 
-  it('accepts .dcm at the imaging dropzone', () => {
-    renderPatientView();
-    const niiDropZoneProps = FileDropZone.mock.calls.find(
-      ([p]) => p.label === 'Drop imaging files'
-    )[0];
-    expect(niiDropZoneProps.accepted_formats).toContain('.dcm');
-  });
-
   it('lists the imaging files by type in the initial dropzone: volumes, meshes, connectomes', () => {
     renderPatientView();
     const niiDropZoneProps = FileDropZone.mock.calls.find(
       ([p]) => p.label === 'Drop imaging files'
     )[0];
-    // label/value rows, like the EEG dropzone — one row per type, in this order
+    // label/value rows, like the EEG dropzone — one row per type, in this order, then a row
+    // telling the user the list isn't exhaustive
     expect(niiDropZoneProps.description.map((row) => row.label)).toEqual([
       'Volume:',
       'Mesh:',
       'Connectome:',
+      'Other:',
     ]);
     expect(niiDropZoneProps.description).toEqual([
-      { label: 'Volume:', value: expect.stringContaining('.nii') },
+      { label: 'Volume:', value: expect.stringContaining('.dcm') },
       { label: 'Mesh:', value: expect.stringContaining('.gii') },
       { label: 'Connectome:', value: expect.stringContaining('.jcon') },
+      { label: 'Other:', value: expect.stringContaining('NiiVue') },
     ]);
   });
 
-  it('accepts every listed imaging extension at the initial dropzone, incl. connectome files', () => {
-    // the file picker only shows accepted extensions, so a missing one can't be selected by clicking
+  it("doesn't restrict the initial dropzone's file picker to the listed extensions", () => {
+    // NiiVue reads dozens of formats beyond the listed ones (e.g. .nrrd, .stl, FreeSurfer's
+    // lh.pial); an accept list would hide those in the file picker, while a drop takes them.
     renderPatientView();
     const niiDropZoneProps = FileDropZone.mock.calls.find(
       ([p]) => p.label === 'Drop imaging files'
     )[0];
-    const accepted = niiDropZoneProps.accepted_formats.split(',');
-    for (const ext of [
-      '.nii',
-      '.nii.gz',
-      '.mgh',
-      '.mgz',
-      '.dcm',
-      '.gii',
-      '.ply',
-      '.obj',
-      '.jcon',
-      '.json',
-    ]) {
-      expect(accepted).toContain(ext);
-    }
+    expect(niiDropZoneProps.accepted_formats).toBeUndefined();
   });
 
   it('passes a dropped .jcon file to NiiViewer as a connectome layer', async () => {
