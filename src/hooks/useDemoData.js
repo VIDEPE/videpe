@@ -3,27 +3,37 @@ import toast from 'react-hot-toast';
 import { detectAndLoadEEG } from '../loaders/eegFormatRegistry';
 import { detectVolumeType } from '../utils/NiiViewer.utils';
 
-const DEMO_EEG = {
-  // the recording's files, in any supported EEG format (e.g. a single .edf works too)
-  recording: [
-    'demo_data/sub-synth_task-rest_desc-spkavgall_eeg.vhdr',
-    'demo_data/sub-synth_task-rest_desc-spkavgall_eeg.eeg',
-  ],
-  elec_pos: 'demo_data/sub-synth_electrodes.tsv',
-  invers_solution: 'demo_data/sub-synth_desc-eloreta_inversefilters.mat',
-};
-
+// The demo imaging volumes in demo_data/anat (BIDS layout), shared by both demos: the same
+// synthetic subject's T1w scan, white matter mask and Lausanne 2018 (scale 2) atlas
 const DEMO_LAYERS = [
-  { url: 'demo_data/sub-synth_T1w.nii.gz', ...detectVolumeType('sub-synth_T1w.nii.gz') },
-  {
-    url: 'demo_data/sub-synth_label-WM_dseg.nii.gz',
-    ...detectVolumeType('sub-synth_label-WM_dseg.nii.gz'),
+  'sub-synth_T1w.nii.gz',
+  'sub-synth_label-WM_dseg.nii.gz',
+  'sub-synth_atlas-L2018_res-scale2_dseg.nii.gz',
+].map((name) => ({ url: `demo_data/anat/${name}`, ...detectVolumeType(name) }));
+
+// The two demos, by the key handleLoadDemo is called with. Each has its BIDS modality folder
+// (demo_data/eeg or demo_data/ieeg) with the recording and electrode positions.
+const DEMOS = {
+  eeg: {
+    label: 'EEG',
+    // the recording's files, in any supported EEG format (e.g. a single .edf works too)
+    recording: [
+      'demo_data/eeg/sub-synth_task-rest_desc-spkavgall_eeg.vhdr',
+      'demo_data/eeg/sub-synth_task-rest_desc-spkavgall_eeg.eeg',
+    ],
+    elec_pos: 'demo_data/eeg/sub-synth_electrodes.tsv',
+    invers_solution: 'demo_data/eeg/sub-synth_desc-eloreta_inversefilters.mat',
   },
-  {
-    url: 'demo_data/sub-synth_atlas-L2018_res-scale1_dseg.nii.gz',
-    ...detectVolumeType('sub-synth_atlas-L2018_res-scale1_dseg.nii.gz'),
+  ieeg: {
+    label: 'iEEG',
+    recording: [
+      'demo_data/ieeg/sub-synth_task-rest_desc-spkavgall_ieeg.vhdr',
+      'demo_data/ieeg/sub-synth_task-rest_desc-spkavgall_ieeg.eeg',
+    ],
+    elec_pos: 'demo_data/ieeg/sub-synth_electrodes.tsv',
+    invers_solution: null, // no inverse solution: ESI isn't done on intracranial recordings
   },
-];
+};
 
 /**
  * Fetches a demo file by URL and wraps it as a File, so demo loading can feed the same
@@ -42,16 +52,17 @@ async function fetchAsFile(url) {
 }
 
 /**
- * Loads the bundled demo EEG recording, electrode positions, inverse solution, and
- * imaging volumes — via the same handlers a manual file drop would use, so the demo
- * path exercises exactly the same downstream logic (EegViewer, ESI, etc.) as real data.
+ * Loads one of the bundled demos — the scalp EEG one (recording, electrode positions,
+ * inverse solution) or the intracranial iEEG one (recording, electrode positions), each
+ * with the same imaging volumes — via the same handlers a manual file drop would use, so the
+ * demo path exercises exactly the same downstream logic (EegViewer, ESI, etc.) as real data.
  *
  * @param {Object} params
  * @param {(eeg: object) => void} params.setEeg
  *   Called with the loaded demo EEG recording, same setter a real file drop would use.
  * @param {(layers: object[]) => void} params.setLayers
- *   Called with the demo imaging volumes (T1w scan plus white-matter and CSF
- *   segmentations) once the EEG side has finished loading.
+ *   Called with the demo imaging volumes (T1w scan, white matter mask and atlas) once the
+ *   EEG side has finished loading.
  * @param {(file: File) => Promise<void>} params.handleElecPosFile
  *   The electrode-position handler from useEegFileIntake. Called here with the demo
  *   electrode-positions file (wrapped via fetchAsFile), so it's parsed exactly like a
@@ -71,10 +82,10 @@ async function fetchAsFile(url) {
  *   Same pattern as eegReadyResolveRef, but for NiiViewer finishing to render the demo
  *   imaging volumes.
  * @returns {Object} The demo-loading state and its trigger function:
- *   - `isDemoLoading` (boolean) — true for the duration of a demo load; lets the caller
- *     show a distinct "Loading…" label on the button that triggers it.
- *   - `handleLoadDemo` () => Promise<void> — fetches and loads all the demo data
- *     described above, resolving once both viewers report they've finished rendering it.
+ *   - `loadingDemo` ('eeg'|'ieeg'|null) — the demo being loaded, or null when none is;
+ *     lets the caller show "Loading…" on just the button that triggered it.
+ *   - `handleLoadDemo` (demo: 'eeg'|'ieeg') => Promise<void> — fetches and loads that
+ *     demo's data, resolving once both viewers report they've finished rendering it.
  */
 export function useDemoData({
   setEeg,
@@ -85,69 +96,77 @@ export function useDemoData({
   eegReadyResolveRef,
   niiReadyResolveRef,
 }) {
-  const [isDemoLoading, setIsDemoLoading] = useState(false);
+  const [loadingDemo, setLoadingDemo] = useState(null); // 'eeg' | 'ieeg' | null
 
   /**
-   * Fetches and loads the full demo dataset (EEG recording, electrode positions,
-   * inverse solution, imaging volumes), routing each piece through the same handlers a
+   * Fetches and loads one demo dataset (recording, electrode positions, inverse solution
+   * if it has one, imaging volumes), routing each piece through the same handlers a
    * manual file drop would use. Wrapped in `toast.promise` so the user sees a single
    * loading → success/error toast for the whole sequence, rather than one per file.
    *
+   * @param {'eeg'|'ieeg'} demoKey - which demo to load (a key of DEMOS).
    * @returns {Promise<void>} Resolves once both EegViewer and NiiViewer report (via
    *   eegReadyResolveRef/niiReadyResolveRef) that they've finished rendering the loaded
    *   data. Doesn't return a value — callers observe the outcome through this hook's
-   *   `isDemoLoading` return value and the loaded `eeg`/`layers` state it updates.
+   *   `loadingDemo` return value and the loaded `eeg`/`layers` state it updates.
    */
-  const handleLoadDemo = useCallback(async () => {
-    setIsLoading(true);
-    setIsDemoLoading(true);
-    // Create ready promises before setting state — the viewers resolve them once fully rendered
-    const eegReady = new Promise((resolve) => {
-      eegReadyResolveRef.current = resolve;
-    });
-    const niiReady = new Promise((resolve) => {
-      niiReadyResolveRef.current = resolve;
-    });
-    try {
-      const base = import.meta.env.BASE_URL; // base is the public folder in Vite, so demo_data is at `${base}demo_data/...`
-      await toast.promise(
-        (async () => {
-          // Load and set EEG — as Files through detectAndLoadEEG, like a file drop, so the
-          // loaders only ever need to read Files (and the demo can be in any supported format)
-          const recordingFiles = await Promise.all(
-            DEMO_EEG.recording.map((path) => fetchAsFile(base + path))
-          );
-          const result = await detectAndLoadEEG(recordingFiles);
-          setEeg(result);
-          // Load and set electrode positions and inverse solution, via the same handlers
-          // file drops use, so they reach EegViewer/ESI exactly as a manual drop would.
-          const elecPosFile = await fetchAsFile(base + DEMO_EEG.elec_pos);
-          await handleElecPosFile(elecPosFile);
-          const inverseSolutionFile = await fetchAsFile(base + DEMO_EEG.invers_solution);
-          await handleInverseSolutionFile(inverseSolutionFile);
-          // Load and set layers
-          setLayers(DEMO_LAYERS);
-          await Promise.all([eegReady, niiReady]);
-        })(),
-        {
-          loading: 'Loading demo data…',
-          success: 'Demo data loaded!',
-          error: (err) => `Error loading demo data:\n${err.message}`,
-        }
-      );
-    } finally {
-      setIsLoading(false);
-      setIsDemoLoading(false);
-    }
-  }, [
-    setEeg,
-    setLayers,
-    handleElecPosFile,
-    handleInverseSolutionFile,
-    setIsLoading,
-    eegReadyResolveRef,
-    niiReadyResolveRef,
-  ]);
+  const handleLoadDemo = useCallback(
+    async (demoKey) => {
+      const demo = DEMOS[demoKey];
+      setIsLoading(true);
+      setLoadingDemo(demoKey);
+      // Create ready promises before setting state — the viewers resolve them once fully rendered
+      const eegReady = new Promise((resolve) => {
+        eegReadyResolveRef.current = resolve;
+      });
+      const niiReady = new Promise((resolve) => {
+        niiReadyResolveRef.current = resolve;
+      });
+      try {
+        const base = import.meta.env.BASE_URL; // base is the public folder in Vite, so demo_data is at `${base}demo_data/...`
+        await toast.promise(
+          (async () => {
+            // Load and set EEG — as Files through detectAndLoadEEG, like a file drop, so the
+            // loaders only ever need to read Files (and the demo can be in any supported format)
+            const recordingFiles = await Promise.all(
+              demo.recording.map((path) => fetchAsFile(base + path))
+            );
+            const result = await detectAndLoadEEG(recordingFiles);
+            setEeg(result);
+            // Load and set electrode positions and inverse solution (when the demo has one),
+            // via the same handlers file drops use, so they reach EegViewer/ESI exactly as a
+            // manual drop would.
+            const elecPosFile = await fetchAsFile(base + demo.elec_pos);
+            await handleElecPosFile(elecPosFile);
+            if (demo.invers_solution) {
+              const inverseSolutionFile = await fetchAsFile(base + demo.invers_solution);
+              await handleInverseSolutionFile(inverseSolutionFile);
+            }
+            // Load and set layers
+            setLayers(DEMO_LAYERS);
+            await Promise.all([eegReady, niiReady]);
+          })(),
+          {
+            loading: `Loading ${demo.label} demo data…`,
+            success: `${demo.label} demo data loaded!`,
+            error: (err) => `Error loading ${demo.label} demo data:\n${err.message}`,
+          }
+        );
+      } finally {
+        setIsLoading(false);
+        setLoadingDemo(null);
+      }
+    },
+    [
+      setEeg,
+      setLayers,
+      handleElecPosFile,
+      handleInverseSolutionFile,
+      setIsLoading,
+      eegReadyResolveRef,
+      niiReadyResolveRef,
+    ]
+  );
 
-  return { isDemoLoading, handleLoadDemo };
+  return { loadingDemo, handleLoadDemo };
 }

@@ -76,7 +76,7 @@ Full multiplanar and 3D rendering powered by [NiiVue](https://niivue.com/). Load
 
 ### Built-in Demo
 
-Hit **Load Demo** to instantly load a synthetic EEG recording, electrode positions and inverse solution alongside aligned MRI volumes. No upload, no account, no wait.
+Hit **EEG Demo** to instantly load a synthetic scalp EEG recording with its electrode positions and inverse solution, or **iEEG Demo** for a synthetic intracranial (SEEG) recording with its electrode positions — both alongside aligned MRI volumes. No upload, no account, no wait.
 
 ### Additional features:
 

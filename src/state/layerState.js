@@ -23,7 +23,7 @@
 //
 // entries — one per layer, in display order (= the ImagingControls card order):
 //   url      — the layer's unique id; every action addresses a layer by it. A blob: url for a
-//              dropped file, a path for demo/Shanoir files (e.g. 'demo_data/sub-synth_T1w.nii.gz'),
+//              dropped file, a path for demo/Shanoir files (e.g. 'demo_data/anat/sub-synth_T1w.nii.gz'),
 //              or a fixed sentinel string for a generated layer ('__electrodes__',
 //              '__esi-source-power__' — see ELECTRODE_LAYER_URL/ESI_LAYER_URL).
 //   layer    — what to show: the data, which the user doesn't edit. Always has

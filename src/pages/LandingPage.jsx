@@ -69,8 +69,9 @@ const FEATURES = [
       <>
         Curious?
         <br />
-        Try the demo: an EEG with electrode positions and an inverse solution, plus an MRI with a
-        brain atlas, all in one click — no files of your own needed.
+        Try a demo: a scalp EEG with an inverse solution or an intracranial iEEG, each with
+        electrode positions and an MRI with a brain atlas, all in one click — no files of your own
+        needed.
       </>
     ),
     anchor: '#feature-demo',

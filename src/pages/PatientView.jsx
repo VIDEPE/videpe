@@ -41,6 +41,20 @@ import neuxelecLogo from '@/assets/neuxelec_logo.ico';
 const PANEL_TITLE_CLASS = 'h-7 flex items-center text-xl font-medium leading-none text-heading';
 const PANEL_SUBTITLE_CLASS = 'text-xs font-medium text-foreground pl-2';
 
+// The two demo buttons in the top bar, by the demo key useDemoData's handleLoadDemo takes
+const DEMO_BUTTONS = [
+  {
+    key: 'eeg',
+    label: 'EEG Demo',
+    title: 'Load a scalp EEG demo, with an inverse solution, to test VIDEPE without your own files',
+  },
+  {
+    key: 'ieeg',
+    label: 'iEEG Demo',
+    title: 'Load an intracranial (SEEG) demo to test VIDEPE without your own files',
+  },
+];
+
 // Everything the initial EEG dropzone handles: recordings, electrode positions, inverse
 // solutions and montages. Built from the registry, so the file picker never falls behind a
 // newly added format.
@@ -134,7 +148,7 @@ export const PatientView = () => {
     onInverseSolutionFile: handleInverseSolutionFile,
   });
 
-  const { isDemoLoading, handleLoadDemo } = useDemoData({
+  const { loadingDemo, handleLoadDemo } = useDemoData({
     setEeg,
     setLayers,
     handleElecPosFile,
@@ -169,7 +183,7 @@ export const PatientView = () => {
   });
 
   // Launched by another app (Shanoir or a host app), rather than opened directly: no Back or
-  // Load Demo, as leaving or resetting would discard the data the app handed over
+  // demo buttons, as leaving or resetting would discard the data the app handed over
   const isLaunched = Boolean(shanoirSession || hostAppSession);
 
   // Build the electrode layer if the toggle is on.
@@ -326,7 +340,7 @@ export const PatientView = () => {
       {/* Top bar: 3-column grid with equal side columns (1fr | auto | 1fr), so the title stays
           centered on the screen however wide the left/right content is */}
       <div className="shrink-0 grid grid-cols-[1fr_auto_1fr] items-start border-b border-border">
-        {/* Left column: Back + Load Demo (or, when launched: About + where the data came from) in normal flow — top bar never scrolls so fixed isn't needed */}
+        {/* Left column: Back + the demo buttons (or, when launched: About + where the data came from) in normal flow — top bar never scrolls so fixed isn't needed */}
         <div className="flex flex-col items-start gap-2 px-5 py-3 z-10">
           {isLaunched ? (
             /* Launched from Shanoir or a host app: no Back (leaving the patient view would discard
@@ -383,31 +397,36 @@ export const PatientView = () => {
                 <span className="text-xs text-foreground italic">{hostAppTitle}</span>
               )}
             </div>
-          ) : (
-            /* Normal VIDEPE: Load Demo / Reset button */
+          ) : (eeg || layers.length > 0 || pendingEegFiles.length > 0) && !loadingDemo ? (
+            /* Normal VIDEPE with data loaded: one Reset button in place of the demo buttons.
+               Not while a demo loads, as its EEG is set before its volumes: the demo buttons
+               stay until the whole demo has loaded */
             <button
               type="button"
               className="button px-3 py-1 whitespace-nowrap"
-              onClick={
-                eeg || layers.length > 0 || pendingEegFiles.length > 0
-                  ? handleReset
-                  : handleLoadDemo
-              }
+              onClick={handleReset}
               disabled={isLoading || isShanoirLoading || isHostAppLoading}
-              title={
-                isDemoLoading
-                  ? 'Loading demo data…'
-                  : eeg || layers.length > 0 || pendingEegFiles.length > 0
-                    ? 'Reset both viewers'
-                    : 'Load demo data to test VIDEPE without needing your own files'
-              }
+              title="Reset both viewers"
             >
-              {isDemoLoading
-                ? 'Loading…'
-                : eeg || layers.length > 0 || pendingEegFiles.length > 0
-                  ? 'Reset'
-                  : 'Load Demo'}
+              Reset
             </button>
+          ) : (
+            /* Normal VIDEPE without data: the EEG and iEEG demo buttons side by side. Both are
+               disabled while either loads; only the clicked one says "Loading…" */
+            <div className="flex gap-2">
+              {DEMO_BUTTONS.map(({ key, label, title }) => (
+                <button
+                  key={key}
+                  type="button"
+                  className="button px-3 py-1 whitespace-nowrap"
+                  onClick={() => handleLoadDemo(key)}
+                  disabled={isLoading || isShanoirLoading || isHostAppLoading}
+                  title={loadingDemo === key ? `Loading ${label} data…` : title}
+                >
+                  {loadingDemo === key ? 'Loading…' : label}
+                </button>
+              ))}
+            </div>
           )}
         </div>
 
