@@ -12,6 +12,7 @@ import {
   DEFAULT_EDGE_SCALE,
   DEFAULT_MESH_XRAY,
 } from '@/utils/NiiViewer.utils';
+import { isFileConnectomeLayer } from '@/state/layerState';
 import { useDoubleClickToDefault } from '@/hooks/useSingleAndDoubleClick';
 import { cn } from '@/utils/utils';
 
@@ -212,9 +213,10 @@ function SortableSettingsCard({
 
   // Node/Edge sliders are only meaningful when this connectome actually has that data — e.g.
   // ESI connectomes always have edges: [] (source points have no connecting structure), and a
-  // fully-below-threshold electrode connectome can have zero nodes.
-  const hasNodes = isConnectome && layer.nodes?.length > 0;
-  const hasEdges = isConnectome && layer.edges?.length > 0;
+  // fully-below-threshold electrode connectome can have zero nodes. A file connectome's nodes and
+  // edges aren't in its layer (NiiVue reads them from the file), so it's treated as having both.
+  const hasNodes = isConnectome && (isFileConnectomeLayer(layer) || layer.nodes?.length > 0);
+  const hasEdges = isConnectome && (isFileConnectomeLayer(layer) || layer.edges?.length > 0);
 
   // Colorbar is meaningless with no metric selected — same reasoning as hasNodes/hasEdges
   // above disabling the size sliders. Shared by the toggle's `disabled` prop and the
@@ -422,7 +424,7 @@ function SortableSettingsCard({
               </div>
             )}
 
-            {/* MeshXRay — meaningful for mesh and commectomes */}
+            {/* MeshXRay — meaningful for meshes and connectomes */}
             {!isImageVolume && (
               <div
                 className="flex items-center gap-3 whitespace-pre-wrap"
@@ -534,8 +536,9 @@ function SortableSettingsCard({
               </div>
             )}
 
-            {/* ElectrodeDisplayMode — meaningful commectomes */}
-            {isConnectome && (
+            {/* ElectrodeDisplayMode — meaningful for generated connectomes only: its options
+                (voltage, metrics) come from EEG data, which a .jcon/.json file doesn't have. */}
+            {isConnectome && !isFileConnectomeLayer(layer) && (
               <div
                 className="flex items-center gap-3"
                 title="Choose what metric the electrode connectome node size+colour displays"

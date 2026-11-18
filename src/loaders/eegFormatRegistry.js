@@ -8,6 +8,8 @@ import { loadEegTrc } from '@/loaders/loadEegTrc';
 // Exported so both components share the same truth without duplicating the lists.
 export const ELEC_POS_EXTENSIONS = ['.elc', '.tsv'];
 export const INV_SOLUTIONS_EXTENSIONS = ['.mat'];
+// AnyWave (XML) and Cartool (text) montages both use .mtg — parseMontageText tells them apart
+export const MONTAGE_EXTENSIONS = ['.mtg'];
 
 const baseName = (filename) => filename.slice(0, filename.lastIndexOf('.'));
 

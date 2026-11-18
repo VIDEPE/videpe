@@ -10,8 +10,8 @@ import { cn } from '@/utils/utils';
 // ─── Window sizing constants ────────────────────────────────────────────────
 // Default/minimum window size in px — much smaller than the montage editor, since this window
 // only holds one row per channel type
-const START_WINDOW_POS = { x: 40, y: 50 };
-const DEFAULT_WINDOW_SIZE = { width: 385, height: 300 };
+const START_WINDOW_POS = { x: 100, y: 250 };
+const DEFAULT_WINDOW_SIZE = { width: 440, height: 300 }; // wide enough for the harmonics column too
 const MIN_WINDOW_WIDTH = 300;
 const MIN_WINDOW_HEIGHT = 245;
 const RESIZE_DIRECTIONS = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
@@ -24,6 +24,7 @@ const RESIZE_DIRECTIONS = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
 const TYPE_COL_CLASS = 'w-12 shrink-0';
 const COUNT_COL_CLASS = 'flex-1 min-w-14';
 const FILTER_COL_CLASS = 'w-14 shrink-0';
+const HARMONICS_COL_CLASS = 'w-13 shrink-0 flex justify-center pl-1 text-center'; // narrow: a checkbox, centred
 
 export function EegGlobalFiltersEditor({
   globalFilters,
@@ -79,6 +80,12 @@ export function EegGlobalFiltersEditor({
 
   const setDraftFilterNotch = useCallback((type, notch) => {
     setDraftGlobalFilters((prev) => ({ ...prev, [type]: { ...prev[type], notch } }));
+  }, []);
+
+  // Also notch the 2nd and 3rd harmonic of this type's notch (off by default — see
+  // buildFilterSections); the montage rows of this type follow it, they have no setting of their own
+  const setDraftNotchHarmonics = useCallback((type, notchHarmonics) => {
+    setDraftGlobalFilters((prev) => ({ ...prev, [type]: { ...prev[type], notchHarmonics } }));
   }, []);
 
   const handleApply = useCallback(() => {
@@ -287,12 +294,13 @@ export function EegGlobalFiltersEditor({
         />
       </div>
 
-      {/* Header + one row per channel type — bg-background inside a bg-surface padding, so the
-          surrounding surface shows as a border around the list, like the montage row list. */}
-      <div className="flex-1 min-h-0 flex flex-col p-2">
+      {/* Header + one row per channel type — bg-background fills the whole area between the
+          title bar and the footer, without a bg-surface border around it. */}
+      <div className="flex-1 min-h-0 flex flex-col bg-background">
         <div className="flex-1 min-h-0 overflow-auto bg-background">
-          {/* Column headers — sticky so they stay visible if the window is made very short */}
-          <div className="sticky top-0 z-10 flex items-end gap-2 pl-3 pr-1 py-1 text-xs font-medium text-heading border-b-2 border-border bg-background">
+          {/* Column headers — sticky so they stay visible if the window is made very short.
+              pl-3/pr-3: the same padding on both sides, so the last column doesn't touch the edge */}
+          <div className="sticky top-0 z-10 flex items-end gap-2 pl-3 pr-3 py-1 text-xs font-medium text-heading border-b-2 border-border bg-background">
             <span className={cn(TYPE_COL_CLASS, 'cursor-default')}>Type</span>
             <span
               className={cn(COUNT_COL_CLASS, 'cursor-default')}
@@ -335,6 +343,14 @@ export function EegGlobalFiltersEditor({
                 </div>
               </div>
             ))}
+            {/* Harmonics — a per-type checkbox, no bulk control. self-start puts the label on
+                the same line as the other column labels (the header row aligns to the bottom). */}
+            <span
+              className={cn(HARMONICS_COL_CLASS, 'self-start cursor-default')}
+              title="Additionally notch the 2nd and 3rd harmonic (e.g. 100 and 150 Hz for a 50 Hz notch)"
+            >
+              Notch Harmonics
+            </span>
           </div>
 
           {/* One row per channel type, in TYPE_ORDER — a type added to TYPE_LIST shows up here
@@ -345,7 +361,7 @@ export function EegGlobalFiltersEditor({
             <div
               key={type}
               className={cn(
-                'flex items-center gap-2 pl-3 pr-1 py-0.5',
+                'flex items-center gap-2 pl-3 pr-3 py-0.5',
                 channelCountByType?.[type] === 0 && 'opacity-40'
               )}
               style={{ borderBottom: `1px solid ${rowDividerColor}` }}
@@ -380,6 +396,24 @@ export function EegGlobalFiltersEditor({
                   }}
                 />
               ))}
+              {/* Disabled without a notch — there's nothing to add harmonics to. Its checked
+                  state is kept, so it comes back when a notch is set again. */}
+              <span className={HARMONICS_COL_CLASS}>
+                <input
+                  type="checkbox"
+                  data-testid={`global-notchHarmonics-${type}`}
+                  aria-label={`${TYPE_LIST[type]} also notch the 2nd and 3rd harmonic`}
+                  title={
+                    draftGlobalFilters[type]?.notch == null
+                      ? 'Set a notch first to also notch its harmonics'
+                      : `Also notch ${2 * draftGlobalFilters[type].notch} and ${3 * draftGlobalFilters[type].notch} Hz (skipped above ${nyquist} Hz, the Nyquist frequency)`
+                  }
+                  className="accent-primary cursor-pointer disabled:cursor-not-allowed"
+                  disabled={draftGlobalFilters[type]?.notch == null}
+                  checked={draftGlobalFilters[type]?.notchHarmonics ?? false}
+                  onChange={(e) => setDraftNotchHarmonics(type, e.target.checked)}
+                />
+              </span>
             </div>
           ))}
         </div>

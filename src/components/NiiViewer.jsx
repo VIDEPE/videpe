@@ -30,6 +30,7 @@ import {
   applyColormap,
 } from '../utils/NiiViewer.utils';
 import {
+  isFileMeshLayer,
   layerReducer,
   initLayerState,
   selectOrderedLayers,
@@ -49,6 +50,7 @@ import { useSharedNiiVueInstance } from '@/hooks/useSharedNiiVueInstance';
 import { useLoadingToast } from '@/hooks/useLoadingToast';
 import { useLayerLoader } from '@/hooks/useLayerLoader';
 import { useElectrodeConnectome } from '@/hooks/useElectrodeConnectome';
+import { useColorBlindMode } from '@/hooks/useColorBlindMode';
 import { useEsiLayer } from '@/hooks/useEsiLayer';
 
 // ─── handleSettingChange dispatch helpers ──────────────────────────────────────
@@ -119,31 +121,30 @@ function applyVolumeSettingChange({
   }
 }
 
-// Connectome layers (electrodes / ESI connectome mode) aren't in nv.volumes at
-// all — they're a mesh, built/tracked by useElectrodeConnectome/useEsiLayer — so settings
-// are applied to the mesh object directly instead of through nv.setOpacity/setColormap.
-function applyConnectomeSettingChange({
+// Meshes (surface meshes, file connectomes, and the electrode/ESI connectomes) aren't in
+// nv.volumes at all, so settings are applied to the mesh object directly instead of through
+// nv.setOpacity/setColormap. The caller finds `mesh` via its owner (see handleSettingChange).
+function applyMeshSettingChange({
   layer,
   key,
   value,
   settings,
   nv,
-  esiMeshRef,
-  electrodeMeshRef,
+  mesh,
   thresholdRafRef,
   meshXRayRafRef,
   nodeScaleRafRef,
 }) {
-  const mesh = layer.url === ESI_LAYER_URL ? esiMeshRef.current : electrodeMeshRef.current;
   if (!mesh) return;
 
   // ImagingControls only renders an Opacity slider for image volumes (`{isImageVolume && (...)}`)
-  // — a connectome never gets one — so there's no 'opacity' branch here; key === 'opacity' can
+  // — a mesh never gets one — so there's no 'opacity' branch here; key === 'opacity' can
   // never fire for this layer kind. 'visible' sets mesh.opacity directly instead.
   if (key === 'visible') {
     mesh.opacity = value ? settings.opacity : 0;
     nv.updateGLVolume();
   } else if (key === 'cal_min' || key === 'cal_max' || key === 'cal_range') {
+    // Threshold: only shown for the ESI connectome (and volumes), so only it gets here.
     // Throttle to one GL redraw per frame — cancels any pending rAF so only the latest drag value redraws
     if (settings.visible) {
       if (thresholdRafRef.current) cancelAnimationFrame(thresholdRafRef.current);
@@ -172,6 +173,7 @@ function applyConnectomeSettingChange({
       });
     }
   } else if (key === 'nodeScale' || key === 'edgeScale') {
+    // Node/edge size: only shown for connectomes (generated or from a file), never a surface mesh.
     // Throttle to one GL redraw per frame — cancels any pending rAF so only the latest drag value redraws
     if (nodeScaleRafRef.current) cancelAnimationFrame(nodeScaleRafRef.current);
     nodeScaleRafRef.current = requestAnimationFrame(() => {
@@ -183,46 +185,13 @@ function applyConnectomeSettingChange({
       nv.updateGLVolume();
     });
   }
-  // colormap/invert/showColorbar: ImagingControls doesn't render those controls for this
-  // kind, so there's nothing to apply here.
-}
-
-// File-loaded surface meshes live in nv.meshes (tracked by fileMeshesRef), not nv.volumes —
-// like connectomes, they only expose opacity/visibility; colormap/threshold/invert/showColorbar
-// aren't rendered for this kind, so there's nothing to apply for those.
-function applyFileMeshSettingChange({
-  layer,
-  key,
-  value,
-  settings,
-  nv,
-  fileMeshesRef,
-  meshXRayRafRef,
-}) {
-  const mesh = fileMeshesRef.current.get(layer.url);
-  if (!mesh) return;
-
-  // ImagingControls only renders an Opacity slider for image volumes (`{isImageVolume && (...)}`)
-  // — a file-loaded mesh never gets one — so there's no 'opacity' branch here; key === 'opacity'
-  // can never fire for this layer kind. 'visible' sets mesh.opacity directly instead.
-  if (key === 'visible') {
-    mesh.opacity = value ? settings.opacity : 0;
-    nv.updateGLVolume();
-  } else if (key === 'meshXRay') {
-    // Throttle to one GL redraw per frame — cancels any pending rAF so only the latest drag value redraws
-    if (settings.visible) {
-      if (meshXRayRafRef.current) cancelAnimationFrame(meshXRayRafRef.current);
-      meshXRayRafRef.current = requestAnimationFrame(() => {
-        nv.opts.meshXRay = value;
-        nv.updateGLVolume();
-      });
-    }
-  }
+  // colormap/invert/showColorbar: ImagingControls doesn't render those controls for a mesh, so
+  // there's nothing to apply here.
 }
 
 export const NiiViewer = ({
   nvRef,
-  layers = [], // image volumes/meshes loaded from files — e.g. .nii/.mgz/.gii/.ply/.obj drops
+  layers = [], // image volumes/meshes/connectomes loaded from files — e.g. .nii/.mgz/.gii/.ply/.obj/.jcon drops
   electrodeLayer = null, // kept separate from `layers` so a voltage-driven refresh never resets other layers' settings
   esiLayer = null, // same pattern — ESI source power connectome/volume layer
   onViewReady,
@@ -253,7 +222,7 @@ export const NiiViewer = ({
   // alone can't distinguish success from failure (it's just "in flight" vs "not"), so this is
   // what tells useLoadingToast below not to show its misleading "Imaging data loaded!" success
   // toast right alongside the real error toast(s) for the same failure. Reset to false whenever
-  // a new `layers` prop load starts (see the effect below) or handleNiiFiles starts a new
+  // a new `layers` prop load starts (see the effect below) or handleImagingFiles starts a new
   // internal-dropzone load, then flipped true by whichever failure branch actually hits.
   const [hasLoadError, setHasLoadError] = useState(false);
   const [activeSliceType, setActiveSliceType] = useState(SLICE_TYPE.MULTIPLANAR);
@@ -275,7 +244,7 @@ export const NiiViewer = ({
   const nodeScaleRafRef = useRef(null); // rAF id — shared by nodeScale/edgeScale (only one slider can be dragged at a time), cancelled on each drag so only the latest value redraws
   const settingsCommitRafRef = useRef(null); // rAF id — throttles the settings React commit itself to once per frame, so it matches the once-per-frame GL redraw above instead of re-rendering the whole card list on every Radix onValueChange tick
   const pendingSettingPatchesRef = useRef(new Map()); // url → settings patch waiting for that once-per-frame commit, merged per url
-  const fileMeshesRef = useRef(new Map()); // url → NVMesh for surface meshes loaded from files; keyed by url since nv.meshes also holds connectome meshes
+  const fileMeshesRef = useRef(new Map()); // url → NVMesh for meshes loaded from files (surface meshes + file connectomes); keyed by url since nv.meshes also holds the generated connectome meshes
 
   // ─── Derived values ─────────────────────────────────────────────────────────
   // hasImageVolumes is derived from orderedLayers (not `layers`) to also catch files dropped
@@ -335,12 +304,15 @@ export const NiiViewer = ({
     onViewReady,
     onLoadError: handleLayerLoadError,
   });
+  // App-wide colorblind colormap mode (PatientView header toggle) — swaps the connectome's voltage colormaps
+  const { isColorBlindMode: colorBlindMode } = useColorBlindMode();
   // Merges the electrode connectome into the card list and builds/rebuilds its mesh.
   const { electrodeMeshRef, clearElectrodeMesh, dismissElectrodeLayer } = useElectrodeConnectome({
     electrodeLayer,
     nvRef,
     layerState,
     dispatchLayers,
+    colorBlindMode,
   });
   // Merges the ESI source-power layer into the card list and builds/rebuilds its mesh or volume.
   const { esiMeshRef, clearEsiMesh, clearEsiVolume, dismissEsiLayer } = useEsiLayer({
@@ -380,9 +352,9 @@ export const NiiViewer = ({
   };
 
   // Applies a single ImagingControls setting change (opacity/colormap/threshold/etc.) to the
-  // layer at `url`: commits it to React state, then dispatches to the right nv-mutation helper by
-  // layer kind — volumes/meshes/connectomes each live in a different part of nv and support a
-  // different subset of settings (see the three apply*SettingChange helpers above).
+  // layer at `url`: commits it to React state, then dispatches to the right nv-mutation helper —
+  // volumes and meshes live in a different part of nv and support a different subset of settings
+  // (see applyVolumeSettingChange/applyMeshSettingChange above).
   const handleSettingChange = useCallback(
     (url, key, value) => {
       // 'cal_range' carries both fractions as a [min, max] pair in one call — the Threshold
@@ -417,32 +389,19 @@ export const NiiViewer = ({
       const entry = selectEntry(nextState, url);
       if (!entry) return;
       const { layer, settings } = entry; // this layer's own settings, post-update
-      const nextLayerSettings = selectLayerSettings(nextState);
+      // The NiiVue mesh this card controls, found via its owner: the ESI/electrode hooks for the
+      // generated connectomes, fileMeshesRef for surface meshes and file connectomes. Undefined for a volume.
+      const mesh =
+        layer.url === ESI_LAYER_URL
+          ? esiMeshRef.current
+          : layer.url === ELECTRODE_LAYER_URL
+            ? electrodeMeshRef.current
+            : fileMeshesRef.current.get(url);
 
-      if (layer.kind === 'connectome') {
-        applyConnectomeSettingChange({
-          layer,
-          key,
-          value,
-          settings,
-          nv,
-          esiMeshRef,
-          electrodeMeshRef,
-          thresholdRafRef,
-          meshXRayRafRef,
-          nodeScaleRafRef,
-        });
-      } else if (layer.kind === 'mesh') {
-        applyFileMeshSettingChange({
-          layer,
-          key,
-          value,
-          settings,
-          nv,
-          fileMeshesRef,
-          meshXRayRafRef,
-        });
-      } else {
+      const nextLayerSettings = selectLayerSettings(nextState);
+      if (isImageVolumeLayer(layer)) {
+        // Image volume (a file volume, or the ESI layer in volume mode): lives in nv.volumes, so
+        // it's changed through its index there, with the NiiVue volume API (setOpacity/setColormap…).
         applyVolumeSettingChange({
           layer,
           nvIndex: selectNvVolumeIndex(nextState, url),
@@ -454,13 +413,27 @@ export const NiiViewer = ({
           opacityRafRef,
           thresholdRafRef,
         });
+      } else {
+        // Any mesh (surface mesh, file connectome, or a generated connectome): lives in nv.meshes,
+        // so the change is applied to the mesh object found above.
+        applyMeshSettingChange({
+          layer,
+          key,
+          value,
+          settings,
+          nv,
+          mesh,
+          thresholdRafRef,
+          meshXRayRafRef,
+          nodeScaleRafRef,
+        });
       }
     },
     [layerState, nvRef, esiMeshRef, electrodeMeshRef]
   );
 
   // Loads files dropped into this component's own drop zone, appending them alongside whatever's already loaded.
-  const handleNiiFiles = async (files) => {
+  const handleImagingFiles = async (files) => {
     if (!nvRef.current) return;
     setIsLoading(true);
     setHasLoadError(false); // this internal-dropzone path never touches `layers`, so the effect above won't reset it
@@ -468,7 +441,7 @@ export const NiiViewer = ({
     try {
       // A dropped .dcm file runs dcm2niix conversion inside filesToLayers, which can reject on
       // corrupt/unsupported data — every other format just wraps the File in a blob: URL and
-      // can't fail. PatientView's own handleNiiFiles guards the same call for the same reason.
+      // can't fail. PatientView's own handleImagingFiles guards the same call for the same reason.
       newLayers = await filesToLayers(files);
     } catch (err) {
       setHasLoadError(true);
@@ -481,10 +454,10 @@ export const NiiViewer = ({
     const appendAction = { type: APPEND_FILE_LAYERS, layers: newLayers };
     const nextState = layerReducer(layerState, appendAction);
     dispatchLayers(appendAction);
-    // Image volumes and surface meshes take separate NiiVue load paths (nv.loadVolumes vs
-    // nv.addMeshesFromUrl); connectomes are handled by their own effects and excluded from both.
+    // Image volumes and file meshes (surface meshes + file connectomes) take separate NiiVue load
+    // paths (nv.loadVolumes vs nv.addMeshesFromUrl); generated connectomes have their own effects.
     const imageEntries = nextState.entries.filter((entry) => isImageVolumeLayer(entry.layer));
-    const meshEntries = nextState.entries.filter((entry) => entry.layer.kind === 'mesh');
+    const meshEntries = nextState.entries.filter((entry) => isFileMeshLayer(entry.layer));
     const imageLayers = imageEntries.map((entry) => entry.layer);
     const imageLayerSettings = imageEntries.map((entry) => entry.settings);
     const meshLayers = meshEntries.map((entry) => entry.layer);
@@ -509,14 +482,13 @@ export const NiiViewer = ({
     if (volumeResult.status === 'rejected')
       newLayers.filter(isImageVolumeLayer).forEach((l) => failedUrls.add(l.url));
     if (meshResult.status === 'rejected')
-      newLayers.filter((layer) => layer.kind === 'mesh').forEach((l) => failedUrls.add(l.url));
+      newLayers.filter(isFileMeshLayer).forEach((l) => failedUrls.add(l.url));
 
     if (failedUrls.size > 0) {
       // A rejected load never reaches syncVolumesAndApplySettings/syncMeshesAndApplySettings's
       // own revoke, so these blobs are still live — free them here instead.
       if (volumeResult.status === 'rejected') revokeLayerUrls(newLayers.filter(isImageVolumeLayer));
-      if (meshResult.status === 'rejected')
-        revokeLayerUrls(newLayers.filter((l) => l.kind === 'mesh'));
+      if (meshResult.status === 'rejected') revokeLayerUrls(newLayers.filter(isFileMeshLayer));
       dispatchLayers({ type: REMOVE_LAYERS, urls: [...failedUrls] });
       setHasLoadError(true); // suppresses useLoadingToast's success toast once setIsLoading(false) below fires
       // One toast per failed layer, named by file rather than by its opaque blob: url — mirrors
@@ -532,7 +504,7 @@ export const NiiViewer = ({
       }
       if (meshResult.status === 'rejected') {
         newLayers
-          .filter((l) => l.kind === 'mesh')
+          .filter(isFileMeshLayer)
           .forEach((layer) =>
             toast.error(`Failed to load image ${layer.name}:\n${meshResult.reason.message}`)
           );
@@ -582,9 +554,17 @@ export const NiiViewer = ({
       // Defensive backstop — normally already revoked right after load; no-op for sentinel URLs.
       if (layer) revokeLayerUrls([layer]);
 
-      if (layer?.kind === 'connectome') {
-        // Dispatch by URL — each connectome layer tracks its own mesh, owned by its own hook
-        // (mutating `.current` directly isn't allowed from outside that hook, hence clear*Mesh).
+      if (isFileMeshLayer(layer)) {
+        // File meshes (surface meshes + file connectomes) live in nv.meshes, tracked by
+        // fileMeshesRef — drop it from both. Checked first: a file connectome is kind 'connectome' too.
+        const mesh = fileMeshesRef.current.get(layer.url);
+        if (mesh) {
+          nv.removeMesh(mesh);
+          fileMeshesRef.current.delete(layer.url);
+        }
+      } else if (layer?.kind === 'connectome') {
+        // Only generated connectomes (ESI/electrodes) get here. Dispatch by URL — each tracks its own
+        // mesh, owned by its own hook (mutating `.current` isn't allowed from outside, hence clear*Mesh).
         if (layer.url === ESI_LAYER_URL) {
           if (esiMeshRef.current) {
             nv.removeMesh(esiMeshRef.current);
@@ -599,14 +579,9 @@ export const NiiViewer = ({
           dismissElectrodeLayer();
           onElectrodeLayerDismissed?.(); // tells PatientView to flip the electrode toggle off
         }
-      } else if (layer?.kind === 'mesh') {
-        // File meshes live in nv.meshes, tracked by fileMeshesRef — drop it from both.
-        const mesh = fileMeshesRef.current.get(layer.url);
-        if (mesh) {
-          nv.removeMesh(mesh);
-          fileMeshesRef.current.delete(layer.url);
-        }
       } else {
+        // Everything else is an image volume (a file volume, or the ESI layer in volume mode):
+        // it lives in nv.volumes, so it's removed by its index there (see selectNvVolumeIndex).
         nv.removeVolumeByIndex(selectNvVolumeIndex(layerState, url));
         // The ESI volume (volume mode) is a non-connectome layer too — clear its ref so the
         // ESI build effect doesn't try to remove an already-gone NVImage on its next rebuild,
@@ -663,8 +638,8 @@ export const NiiViewer = ({
   }, [orderedLayers, onHasContentChange]);
 
   // Reports whether the 3D scene has a usable spatial extent — i.e. at least one image
-  // volume or surface mesh. A connectome-only scene (electrodes and/or the ESI
-  // layer in connectome mode) leaves NiiVue's scene extent at zero, which makes its per-frame
+  // volume or surface mesh. A connectome-only scene (electrodes, the ESI layer in connectome
+  // mode and/or connectome files) leaves NiiVue's scene extent at zero, which makes its per-frame
   // sync() crash (createOnLocationChange → toFixed(Infinity)) if another instance is broadcast-
   // linked to it. PatientView uses this to keep the cross-panel rotation link off whenever this
   // viewer holds nothing but connectomes — see the sync effect in PatientView. Covers every
@@ -697,10 +672,11 @@ export const NiiViewer = ({
           onReorder={handleReorder}
           onDeleteLayer={handleDeleteLayer}
         />
+        {/* No accepted_formats: NiiVue reads dozens of formats beyond the listed ones, and an
+            accept list would hide those in the file picker (see src/utils/imagingFormats.js). */}
         <FileDropZone
-          onFiles={handleNiiFiles}
-          accepted_formats=".nii,.nii.gz,.mgh,.mgz,.gii,.ply,.obj,.dcm"
-          label="Drop additional files"
+          onFiles={handleImagingFiles}
+          label="Browse or drop volumes / meshes / connectomes"
           compact
         />
       </div>

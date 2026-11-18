@@ -166,3 +166,56 @@ describe('useEegFileIntake › handleEegFiles result', () => {
     expect(setEeg).toHaveBeenCalledWith(PARSED_EEG);
   });
 });
+
+describe('useEegFileIntake › montage files', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    detectAndLoadEEG.mockResolvedValue(PARSED_EEG);
+  });
+
+  const MTG = `<!DOCTYPE AnyWaveMontage>
+<Montage>
+	<Channel name="Fp2">
+		<type>EEG</type>
+		<reference>Fp1</reference>
+		<color></color>
+	</Channel>
+</Montage>`;
+
+  it('parses a dropped .mtg file into droppedMontage, without treating it as a recording', async () => {
+    const toast = (await import('react-hot-toast')).default;
+    const { hook, drop, setEeg } = setup();
+    expect(await drop(file('my_montage.mtg', MTG))).toBe(false);
+    expect(setEeg).not.toHaveBeenCalled();
+    expect(detectAndLoadEEG).not.toHaveBeenCalled();
+    expect(toast.error).not.toHaveBeenCalled(); // not rejected as unsupported
+    expect(hook.result.current.droppedMontage).toMatchObject({
+      fileName: 'my_montage.mtg',
+      rows: [expect.objectContaining({ channel: 'Fp2', reference: 'Fp1' })],
+      channelTypes: { Fp2: 'eeg' },
+    });
+  });
+
+  it('keeps the montage when dropped together with a recording', async () => {
+    const { hook, drop, setEeg } = setup();
+    expect(await drop(file('rec.edf'), file('my_montage.mtg', MTG))).toBe(true);
+    expect(setEeg).toHaveBeenCalledWith(PARSED_EEG);
+    expect(hook.result.current.droppedMontage?.fileName).toBe('my_montage.mtg');
+  });
+
+  it('shows an error toast and keeps the previous montage when the file is not a valid montage', async () => {
+    const toast = (await import('react-hot-toast')).default;
+    const { hook, drop } = setup();
+    await drop(file('good.mtg', MTG));
+    await drop(file('bad.mtg', 'not a montage'));
+    expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/montage/i));
+    expect(hook.result.current.droppedMontage?.fileName).toBe('good.mtg');
+  });
+
+  it('clears the montage on resetIntake', async () => {
+    const { hook, drop } = setup();
+    await drop(file('my_montage.mtg', MTG));
+    act(() => hook.result.current.resetIntake());
+    expect(hook.result.current.droppedMontage).toBeNull();
+  });
+});

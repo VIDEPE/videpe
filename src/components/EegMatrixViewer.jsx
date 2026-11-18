@@ -26,7 +26,7 @@ const LABEL_COL_WIDTH = 28;
 // neither eeg nor seeg (e.g. ECG) get their own "Other" section at the bottom. See
 // EegTopoViewer, which swaps this in for the Matrix tab. Pure channel-name-derived, no
 // electrode position file needed (unlike the 3D connectome, which does).
-export function EegMatrixViewer({ channelNames, voltages, channelTypes, colourBlindMode }) {
+export function EegMatrixViewer({ channelNames, voltages, channelTypes, colorBlindMode }) {
   const buckets = useMemo(
     () => splitChannelsByType(channelNames, voltages, channelTypes),
     [channelNames, voltages, channelTypes]
@@ -54,16 +54,16 @@ export function EegMatrixViewer({ channelNames, voltages, channelTypes, colourBl
         title="EEG"
         groups={eegMatrix.groups}
         ungrouped={eegMatrix.ungrouped}
-        colourBlindMode={colourBlindMode}
+        colorBlindMode={colorBlindMode}
       />
       <MatrixSection
         sectionKey="seeg"
         title="SEEG"
         groups={seegMatrix.groups}
         ungrouped={seegMatrix.ungrouped}
-        colourBlindMode={colourBlindMode}
+        colorBlindMode={colorBlindMode}
       />
-      <OtherSection entries={otherEntries} colourBlindMode={colourBlindMode} />
+      <OtherSection entries={otherEntries} colorBlindMode={colorBlindMode} />
     </div>
   );
 }
@@ -80,9 +80,9 @@ export function EegMatrixViewer({ channelNames, voltages, channelTypes, colourBl
  * @param {{ group: string, contacts: { numberInGroup: number, channelIdx: number, voltage: number }[] }[]} groups
  *   - from buildElectrodeMatrix
  * @param {{ channelIdx: number, name: string, voltage: number }[]} ungrouped - from buildElectrodeMatrix
- * @param {boolean} colourBlindMode
+ * @param {boolean} colorBlindMode
  */
-function MatrixSection({ sectionKey, title, groups, ungrouped, colourBlindMode }) {
+function MatrixSection({ sectionKey, title, groups, ungrouped, colorBlindMode }) {
   // Own colour scale per section — EEG (scalp) and SEEG (depth) voltages typically differ by
   // an order of magnitude, so a single shared scale would wash out whichever type is smaller.
   // Ungrouped entries share it too, since they're genuinely the same channel type.
@@ -167,7 +167,7 @@ function MatrixSection({ sectionKey, title, groups, ungrouped, colourBlindMode }
                             }
                             style={{
                               backgroundColor: cell
-                                ? interpolateDivergingColor(cell.voltage, calMax, colourBlindMode)
+                                ? interpolateDivergingColor(cell.voltage, calMax, colorBlindMode)
                                 : 'transparent',
                             }}
                           />
@@ -212,7 +212,7 @@ function MatrixSection({ sectionKey, title, groups, ungrouped, colourBlindMode }
                       backgroundColor: interpolateDivergingColor(
                         entry.voltage,
                         calMax,
-                        colourBlindMode
+                        colorBlindMode
                       ),
                     }}
                   />
@@ -231,7 +231,7 @@ function MatrixSection({ sectionKey, title, groups, ungrouped, colourBlindMode }
 // table-fixed like MatrixSection) so columns size to fit each name in full rather than
 // truncating it — names here aren't constrained to the electrode-label lengths MatrixSection's
 // ungrouped rows expect.
-function OtherSection({ entries, colourBlindMode }) {
+function OtherSection({ entries, colorBlindMode }) {
   const calMax = useMemo(
     () => Math.max(1e-6, ...entries.map((e) => Math.abs(e.voltage))),
     [entries]
@@ -271,7 +271,7 @@ function OtherSection({ entries, colourBlindMode }) {
                       backgroundColor: interpolateDivergingColor(
                         entry.voltage,
                         calMax,
-                        colourBlindMode
+                        colorBlindMode
                       ),
                     }}
                   />

@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 // Components
 import { FullWidthLayout } from '../components/FullWidthLayout';
 import { ThemeToggle } from '../components/ThemeToggle';
+import { ColorBlindToggle } from '@/components/ColorBlindToggle';
 import { ResearchUseBadge } from '../components/VidepeLogo';
 import { VidepeTitle } from '../components/VidepeTitle';
 import { EegViewer } from '../components/EegViewer';
@@ -14,11 +15,13 @@ import { SplitPane } from '../components/SplitPane';
 import { FileDropZone } from '../components/FileDropZone';
 // Utils
 import { filesToLayers, rotateViews } from '../utils/NiiViewer.utils';
+import { IMAGING_DROPZONE_DESCRIPTION } from '@/utils/imagingFormats';
 import { buildElectrodeLayer } from '../utils/eegTopographyUtils';
 import {
   EEG_FORMAT_EXTENSIONS,
   ELEC_POS_EXTENSIONS,
   INV_SOLUTIONS_EXTENSIONS,
+  MONTAGE_EXTENSIONS,
   SUPPORTED_EEG_FORMATS,
 } from '../loaders/eegFormatRegistry';
 // Hooks
@@ -38,16 +41,18 @@ import neuxelecLogo from '@/assets/neuxelec_logo.ico';
 const PANEL_TITLE_CLASS = 'h-7 flex items-center text-xl font-medium leading-none text-heading';
 const PANEL_SUBTITLE_CLASS = 'text-xs font-medium text-foreground pl-2';
 
-// Everything the initial EEG dropzone handles: recordings, electrode positions and inverse
-// solutions. Built from the registry, so the file picker never falls behind a newly added format.
+// Everything the initial EEG dropzone handles: recordings, electrode positions, inverse
+// solutions and montages. Built from the registry, so the file picker never falls behind a
+// newly added format.
 const EEG_DROPZONE_ACCEPTED_FORMATS = [
   ...EEG_FORMAT_EXTENSIONS,
   ...ELEC_POS_EXTENSIONS,
   ...INV_SOLUTIONS_EXTENSIONS,
+  ...MONTAGE_EXTENSIONS,
 ].join(',');
 
 // What the initial EEG dropzone lists: one row per recording format (from the registry, so a new
-// format is listed automatically), then electrode positions and inverse solutions
+// format is listed automatically), then electrode positions, inverse solutions and montages
 const EEG_DROPZONE_DESCRIPTION = [
   ...SUPPORTED_EEG_FORMATS.map((format) => ({
     label: `${format.name}:`,
@@ -55,6 +60,7 @@ const EEG_DROPZONE_DESCRIPTION = [
   })),
   { label: 'Electrode Positions:', value: '.elc + .tsv' },
   { label: 'Inverse Solution:', value: '.mat (FieldTrip)' },
+  { label: 'Montage:', value: '.mtg (AnyWave, Cartool)' },
 ];
 
 export const PatientView = () => {
@@ -117,7 +123,9 @@ export const PatientView = () => {
     eegHint,
     customElectrodes,
     customElecPosFileName,
+    droppedMontage,
     handleElecPosFile,
+    handleMontageFile,
     handleEegFiles,
     resetIntake,
   } = useEegFileIntake({
@@ -250,7 +258,7 @@ export const PatientView = () => {
 
   // Handler for when imaging files are dropped or selected. It reads the files as ArrayBuffers and prepares them for visualization, updating state accordingly.
   // NiiViewer shows its own loading/success toast once mounted, so this just sets layers and surfaces errors.
-  const handleNiiFiles = async (files) => {
+  const handleImagingFiles = async (files) => {
     setIsLoading(true);
     try {
       const result = await filesToLayers(files);
@@ -412,9 +420,11 @@ export const PatientView = () => {
         </div>
 
         {/* Right column: ThemeToggle rendered inline (not fixed) — top bar never scrolls so fixed isn't needed,
-            and inline keeps it locked to the layout as the window resizes */}
-        <div className="flex justify-end items-start px-5 py-3">
+            and inline keeps it locked to the layout as the window resizes. The app-wide colorblind
+            colormap toggle sits right below it. */}
+        <div className="flex flex-col items-end px-5 pt-3">
           <ThemeToggle className="" />
+          <ColorBlindToggle className="-mt-1" />
         </div>
       </div>
 
@@ -450,8 +460,10 @@ export const PatientView = () => {
               esiChannelTotalCount={esiChannelTotalCount}
               isEsiChannelMatchGoodForLed={isEsiChannelMatchGoodForLed}
               esiSeegChannelNames={esiSeegChannelNames}
+              droppedMontage={droppedMontage}
               onElecPosFile={handleElecPosFile}
               onInverseSolutionFile={handleInverseSolutionFile}
+              onMontageFile={handleMontageFile}
               onElectrodeSnapshotChange={setElectrodeSnapshot}
               onChannelSnapshotChange={setChannelSnapshot}
               onChannelTypesChange={setChannelTypes}
@@ -469,7 +481,7 @@ export const PatientView = () => {
                 accepted_formats={EEG_DROPZONE_ACCEPTED_FORMATS}
                 label={'Drop EEG files'}
                 description={EEG_DROPZONE_DESCRIPTION}
-                // Registered electrode-position/inverse-solution files ride along in the same checkmark list as pending EEG files.
+                // Registered electrode-position/inverse-solution/montage files ride along in the same checkmark list as pending EEG files.
                 pendingFiles={[
                   ...pendingEegFiles.map((f) => ({ name: `EEG Recording: ${f.name}` })),
                   ...(customElecPosFileName
@@ -478,6 +490,7 @@ export const PatientView = () => {
                   ...(inverseSolutionFileName
                     ? [{ name: `Inverse solution: ${inverseSolutionFileName}` }]
                     : []),
+                  ...(droppedMontage ? [{ name: `Montage: ${droppedMontage.fileName}` }] : []),
                 ]}
                 hint={eegHint}
                 className="h-full min-h-48"
@@ -503,11 +516,12 @@ export const PatientView = () => {
             />
           ) : (
             <div className="h-full p-2">
+              {/* No accepted_formats: NiiVue reads dozens of formats beyond the listed ones, and an
+                  accept list would hide those in the file picker. The description says so. */}
               <FileDropZone
-                onFiles={handleNiiFiles}
-                accepted_formats=".nii,.nii.gz,.mgh,.mgz,.gii,.ply,.obj,.dcm"
+                onFiles={handleImagingFiles}
                 label="Drop imaging files"
-                description="Volumes: NIfTI, MGH, DICOM, GIFTI, PLY, OBJ, …"
+                description={IMAGING_DROPZONE_DESCRIPTION}
                 className="h-full min-h-48"
               />
             </div>

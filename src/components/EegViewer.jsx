@@ -32,8 +32,9 @@ import {
   getRowCrosshairPosition,
   filterMontageRows,
   computeAutoYScale,
+  remapMontageToRecording,
 } from '@/utils/eegViewerUtils';
-import { hasActiveFilters } from '@/utils/eegFilters';
+import { hasActiveFilters, extractGlobalFilters } from '@/utils/eegFilters';
 import { useEegBuffer } from '@/loaders/eegBuffer';
 import { useContainerResize } from '@/hooks/useContainerResize';
 import { useEegPlotControls } from '@/hooks/useEegPlotControls';
@@ -46,7 +47,11 @@ import { useTimepointSnapshot } from '@/hooks/useTimepointSnapshot';
 import { useRowResize } from '@/hooks/useRowResize';
 import { DEFAULT_GLOBAL_FILTERS, countChannelsByType } from '@/utils/channelTypes';
 
-import { ELEC_POS_EXTENSIONS, INV_SOLUTIONS_EXTENSIONS } from '@/loaders/eegFormatRegistry';
+import {
+  ELEC_POS_EXTENSIONS,
+  INV_SOLUTIONS_EXTENSIONS,
+  MONTAGE_EXTENSIONS,
+} from '@/loaders/eegFormatRegistry';
 import { EegTopoViewer } from '@/components/EegTopoViewer';
 import { FileDropZone } from '@/components/FileDropZone';
 import { StatusLed } from '@/components/StatusLed';
@@ -190,8 +195,10 @@ export const EegViewer = ({
   esiChannelTotalCount, // paired with esiChannelMatchCount for the Inverse Solution status LED
   isEsiChannelMatchGoodForLed = false, // true only for a *full* match — a partial match means ESI can't compute at all
   esiSeegChannelNames = [], // which of the model's own channels are matched by name but themselves typed SEEG — explains an amber/disabled state a bare match count can't
+  droppedMontage = null, // {fileName, rows, channelTypes} — owned by PatientView (useEegFileIntake), the last .mtg file dropped; applied once per new drop
   onElecPosFile,
   onInverseSolutionFile,
+  onMontageFile, // (file: File) — hands a .mtg file dropped here to useEegFileIntake, which parses it into droppedMontage
   onElectrodeSnapshotChange,
   onChannelSnapshotChange,
   onChannelTypesChange, // channelSettings type per channelNames index, independent of any plot click — lets the Inverse Solution LED/ESI toggle react to a montage-editor type edit without waiting for a topo click
@@ -443,56 +450,88 @@ export const EegViewer = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- updateVisibleChannelCount isn't memoized
   }, [visibleChannelCount, displayRows.length]);
 
-  const applyMontageFileTemplate = (template) => {
-    // Warn about any channel/reference the template names that this recording doesn't
+  // Applies a parsed montage file: a bundled template picked in the dropdown, or a file dropped
+  // in a dropzone or passed on launch. `montage` is { name, rows, channelTypes }, already in the
+  // recording's spelling.
+  const applyMontageFile = (montage) => {
+    // Warn about any channel/reference the montage names that this recording doesn't
     // have — those rows still get applied to montageChannels state below (so the dropdown
-    // keeps reflecting "this is the template, as loaded"), but buildMontageDisplayRows
+    // keeps reflecting "this is the montage, as loaded"), but buildMontageDisplayRows
     // silently drops them from the waveform, which otherwise looks like a mystery
     // empty/partial montage.
     const missingNames = new Set();
-    for (const row of template.rows) {
+    for (const row of montage.rows) {
       if (!channelNames.includes(row.channel)) missingNames.add(row.channel);
       if (row.reference && !channelNames.includes(row.reference)) missingNames.add(row.reference);
     }
     if (missingNames.size > 0) {
       if (missingNames.size < 20) {
         toast(
-          `"${template.name}" applied.\nRecording is missing ${missingNames.size} ${missingNames.size > 1 ? 'channels' : 'channel'}.\nIt references: (${[...missingNames].join(', ')}) — these rows won't be shown.`,
+          `"${montage.name}" applied.\nRecording is missing ${missingNames.size} ${missingNames.size > 1 ? 'channels' : 'channel'}.\nIt references: (${[...missingNames].join(', ')}) — these rows won't be shown.`,
           {
             icon: '⚠️',
           }
         );
       } else {
         toast(
-          `"${template.name}" applied.\nRecording is missing ${missingNames.size} channels.\nThese rows won't be shown.`,
+          `"${montage.name}" applied.\nRecording is missing ${missingNames.size} channels.\nThese rows won't be shown.`,
           {
             icon: '⚠️',
           }
         );
       }
     }
-
-    // Overwrite the current montage rows with the one from the template
-    applyMontageChannels(
-      template.rows.map((row) => ({
-        id: crypto.randomUUID(),
-        ...row, // this preserves whatever channel, reference and color the fil has per row
-      }))
-    );
-    // Patch the type of every channel the template names. A name not in this recording
+    // Patch the type of every channel the montage names. A name not in this recording
     // still gets added (harmless — nothing reads channelSettings by iterating its keys).
     const nextChannelSettings = { ...channelSettings };
-    for (const [name, type] of Object.entries(template.channelTypes)) {
+    for (const [name, type] of Object.entries(montage.channelTypes)) {
       nextChannelSettings[name] = { ...nextChannelSettings[name], type };
     }
     applyChannelSettings(nextChannelSettings);
+
+    // Extract the Global Filters from the montage
+    const { clearedRows, extractedGlobalFilters } = extractGlobalFilters(
+      montage.rows,
+      nextChannelSettings
+    );
+
+    // Overwrite the current montage rows with the ones from the montage
+    applyMontageChannels(
+      clearedRows.map((row) => ({
+        id: crypto.randomUUID(),
+        ...row, // this preserves whatever channel, reference and color the file has per row
+      }))
+    );
+
+    // Merge the global filters extracted from the montage into the current ones, per type
+    const nextGlobalFilters = { ...globalFilters };
+    for (const [type, typeFilters] of Object.entries(extractedGlobalFilters)) {
+      nextGlobalFilters[type] = { ...globalFilters[type], ...typeFilters };
+    }
+    setGlobalFilters(nextGlobalFilters);
   };
+
+  // Applies a montage file dropped in either dropzone, through the same path as a bundled template:
+  // converted to the recording's spelling first (like the montage editor's Load button), so a
+  // file written with Fp1 works on a recording with FP1. Runs on mount too, for a file dropped
+  // before this viewer existed. The ref makes sure each drop is applied only once — React's
+  // StrictMode re-runs effects in development, which would otherwise repeat the toasts.
+  const appliedDroppedMontageRef = useRef(null);
+  useEffect(() => {
+    if (!droppedMontage || appliedDroppedMontageRef.current === droppedMontage) return;
+    appliedDroppedMontageRef.current = droppedMontage;
+    applyMontageFile({
+      name: droppedMontage.fileName,
+      ...remapMontageToRecording(droppedMontage, channelNames),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- apply once per new drop only, not on every channelNames/channelSettings change
+  }, [droppedMontage]);
 
   // Routes the sidebar template <select>'s value to the right apply function — a template id
   // (looked up in montageTemplates) or one of the built-in preset strings.
   const applyTemplateSelection = (value) => {
     const template = montageTemplates.find((t) => t.id === value);
-    if (template) applyMontageFileTemplate(template);
+    if (template) applyMontageFile(template);
     else applyMontageTemplate(value);
   };
 
@@ -1503,7 +1542,8 @@ export const EegViewer = ({
         {/* Persistent electrode-position dropzone — always available once EEG is loaded,
             not just buried in the topography popup. Overwrites whatever positions are
             currently active (fsaverage_1005, or a file loaded via any of the other entry
-            points) — onElecPosFile has no "only if empty" guard. */}
+            points) — onElecPosFile has no "only if empty" guard. A montage file dropped
+            here likewise replaces the current montage (see droppedMontage). */}
         <FileDropZone
           onFiles={(files) => {
             const all = Array.from(files);
@@ -1515,12 +1555,20 @@ export const EegViewer = ({
               ELEC_POS_EXTENSIONS.some((ext) => f.name.toLowerCase().endsWith(ext))
             );
             if (elecFile) onElecPosFile?.(elecFile);
+            const montageFile = all.findLast((f) =>
+              MONTAGE_EXTENSIONS.some((ext) => f.name.toLowerCase().endsWith(ext))
+            );
+            if (montageFile) onMontageFile?.(montageFile);
 
-            // Anything that isn't an electrode-position or inverse-solution file (e.g. an
-            // imaging volume meant for the Neuroimaging panel) would otherwise be silently
-            // swallowed here — surface it instead of leaving the user to wonder why
+            // Anything that isn't an electrode-position, inverse-solution or montage file
+            // (e.g. an imaging volume meant for the Neuroimaging panel) would otherwise be
+            // silently swallowed here — surface it instead of leaving the user to wonder why
             // nothing happened.
-            const recognizedExtensions = [...ELEC_POS_EXTENSIONS, ...INV_SOLUTIONS_EXTENSIONS];
+            const recognizedExtensions = [
+              ...ELEC_POS_EXTENSIONS,
+              ...INV_SOLUTIONS_EXTENSIONS,
+              ...MONTAGE_EXTENSIONS,
+            ];
             const unsupported = all.filter(
               (f) => !recognizedExtensions.some((ext) => f.name.toLowerCase().endsWith(ext))
             );
@@ -1530,12 +1578,12 @@ export const EegViewer = ({
                   .map((f) => f.name)
                   .join(
                     ', '
-                  )}\nExpected electrode positions (.elc, .tsv) or an inverse solution (.mat).`
+                  )}\nExpected electrode positions (.elc, .tsv), an inverse solution (.mat) or a montage (.mtg).`
               );
             }
           }}
-          accepted_formats=".elc,.tsv,.mat"
-          label="Browse or drop electrode positions / inverse solution"
+          accepted_formats=".elc,.tsv,.mat,.mtg"
+          label="Browse or drop electrode positions / inverse solution / montage"
           compact
           className="shrink-0 mb-2 mt-1"
         >
@@ -1633,6 +1681,7 @@ export const EegViewer = ({
           onApplyChannelSettings={applyChannelSettings}
           montageChannels={montageChannels}
           onApplyMontageChannels={applyMontageChannels}
+          onApplyGlobalFilters={setGlobalFilters}
           fs={provider.fs}
           globalFilters={globalFilters}
         />

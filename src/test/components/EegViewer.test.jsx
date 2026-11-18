@@ -1885,12 +1885,39 @@ describe('EegViewer — customElectrodes prop', () => {
 });
 
 describe('EegViewer — persistent electrode position dropzone', () => {
-  it('renders a dropzone for electrode positions and inverse solution even while the topography window is closed', async () => {
+  it('renders a dropzone for electrode positions, inverse solution and montage even while the topography window is closed', async () => {
     await renderViewer();
     expect(screen.queryByTestId('eeg-topo-viewer')).toBeNull();
     expect(
-      screen.getByText('Browse or drop electrode positions / inverse solution')
+      screen.getByText('Browse or drop electrode positions / inverse solution / montage')
     ).toBeInTheDocument();
+  });
+
+  it('calls onMontageFile with a dropped .mtg file, without rejecting it as unsupported', async () => {
+    const { default: toast } = await import('react-hot-toast');
+    toast.error.mockClear();
+    const onMontageFile = vi.fn();
+    const provider = makeProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        onMontageFile={onMontageFile}
+      />
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const mtgFile = new File(['<Montage/>'], 'my_montage.mtg');
+    const zone = screen
+      .getByText('Browse or drop electrode positions / inverse solution / montage')
+      .closest('div[class]');
+    fireEvent.drop(zone, { dataTransfer: { files: [mtgFile] } });
+
+    expect(onMontageFile).toHaveBeenCalledWith(mtgFile);
+    expect(toast.error).not.toHaveBeenCalled();
   });
 
   it('calls onElecPosFile with the dropped .elc file', async () => {
@@ -2280,7 +2307,7 @@ describe('EegViewer — persistent electrode position dropzone', () => {
     // rather than the browser's own file-picker filtering.
     const niiFile = new File(['binary'], 'sub-01_T1w.nii');
     const zone = screen
-      .getByText('Browse or drop electrode positions / inverse solution')
+      .getByText('Browse or drop electrode positions / inverse solution / montage')
       .closest('div[class]');
     fireEvent.drop(zone, { dataTransfer: { files: [niiFile] } });
 
@@ -2763,6 +2790,243 @@ describe('EegViewer — file-backed montage templates', () => {
     );
     // the row itself is dropped from the display since its reference channel doesn't exist
     expect(screen.queryByText('EEG1 - EEG9')).toBeNull();
+  });
+});
+
+// A montage file dropped in a dropzone (see useEegFileIntake) arrives as the droppedMontage
+// prop — already parsed, but still in the file's own channel spelling.
+describe('EegViewer — dropped montage files', () => {
+  // Written in lowercase to check it's converted to the recording's spelling (EEG1, EEG2)
+  const MTG_TEXT = `<!DOCTYPE AnyWaveMontage>
+<Montage>
+	<Channel name="eeg1">
+		<type>SEEG</type>
+		<reference></reference>
+		<color></color>
+	</Channel>
+	<Channel name="eeg2">
+		<type>EEG</type>
+		<reference>eeg1</reference>
+		<color></color>
+	</Channel>
+</Montage>`;
+
+  const makeDroppedMontage = (fileName = 'my_montage.mtg') => ({
+    fileName,
+    ...parseAnyWaveMontage(MTG_TEXT),
+  });
+
+  const flush = () =>
+    act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+  it('applies a montage that was dropped before the viewer mounted', async () => {
+    const provider = makeProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        droppedMontage={makeDroppedMontage()}
+      />
+    );
+    await flush();
+
+    expect(screen.getByText('EEG1')).toBeTruthy();
+    expect(screen.getByText('EEG2 - EEG1')).toBeTruthy();
+    expect(screen.queryByText('EEG3')).toBeNull();
+
+    // channel types from the file are patched in too
+    await userEvent.click(screen.getByRole('button', { name: 'Montage' }));
+    expect(screen.getByTestId('channel-type-EEG1')).toHaveValue('seeg');
+  });
+
+  it('applies a new montage dropped while the viewer is open', async () => {
+    const provider = makeProvider();
+    const { rerender } = render(
+      <EegViewer provider={provider} channelNames={provider.channelNames} />
+    );
+    await flush();
+    expect(screen.getByText('EEG3')).toBeTruthy();
+
+    rerender(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        droppedMontage={makeDroppedMontage()}
+      />
+    );
+
+    expect(screen.getByText('EEG2 - EEG1')).toBeTruthy();
+    expect(screen.queryByText('EEG3')).toBeNull();
+  });
+
+  it('does not re-apply the same dropped montage over a later edit', async () => {
+    const provider = makeProvider();
+    const droppedMontage = makeDroppedMontage();
+    const { rerender } = render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        droppedMontage={droppedMontage}
+      />
+    );
+    await flush();
+
+    await userEvent.selectOptions(screen.getByTestId('montage-template-select'), 'average');
+    rerender(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        droppedMontage={droppedMontage}
+      />
+    );
+
+    channelNames.forEach((name) => expect(screen.getByText(`${name} - Avg`)).toBeTruthy());
+  });
+});
+
+// A loaded montage's filters that are shared by every row of a channel type become that type's
+// global filters (see extractGlobalFilters). Cutoffs stay below the test recording's Nyquist
+// (fs = 1 → 0.5 Hz), so the filtering they switch on stays stable.
+describe('EegViewer — global filters from a loaded montage', () => {
+  // EEG1 and EEG2 (both EEG) share high-pass 0.1 and low-pass 0.4; neither has a notch
+  const FILTERS_MTG_TEXT = `<!DOCTYPE AnyWaveMontage>
+<Montage>
+	<Channel name="EEG1">
+		<type>EEG</type>
+		<reference></reference>
+		<color></color>
+		<filters highPass="0.1" lowPass="0.4" notch="0"/>
+	</Channel>
+	<Channel name="EEG2">
+		<type>EEG</type>
+		<reference>EEG1</reference>
+		<color></color>
+		<filters highPass="0.1" lowPass="0.4" notch="0"/>
+	</Channel>
+</Montage>`;
+
+  const droppedMontage = (text = FILTERS_MTG_TEXT) => ({
+    fileName: 'filters.mtg',
+    ...parseAnyWaveMontage(text),
+  });
+
+  const flush = () =>
+    act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+  // Opens the Global Filters window and returns eeg's three inputs
+  const openGlobalFilters = async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Filters' }));
+    return {
+      highPass: screen.getByTestId('global-highPass-eeg'),
+      lowPass: screen.getByTestId('global-lowPass-eeg'),
+      notch: screen.getByTestId('global-notch-eeg'),
+    };
+  };
+
+  // Sets eeg's global low-pass through the Global Filters window, like a user would
+  const setGlobalLowPass = async (value) => {
+    const { lowPass } = await openGlobalFilters();
+    await userEvent.type(lowPass, value);
+    await userEvent.click(screen.getByRole('button', { name: 'OK' }));
+  };
+
+  it('sets the shared filters of a dropped montage as global filters', async () => {
+    const provider = makeProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        droppedMontage={droppedMontage()}
+      />
+    );
+    await flush();
+
+    const { highPass, lowPass, notch } = await openGlobalFilters();
+    expect(highPass).toHaveValue(0.1);
+    expect(lowPass).toHaveValue(0.4);
+    expect(notch).toHaveValue(null);
+  });
+
+  it("clears those filters from the dropped montage's rows, which then follow the global ones", async () => {
+    const provider = makeProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        droppedMontage={droppedMontage()}
+      />
+    );
+    await flush();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Montage' }));
+    const highPassInputs = screen.getAllByTestId(/^montage-highpass-/);
+    expect(highPassInputs).toHaveLength(2);
+    highPassInputs.forEach((input) => {
+      expect(input).toHaveValue(null);
+      expect(input).toHaveAttribute('placeholder', '0.1');
+    });
+  });
+
+  it("keeps the global filters the dropped montage doesn't set", async () => {
+    // only high-pass is set in this file; low-pass is off on both rows
+    const highPassOnly = FILTERS_MTG_TEXT.replaceAll('lowPass="0.4"', 'lowPass="-1"');
+    const provider = makeProvider();
+    const { rerender } = render(
+      <EegViewer provider={provider} channelNames={provider.channelNames} />
+    );
+    await flush();
+    await setGlobalLowPass('0.3');
+
+    rerender(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        droppedMontage={droppedMontage(highPassOnly)}
+      />
+    );
+
+    const { highPass, lowPass } = await openGlobalFilters();
+    expect(highPass).toHaveValue(0.1);
+    expect(lowPass).toHaveValue(0.3);
+  });
+
+  // The bundled templates have no filters in their files: picking one mustn't reset the
+  // global filters the user set
+  it('keeps the global filters when a montage template without filters is picked', async () => {
+    montageTemplatesMock.current = [
+      {
+        id: 'test-template',
+        name: 'Test Template',
+        ...parseAnyWaveMontage(FILTERS_MTG_TEXT.replaceAll(/\s*<filters [^>]*\/>/g, '')),
+      },
+    ];
+    await renderViewer();
+    await setGlobalLowPass('0.3');
+
+    await userEvent.selectOptions(screen.getByTestId('montage-template-select'), 'test-template');
+
+    const { lowPass } = await openGlobalFilters();
+    expect(lowPass).toHaveValue(0.3);
+  });
+
+  it("sets the global filters from a montage loaded in the editor once it's confirmed with OK", async () => {
+    await renderViewer();
+    await userEvent.click(screen.getByRole('button', { name: 'Montage' }));
+    await userEvent.upload(
+      screen.getByTestId('montage-file-input'),
+      new File([FILTERS_MTG_TEXT], 'filters.mtg')
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'OK' }));
+
+    const { highPass, lowPass } = await openGlobalFilters();
+    expect(highPass).toHaveValue(0.1);
+    expect(lowPass).toHaveValue(0.4);
   });
 });
 

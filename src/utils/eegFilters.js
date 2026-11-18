@@ -89,14 +89,18 @@ export function getBandStopCoeff(fs, fc, order = 1) {
  * Each is independently optional (`null` means off). Highpass, lowpass, and notch are
  * independent LTI filters, so cascading them is commutative — no need for a dedicated
  * bandpass design; a highpass section followed by a lowpass section produces the same result.
+ * With `notchHarmonics`, extra notch sections at 2× and 3× the notch frequency remove the mains
+ * harmonics too (e.g. 100 and 150 Hz for a 50 Hz notch) — each only when below Nyquist.
  *
  * @param {number} fs - Sampling frequency in Hz.
  * @param {number|null} highPass - Highpass cutoff in Hz, or `null` to skip.
  * @param {number|null} lowPass - Lowpass cutoff in Hz, or `null` to skip.
  * @param {number|null} notch - Notch center frequency in Hz, or `null` to skip.
+ * @param {boolean} [notchHarmonics=false] - Also notch the 2nd and 3rd harmonic of `notch`;
+ *   ignored when `notch` is `null`. A harmonic at or above Nyquist (fs / 2) is skipped.
  * @returns {Array<{ z: number[], a: number[], b: number[], a0: number, k: number }>} Concatenated coefficient sections for every filter that's set; empty if none are.
  */
-export function buildFilterSections(fs, highPass, lowPass, notch) {
+export function buildFilterSections(fs, highPass, lowPass, notch, notchHarmonics = false) {
   const sections = [];
 
   if (highPass !== null) {
@@ -107,6 +111,12 @@ export function buildFilterSections(fs, highPass, lowPass, notch) {
   }
   if (notch !== null) {
     sections.push(...getBandStopCoeff(fs, notch));
+    // 2f and 3f, only below Nyquist (fs/2) => fili's coefficients are unstable at or above it
+    if (notchHarmonics === true) {
+      [2, 3].forEach((k) => {
+        if (k * notch < fs / 2) sections.push(...getBandStopCoeff(fs, k * notch));
+      });
+    }
   }
 
   return sections;
@@ -207,7 +217,13 @@ export function applyFilterSections(samples, sections, window) {
  * @returns {number[]} Filtered signal, same length as `samples`.
  */
 export function applyMontageRowFilter(samples, row, fs, window) {
-  const sections = buildFilterSections(fs, row.highPass, row.lowPass, row.notch);
+  const sections = buildFilterSections(
+    fs,
+    row.highPass,
+    row.lowPass,
+    row.notch,
+    row.notchHarmonics
+  );
   if (sections.length === 0) return samples; // nothing to filter — skip building a default window too
   const resolvedWindow = window ?? getTukeyWindow(samples.length + fs, 0.1);
   return applyFilterSections(samples, sections, resolvedWindow);
@@ -218,24 +234,26 @@ export function applyMontageRowFilter(samples, row, fs, window) {
  * own values with the global filters for the row's channel type. A row value of `null` means
  * "follow global"; any set value (including 0) is a channel-specific exception that wins over
  * the global one. Each field resolves on its own, so a row with only its own highPass still
- * follows the global lowPass and notch.
+ * follows the global lowPass and notch. `notchHarmonics` always comes from the type: rows have
+ * no setting of their own, so a row's own notch also gets its type's harmonics.
  *
  * The caller looks up the channel type and passes only that type's entry, e.g. for a
  * globalFilters of:
  *   {
- *     eeg:   { highPass: 0.5, lowPass: 70, notch: 50 },
- *     seeg:  { highPass: null, lowPass: null, notch: null },
- *     other: { highPass: null, lowPass: null, notch: null },
+ *     eeg:   { highPass: 0.5, lowPass: 70, notch: 50, notchHarmonics: true },
+ *     seeg:  { highPass: null, lowPass: null, notch: null, notchHarmonics: false },
+ *     other: { highPass: null, lowPass: null, notch: null, notchHarmonics: false },
  *   }
  * an EEG row is resolved with `resolveRowFilters(row, globalFilters.eeg)`.
  *
  * @param {{highPass: number|null, lowPass: number|null, notch: number|null}} row - A montage
  *   row; `null` on a field means "follow the global setting". Other row fields are ignored.
- * @param {{highPass: number|null, lowPass: number|null, notch: number|null}|undefined} typeFilters -
+ * @param {{highPass: number|null, lowPass: number|null, notch: number|null, notchHarmonics: boolean}|undefined} typeFilters -
  *   The global filters for the row's channel type (`globalFilters[type]`), or `undefined` for
  *   a type without global filters, in which case only the row's own values apply.
- * @returns {{highPass: number|null, lowPass: number|null, notch: number|null}} The effective
- *   settings, ready for buildFilterSections; `null` on a field means that filter is off.
+ * @returns {{highPass: number|null, lowPass: number|null, notch: number|null, notchHarmonics: boolean}} The effective
+ *   settings, ready for buildFilterSections; `null` on a field means that filter is off, and
+ *   `notchHarmonics` is the type's flag (`false` without type filters).
  */
 export function resolveRowFilters(row, typeFilters) {
   // row.highPass ?? falls through only when row.highPass is null/undefined
@@ -245,7 +263,74 @@ export function resolveRowFilters(row, typeFilters) {
     highPass: row.highPass ?? typeFilters?.highPass ?? null,
     lowPass: row.lowPass ?? typeFilters?.lowPass ?? null,
     notch: row.notch ?? typeFilters?.notch ?? null,
+    notchHarmonics: typeFilters?.notchHarmonics ?? false,
   };
+}
+
+/**
+ * Recognises a loaded montage's global filters — the inverse of resolveRowFilters. Save writes
+ * each row's effective filters, so a value shared by every row of a channel type is that type's
+ * global filter. Each field is checked on its own, like resolveRowFilters resolves each field
+ * on its own; a lifted value is cleared from the rows, which then follow the global filter.
+ *
+ * Only set values are lifted: a field that's null on every row (e.g. a montage file without
+ * filters) is left alone, as are types without rows in the montage and `notchHarmonics`, which
+ * montage files don't store. The result is a partial update, to merge into the current global
+ * filters per type, e.g. for rows where every eeg row has high-pass 0.5 and notch 50 but the
+ * low-pass differs:
+ *   { eeg: { highPass: 0.5, notch: 50 } }
+ *
+ * @param {Array<{channel: string, highPass: number|null, lowPass: number|null, notch: number|null}>} rows -
+ *   The montage rows, in the recording's channel spelling (see remapMontageToRecording). Other
+ *   row fields are copied over unchanged.
+ * @param {Record<string, {type: string}>} channelSettings - Per-channel settings, keyed by
+ *   channel name, with the montage's own channel types already applied; a channel without
+ *   settings counts as eeg.
+ * @returns {{clearedRows: Array, extractedGlobalFilters: Record<string, {highPass?: number, lowPass?: number, notch?: number}>}}
+ *   - `clearedRows`: copies of `rows` with every lifted field set to null; `rows` itself is unchanged.
+ *   - `extractedGlobalFilters`: per type, only the lifted fields; a type is listed only when at least one
+ *     field was lifted, so a montage without shared filters gives `{}`.
+ */
+export function extractGlobalFilters(rows, channelSettings) {
+  let extractedGlobalFilters = {};
+  // Each row's channel type, in the same order as rows; a channel without settings counts as
+  // eeg, like in the display rows
+  const rowTypes = rows.map((row) => channelSettings[row.channel]?.type ?? 'eeg');
+  // Only the types that have rows in this montage — the others are left as they are
+  const uniqueTypes = [...new Set(rowTypes)];
+
+  // Extract global filters from montage rows, i.e. filter values when for each type all the
+  // highPass AND/OR lowPass AND/OR notch are the same
+  for (let iType = 0; iType < uniqueTypes.length; iType++) {
+    const type = uniqueTypes[iType];
+    const typeRows = rows.filter((_, iRow) => rowTypes[iRow] === type);
+
+    // Lift a field only when all rows share the same, non-null value. A montage file without
+    // filters (e.g. a bundled template) loads as null on every row, and lifting that would turn
+    // off the user's global filters. Fields not lifted are left out, so they keep their current
+    // global value.
+    const liftedFilters = {};
+    for (const field of ['highPass', 'lowPass', 'notch']) {
+      const values = [...new Set(typeRows.map((row) => row[field]))];
+      if (values.length === 1 && values[0] != null) liftedFilters[field] = values[0];
+    }
+
+    // A type is only listed when it has at least one lifted field, for the same reason
+    if (Object.keys(liftedFilters).length > 0) extractedGlobalFilters[type] = liftedFilters;
+  }
+
+  // If there is a Global Filter value set for a type, then clear filter rows for that type's rows, so
+  // they follow the global filter. Copies each row, so the rows passed in aren't changed.
+  const clearedRows = rows.map((row, iRow) => {
+    const typeFilters = extractedGlobalFilters[rowTypes[iRow]] ?? {};
+    const clearedRow = { ...row }; // create shallow copy to not mutate the original row
+    for (const field of ['highPass', 'lowPass', 'notch']) {
+      if (typeFilters[field] != null) clearedRow[field] = null; // lifted, so follows global now
+    }
+    return clearedRow;
+  });
+
+  return { clearedRows, extractedGlobalFilters };
 }
 
 /**
@@ -338,21 +423,25 @@ export function filterChannelsAtSample(channels, sampleIndex, channelTypes, glob
  * voltages went through, short enough for several types to fit on one line.
  * Only `null` means off, so a filter set to 0 is listed too (buildFilterSections applies it).
  *
- * @param {{highPass: number|null, lowPass: number|null, notch: number|null}|undefined} typeFilters -
+ * @param {{highPass: number|null, lowPass: number|null, notch: number|null, notchHarmonics?: boolean}|undefined} typeFilters -
  *   The global filters for one channel type, or `undefined` for a type without global filters.
  * @returns {string} The pass band ('0.5–40 Hz', or '> 0.5 Hz' / '< 40 Hz' with one edge),
- *   then the notch ('notch 50 Hz'), joined by ', '; 'unfiltered' when no filter is set.
+ *   then the notch ('notch 50 Hz', or 'notch 50 Hz + harmonics' with notchHarmonics on),
+ *   joined by ', '; 'unfiltered' when no filter is set (notchHarmonics alone doesn't count).
  */
 export function formatFilterSummary(typeFilters) {
   const highPass = typeFilters?.highPass ?? null;
   const lowPass = typeFilters?.lowPass ?? null;
   const notch = typeFilters?.notch ?? null;
+  const notchHarmonics = typeFilters?.notchHarmonics ?? false;
 
   const parts = [];
   // pass band: both edges as a band, one edge as "above"/"below" that cutoff
   if (highPass !== null && lowPass !== null) parts.push(`${highPass}–${lowPass} Hz`);
   else if (highPass !== null) parts.push(`> ${highPass} Hz`);
   else if (lowPass !== null) parts.push(`< ${lowPass} Hz`);
-  if (notch !== null) parts.push(`notch ${notch} Hz`);
+  if (notch !== null) {
+    parts.push(`notch ${notch} Hz`.concat(notchHarmonics === true ? ' + harmonics' : ''));
+  }
   return parts.length > 0 ? parts.join(', ') : 'unfiltered';
 }

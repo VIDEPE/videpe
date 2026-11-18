@@ -21,7 +21,7 @@ import { filesToLayers } from '@/utils/NiiViewer.utils';
  *   eegName: string|null, warning: string|null }>} params.fetchData
  *   Gets the mode's files, sorted for the two viewers:
  *   - `eegFiles`: for handleEegFiles (recording, electrode positions, inverse solution).
- *   - `imagingFiles`: for filesToLayers (volumes and surface meshes).
+ *   - `imagingFiles`: for filesToLayers (volumes, surface meshes and connectomes).
  *   - `eegName`: the loaded recording's name, for the EEG panel header, or null.
  *   - `warning`: a finished message for a warning toast (e.g. what was skipped), or null.
  *   Must stay the same function between renders (wrap it in useCallback): a new fetchData

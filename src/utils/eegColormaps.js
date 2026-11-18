@@ -11,8 +11,8 @@ export const EEG_TOPO_COLORMAP = {
   A: [255, 255, 255],
   I: [0, 128, 255],
 };
-export const EEG_TOPO_COLORMAP_COLOURBLIND_KEY = 'eegColourblind'; // cividis min and max values
-export const EEG_TOPO_COLORMAP_COLOURBLIND = {
+export const EEG_TOPO_COLORMAP_COLORBLIND_KEY = 'eegColorblind'; // cividis min and max values
+export const EEG_TOPO_COLORMAP_COLORBLIND = {
   R: [0, 255, 255],
   G: [32, 255, 233],
   B: [76, 255, 69],
@@ -27,9 +27,9 @@ export const EEG_NODE_POS_KEY = 'eegNodePos';
 export const EEG_NODE_POS = { R: [255, 255], G: [255, 0], B: [255, 0], A: [255, 255], I: [0, 255] };
 export const EEG_NODE_NEG_KEY = 'eegNodeNeg';
 export const EEG_NODE_NEG = { R: [255, 0], G: [255, 0], B: [255, 255], A: [255, 255], I: [0, 255] };
-export const EEG_NODE_POS_COLOURBLIND_KEY = 'eegNodePosColourblind';
+export const EEG_NODE_POS_COLORBLIND_KEY = 'eegNodePosColorblind';
 // White to Cividis yellow for positive voltage markers
-export const EEG_NODE_POS_COLOURBLIND = {
+export const EEG_NODE_POS_COLORBLIND = {
   R: [255, 255],
   G: [255, 233],
   B: [255, 69],
@@ -37,8 +37,8 @@ export const EEG_NODE_POS_COLOURBLIND = {
   I: [0, 255],
 };
 // White to Cividis blue for negative voltage markers
-export const EEG_NODE_NEG_COLOURBLIND_KEY = 'eegNodeNegColourblind';
-export const EEG_NODE_NEG_COLOURBLIND = {
+export const EEG_NODE_NEG_COLORBLIND_KEY = 'eegNodeNegColorblind';
+export const EEG_NODE_NEG_COLORBLIND = {
   R: [255, 0],
   G: [255, 32],
   B: [255, 76],
@@ -61,23 +61,23 @@ export const EEG_NODE_UNMAPPED = {
 const WHITE = { R: 255, G: 255, B: 255 };
 const POSITIVE_END = { R: 255, G: 0, B: 0 };
 const NEGATIVE_END = { R: 0, G: 0, B: 255 };
-const POSITIVE_END_COLOURBLIND = { R: 255, G: 233, B: 69 };
-const NEGATIVE_END_COLOURBLIND = { R: 0, G: 32, B: 76 };
+const POSITIVE_END_COLORBLIND = { R: 255, G: 233, B: 69 };
+const NEGATIVE_END_COLORBLIND = { R: 0, G: 32, B: 76 };
 
-// Interpolates a diverging blue-white-red (or cividis colourblind variant) CSS color
+// Interpolates a diverging blue-white-red (or cividis colorblind variant) CSS color
 // for a voltage value, given the symmetric colormap range [-calMax, calMax].
 // value=0 or calMax<=0 -> white.
-export function interpolateDivergingColor(value, calMax, colourBlind = false) {
+export function interpolateDivergingColor(value, calMax, colorBlind = false) {
   if (!(calMax > 0)) return 'rgb(255, 255, 255)';
 
   const t = Math.max(-1, Math.min(1, value / calMax));
   const end =
     t >= 0
-      ? colourBlind
-        ? POSITIVE_END_COLOURBLIND
+      ? colorBlind
+        ? POSITIVE_END_COLORBLIND
         : POSITIVE_END
-      : colourBlind
-        ? NEGATIVE_END_COLOURBLIND
+      : colorBlind
+        ? NEGATIVE_END_COLORBLIND
         : NEGATIVE_END;
   const frac = Math.abs(t);
 
