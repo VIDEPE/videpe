@@ -3,6 +3,7 @@ import {
   INV_SOLUTIONS_EXTENSIONS,
   MONTAGE_EXTENSIONS,
 } from '@/loaders/eegFormatRegistry';
+import { LAUNCH_IMAGING_EXTENSIONS } from '@/utils/imagingFormats';
 
 // Decides which viewer gets each file when VIDEPE is launched by another app (Shanoir, or a
 // host app such as a local Python app), which hands over its files in one batch. In the
@@ -11,11 +12,10 @@ import {
 //
 // Shared by src/shanoir/ and src/hostApp/, which never import from each other.
 
-// Image files the neuroimaging viewer opens: NIfTI volumes (e.g. what Shanoir's format=nii
-// download returns), FreeSurfer MGH/MGZ volumes and GIFTI surface meshes. Anything else —
-// e.g. the JSON sidecars and .bval/.bvec files Shanoir's DICOM → NIfTI conversion can add —
-// would fail to load as a layer.
-const IMAGING_EXTENSIONS = ['.nii', '.nii.gz', '.mgh', '.mgz', '.gii'];
+// Image files the neuroimaging viewer opens are picked by LAUNCH_IMAGING_EXTENSIONS: the volumes,
+// meshes and .jcon connectomes the imaging dropzone lists (e.g. NIfTI, what Shanoir's format=nii
+// download returns). Anything else — e.g. the JSON sidecars and .bval/.bvec files Shanoir's
+// DICOM → NIfTI conversion can add — would fail to load as a layer.
 
 // Electrode positions: '.elc', or a BIDS '*_electrodes.tsv'. Other .tsv files
 // (BIDS _channels.tsv, _events.tsv, _scans.tsv) are not positions, and would be
@@ -32,7 +32,8 @@ const isEegIntakeFile = (name) =>
   isElectrodePositionFile(name) ||
   isInverseSolutionFile(name) ||
   isMontageFile(name);
-const isImagingFile = (name) => IMAGING_EXTENSIONS.some((ext) => name.toLowerCase().endsWith(ext));
+const isImagingFile = (name) =>
+  LAUNCH_IMAGING_EXTENSIONS.some((ext) => name.toLowerCase().endsWith(ext));
 
 // Base file name of a path — paths (e.g. Shanoir's) can use either separator.
 export const baseName = (path) => path.split(/[\\/]/).pop();
@@ -78,7 +79,7 @@ export function listFileExtensions(files) {
 }
 
 /**
- * Picks the image files (volumes and surface meshes) for filesToLayers. Conversion sidecars
+ * Picks the image files (volumes, surface meshes and connectomes) for filesToLayers. Conversion sidecars
  * and other non-image files are dropped.
  *
  * @param {File[]} files
@@ -102,7 +103,7 @@ export function selectImagingFiles(files) {
  *   exactly one group, each in the original order:
  *   - `eegFiles`: for the EEG intake (recording, electrode positions, inverse solutions,
  *     montages).
- *   - `imagingFiles`: for filesToLayers (volumes and surface meshes).
+ *   - `imagingFiles`: for filesToLayers (volumes, surface meshes and connectomes).
  *   - `skippedFiles`: files neither viewer opens (e.g. an EEGLAB .set, a BIDS sidecar, the
  *     BrainVision .vmrk marker file).
  */

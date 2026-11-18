@@ -12,6 +12,8 @@ import {
   SYNC_GENERATED_LAYER,
   REORDER,
   UPDATE_SETTINGS,
+  isFileConnectomeLayer,
+  isFileMeshLayer,
 } from '@/state/layerState';
 import {
   isImageVolumeLayer,
@@ -26,6 +28,7 @@ const pial = { url: 'blob:pial', type: 'pial', kind: 'mesh' };
 const electrodes = { url: ELECTRODE_LAYER_URL, type: 'Electrodes', kind: 'connectome' };
 const esiVolume = { url: ESI_LAYER_URL, type: 'Electrical Source Imaging', kind: 'volume' };
 const esiConnectome = { url: ESI_LAYER_URL, type: 'Electrical Source Imaging', kind: 'connectome' };
+const fileConnectome = { url: 'blob:network', type: 'Connectome', kind: 'connectome' };
 
 const urls = (state) => state.entries.map((entry) => entry.url);
 const run = (state, ...actions) => actions.reduce(layerReducer, state);
@@ -97,6 +100,40 @@ describe('LOAD_FILE_LAYERS', () => {
     );
     state = layerReducer(state, { type: LOAD_FILE_LAYERS, layers: [pial] });
     expect(selectEntry(state, 'blob:pial').settings.meshXRay).toBe(0.3);
+  });
+
+  // A connectome loaded from a .jcon file is a file layer like any other — only the generated
+  // (electrode/ESI) connectomes survive a reload, not every layer of kind 'connectome'.
+  it('replaces a file-loaded connectome, while keeping the generated electrode connectome', () => {
+    let state = run(initLayerState([fileConnectome]), {
+      type: SYNC_GENERATED_LAYER,
+      url: ELECTRODE_LAYER_URL,
+      layer: electrodes,
+    });
+    state = layerReducer(state, { type: LOAD_FILE_LAYERS, layers: [mri] });
+    expect(urls(state)).toEqual(['blob:mri', ELECTRODE_LAYER_URL]);
+    expectInvariants(state);
+  });
+});
+
+describe('isFileConnectomeLayer', () => {
+  it('is true only for connectomes loaded from a file, not the generated electrode/ESI ones', () => {
+    expect(isFileConnectomeLayer(fileConnectome)).toBe(true);
+    expect(isFileConnectomeLayer(electrodes)).toBe(false);
+    expect(isFileConnectomeLayer(esiConnectome)).toBe(false);
+    expect(isFileConnectomeLayer(pial)).toBe(false);
+    expect(isFileConnectomeLayer(mri)).toBe(false);
+  });
+});
+
+describe('isFileMeshLayer', () => {
+  it('is true for every mesh loaded from a file — surface meshes and file connectomes', () => {
+    expect(isFileMeshLayer(pial)).toBe(true);
+    expect(isFileMeshLayer(fileConnectome)).toBe(true);
+    // the generated connectomes are meshes too, but owned by their own hooks
+    expect(isFileMeshLayer(electrodes)).toBe(false);
+    expect(isFileMeshLayer(esiConnectome)).toBe(false);
+    expect(isFileMeshLayer(mri)).toBe(false);
   });
 });
 

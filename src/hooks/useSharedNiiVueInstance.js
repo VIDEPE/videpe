@@ -27,8 +27,9 @@ import { revokeLayerUrls } from '@/utils/NiiViewer.utils';
  *   `handleSliceTypeChange`) — this hook only syncs once, on mount.
  * @param {Function} [params.onNiiNvReady] - called once `attachToCanvas` has run, so the caller
  *   can react to the canvas becoming usable.
- * @param {React.RefObject} params.fileMeshesRef - url→NVMesh map for file-loaded surface
- *   meshes; cleared alongside `nv.meshes` on unmount so a later remount starts from empty.
+ * @param {React.RefObject} params.fileMeshesRef - url→NVMesh map for file-loaded meshes (surface
+ *   meshes and file connectomes); cleared alongside `nv.meshes` on unmount so a later remount
+ *   starts from empty.
  * @param {Function} [params.onHas3DExtentChange] - called with `false` on unmount, once `nv`'s
  *   volumes/meshes have actually been cleared — the caller's own has-3D-extent reporting (driven
  *   by `orderedLayers`) can't fire on unmount since its effect body simply stops running, so it

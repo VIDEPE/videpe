@@ -343,7 +343,7 @@ const getEegOnFiles = () => {
 };
 
 // Returns the onFiles prop from the most recent render of the imaging drop zone
-const getNiiOnFiles = () => {
+const getImagingOnFiles = () => {
   const calls = FileDropZone.mock.calls.filter(([p]) => p.label === 'Drop imaging files');
   return calls.at(-1)[0].onFiles;
 };
@@ -765,7 +765,7 @@ describe('PatientView — imaging file-type detection', () => {
     renderPatientView();
 
     await act(async () => {
-      await getNiiOnFiles()([makeFile('sub-01_T1w.nii')]);
+      await getImagingOnFiles()([makeFile('sub-01_T1w.nii')]);
     });
 
     expect(NiiViewer.mock.lastCall[0].layers).toHaveLength(1);
@@ -776,7 +776,7 @@ describe('PatientView — imaging file-type detection', () => {
     renderPatientView();
 
     await act(async () => {
-      await getNiiOnFiles()([makeFile('sub-01_T1w.nii')]);
+      await getImagingOnFiles()([makeFile('sub-01_T1w.nii')]);
     });
 
     expect(NiiViewer.mock.lastCall[0].layers[0].subtype).toBe('sub-01_T1w');
@@ -786,7 +786,7 @@ describe('PatientView — imaging file-type detection', () => {
     renderPatientView();
 
     await act(async () => {
-      await getNiiOnFiles()([makeFile('patT1.nii')]);
+      await getImagingOnFiles()([makeFile('patT1.nii')]);
     });
 
     expect(NiiViewer.mock.lastCall[0].layers[0].subtype).toBe('patT1');
@@ -796,7 +796,7 @@ describe('PatientView — imaging file-type detection', () => {
     renderPatientView();
 
     await act(async () => {
-      await getNiiOnFiles()([makeFile('sub-01_pet.nii.gz')]);
+      await getImagingOnFiles()([makeFile('sub-01_pet.nii.gz')]);
     });
 
     expect(NiiViewer.mock.lastCall[0].layers[0].type).toBe('PET');
@@ -806,7 +806,7 @@ describe('PatientView — imaging file-type detection', () => {
     renderPatientView();
 
     await act(async () => {
-      await getNiiOnFiles()([makeFile('pat_siscom_17-13.nii')]);
+      await getImagingOnFiles()([makeFile('pat_siscom_17-13.nii')]);
     });
 
     expect(NiiViewer.mock.lastCall[0].layers[0].type).toBe('SPECT');
@@ -817,7 +817,7 @@ describe('PatientView — imaging file-type detection', () => {
     renderPatientView();
 
     await act(async () => {
-      await getNiiOnFiles()([makeFile('IM0001.dcm'), makeFile('IM0002.dcm')]);
+      await getImagingOnFiles()([makeFile('IM0001.dcm'), makeFile('IM0002.dcm')]);
     });
 
     expect(dicomLoader).toHaveBeenCalledTimes(1); // one call for the whole series, not per-file
@@ -825,12 +825,49 @@ describe('PatientView — imaging file-type detection', () => {
     expect(NiiViewer.mock.lastCall[0].layers[0].type).toBe('ANAT');
   });
 
-  it('accepts .dcm at the imaging dropzone', () => {
+  it('lists the imaging files by type in the initial dropzone: volumes, meshes, connectomes', () => {
     renderPatientView();
-    const niiDropZoneProps = FileDropZone.mock.calls.find(
+    const imagingDropZoneProps = FileDropZone.mock.calls.find(
       ([p]) => p.label === 'Drop imaging files'
     )[0];
-    expect(niiDropZoneProps.accepted_formats).toContain('.dcm');
+    // label/value rows, like the EEG dropzone — one row per type, in this order, then a row
+    // telling the user the list isn't exhaustive
+    expect(imagingDropZoneProps.description.map((row) => row.label)).toEqual([
+      'Volume:',
+      'Mesh:',
+      'Connectome:',
+      'Other:',
+    ]);
+    expect(imagingDropZoneProps.description).toEqual([
+      { label: 'Volume:', value: expect.stringContaining('.dcm') },
+      { label: 'Mesh:', value: expect.stringContaining('.gii') },
+      { label: 'Connectome:', value: expect.stringContaining('.jcon') },
+      { label: 'Other:', value: expect.stringContaining('NiiVue') },
+    ]);
+  });
+
+  it("doesn't restrict the initial dropzone's file picker to the listed extensions", () => {
+    // NiiVue reads dozens of formats beyond the listed ones (e.g. .nrrd, .stl, FreeSurfer's
+    // lh.pial); an accept list would hide those in the file picker, while a drop takes them.
+    renderPatientView();
+    const imagingDropZoneProps = FileDropZone.mock.calls.find(
+      ([p]) => p.label === 'Drop imaging files'
+    )[0];
+    expect(imagingDropZoneProps.accepted_formats).toBeUndefined();
+  });
+
+  it('passes a dropped .jcon file to NiiViewer as a connectome layer', async () => {
+    renderPatientView();
+
+    await act(async () => {
+      await getImagingOnFiles()([makeFile('network.jcon')]);
+    });
+
+    expect(NiiViewer.mock.lastCall[0].layers).toHaveLength(1);
+    expect(NiiViewer.mock.lastCall[0].layers[0]).toMatchObject({
+      type: 'Connectome',
+      kind: 'connectome',
+    });
   });
 });
 
@@ -857,7 +894,7 @@ describe('PatientView — imaging load-failure recovery', () => {
     renderPatientView();
 
     await act(async () => {
-      await getNiiOnFiles()([makeFile('sub-01_T1w.nii')]);
+      await getImagingOnFiles()([makeFile('sub-01_T1w.nii')]);
     });
     expect(screen.getByTestId('nii-viewer')).toBeInTheDocument();
 
@@ -870,7 +907,7 @@ describe('PatientView — imaging load-failure recovery', () => {
     renderPatientView();
 
     await act(async () => {
-      await getNiiOnFiles()([makeFile('sub-01_T1w.nii'), makeFile('sub-01_pet.nii.gz')]);
+      await getImagingOnFiles()([makeFile('sub-01_T1w.nii'), makeFile('sub-01_pet.nii.gz')]);
     });
     expect(NiiViewer.mock.lastCall[0].layers).toHaveLength(2);
     const failedUrl = NiiViewer.mock.lastCall[0].layers[0].url;
@@ -1595,7 +1632,7 @@ describe('PatientView — cross-panel 3D rotation sync', () => {
   const setupBothPanelsWithContent = async () => {
     renderPatientView();
     await act(async () => {
-      await getNiiOnFiles()([makeFile('sub-01_T1w.nii')]);
+      await getImagingOnFiles()([makeFile('sub-01_T1w.nii')]);
     });
     await act(async () => {
       await getEegOnFiles()([makeFile('sub01.vhdr'), makeFile('sub01.eeg')]);
@@ -1716,7 +1753,7 @@ describe('PatientView — rotating the 3D views to a clicked EEG channel', () =>
 
   const loadImaging = async () => {
     await act(async () => {
-      await getNiiOnFiles()([makeFile('sub-01_T1w.nii')]);
+      await getImagingOnFiles()([makeFile('sub-01_T1w.nii')]);
     });
     await waitFor(() => expect(screen.getByTestId('nii-viewer')).toBeInTheDocument());
   };

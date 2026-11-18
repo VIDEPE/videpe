@@ -410,8 +410,9 @@ export const AboutPage = () => {
                   style={{ color: 'var(--c-foreground)' }}
                 >
                   <li>
-                    <strong>Multi-layer</strong> — MRI, PET, SPECT and meshes in one view: NIfTI
-                    (.nii, .nii.gz), MGH/MGZ, GIFTI, PLY, OBJ, and DICOM (converted via dcm2niix)
+                    <strong>Multi-layer</strong> — MRI, PET, SPECT, meshes and connectomes in one
+                    view: NIfTI (.nii, .nii.gz), DICOM, MGH/MGZ, GIFTI, PLY, OBJ, connectomes
+                    (.jcon, .json), and any other format NiiVue reads
                   </li>
                   <li>
                     <strong>Per-layer controls</strong> — opacity/mesh x-ray, colormap, colorbar,

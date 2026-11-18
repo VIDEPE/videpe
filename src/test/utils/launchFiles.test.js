@@ -78,19 +78,24 @@ describe('selectEegIntakeFiles', () => {
 });
 
 describe('selectImagingFiles', () => {
-  it('keeps volumes and surface meshes', () => {
+  it('keeps volumes, surface meshes and connectomes', () => {
     const files = [
       file('sub-01_T1w.nii.gz'),
       file('sub-01_pet.nii'),
       file('aseg.mgz'),
       file('orig.mgh'),
+      file('IM0001.dcm'),
       file('lh.pial.gii'),
+      file('cortex.ply'),
+      file('cortex.obj'),
+      file('network.jcon'),
     ];
     expect(names(selectImagingFiles(files))).toEqual(names(files));
   });
 
   it('drops conversion sidecars that are not images', () => {
     // Shanoir's DICOM → NIfTI conversion can add JSON sidecars and diffusion gradient files.
+    // A .json would otherwise be loaded as a (broken) connectome — only .jcon is launched as one.
     const files = [
       file('sub-01_dwi.nii.gz'),
       file('sub-01_dwi.json'),
