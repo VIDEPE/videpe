@@ -1768,7 +1768,7 @@ describe('NiiViewer', () => {
 
       expect(nv.loadVolumes).toHaveBeenCalledTimes(1);
       const loadedUrls = nv.loadVolumes.mock.calls[0][0].map((l) => l.url);
-      expect(loadedUrls).not.toContain('__intracranial-electrodes__');
+      expect(loadedUrls).not.toContain(ELECTRODE_LAYER_URL);
 
       // Both cards are present — the new volume alongside the untouched connectome.
       expect(screen.getByRole('button', { name: /expand.*scan/i })).toBeInTheDocument();
