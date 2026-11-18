@@ -11,7 +11,43 @@ import {
   computeAutoYScale,
   isMontageRowDrawable,
   remapMontageToRecording,
+  formatTimelineTime,
 } from '@/utils/eegViewerUtils';
+
+// ---------------------------------------------------------------------------
+// formatTimelineTime
+// ---------------------------------------------------------------------------
+
+describe('formatTimelineTime', () => {
+  it('shows times under a minute as seconds with one decimal', () => {
+    expect(formatTimelineTime(0)).toBe('0.0 s');
+    expect(formatTimelineTime(42.34)).toBe('42.3 s');
+    expect(formatTimelineTime(59.9)).toBe('59.9 s');
+  });
+
+  it('switches to m:ss with whole seconds in brackets from one minute', () => {
+    expect(formatTimelineTime(60)).toBe('1:00 (60 s)');
+    expect(formatTimelineTime(125)).toBe('2:05 (125 s)');
+    expect(formatTimelineTime(3599)).toBe('59:59 (3599 s)');
+  });
+
+  it('switches to h:mm:ss from one hour', () => {
+    expect(formatTimelineTime(3600)).toBe('1:00:00 (3600 s)');
+    expect(formatTimelineTime(5630)).toBe('1:33:50 (5630 s)');
+  });
+
+  it('rounds up into the next format instead of showing 60.0 s or 59:60', () => {
+    // 59.96 rounds to 60.0 — the minute form says the same thing without an impossible "60.0 s"
+    expect(formatTimelineTime(59.96)).toBe('1:00 (60 s)');
+    // 3599.6 rounds to 3600 whole seconds — carried into the hour instead of "59:60"
+    expect(formatTimelineTime(3599.6)).toBe('1:00:00 (3600 s)');
+  });
+
+  it('keeps the clock and the bracketed seconds in agreement', () => {
+    // Both halves come from the same rounded whole-second value
+    expect(formatTimelineTime(5629.6)).toBe('1:33:50 (5630 s)');
+  });
+});
 
 // ---------------------------------------------------------------------------
 // computeAutoYScale

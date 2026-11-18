@@ -585,3 +585,27 @@ export function getRowCrosshairPosition(row, matched) {
     z: (channelPos.z + referencePos.z) / 2,
   };
 }
+
+/**
+ * Formats a timeline position for the scrubber's hover tooltip. Under a minute it stays in
+ * seconds with one decimal (`42.3 s`), matching the x-axis. From one minute on it switches to
+ * a clock (`2:05`, `1:33:50`) — far easier to place in a long recording than `5630 s` — and
+ * keeps the whole seconds in brackets so the value still lines up with the x-axis after a jump.
+ * @param {number} seconds - timeline position in seconds (≥ 0).
+ * @returns {string} e.g. `'42.3 s'`, `'2:05 (125 s)'`, `'1:33:50 (5630 s)'`.
+ */
+export function formatTimelineTime(seconds) {
+  // Decide the format on the rounded value, so 59.96 s becomes "1:00" rather than "60.0 s"
+  const tenths = Math.round(seconds * 10) / 10;
+  if (tenths < 60) return `${tenths.toFixed(1)} s`;
+
+  // Clock and bracketed seconds share one rounded value, so they always agree
+  // (and 3599.6 s carries into "1:00:00" instead of "59:60").
+  const whole = Math.round(seconds);
+  const hours = Math.floor(whole / 3600);
+  const minutes = Math.floor((whole % 3600) / 60);
+  const secs = String(whole % 60).padStart(2, '0');
+  const clock =
+    hours > 0 ? `${hours}:${String(minutes).padStart(2, '0')}:${secs}` : `${minutes}:${secs}`;
+  return `${clock} (${whole} s)`;
+}
