@@ -126,7 +126,12 @@ describe('useShanoirData', () => {
     fetchShanoirExamination.mockResolvedValue(
       examination({
         skippedDatasets: [
-          { id: 2, name: 'second run', type: 'EEG', reason: 'additional EEG recording' },
+          {
+            id: 2,
+            name: 'first run',
+            type: 'EEG',
+            reason: 'older EEG recording, using the latest (highest dataset id)',
+          },
           {
             id: 3,
             name: 'report',
@@ -141,7 +146,7 @@ describe('useShanoirData', () => {
 
     expect(toast).toHaveBeenCalledWith(
       'Skipped the following datasets:\n' +
-        '- second run (additional EEG recording)\n' +
+        '- first run (older EEG recording, using the latest (highest dataset id))\n' +
         '- report (unsupported dataset type: Measurement)',
       expect.anything()
     );

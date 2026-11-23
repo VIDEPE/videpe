@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { zipSync, strToU8 } from 'fflate';
 import { fetchShanoirExamination } from '@/shanoir/fetchShanoirExamination';
+import { fixtureBody, fixtureDatasetZip } from './shanoirFixtures';
 
 // Builds an in-memory zip Blob from a list of file paths (content is irrelevant here).
 const makeZip = (paths) =>
@@ -41,23 +42,65 @@ describe('fetchShanoirExamination', () => {
     expect(result.skippedDatasets).toEqual([]);
   });
 
-  it('loads only the first EEG dataset and reports the others as skipped', async () => {
+  it('loads only the latest imported EEG dataset (highest id) and reports the others as skipped', async () => {
     // handleEegFiles keeps one file per extension, so mixing two recordings could pair
-    // one run's .vhdr with another run's .eeg.
+    // one run's .vhdr with another run's .eeg. Shanoir's dataset ids follow import order, so
+    // the highest id is the latest import (like the dropzone, where the newest drop wins),
+    // whatever order Shanoir lists them in.
     const client = makeClient({
       datasets: [
-        { id: 1, name: 'run-1', type: 'Eeg' },
-        { id: 2, name: 'run-2', type: 'Eeg' },
+        { id: 5, name: 'run-2', type: 'Eeg' },
+        { id: 9, name: 'run-3', type: 'Eeg' },
+        { id: 3, name: 'run-1', type: 'Eeg' },
       ],
-      zips: { 1: EEG_ZIP },
+      zips: { 9: EEG_ZIP },
     });
     const result = await fetchShanoirExamination({ client, examinationId: 7 });
 
-    expect(result.eegDataset.name).toBe('run-1');
+    expect(result.eegDataset.name).toBe('run-3');
     expect(client.downloadDatasetZip).toHaveBeenCalledTimes(1);
+    expect(client.downloadDatasetZip).toHaveBeenCalledWith(9, undefined);
     expect(result.skippedDatasets).toEqual([
-      { id: 2, name: 'run-2', type: 'Eeg', reason: 'additional EEG recording' },
+      {
+        id: 5,
+        name: 'run-2',
+        type: 'Eeg',
+        reason: 'older EEG recording, using the latest (highest dataset id)',
+      },
+      {
+        id: 3,
+        name: 'run-1',
+        type: 'Eeg',
+        reason: 'older EEG recording, using the latest (highest dataset id)',
+      },
     ]);
+  });
+
+  it('loads the latest of the EEG-tab recordings in a real Shanoir examination (fixture: examination 7)', async () => {
+    // Examination 7: a BIDS import (12 `BIDS` datasets), then two EEG-tab imports, recording
+    // 57 (iEEG) and the more recent 58 (scalp EEG)
+    const client = makeClient({
+      datasets: fixtureBody('datasets-examination-7.json'),
+      zips: { 58: fixtureDatasetZip(58) },
+    });
+    const result = await fetchShanoirExamination({ client, examinationId: 7 });
+
+    expect(result.eegDataset).toEqual({
+      id: 58,
+      name: 'sub-synth_task-rest_desc-spkavgall_eeg',
+      type: 'EEG',
+    });
+    expect(names(result.eegFiles)).toEqual([
+      'sub-4_ses-7_sub-synth_task-rest_desc-spkavgall_eeg.eeg',
+      'sub-4_ses-7_sub-synth_task-rest_desc-spkavgall_eeg.vhdr',
+    ]);
+    expect(client.downloadDatasetZip).toHaveBeenCalledTimes(1);
+    expect(result.skippedDatasets).toContainEqual({
+      id: 57,
+      name: 'sub-synth_task-rest_desc-spkavgall_ieeg',
+      type: 'EEG',
+      reason: 'older EEG recording, using the latest (highest dataset id)',
+    });
   });
 
   it('reports dataset types VIDEPE cannot show as skipped, naming the type, without downloading them', async () => {

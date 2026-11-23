@@ -35,7 +35,14 @@ All requests are `GET` with `Authorization: Bearer <access token>`, under `/shan
 | `datasets/download/{datasetId}?format=nii`                     | each dataset as a ZIP (imaging converted to NIfTI; EEG returned as imported)                        |
 | `examinations/extra-data-download/{examinationId}/{fileName}/` | selected extra-data files (`*_electrodes.tsv`, `.elc`, `.mat`, `.mtg`)                              |
 
-Only the first EEG dataset of an examination is loaded; any others, and unsupported dataset types, are listed to the user as skipped.
+### What VIDEPE loads from an examination
+
+VIDEPE only reads the examination it was opened for, not the subject's other examinations. Data that should be viewed together belongs in one examination.
+
+- **EEG recording:** one per opening. When the examination holds several EEG datasets, VIDEPE loads the most recently imported one (the highest dataset id) and lists the others as skipped. This matches VIDEPE's own file dropzone, where the newest drop wins.
+- **Imaging** (MR, PET, SPECT, CT, segmentation, mesh): all of them, each as its own layer; users remove layers they don't need in VIDEPE.
+- **Electrode positions, inverse solutions and montages:** from the examination's extra data, loaded together with the recording.
+- Datasets of any other type are listed to the user as skipped.
 
 ## What VIDEPE provides
 

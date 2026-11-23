@@ -31,7 +31,7 @@ const DATASETS = [
   },
   // Unsupported type: skipped before downloading, so its file is never fetched (and doesn't exist)
   { id: 3, name: 'Shanoir dummy demo', type: 'DUMMY', files: ['dummy.bak'] },
-  // more: a second EEG dataset, to trigger the "additional EEG recording" reason in the "skipped" toast
+  // more: a second EEG dataset (with a lower id), to trigger the "older EEG recording" reason in the "skipped" toast
 ];
 
 // a Promise that resolves after `ms` milliseconds, so it can be awaited

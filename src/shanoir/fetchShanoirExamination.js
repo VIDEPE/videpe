@@ -20,8 +20,10 @@ const datasetLabel = (dataset) => ({
  *
  * Datasets are routed by their Shanoir type (DatasetDTO.type), known before downloading —
  * each dataset is one zip, and its files simply follow the dataset's route:
- * - EEG: only the first EEG dataset is loaded. The EEG intake keeps one file per extension,
+ * - EEG: only the latest imported EEG dataset is loaded (highest dataset id), like the
+ *   dropzone, where the newest drop wins. The EEG intake keeps one file per extension,
  *   so combining two recordings could pair one run's .vhdr with another run's .eeg.
+ *   The older recordings are reported back in `skippedDatasets`.
  *   Electrode positions, inverse solutions and montages attached to the examination (extra-data)
  *   are added to the EEG files.
  * - Imaging (MR, PET, …): every dataset is loaded; each becomes one or more layers.
@@ -60,18 +62,21 @@ export async function fetchShanoirExamination({ client, examinationId, signal })
   const imagingDatasets = datasets.filter((dataset) => classifyDataset(dataset) === 'imaging');
   const otherDatasets = datasets.filter((dataset) => classifyDataset(dataset) === null);
   const eegDatasets = datasets.filter((dataset) => classifyDataset(dataset) === 'eeg');
-  // only keep the first eeg dataset the examination contains e.g. multiple runs
-  // group others under additionalEegDatasets
-  const eegDataset = eegDatasets[0];
-  const additionalEegDatasets = eegDatasets.slice(1);
+  // only keep the latest imported eeg dataset the examination contains e.g. multiple runs.
+  // Shanoir's dataset ids follow import order, so the highest id is the latest import,
+  // whatever order Shanoir lists them in. Group the others under olderEegDatasets
+  const eegDatasetsLatestFirst = [...eegDatasets].sort((a, b) => b.id - a.id);
+  const eegDataset = eegDatasetsLatestFirst[0];
+  const olderEegDatasets = eegDatasetsLatestFirst.slice(1);
 
-  // both additionalEegDatasets and otherDatasets are skipped, but logged in the skippedDatasets
+  // both olderEegDatasets and otherDatasets are skipped, but logged in the skippedDatasets
   // so the user knows what is and isn't displayed
-  const skippedDatasets = additionalEegDatasets.map((dataset) => ({
+  const skippedDatasets = olderEegDatasets.map((dataset) => ({
     id: dataset.id,
     name: dataset.name ?? `dataset ${dataset.id}`,
     type: dataset.type,
-    reason: 'additional EEG recording',
+    // "latest" = the highest dataset id, since Shanoir's ids follow import order
+    reason: 'older EEG recording, using the latest (highest dataset id)',
   }));
   skippedDatasets.push(
     ...otherDatasets.map((dataset) => ({

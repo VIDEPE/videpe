@@ -28,7 +28,7 @@ import { fetchShanoirExamination } from '@/shanoir/fetchShanoirExamination';
  *   Called with the imaging layers built from the downloaded volumes/meshes.
  * @param {(name: string|null) => void} params.setShanoirEegName
  *   Called with the name of the EEG dataset that was loaded, or null if none. An examination
- *   can hold several EEG recordings but only the first is loaded, so the caller can show the
+ *   can hold several EEG recordings but only the latest imported is loaded, so the caller can show the
  *   user which one is on screen (and clear it when the EEG viewer is reset).
  * @param {{ current: (() => void)|null }} params.eegReadyResolveRef
  *   Ref that the load assigns a resolver function into; EegViewer calls it once its charts
