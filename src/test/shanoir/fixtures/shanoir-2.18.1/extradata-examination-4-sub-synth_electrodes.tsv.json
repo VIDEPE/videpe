@@ -1,0 +1,10 @@
+{
+  "request": "GET examinations/extra-data-download/4/sub-synth_electrodes.tsv/",
+  "status": 200,
+  "headers": {
+    "content-type": "text/tab-separated-values",
+    "content-disposition": "attachment;filename=\"sub-synth_electrodes.tsv\""
+  },
+  "size": 10497,
+  "zipEntries": null
+}

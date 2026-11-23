@@ -1,0 +1,51 @@
+{
+  "request": "GET datasetProcessing/2/outputDatasets/",
+  "status": 200,
+  "body": [
+    {
+      "creationDate": "2026-11-23",
+      "groupOfSubjectsId": null,
+      "id": 41,
+      "originMetadata": {
+        "cardinalityOfRelatedSubjects": null,
+        "comment": null,
+        "datasetModalityType": "SEG_DATASET",
+        "exploredEntity": null,
+        "id": 41,
+        "name": "DSEG - White Matter Mask",
+        "processedDatasetType": "EXECUTION_RESULT"
+      },
+      "studyId": 1,
+      "subjectId": 4,
+      "centerId": null,
+      "updatedMetadata": {
+        "cardinalityOfRelatedSubjects": null,
+        "comment": null,
+        "datasetModalityType": "SEG_DATASET",
+        "exploredEntity": null,
+        "id": 41,
+        "name": "DSEG - White Matter Mask",
+        "processedDatasetType": "EXECUTION_RESULT"
+      },
+      "name": "DSEG - White Matter Mask",
+      "type": "SEGMENTATION",
+      "inPacs": true,
+      "tags": null,
+      "source": null,
+      "copies": null,
+      "datasetProcessing": {
+        "id": 2,
+        "comment": null,
+        "datasetProcessingType": null,
+        "outputDatasets": null,
+        "inputDatasets": null,
+        "processingDate": null,
+        "studyId": null,
+        "parentId": null,
+        "processingStatus": null,
+        "monitoringIndex": null
+      },
+      "datasetAcquisition": null
+    }
+  ]
+}

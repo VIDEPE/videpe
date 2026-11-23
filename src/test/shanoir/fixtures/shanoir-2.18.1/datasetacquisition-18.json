@@ -1,0 +1,43 @@
+{
+  "request": "GET datasetacquisition/18",
+  "status": 200,
+  "body": {
+    "id": 18,
+    "acquisitionEquipmentId": 2,
+    "examination": {
+      "id": 7,
+      "centerId": 2,
+      "comment": "",
+      "dataReuseAgreement": false,
+      "examinationDate": "2026-11-23",
+      "note": null,
+      "studyId": 1,
+      "subject": {
+        "id": 4,
+        "name": "synth"
+      },
+      "subjectWeight": null,
+      "weightUnitOfMeasure": null,
+      "preclinical": false,
+      "instrumentBasedAssessmentList": null,
+      "extraDataFilePathList": [],
+      "source": null,
+      "copies": null,
+      "studyInstanceUID": null
+    },
+    "studyCard": null,
+    "studyCardTimestamp": null,
+    "rank": 0,
+    "softwareRelease": null,
+    "sortingIndex": 0,
+    "type": "Eeg",
+    "protocol": null,
+    "importDate": "2026-11-23",
+    "username": "shanoir-user",
+    "source": null,
+    "copies": null,
+    "acquisitionStartTime": null,
+    "qualityTag": null,
+    "extraDataFilePathList": ["sub-synth_electrodes.tsv"]
+  }
+}

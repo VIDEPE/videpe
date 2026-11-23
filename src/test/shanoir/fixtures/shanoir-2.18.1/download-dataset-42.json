@@ -1,0 +1,15 @@
+{
+  "request": "GET datasets/download/42?format=nii",
+  "status": 200,
+  "headers": {
+    "content-type": "application/zip",
+    "content-disposition": "attachment;filename=\"Dataset_synth_42_Atlas_20261123154827.zip\""
+  },
+  "size": 356235,
+  "zipEntries": [
+    {
+      "name": "sub-synth_atlas-L2018_res-scale2_dseg.nii.gz",
+      "size": 492418
+    }
+  ]
+}

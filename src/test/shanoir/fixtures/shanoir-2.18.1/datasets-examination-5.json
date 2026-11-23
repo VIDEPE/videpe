@@ -1,0 +1,40 @@
+{
+  "request": "GET datasets/examination/5",
+  "status": 200,
+  "body": [
+    {
+      "creationDate": "2026-11-23",
+      "groupOfSubjectsId": null,
+      "id": 39,
+      "originMetadata": {
+        "cardinalityOfRelatedSubjects": "SINGLE_SUBJECT_DATASET",
+        "comment": null,
+        "datasetModalityType": "EEG_DATASET",
+        "exploredEntity": null,
+        "id": 39,
+        "name": "sub-synth_task-rest_desc-spkavgall_eeg",
+        "processedDatasetType": "NONRECONSTRUCTEDDATASET"
+      },
+      "studyId": 1,
+      "subjectId": 4,
+      "centerId": 2,
+      "updatedMetadata": {
+        "cardinalityOfRelatedSubjects": "SINGLE_SUBJECT_DATASET",
+        "comment": null,
+        "datasetModalityType": "EEG_DATASET",
+        "exploredEntity": null,
+        "id": 39,
+        "name": "sub-synth_task-rest_desc-spkavgall_eeg",
+        "processedDatasetType": "NONRECONSTRUCTEDDATASET"
+      },
+      "name": "sub-synth_task-rest_desc-spkavgall_eeg",
+      "type": "EEG",
+      "inPacs": true,
+      "tags": null,
+      "source": null,
+      "copies": null,
+      "datasetProcessing": null,
+      "datasetAcquisition": null
+    }
+  ]
+}

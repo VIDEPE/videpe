@@ -1,0 +1,46 @@
+{
+  "request": "GET datasetacquisition/12",
+  "status": 200,
+  "body": {
+    "id": 12,
+    "acquisitionEquipmentId": 3,
+    "examination": {
+      "id": 5,
+      "centerId": 2,
+      "comment": null,
+      "dataReuseAgreement": false,
+      "examinationDate": "2026-11-22",
+      "note": null,
+      "studyId": 1,
+      "subject": {
+        "id": 4,
+        "name": "synth"
+      },
+      "subjectWeight": null,
+      "weightUnitOfMeasure": "KG",
+      "preclinical": false,
+      "instrumentBasedAssessmentList": null,
+      "extraDataFilePathList": [
+        "sub-synth_electrodes.tsv",
+        "sub-synth_desc-eloreta_inversefilters.mat"
+      ],
+      "source": null,
+      "copies": null,
+      "studyInstanceUID": "1.4.9.12.34.1.8527.9214381075136900869244842528080289591396"
+    },
+    "studyCard": null,
+    "studyCardTimestamp": null,
+    "rank": 0,
+    "softwareRelease": null,
+    "sortingIndex": 0,
+    "type": "Eeg",
+    "protocol": null,
+    "importDate": "2026-11-23",
+    "username": "shanoir-user",
+    "source": null,
+    "copies": null,
+    "acquisitionStartTime": null,
+    "qualityTag": null,
+    "extraDataFilePathList": []
+  }
+}

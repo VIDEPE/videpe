@@ -1,0 +1,25 @@
+{
+  "request": "GET examinations/7",
+  "status": 200,
+  "body": {
+    "id": 7,
+    "centerId": 2,
+    "comment": "",
+    "dataReuseAgreement": false,
+    "examinationDate": "2026-11-23",
+    "note": null,
+    "studyId": 1,
+    "subject": {
+      "id": 4,
+      "name": "synth"
+    },
+    "subjectWeight": null,
+    "weightUnitOfMeasure": null,
+    "preclinical": false,
+    "instrumentBasedAssessmentList": [],
+    "extraDataFilePathList": [],
+    "source": null,
+    "copies": [],
+    "studyInstanceUID": null
+  }
+}

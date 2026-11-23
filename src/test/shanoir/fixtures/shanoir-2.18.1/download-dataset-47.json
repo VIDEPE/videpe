@@ -1,0 +1,15 @@
+{
+  "request": "GET datasets/download/47?format=nii",
+  "status": 200,
+  "headers": {
+    "content-type": "application/zip",
+    "content-disposition": "attachment;filename=\"Dataset_synth_47_sub-4_ses-7_T1w_nii_gz_20261123154828.zip\""
+  },
+  "size": 4995719,
+  "zipEntries": [
+    {
+      "name": "sub-4_ses-7_T1w.nii.gz",
+      "size": 5090178
+    }
+  ]
+}
