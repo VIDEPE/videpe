@@ -1280,11 +1280,16 @@ export const EegViewer = ({
                 data-active={montageActive}
                 title={montageActive ? 'Montage (active)' : 'Montage (inactive)'}
               >
-                <TableColumnsSplit size={ICON_SIZE * 0.75} />
+                <TableColumnsSplit className="scale-x-[-1]" size={ICON_SIZE * 0.75} />
                 Montage
               </button>
+              {/* w-26 with -mr-6: the negative margin cancels the extra 1.5rem in the sidebar's
+                  width calculation (it still sizes as w-20), so the select overhangs into the
+                  empty Y_AXIS_WIDTH padding left of the x-axis/scrubber instead of narrowing the
+                  traces. relative z-10 keeps it above the right column, which would otherwise
+                  paint over it and swallow its clicks. */}
               <select
-                className="text-xs w-20 border border-border rounded bg-surface disabled:opacity-40 disabled:cursor-not-allowed"
+                className="relative z-10 text-xs w-26 -mr-6 border border-border rounded bg-surface disabled:opacity-40 disabled:cursor-not-allowed"
                 data-testid="montage-template-select"
                 title={
                   montageVisible
