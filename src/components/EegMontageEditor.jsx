@@ -994,7 +994,7 @@ export function EegMontageEditor({
             window's Clear all, so clearing reads as a secondary action */}
         <button
           type="button"
-          className="text-xs border border-border rounded-full px-2 py-1 bg-surface hover:bg-background cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+          className="button button-outline"
           data-testid="clear-all-button"
           onClick={handleClearAllMontageRows}
           disabled={draftMontageChannels.length === 0}
@@ -1719,20 +1719,12 @@ export function EegMontageEditor({
         <button type="button" className="button" onClick={handleOk}>
           OK
         </button>
-        <button
-          type="button"
-          className="text-xs border border-border rounded-full px-2 py-1 bg-surface hover:bg-background"
-          onClick={onClose}
-        >
+        <button type="button" className="button button-outline" onClick={onClose}>
           Cancel
         </button>
         <button
           type="button"
-          className={
-            isModified
-              ? 'button'
-              : 'text-xs border border-border rounded-full px-2 py-1 bg-surface hover:bg-background'
-          }
+          className={cn('button', !isModified && 'button-outline')}
           onClick={handleApply}
         >
           Apply
@@ -1762,7 +1754,7 @@ export function EegMontageEditor({
             <div className="flex justify-end gap-2">
               <button
                 type="button"
-                className="text-xs border border-border rounded-full px-3 py-1 bg-surface hover:bg-background"
+                className="button button-outline"
                 data-testid="keep-monopolar-yes"
                 onClick={() => commitSeegBipolarMontage(pendingSeegBipolarBuild, true)}
               >

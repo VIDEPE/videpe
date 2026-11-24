@@ -25,17 +25,11 @@ export const NotFoundPage = () => {
 
         {/* Action Buttons */}
         <div className="mt-12 flex flex-col sm:flex-row gap-4 justify-center">
-          <button
-            onClick={() => navigate('/')}
-            className="cosmic-button inline-flex items-center gap-2"
-          >
+          <button onClick={() => navigate('/')} className="button-lg">
             <Home size={18} />
             Back to Home
           </button>
-          <button
-            onClick={() => navigate(-1)}
-            className="cosmic-button-inverted inline-flex items-center gap-2"
-          >
+          <button onClick={() => navigate(-1)} className="button-lg button-outline">
             <ArrowLeft size={18} />
             Go Back
           </button>

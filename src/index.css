@@ -141,12 +141,12 @@ code {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 24px;
+  padding: 11px 23px; /* +1px transparent border = 12px 24px, see .button */
   border-radius: 9999px;
   font-weight: 500;
   color: var(--color-background);
   background: var(--color-primary);
-  border: none;
+  border: 1px solid transparent;
   cursor: pointer;
   transition:
     background-color 0.15s ease,
@@ -169,13 +169,16 @@ code {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 2px 10px;
+  /* Every button carries a 1px transparent border (padding is 1px less to compensate), so
+     filled and .button-outline buttons are the exact same size and the outline variant only
+     has to colour the border — it then works with every size modifier below. */
+  padding: 1px 9px;
   border-radius: 9999px;
   font-weight: bold;
   font-size: 12px;
   color: var(--color-background);
   background: var(--color-primary);
-  border: none;
+  border: 1px solid transparent;
   cursor: pointer;
   transition:
     background-color 0.2s ease,
@@ -221,27 +224,31 @@ code {
     opacity: 0.4;
     cursor: not-allowed;
   }
+}
 
-  &[data-active='false'] {
-    background: var(--color-background);
-    color: var(--color-heading);
-    border: 1px solid var(--color-border);
-    padding: 1px 9px; /* compensates the 1px border */
+/* Outline variant: secondary actions (Cancel, Clear all, Reset) next to a filled primary one.
+   Combine with a size class: "button button-outline" or "button-lg button-outline".
+   A data-active='false' .button (e.g. the EEG sidebar's Filters/Montage toggles when inactive)
+   uses the same look. Declared after .button/.button-lg so it overrides their colours. */
+.button[data-active='false'],
+.button-outline {
+  background: var(--color-background);
+  color: var(--color-heading);
+  border-color: var(--color-border);
 
-    &:hover:not(:disabled) {
-      background: color-mix(in srgb, var(--color-primary) 12%, var(--color-background));
-    }
+  &:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--color-primary) 12%, var(--color-background));
   }
 }
 
 /* Icon-only variant: tighter padding — for dense control toolbars */
 .button-icon {
-  padding: 2px 4px;
+  padding: 1px 3px; /* +1px transparent border, see .button */
 }
 
 /* Extra-small variant: minimal padding and smaller text — for compact sidebars */
 .size-xs {
-  padding: 2px 6px;
+  padding: 1px 5px; /* +1px transparent border, see .button */
   font-size: 11px;
 }
 
@@ -249,7 +256,7 @@ code {
    is symmetric so a single icon glyph renders as a circle, unlike .size-xs's asymmetric
    text padding (wider than tall, tuned for 2-character labels). */
 .button-icon-xs {
-  padding: 6px;
+  padding: 5px; /* +1px transparent border, see .button */
 }
 
 /* ============================================
