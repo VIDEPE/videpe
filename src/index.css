@@ -137,14 +137,15 @@ code {
    Button Styles
    ============================================ */
 
+/* Base button: a filled primary-coloured pill with bold 12px text. Combine with a style class
+   (button-outline, button-cta) and/or a size class (size-*). */
 .button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  /* Every button carries a 1px transparent border (padding is 1px less to compensate), so
-     filled and .button-outline buttons are the exact same size and the outline variant only
-     has to colour the border — it then works with every size modifier below. */
+  /* Every button has a 1px transparent border (padding is 1px less to compensate), so filled
+     and outline buttons are exactly the same size — the outline style only colours the border */
   padding: 1px 9px;
   border-radius: 9999px;
   font-weight: bold;
@@ -158,16 +159,15 @@ code {
     box-shadow 0.2s ease,
     transform 0.1s ease;
 
-  /* Hover shifts the colour and adds a primary-tinted glow, without growing: a scaled button
-     wobbles (its text re-rasterises) and overlaps its neighbours in dense toolbars, and the old
-     white dark-mode shadow read as a halo. Mixing toward --c-heading darkens the primary in light
-     mode and lightens it in dark mode. */
+  /* Hover: the fill darkens in light mode and lightens in dark mode (mixed toward --c-heading),
+     and a soft primary-tinted glow appears. No scaling: a growing button wobbles and overlaps
+     its neighbours in dense toolbars. */
   &:hover:not(:disabled) {
     background: color-mix(in srgb, var(--color-primary) 70%, var(--color-heading));
     box-shadow: 0 2px 8px -2px color-mix(in srgb, var(--color-primary) 60%, transparent);
   }
 
-  /* Slight press-in as click feedback; the glow drops so the button reads as pushed in */
+  /* Press: shrinks slightly and the glow drops, so it reads as pushed in */
   &:active:not(:disabled) {
     transform: scale(0.96);
     box-shadow: none;
@@ -179,12 +179,10 @@ code {
   }
 }
 
-/* Outline variant: secondary actions (Cancel, Clear all, Reset) next to a filled primary one.
-   Combine with .button and optionally a size class: "button button-outline" or
-   "button size-lg button-outline". Every off-state .button uses the same look, so a toggle
-   is filled when on and outlined when off: aria-pressed (e.g. the Topo/3D/ESI toggles),
-   aria-expanded (e.g. the imaging layer expand button) and data-active (e.g. the
-   Filters/Montage buttons when inactive). Declared after .button so it overrides its colours. */
+/* Outline: page-colour fill, grey border and heading-coloured text. Used for secondary actions
+   next to a filled primary one (Cancel, Clear all, Reset), and for every toggle's off-state
+   (aria-pressed, aria-expanded or data-active false), so toggles are filled when on and
+   outlined when off. Declared after .button so it overrides its colours. */
 .button[aria-pressed='false'],
 .button[aria-expanded='false'],
 .button[data-active='false'],
@@ -193,17 +191,17 @@ code {
   color: var(--color-heading);
   border-color: var(--color-border);
 
-  /* Hovers to a light primary tint instead of the darkened primary. Not --c-surface: buttons on
-     a surface-coloured card (e.g. the imaging layer cards) would vanish into it. */
+  /* Hover: a light primary tint. Not --c-surface: on surface-coloured cards (e.g. the imaging
+     layer cards) the button would vanish into the card. */
   &:hover:not(:disabled) {
     background: color-mix(in srgb, var(--color-primary) 12%, var(--color-background));
   }
 }
 
-/* Bare variant: icon-only buttons with no fill or border (e.g. the theme and colorblind
-   toggles in the page headers). Feedback is on the icon only — it rests slightly muted and goes
-   to full strength on hover — since a background disc behind these coloured icons read as a
-   halo. Sets no padding, so the element keeps its own (e.g. p-2). */
+/* Bare: icon-only button with no fill or border (the theme and colorblind toggles in the page
+   headers). Feedback is on the icon itself: it rests slightly muted and brightens on hover — a
+   background disc behind these coloured icons looked like a halo. Sets no padding, so the
+   element keeps its own (e.g. p-2). */
 .button-bare {
   display: inline-flex;
   align-items: center;
@@ -219,7 +217,7 @@ code {
       filter 0.2s ease;
   }
 
-  /* Full opacity alone isn't bright enough a step up, so brightness() lifts the colour further */
+  /* Hover: full opacity plus brightness(), since full opacity alone is too small a step */
   &:hover:not(:disabled) > svg {
     opacity: 1;
     filter: brightness(1.25);
@@ -230,15 +228,18 @@ code {
   }
 }
 
-/* Icon-only variant: tighter padding — for dense control toolbars */
+/* Sizes: only set dimensions (padding, width/height, font size), never colours or behaviour.
+   Combine with .button, e.g. "button size-icon". Paddings are 1px less than they look, to make
+   room for .button's transparent border. */
+
+/* Tighter padding for icon buttons in dense toolbars (EEG viewer, montage editor) */
 .size-icon {
-  padding: 1px 3px; /* +1px transparent border, see .button */
+  padding: 1px 3px;
 }
 
-/* Fixed-size circle for tight sidebars (e.g. NiiViewer's view-button column): every button is
-   the same 28px circle whether it holds a 16px icon or a short 2-character label ("Ax", "MP").
-   Fixed width rather than padding, since padding makes the width follow the label — narrow
-   labels came out as ovals and wide ones as pills. */
+/* Fixed 28px circle holding a 16px icon or a 2-letter label (NiiViewer's view-button column).
+   Fixed width rather than padding: with padding the width follows the label, so narrow labels
+   came out as ovals and wide ones as pills. */
 .size-circle {
   flex-shrink: 0;
   width: 28px;
