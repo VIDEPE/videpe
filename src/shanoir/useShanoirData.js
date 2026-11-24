@@ -1,10 +1,5 @@
-// New src/shanoir/useShanoirData.js: modelled on src/hooks/useDemoData.js (same setIsLoading, the eegReadyResolveRef/niiReadyResolveRef ready promises, one toast.promise).
-// That generic part now lives in src/hooks/useLaunchData.js, shared with the host-app mode; this hook only adds what's specific to Shanoir.
-// For EEG datasets: unzip, then handleEegFiles(files) from src/hooks/useEegFileIntake.js. It already routes .vhdr/.eeg, electrode .tsv/.elc, inverse .mat and montage .mtg in one call, using detectAndLoadEEG in src/loaders/eegFormatRegistry.js. loadEegBrainVision already reads Files with File.slice.
-// Filter .tsv before handing files over. BIDS folders also contain _channels.tsv / _events.tsv, and useEegFileIntake routes every .tsv to the electrode parser (ELEC_POS_EXTENSIONS). Pass only *_electrodes.tsv and .elc, and ignore other .tsv files. .mat goes through unchanged (inverse solution).
-// Examination extra-data: read extraDataFilePathList from GET /shanoir-ng/datasets/examinations/{examinationId}. Download *_electrodes.tsv, .elc, .mat and .mtg entries via GET /shanoir-ng/datasets/examinations/extra-data-download/{examinationId}/{fileName}/ and pass them to handleEegFiles the same way (see "Electrode positions" below).
-// For imaging datasets (Mr, Pet, …): download with format=nii, unzip, then filesToLayers(files) from src/utils/NiiViewer.utils.js (it handles NIfTI and in-browser DICOM), then setLayers.
-// Ignore other types with a toast note.
+// Where this hook sits in the flow from Shanoir's button to the viewers, and what the other
+// files in src/shanoir/ do: see src/shanoir/README.md.
 
 import { createElement, useCallback } from 'react';
 import { useLaunchData } from '@/hooks/useLaunchData';
