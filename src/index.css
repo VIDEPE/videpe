@@ -137,33 +137,6 @@ code {
    Button Styles
    ============================================ */
 
-.button-lg {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 11px 23px; /* +1px transparent border = 12px 24px, see .button */
-  border-radius: 9999px;
-  font-weight: 500;
-  color: var(--color-background);
-  background: var(--color-primary);
-  border: 1px solid transparent;
-  cursor: pointer;
-  transition:
-    background-color 0.15s ease,
-    box-shadow 0.15s ease,
-    transform 0.1s ease;
-
-  &:hover {
-    box-shadow: var(--c-shadow);
-    transform: scale(1.06);
-  }
-
-  &:active {
-    transform: scale(0.93);
-    box-shadow: none;
-  }
-}
-
 .button {
   display: inline-flex;
   align-items: center;
@@ -227,9 +200,10 @@ code {
 }
 
 /* Outline variant: secondary actions (Cancel, Clear all, Reset) next to a filled primary one.
-   Combine with a size class: "button button-outline" or "button-lg button-outline".
-   A data-active='false' .button (e.g. the EEG sidebar's Filters/Montage toggles when inactive)
-   uses the same look. Declared after .button/.button-lg so it overrides their colours. */
+   Combine with .button and optionally a size class: "button button-outline" or
+   "button button-lg button-outline". A data-active='false' .button (e.g. the EEG sidebar's
+   Filters/Montage toggles when inactive) uses the same look. Declared after .button so it
+   overrides its colours. */
 .button[data-active='false'],
 .button-outline {
   background: var(--color-background);
@@ -296,6 +270,90 @@ code {
   width: 1rem;
   height: 1rem;
   padding: 0;
+}
+
+/* Large variant for page-level calls to action (e.g. the landing page's Get Started): body-size
+   text instead of .button's 12px. Combine with .button so it shares its hover, press, disabled
+   and outline behaviour: "button button-lg". */
+.button-lg {
+  padding: 11px 23px; /* +1px transparent border = 12px 24px, see .button */
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+/* Call-to-action modifier for the one button a page wants clicked (the landing page's Get
+   Started): "button button-lg button-cta". At rest its trailing arrow icon nudges right every
+   few seconds, pointing the way, while a subtle glow swells around the button, to invite the
+   click; on hover the button lifts with a strong tinted glow and the arrow slides right and
+   stays there. Lifts (translate) rather than grows (scale), so the label doesn't wobble.
+   Declared after .button so its hover/press override the shared ones. */
+.button-cta {
+  /* Same 3s cycle as the arrow's cta-nudge, and both start on page load, so they stay in sync */
+  animation: cta-nudge-glow 3s ease-in-out infinite;
+  transition:
+    background-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
+
+  & > svg {
+    animation: cta-nudge 3s ease-in-out infinite;
+    transition: transform 0.2s ease;
+  }
+
+  /* animation: none — a running animation overrides box-shadow/transform, so the nudge glow
+     would hide the hover glow, and the nudge would fight the hover slide */
+  &:hover:not(:disabled) {
+    animation: none;
+    transform: translateY(-2px);
+    box-shadow: 0 10px 28px -6px color-mix(in srgb, var(--color-primary) 80%, transparent);
+
+    & > svg {
+      animation: none;
+      transform: translateX(4px);
+    }
+  }
+
+  &:active:not(:disabled) {
+    transform: translateY(0) scale(0.97);
+    box-shadow: 0 4px 12px -4px color-mix(in srgb, var(--color-primary) 60%, transparent);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+
+    & > svg {
+      animation: none;
+    }
+  }
+}
+
+/* Two quick nudges in the first ~30% of the cycle (~0.9s), then rests for the remaining ~2.1s */
+@keyframes cta-nudge {
+  0%,
+  30%,
+  100% {
+    transform: translateX(0);
+  }
+  8%,
+  22% {
+    transform: translateX(4px);
+  }
+  15% {
+    transform: translateX(1px);
+  }
+}
+
+/* Glow on the button that swells with the nudge (peak at 15%, ~0.45s) and then fades out slowly
+   until 75% (~1.8s fade), leaving a short dark pause before the next nudge */
+@keyframes cta-nudge-glow {
+  0%,
+  75%,
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+  15% {
+    box-shadow: 0 0 18px 1px color-mix(in srgb, var(--c-primary) 50%, transparent);
+  }
 }
 
 /* ============================================

@@ -26,6 +26,7 @@ import {
   TabletSmartphone,
   CodeXml,
   MonitorCog,
+  ArrowRight,
 } from 'lucide-react';
 const GithubIcon = ({ size = 24, ...props }) => (
   <svg
@@ -211,10 +212,11 @@ export const LandingPage = () => {
 
         <button
           type="button"
-          className="button-lg w-48 flex justify-center text"
+          className="button button-lg button-cta w-48 flex justify-center text"
           onClick={() => navigate('/patient-view')}
         >
           Get Started
+          <ArrowRight size={18} />
         </button>
       </section>
       <hr></hr>
