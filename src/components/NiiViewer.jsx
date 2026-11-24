@@ -704,7 +704,7 @@ export const NiiViewer = ({
         <div className="flex flex-col gap-2">
           <div
             className={cn(
-              'flex flex-col w-8 gap-0.5 pt-2 items-center',
+              'flex flex-col w-8 gap-0.5 py-2 items-center',
               'rounded-r-md border-r-1 border-t-1 border-b-1 border-border'
             )}
           >
