@@ -1188,8 +1188,8 @@ export const EegViewer = ({
               </div>
             </div>
 
-            {/* Channel Controls */}
-            <div className="flex-1 flex flex-row items-start mt-5 sm:mt-10">
+            {/* Channel Controls — right-aligned so the box's open side sits next to the plots */}
+            <div className="flex-1 flex flex-row items-start justify-end mt-5 sm:mt-10">
               <div className="flex flex-row items-center gap-1 py-1 border-border/50 border-1 border-r-0 rounded-tl-md rounded-bl-md">
                 <span className="text-xs text-foreground/60 whitespace-nowrap [writing-mode:vertical-rl] rotate-180 select-none pointer-events-none">
                   Channels
@@ -1226,10 +1226,8 @@ export const EegViewer = ({
                   >
                     <ListChevronsDownUp size={ICON_SIZE} />
                   </button>
-                  {/* Stack/Unstack EEG toggle — mt-2 sets it apart from the channel-count
-                      buttons above (gap-1 already spaces those tightly together) since it's a
-                      related-but-distinct control, not a third count-adjustment button */}
-                  <div className="mt-2">
+                  {/* Stack/Unstack EEG toggle — set apart from the channel-count buttons above */}
+                  <div className="mt-2 flex">
                     <button
                       type="button"
                       className="button size-icon"
@@ -1456,7 +1454,7 @@ export const EegViewer = ({
                 px-8 reserves room matching the keyboard hint icon (absolute bottom-right, see
                 above) on both sides — flex-wrap can't otherwise see that icon, so without this
                 the row stays unwrapped right up until its last button sits behind the icon. */}
-            <div className="shrink-0 flex flex-wrap justify-center gap-4 py-1 px-8">
+            <div className="shrink-0 flex flex-wrap justify-center gap-x-4 gap-y-1 py-1 px-8">
               <div className="flex flex-col items-center gap-0.5 px-1 pb-1 border-border/50 border-1 border-t-0 rounded-bl-md rounded-br-md">
                 <label htmlFor="eeg-range" className="text-xs text-foreground/60 select-none">
                   Range (µV)
@@ -1493,7 +1491,7 @@ export const EegViewer = ({
               </div>
 
               {/* Time Step: move the x-range forward/backward by a user-defined step */}
-              <div className="flex flex-col items-center gap-0.5 px-1 border-border/50 border-1 border-t-0 rounded-bl-md rounded-br-md">
+              <div className="flex flex-col items-center gap-0.5 px-1 pb-1 border-border/50 border-1 border-t-0 rounded-bl-md rounded-br-md">
                 <label htmlFor="eeg-time-step" className="text-xs text-foreground/60 select-none">
                   Time Step (s)
                 </label>
