@@ -1,5 +1,5 @@
-// Handles VIDEPE being opened from Shanoir's "View in VIDEPE" button, e.g.
-//   https://<viewer-host>/videpe/?examinationId=123
+// Handles VIDEPE being opened from Shanoir's "View EEG" button, e.g.
+//   https://<videpe-host>/videpe/?examinationId=123
 //
 // Flow (OIDC Authorization Code + PKCE, via oidc-client-ts):
 // 1. Launch URL has ?examinationId → redirect to Shanoir's Keycloak, carrying the

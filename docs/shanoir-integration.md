@@ -1,28 +1,28 @@
 # Opening VIDEPE from Shanoir
 
-This guide is for the Shanoir-ng team. It describes the changes needed in [shanoir-ng](https://github.com/fli-iam/shanoir-ng) to add a **View in VIDEPE** button that opens an examination's EEG and imaging in [VIDEPE](https://github.com/VIDEPE/videpe), the same way the existing **View** button opens OHIF.
+This guide is for the Shanoir-ng team. Shanoir opens an examination's EEG and imaging in [VIDEPE](https://github.com/VIDEPE/videpe) through its **View EEG** button, the same way the **View** button opens OHIF. This guide describes how that works, what VIDEPE loads from an examination, how [shanoir-ng](https://github.com/fli-iam/shanoir-ng) integrates it (as of 2.18.1), what has been agreed with the Shanoir team, and the open questions.
 
-The changes mirror what Shanoir already does for OHIF: copy a published Docker image into the viewer nginx, add an nginx location, fill in a config file at startup, register a Keycloak client and add a button. No Shanoir backend code changes are needed.
+The integration mirrors what Shanoir does for OHIF: copy a published Docker image into the viewer nginx, add an nginx server block, fill in a config file at startup, register a Keycloak client and add a button. No Shanoir backend code is involved.
 
 ## How it works
 
 ```
-Shanoir front ──"View in VIDEPE"──▶ https://<viewer-host>/videpe/?examinationId=42
+Shanoir front ──"View EEG"──▶ https://<videpe-host>/videpe/?examinationId=42
                                          │
                 VIDEPE (static files in the viewer nginx, runs in the browser)
                                          │ 1. OIDC sign-in with Shanoir's Keycloak
                                          │    (Authorization Code + PKCE, public client
-                                         │    "videpe"; SSO, so no password prompt)
+                                         │    "videpe-viewer"; SSO, so no password prompt)
                                          │ 2. Read-only API calls with the user's token
                                          ▼
-           https://<viewer-host>/shanoir-ng/datasets/…  ──proxy──▶  datasets service (:9904)
+           https://<videpe-host>/shanoir-ng/datasets/…  ──proxy──▶  datasets service (:9904)
 ```
 
-1. The button opens VIDEPE on the viewer host with the examination ID in the URL.
+1. The button opens VIDEPE on its own viewer host (`SHANOIR_VIEWER_VIDEPE_URL_HOST`, e.g. `videpe`) with the examination ID in the URL.
 2. VIDEPE signs the user in through the `shanoir-ng` realm. Users already logged in to Shanoir come straight back through SSO.
 3. VIDEPE lists the examination's datasets, downloads them (and the extra-data files attached to the examination or to the recording's acquisition, e.g. *_electrodes.tsv if they are present) with the user's access token, and opens them in its viewers. Everything is processed in the browser; VIDEPE has no server-side code.
 
-The viewer host proxies the datasets API (as it already does for /dicomweb/), so VIDEPE's API requests stay on its own origin and the datasets service needs no CORS configuration.
+The VIDEPE host proxies the datasets API (as the OHIF host does for /dicomweb/), so VIDEPE's API requests stay on its own origin and the datasets service needs no CORS configuration.
 
 ### API calls made by VIDEPE
 
@@ -31,7 +31,7 @@ All requests are `GET` with `Authorization: Bearer <access token>`, under `/shan
 | Request                                                              | Purpose                                                                                                                                              |
 | -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `examinations/{examinationId}`                                       | the examination's `extraDataFilePathList` (attached electrode positions, inverse solution, montage)                                                  |
-| `datasets/examination/{examinationId}`                               | the examination's datasets, routed by `type` (`Eeg` → EEG viewer, `Mr`, `Pet`, … → imaging viewer)                                                   |
+| `datasets/examination/{examinationId}`                               | the examination's datasets, routed by `type` (`EEG` → EEG viewer, `MR`, `PET`, … → imaging viewer, `BIDS` → by the file it holds)                    |
 | `datasetProcessing/inputDataset/{datasetId}`                         | the processings that use each dataset as input (also for their outputs, to follow chains)                                                            |
 | `datasetProcessing/{processingId}/outputDatasets/`                   | each processing's output datasets, routed like the examination's own datasets                                                                        |
 | `datasetacquisition/examination/{examinationId}`                     | the examination's acquisitions, with each one's `extraDataFilePathList`                                                                              |
@@ -58,75 +58,80 @@ An examination's datasets are those of its acquisitions, plus the processed data
 A Docker image, published by VIDEPE's CI on every release:
 
 ```
-ghcr.io/videpe/videpe:<version>    e.g. ghcr.io/videpe/videpe:0.19.0
+ghcr.io/videpe/videpe:<version>    e.g. ghcr.io/videpe/videpe:0.20.0
 ghcr.io/videpe/videpe:latest
 ```
 
 It is nginx:alpine with the built app at /usr/share/nginx/html/videpe/. Shanoir only copies that folder out of it, like it does with ohif/app. Pin a version that the Shanoir team has tested, and update it deliberately. If in doubt about which version to use, contact the VIDEPE team.
 
-The folder contains `app-config.js`, which configures VIDEPE at runtime. The default disables Shanoir functionality (`shanoir: null`, the setting for the public GitHub Pages version); Shanoir should replace it at startup with its own settings (step 3).
+The folder contains `app-config.js`, which configures VIDEPE at runtime. The default disables Shanoir functionality (`shanoir: null`, the setting for the public GitHub Pages version); Shanoir replaces it at startup with its own settings (see below).
 
-## Changes needed in shanoir-ng
+The loading rules in "What VIDEPE loads from an examination" need a newer VIDEPE than the 0.20.0 that Shanoir 2.18.1 pins. Until the pin is bumped, Shanoir users get 0.20.0's behaviour (the first EEG dataset only, examination extra data only, processed and BIDS datasets skipped).
 
-> **Note:** these instructions were drafted with the help of an AI assistant (Claude) and checked against shanoir-ng's `develop` branch, but they have not yet been tested on a Shanoir instance and may contain errors. Use them as a guide, and adapt them to your setup where needed.
+## How shanoir-ng integrates VIDEPE (2.18.1)
 
-### 1. Copy VIDEPE into the nginx image
+### 1. VIDEPE in the nginx image
 
 In `docker-compose/Dockerfile`, next to the OHIF image:
 
 ```dockerfile
-FROM ohif/app:v3.12.5 AS nginx-viewer
-FROM ghcr.io/videpe/videpe:0.19.0 AS videpe
-
-FROM nginx AS nginx
+FROM ghcr.io/videpe/videpe:0.20.0 AS videpe-viewer
 ...
 COPY --link \
-    nginx/viewer/app-config.js \
-    nginx/viewer/videpe-app-config.js \
-    nginx/viewer/ohif-viewer.template.conf \
-    /etc/nginx/viewer/
-COPY --link --from=nginx-viewer /usr/share/nginx/html/. /etc/nginx/viewer/html/
-COPY --link --from=videpe /usr/share/nginx/html/videpe/. /etc/nginx/viewer/html/videpe/
+    nginx/videpe/app-config.js \
+    nginx/videpe/videpe.template.conf \
+    /etc/nginx/videpe/
+COPY --link --from=videpe-viewer /usr/share/nginx/html/videpe/. /etc/nginx/videpe/html/videpe/
 ```
 
-### 2. Add VIDEPE's config template
+Updating VIDEPE means changing that tag.
 
-New file `docker-compose/nginx/viewer/videpe-app-config.js`. The placeholder is filled in by the entrypoint (step 3), like in OHIF's `app-config.js`:
+### 2. VIDEPE's config
+
+`docker-compose/nginx/videpe/app-config.js`; the placeholder is filled in by the entrypoint (step 3), like in OHIF's `app-config.js`:
 
 ```js
 // VIDEPE runtime configuration for Shanoir (replaces VIDEPE's default app-config.js)
 window.videpeConfig = {
   shanoir: {
     authority: 'SHANOIR_KEYCLOAK_URL/realms/shanoir-ng', // Keycloak realm
-    clientId: 'videpe', // public client from step 5
-    apiBase: '/shanoir-ng/datasets', // datasets API, proxied on the viewer host (step 4)
+    clientId: 'videpe-viewer', // public client from step 5
+    apiBase: '/shanoir-ng/datasets', // datasets API, proxied on the VIDEPE host (step 4)
   },
 };
 ```
 
 If a value is missing or still a placeholder, VIDEPE ignores the Shanoir settings (with a console warning) and opens as the plain local-files viewer.
 
-### 3. Fill it in at startup
+### 3. Filled in at startup
 
-In `docker-compose/nginx/entrypoint`, next to the existing OHIF `app-config.js` copy:
+`docker-compose/nginx/entrypoint` copies it over the default one shipped in the VIDEPE image, then runs the placeholder `sed` on it (and on `/etc/nginx/videpe.conf`, written from `videpe.template.conf`):
 
 ```sh
 # Copy our VIDEPE config over the default one shipped in the VIDEPE image
-cp "/etc/nginx/viewer/videpe-app-config.js" /etc/nginx/viewer/html/videpe/app-config.js
+cp "/etc/nginx/videpe/app-config.js" /etc/nginx/videpe/html/videpe/
 ```
 
-and add `/etc/nginx/viewer/html/videpe/app-config.js` to the list of files the placeholder `sed` runs on (next to `/etc/nginx/viewer/html/app-config.js`). `/etc/nginx/ohif-viewer.conf` is already in that list, which step 4 relies on for `SHANOIR_KEYCLOAK_URL` and `SHANOIR_DATASETS_HOST`.
+### 4. Served on its own host, with the datasets API proxied
 
-### 4. Serve VIDEPE and proxy the datasets API
+VIDEPE has its own `server` block in `docker-compose/nginx/http.conf` and `https.conf`, next to OHIF's, with the proxy settings shared by both viewers in `viewer.template.conf`:
 
-In `docker-compose/nginx/viewer/ohif-viewer.template.conf`:
+```nginx
+server {
+    server_name SHANOIR_VIEWER_VIDEPE_URL_HOST;
+    include viewer.conf;
+    include videpe.conf;
+}
+```
+
+`SHANOIR_VIEWER_VIDEPE_URL_SCHEME` and `SHANOIR_VIEWER_VIDEPE_URL_HOST` are set in `.env` (`https` and `videpe` in the default setup). `videpe.conf` comes from `docker-compose/nginx/videpe/videpe.template.conf`:
 
 ```nginx
 # VIDEPE (EEG + imaging viewer), opened from Shanoir with ?examinationId=…
 location /videpe/
 {
     include mime.types;
-    root /etc/nginx/viewer/html;
+    root /etc/nginx/videpe/html;
     index index.html;
 
     # VIDEPE's own CSP. Scripts are all separate files (no inline scripts); WebAssembly is
@@ -145,18 +150,17 @@ location /shanoir-ng/datasets/ { proxy_pass http://SHANOIR_DATASETS_HOST:9904/; 
 
 Notes:
 
-- `location /videpe/` has its own `add_header`, so it doesn't inherit headers from `location /` (OHIF's COOP/COEP headers aren't needed for VIDEPE).
 - No `try_files` fallback is needed: VIDEPE uses hash-based routing, so the page is always `/videpe/`.
-- The existing `proxy_read_timeout` and `proxy_buffering off` at the top of the template also suit VIDEPE's dataset downloads.
+- The shared `proxy_read_timeout` and `proxy_buffering off` in `viewer.template.conf` also suit VIDEPE's dataset downloads.
 - VIDEPE's image applies this same CSP when run on its own (`docker run -p 8080:80 ghcr.io/videpe/videpe:<version>`), and has been checked with it, including DICOM import.
 
-### 5. Register the `videpe` Keycloak client
+### 5. The `videpe-viewer` Keycloak client
 
-In `docker-compose/keycloak/cfg/shanoir-ng-realm.json`, add a client modelled on `ohif-viewer`:
+In `docker-compose/keycloak/cfg/shanoir-ng-realm.json`, modelled on `ohif-viewer`:
 
 ```json
 {
-  "clientId": "videpe",
+  "clientId": "videpe-viewer",
   "name": "VIDEPE",
   "enabled": true,
   "publicClient": true,
@@ -165,39 +169,36 @@ In `docker-compose/keycloak/cfg/shanoir-ng-realm.json`, add a client modelled on
   "directAccessGrantsEnabled": false,
   "serviceAccountsEnabled": false,
   "protocol": "openid-connect",
-  "redirectUris": ["SHANOIR_VIEWER_OHIF_URL_SCHEME://SHANOIR_VIEWER_OHIF_URL_HOST/videpe/*"],
-  "webOrigins": ["SHANOIR_VIEWER_OHIF_URL_SCHEME://SHANOIR_VIEWER_OHIF_URL_HOST"],
+  "redirectUris": ["SHANOIR_VIEWER_VIDEPE_URL_SCHEME://SHANOIR_VIEWER_VIDEPE_URL_HOST/videpe/*"],
+  "webOrigins": ["SHANOIR_VIEWER_VIDEPE_URL_SCHEME://SHANOIR_VIEWER_VIDEPE_URL_HOST"],
   "attributes": {
     "pkce.code.challenge.method": "S256",
     "post.logout.redirect.uris": "+"
   },
-  "protocolMappers": ["… same three mappers as ohif-viewer: userId, email, username …"],
+  "protocolMappers": ["… the same three mappers as ohif-viewer: userId, email, username …"],
   "defaultClientScopes": ["web-origins", "profile", "roles", "basic", "email"]
 }
 ```
 
-- Copy `protocolMappers` from `ohif-viewer` as-is. The `userId` claim in the access token is what the Shanoir services read to identify the user.
+- The `userId` claim in the access token is what the Shanoir services read to identify the user.
 - `webOrigins` is required: VIDEPE exchanges the authorization code from the browser, a cross-origin request to Keycloak.
-- VIDEPE's redirect URI is exactly `https://<viewer-host>/videpe/`.
+- VIDEPE's redirect URI is exactly `https://<videpe-host>/videpe/`.
 
 Existing installations need the client created in the Keycloak admin console (or through their usual realm update procedure) with the same settings.
 
-### 6. Add the button
+### 6. The buttons
 
-In `shanoir-ng-front/src/app/examinations/examination/examination.component.ts`, next to `openViewer()`:
+Both open `environment.videpeUrl + '/videpe/?examinationId=' + <id>` in a new tab (`videpeUrl` defaults to `https://videpe`):
 
-```ts
-openVidepe() {
-    window.open(environment.viewerUrl + '/videpe/?examinationId=' + this.entity.id, '_blank');
-}
-```
+- **View EEG** on the examination page (`examination.component.ts`, `openVidepeViewer()`): shown in view mode, for users with `CAN_DOWNLOAD` on the study, when the examination has at least one dataset of type `EEG`.
+- An eye/wave button in the study tree (`study-tree.component.ts`, `openInVidepe()`): enabled when exactly one examination is selected, under the same conditions.
 
-and a **View in VIDEPE** button next to the existing **View** button in the examination template (and the examination node of the tree, if wanted). The button could be shown only for examinations that contain an EEG dataset.
+The condition only looks at `EEG` datasets, so an examination with only BIDS datasets gets no button, even when it holds an EEG recording, and neither does an examination with only imaging, which VIDEPE also shows (see open question 1). Such an examination can still be opened by URL.
 
 ## Checking the integration
 
 1. Import a BrainVision or EDF EEG and an MR into one examination. Optionally attach a BIDS `*_electrodes.tsv` (and an inverse solution `.mat`) to the examination or to the recording's acquisition as extra data.
-2. Click **View in VIDEPE** while logged in to Shanoir. The new tab should open directly on VIDEPE's patient view without a password prompt, with the EEG and the MR loaded (and electrode positions, if attached).
+2. Click **View EEG** while logged in to Shanoir. The new tab should open directly on VIDEPE's patient view without a password prompt, with the EEG and the MR loaded (and electrode positions, if attached).
 3. The browser console should show no CSP violations.
 4. Reloading the VIDEPE tab should sign in again (through SSO) and reload the same examination.
 
@@ -207,19 +208,32 @@ and a **View in VIDEPE** button next to the existing **View** button in the exam
 - Access tokens are kept in memory only (never in `localStorage`/`sessionStorage`); closing or reloading the tab discards them. Only the short-lived PKCE state is kept in `sessionStorage` during the sign-in redirect.
 - Shanoir controls the deployed version (pinned image tag) and the security headers (nginx location above).
 
+## Agreed with the Shanoir team
+
+- **Study rights:** exactly the same as OHIF, so users aren't confused about access rights: `CAN_DOWNLOAD` for the dataset downloads and `CAN_SEE_ALL` for the extra data. VIDEPE has to download the files to display them in the browser, so users without `CAN_DOWNLOAD` get an error when opening an examination, as they would in OHIF.
+- **Imaging as NIfTI:** VIDEPE keeps requesting imaging with `format=nii` (converted from DICOM on Shanoir's server on every download). No benchmarks have been run, but the performance is adequate, so converting in the browser instead (`format=dcm`) isn't needed for now.
+- **Streaming EEG recordings (to do):** Shanoir can offer an endpoint that serves a single file of an EEG dataset (such as the `.eeg` data file) with support for HTTP `Range` requests; Shanoir already streams mass downloads in Chrome.
+  - EEG datasets are now downloaded as one ZIP and held in memory before anything is shown. That's fine for small recordings, but typical (epilepsy) research recordings can be multi-hour, making them slow to display or too large for memory. VIDEPE already reads recordings in chunks, so with range requests it can load only the part being viewed.
+
 ## Open questions
 
-1. Does the datasets service accept access tokens issued to a new `videpe` client (audience), as it does for `ohif-viewer`?
-   - If it only accepts tokens from known clients, sign-in works but every API call is refused (401/403).
-2. Is `/shanoir-ng/datasets/` → `SHANOIR_DATASETS_HOST:9904` the right proxy target on the viewer host?
-   - It's copied from the main host's config; the viewer host may reach the datasets service under another name or port in some deployments.
-3. VIDEPE requests imaging with `format=nii`, which converts DICOM to NIfTI on every download; NIfTI is the format VIDEPE's imaging viewer (NiiVue) reads most directly. How long does that conversion take for a typical T1 or PET series? If it's too slow, VIDEPE could request `format=dcm` and convert in the browser instead.
-   - The conversion runs on Shanoir's server for every opening, so a slow conversion means a long wait for the user and extra server load.
-4. Is a separate 'View in VIDEPE' button on the examination page (and tree node) fine?
-   - You may prefer another placement/integration, e.g. a combined "View in…" menu or showing it only for examinations with EEG.
-5. VIDEPE needs the same study rights as OHIF: `CAN_DOWNLOAD` for the dataset downloads (OHIF needs it for the image data) and `CAN_SEE_ALL` for the extra data. Is that the intended rights model for viewing in VIDEPE?
-   - VIDEPE has to download the files to display them in the browser, so users without `CAN_DOWNLOAD` get an error when opening an examination, as they would in OHIF.
-6. Could Shanoir offer a way to stream EEG recordings, e.g. an endpoint that serves a single file of an EEG dataset (such as the `.eeg` data file) with support for HTTP `Range` requests?
-   - EEG datasets are now downloaded as one ZIP and held in memory before anything is shown. => Fine for small recordings, but typical (epilepsy) research recordings can be multi-hour, making it slow to display and not even fit in memory. VIDEPE already reads recordings in chunks, so combined with range requests it could load only the part being viewed.
-7. VIDEPE routes BIDS datasets by their name (the file name with dots replaced by underscores, e.g. `sub-4_ses-7_T1w_nii_gz`). Is that naming stable, or could the BIDS data type (`anat`/`eeg`/`ieeg`) and the original file name be exposed in the dataset DTO?
+1. Could the button be renamed **View in VIDEPE** and shown for every examination (to users with `CAN_DOWNLOAD`), not only for examinations with an `EEG` dataset?
+   - VIDEPE opens the examination's imaging and electrode positions too, not just the EEG, and also works for examinations with only imaging: OHIF is the more advanced DICOM viewer, but VIDEPE's imaging viewer (NiiVue) can show image layers of various sorts (e.g. a T1 with segmentations and atlases on top) more nicely. Allowing both viewing options give choice to the users.
+   - It would also cover examinations whose EEG recording came in through a BIDS import: their datasets are all of type `BIDS`, so the current condition hides the button although VIDEPE loads their recording.
+2. VIDEPE routes BIDS datasets by their name (the file name with dots replaced by underscores, e.g. `sub-4_ses-7_T1w_nii_gz`). Is that naming stable? Alternatively, could the dataset information the API returns include the BIDS folder (`anat`/`eeg`/`ieeg`) and the original file name? For example, a dataset in `datasets/examination/{examinationId}` (field names only as an illustration):
+
+   ```json
+   {
+     "id": 47,
+     "name": "sub-4_ses-7_T1w_nii_gz",
+     "type": "BIDS",
+     "bidsDataType": "anat",
+     "fileName": "sub-4_ses-7_T1w.nii.gz"
+   }
+   ```
+
    - VIDEPE falls back to downloading a dataset whose name doesn't match, so a change wouldn't break loading, but it would download every BIDS file (incl. large recordings that aren't shown) to find out what it holds.
+   - The BIDS folder would also tell VIDEPE which electrode positions belong to which recording directly, instead of looking up each BIDS acquisition's datasets.
+
+3. A T1 or segmentation imported as a processed dataset (the output of a processing, e.g. with the examination's EEG recording as input) isn't part of an acquisition: Shanoir lists it under that processing, below its input dataset in the study tree. So `datasets/examination/{id}` doesn't return it, and VIDEPE needs `?output=true`, which should also return the processed datasets, in one request. But `GET datasets/examination/{id}?output=true` answers 204 No Content for every examination (2.18.1, and `develop`/`master` at the time of writing): `DatasetRepository.findByIdsWithProcessingAncestorsAndExamination` uses an inner `JOIN FETCH` on both `datasetProcessing` and `datasetAcquisition`, so only datasets with both survive. A `LEFT JOIN FETCH` would fix it.
+   - VIDEPE works around it with the `datasetProcessing` requests (one per dataset), which would no longer be needed once this works.
