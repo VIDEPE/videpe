@@ -249,7 +249,7 @@ async function fetchEegRecording({
  *   eegDatasetName: { id: number, name: string, type: string }|null,
  *   eegFiles: File[],
  *   imagingFiles: File[],
- *   skippedDatasets: { id: number, name: string, type: string, reason: string }[],
+ *   skippedDatasets: { id: number, name: string, type: string, reason: string, detail?: string }[],
  *   skippedFiles: { name: string, source: string, reason: string }[],
  * }>} the sorted files:
  *   - `eegDataset`: the EEG recording that was loaded, or null if the examination has none (or
@@ -257,7 +257,9 @@ async function fetchEegRecording({
  *   - `eegFiles`: files for useEegFileIntake's handleEegFiles (recording, electrode
  *     positions, inverse solutions, montages).
  *   - `imagingFiles`: files for filesToLayers (NIfTI/MGH volumes, GIFTI meshes).
- *   - `skippedDatasets`: datasets not loaded, with the reason, so the caller can tell the user.
+ *   - `skippedDatasets`: datasets not loaded, so the caller can tell the user. `reason` is
+ *     shared by all datasets skipped for the same reason (the toast groups them under it),
+ *     `detail` is this dataset's part, e.g. its type or the extensions it held.
  *   - `skippedFiles`: electrode positions, inverse solutions and montages not loaded because
  *     another file of the same kind was used, with where each was found and the file used.
  * @throws {Error} when any request or unzip fails.
@@ -319,14 +321,17 @@ export async function fetchShanoirExamination({ client, examinationId, signal })
     name: older.name,
     type: older.type,
     // "latest" = the highest dataset id, since Shanoir's ids follow import order
-    reason: 'older EEG recording, using the latest (highest dataset id)',
+    reason: 'Older EEG recordings (only the latest is loaded)',
+    // the type tells e.g. an EEG-tab recording from a BIDS one with a near-identical name
+    detail: older.type,
   }));
   skippedDatasets.push(
     ...otherDatasets.map((dataset) => ({
       ...datasetLabel(dataset),
+      reason: 'Unsupported dataset type',
       // name the type as Shanoir sent it, so a type that should be supported but isn't
       // recognised (e.g. a spelling mismatch) is visible to the user
-      reason: `unsupported dataset type: ${dataset.type ?? 'none'}`,
+      detail: dataset.type ?? 'none',
     }))
   );
 
@@ -337,7 +342,8 @@ export async function fetchShanoirExamination({ client, examinationId, signal })
     const extensions = listFileExtensions(files);
     return {
       ...datasetLabel(dataset),
-      reason: `unsupported files${extensions.length > 0 ? `: ${extensions.join(', ')}` : ''}`,
+      reason: 'No file VIDEPE can open',
+      ...(extensions.length > 0 && { detail: extensions.join(', ') }), // what it contained
     };
   };
   skippedDatasets.push(
@@ -371,7 +377,8 @@ export async function fetchShanoirExamination({ client, examinationId, signal })
       .filter((extra) => !usedBidsExtras.includes(extra))
       .map(({ dataset }) => ({
         ...datasetLabel(dataset),
-        reason: 'only used with a recording from the same BIDS folder',
+        // they only go with a recording from the same BIDS folder (see fetchEegRecording)
+        reason: "Belong to a BIDS recording that isn't loaded",
       }))
   );
 

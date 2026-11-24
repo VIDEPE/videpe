@@ -6,9 +6,10 @@
 // For imaging datasets (Mr, Pet, …): download with format=nii, unzip, then filesToLayers(files) from src/utils/NiiViewer.utils.js (it handles NIfTI and in-browser DICOM), then setLayers.
 // Ignore other types with a toast note.
 
-import { useCallback } from 'react';
+import { createElement, useCallback } from 'react';
 import { useLaunchData } from '@/hooks/useLaunchData';
 import { fetchShanoirExamination } from '@/shanoir/fetchShanoirExamination';
+import { ShanoirSkippedWarning } from '@/shanoir/ShanoirSkippedWarning';
 
 /**
  * Loads one Shanoir examination (EEG recording, electrode positions, inverse solution, montage
@@ -63,27 +64,19 @@ export function useShanoirData({
       const { eegDataset, eegFiles, imagingFiles, skippedDatasets, skippedFiles } =
         await fetchShanoirExamination({ client, examinationId, signal });
 
-      // Toast text for the datasets and the files (electrode positions, inverse solutions,
-      // montages) that have been skipped, one bulleted line each (react-hot-toast keeps the
-      // line breaks)
-      const sections = [];
-      if (skippedDatasets.length > 0) {
-        sections.push(
-          `Skipped the following datasets:\n${skippedDatasets
-            .map((d) => `- ${d.name} (${d.reason})`)
-            .join('\n')}`
-        );
-      }
-      if (skippedFiles.length > 0) {
-        sections.push(
-          `Skipped the following files:\n${skippedFiles
-            .map((f) => `- ${f.name} from ${f.source} (${f.reason})`)
-            .join('\n')}`
-        );
-      }
-      const warning = sections.length > 0 ? sections.join('\n') : null;
+      // Toast message for the datasets and the files (electrode positions, inverse solutions,
+      // montages) that have been skipped, as markup (see ShanoirSkippedWarning). This file
+      // isn't .jsx, so the element is made with createElement instead of <ShanoirSkippedWarning />
+      const warning =
+        skippedDatasets.length > 0 || skippedFiles.length > 0
+          ? createElement(ShanoirSkippedWarning, { skippedDatasets, skippedFiles })
+          : null;
 
-      return { eegFiles, imagingFiles, eegName: eegDataset?.name ?? null, warning };
+      // The name shown in the EEG panel header, with the Shanoir type: an EEG-tab recording and
+      // a BIDS one can have near-identical names
+      const eegName = eegDataset ? `${eegDataset.name} (${eegDataset.type})` : null;
+
+      return { eegFiles, imagingFiles, eegName, warning };
     },
     [client, examinationId]
   );

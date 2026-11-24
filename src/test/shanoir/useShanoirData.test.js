@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
+import { render, renderHook, waitFor } from '@testing-library/react';
 import toast from 'react-hot-toast';
 import { useShanoirData } from '@/shanoir/useShanoirData';
 import { fetchShanoirExamination } from '@/shanoir/fetchShanoirExamination';
@@ -20,6 +20,16 @@ vi.mock('react-hot-toast', () => {
 });
 
 vi.mock('@/shanoir/fetchShanoirExamination', () => ({ fetchShanoirExamination: vi.fn() }));
+
+// Renders the message of the warning toast (React markup) and returns its container
+const renderWarning = () => {
+  const [message, options] = toast.mock.calls.at(-1);
+  expect(options).toEqual(expect.objectContaining({ icon: '⚠️' }));
+  return render(message).container;
+};
+// The warning's text, one entry per line (paragraph or bullet)
+const warningLines = (container) =>
+  [...container.querySelectorAll('p, li')].map((line) => line.textContent);
 vi.mock('@/utils/NiiViewer.utils', () => ({ filesToLayers: vi.fn() }));
 
 const file = (name) => new File(['x'], name);
@@ -98,7 +108,8 @@ describe('useShanoirData', () => {
     expect(handleEegFiles).toHaveBeenCalledWith(EEG_FILES);
     expect(filesToLayers).toHaveBeenCalledWith(IMAGING_FILES);
     expect(setLayers).toHaveBeenCalledWith(LAYERS);
-    expect(setShanoirEegName).toHaveBeenCalledWith('rest');
+    // the name with the Shanoir type, to tell e.g. an EEG-tab recording from a BIDS one
+    expect(setShanoirEegName).toHaveBeenCalledWith('rest (Eeg)');
     expect(toast.success).toHaveBeenCalledWith(expect.any(String), { id: 'toast-id' });
   });
 
@@ -123,7 +134,7 @@ describe('useShanoirData', () => {
     expect(setLayers).toHaveBeenCalledWith(LAYERS);
   });
 
-  it('lists the skipped datasets in a warning toast, one bulleted line each', async () => {
+  it('lists the skipped datasets in a warning toast, grouped by reason, one bulleted line each', async () => {
     fetchShanoirExamination.mockResolvedValue(
       examination({
         skippedDatasets: [
@@ -131,13 +142,28 @@ describe('useShanoirData', () => {
             id: 2,
             name: 'first run',
             type: 'EEG',
-            reason: 'older EEG recording, using the latest (highest dataset id)',
+            reason: 'Older EEG recordings (only the latest is loaded)',
+            detail: 'EEG',
           },
           {
             id: 3,
             name: 'report',
             type: 'Measurement',
-            reason: 'unsupported dataset type: Measurement',
+            reason: 'Unsupported dataset type',
+            detail: 'Measurement',
+          },
+          {
+            id: 4,
+            name: 'second run',
+            type: 'BIDS',
+            reason: 'Older EEG recordings (only the latest is loaded)',
+            detail: 'BIDS',
+          },
+          {
+            id: 5,
+            name: 'sub-1_electrodes_tsv',
+            type: 'BIDS',
+            reason: "Belong to a BIDS recording that isn't loaded",
           },
         ],
       })
@@ -145,12 +171,26 @@ describe('useShanoirData', () => {
     const { hook } = setup();
     await waitFor(() => expect(hook.result.current.isShanoirLoading).toBe(false));
 
-    expect(toast).toHaveBeenCalledWith(
-      'Skipped the following datasets:\n' +
-        '- first run (older EEG recording, using the latest (highest dataset id))\n' +
-        '- report (unsupported dataset type: Measurement)',
-      expect.anything()
+    // one heading per reason, in the order the reasons first appear
+    const warning = renderWarning();
+    expect(warningLines(warning)).toEqual([
+      'Skipped the following datasets:',
+      'Older EEG recordings (only the latest is loaded):',
+      '- first run (EEG)',
+      '- second run (BIDS)',
+      'Unsupported dataset type:',
+      '- report (Measurement)',
+      "Belong to a BIDS recording that isn't loaded:",
+      '- sub-1_electrodes_tsv',
+    ]);
+    // the narrow toast stays readable: the groups in a smaller font, their reasons in bold
+    const reason = [...warning.querySelectorAll('p')].find(
+      (line) => line.textContent === 'Unsupported dataset type:'
     );
+    expect(reason).toHaveClass('font-semibold');
+    expect(reason.closest('.text-xs')).not.toBeNull();
+    const title = warning.querySelector('p');
+    expect(title.closest('.text-xs')).toBeNull();
   });
 
   it('lists the files not used (another file of the same kind won) in the warning toast too', async () => {
@@ -161,7 +201,8 @@ describe('useShanoirData', () => {
             id: 3,
             name: 'report',
             type: 'Measurement',
-            reason: 'unsupported dataset type: Measurement',
+            reason: 'Unsupported dataset type',
+            detail: 'Measurement',
           },
         ],
         skippedFiles: [
@@ -176,13 +217,13 @@ describe('useShanoirData', () => {
     const { hook } = setup();
     await waitFor(() => expect(hook.result.current.isShanoirLoading).toBe(false));
 
-    expect(toast).toHaveBeenCalledWith(
-      'Skipped the following datasets:\n' +
-        '- report (unsupported dataset type: Measurement)\n' +
-        'Skipped the following files:\n' +
-        "- exam_electrodes.tsv from the examination (using acq_electrodes.tsv from the recording's acquisition)",
-      expect.anything()
-    );
+    expect(warningLines(renderWarning())).toEqual([
+      'Skipped the following datasets:',
+      'Unsupported dataset type:',
+      '- report (Measurement)',
+      'Skipped the following files:',
+      "- exam_electrodes.tsv from the examination (using acq_electrodes.tsv from the recording's acquisition)",
+    ]);
   });
 
   it('shows the error and ends the loading state when the load fails', async () => {

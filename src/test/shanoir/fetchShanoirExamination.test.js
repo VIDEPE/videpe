@@ -85,13 +85,15 @@ describe('fetchShanoirExamination', () => {
         id: 5,
         name: 'run-2',
         type: 'Eeg',
-        reason: 'older EEG recording, using the latest (highest dataset id)',
+        reason: 'Older EEG recordings (only the latest is loaded)',
+        detail: 'Eeg',
       },
       {
         id: 3,
         name: 'run-1',
         type: 'Eeg',
-        reason: 'older EEG recording, using the latest (highest dataset id)',
+        reason: 'Older EEG recordings (only the latest is loaded)',
+        detail: 'Eeg',
       },
     ]);
   });
@@ -120,7 +122,8 @@ describe('fetchShanoirExamination', () => {
       id: 57,
       name: 'sub-synth_task-rest_desc-spkavgall_ieeg',
       type: 'EEG',
-      reason: 'older EEG recording, using the latest (highest dataset id)',
+      reason: 'Older EEG recordings (only the latest is loaded)',
+      detail: 'EEG',
     });
   });
 
@@ -143,9 +146,16 @@ describe('fetchShanoirExamination', () => {
         id: 9,
         name: 'report',
         type: 'Measurement',
-        reason: 'unsupported dataset type: Measurement',
+        reason: 'Unsupported dataset type',
+        detail: 'Measurement',
       },
-      { id: 10, name: 'untyped', type: undefined, reason: 'unsupported dataset type: none' },
+      {
+        id: 10,
+        name: 'untyped',
+        type: undefined,
+        reason: 'Unsupported dataset type',
+        detail: 'none',
+      },
     ]);
   });
 
@@ -162,7 +172,13 @@ describe('fetchShanoirExamination', () => {
     expect(result.eegDataset).toBeNull();
     expect(result.eegFiles).toEqual([]);
     expect(result.skippedDatasets).toEqual([
-      { id: 1, name: 'rest', type: 'EEG', reason: 'unsupported files: .set, .json' },
+      {
+        id: 1,
+        name: 'rest',
+        type: 'EEG',
+        reason: 'No file VIDEPE can open',
+        detail: '.set, .json',
+      },
     ]);
   });
 
@@ -178,7 +194,13 @@ describe('fetchShanoirExamination', () => {
 
     expect(names(result.imagingFiles)).toEqual(['sub-01_T1w.nii.gz']);
     expect(result.skippedDatasets).toEqual([
-      { id: 3, name: 'old T2', type: 'MR', reason: 'unsupported files: .img, .hdr' },
+      {
+        id: 3,
+        name: 'old T2',
+        type: 'MR',
+        reason: 'No file VIDEPE can open',
+        detail: '.img, .hdr',
+      },
     ]);
   });
 
@@ -404,35 +426,38 @@ describe('fetchShanoirExamination', () => {
     ]);
     // only the recording 58 and the three images
     expect(client.downloadDatasetZip.mock.calls.map(([id]) => id).sort()).toEqual([44, 45, 47, 58]);
-    const sameFolderOnly = 'only used with a recording from the same BIDS folder';
+    const notLoaded = "Belong to a BIDS recording that isn't loaded";
     expect(result.skippedDatasets).toEqual([
       {
         id: 57,
         name: 'sub-synth_task-rest_desc-spkavgall_ieeg',
         type: 'EEG',
-        reason: 'older EEG recording, using the latest (highest dataset id)',
+        reason: 'Older EEG recordings (only the latest is loaded)',
+        detail: 'EEG',
       },
       // a BIDS recording is one line, named after its files
       {
         id: 54,
         name: 'sub-4_ses-7_task-rest_desc-spkavgall_eeg',
         type: 'BIDS',
-        reason: 'older EEG recording, using the latest (highest dataset id)',
+        reason: 'Older EEG recordings (only the latest is loaded)',
+        detail: 'BIDS',
       },
       {
         id: 49,
         name: 'sub-4_ses-7_task-rest_desc-spkavgall_ieeg',
         type: 'BIDS',
-        reason: 'older EEG recording, using the latest (highest dataset id)',
+        reason: 'Older EEG recordings (only the latest is loaded)',
+        detail: 'BIDS',
       },
-      { id: 43, name: 'sub-4_ses-7_electrodes_tsv', type: 'BIDS', reason: sameFolderOnly },
+      { id: 43, name: 'sub-4_ses-7_electrodes_tsv', type: 'BIDS', reason: notLoaded },
       {
         id: 50,
         name: 'sub-4_ses-7_desc-eloreta_inversefilters_mat',
         type: 'BIDS',
-        reason: sameFolderOnly,
+        reason: notLoaded,
       },
-      { id: 51, name: 'sub-4_ses-7_electrodes_tsv', type: 'BIDS', reason: sameFolderOnly },
+      { id: 51, name: 'sub-4_ses-7_electrodes_tsv', type: 'BIDS', reason: notLoaded },
     ]);
   });
 
@@ -466,13 +491,14 @@ describe('fetchShanoirExamination', () => {
         id: 49,
         name: 'sub-4_ses-7_task-rest_desc-spkavgall_ieeg',
         type: 'BIDS',
-        reason: 'older EEG recording, using the latest (highest dataset id)',
+        reason: 'Older EEG recordings (only the latest is loaded)',
+        detail: 'BIDS',
       },
       {
         id: 43,
         name: 'sub-4_ses-7_electrodes_tsv',
         type: 'BIDS',
-        reason: 'only used with a recording from the same BIDS folder',
+        reason: "Belong to a BIDS recording that isn't loaded",
       },
     ]);
   });
@@ -524,12 +550,13 @@ describe('fetchShanoirExamination', () => {
     // the renamed ones once each; the channels file is known from its name not to be needed
     expect(client.downloadDatasetZip.mock.calls.map(([id]) => id).sort()).toEqual([1, 2]);
     expect(result.skippedDatasets).toEqual([
-      { id: 2, name: 'notes', type: 'BIDS', reason: 'unsupported files: .txt' },
+      { id: 2, name: 'notes', type: 'BIDS', reason: 'No file VIDEPE can open', detail: '.txt' },
       {
         id: 3,
         name: 'sub-1_ses-1_task-rest_channels_tsv',
         type: 'BIDS',
-        reason: 'unsupported files: .tsv',
+        reason: 'No file VIDEPE can open',
+        detail: '.tsv',
       },
     ]);
   });
