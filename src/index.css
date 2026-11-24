@@ -178,28 +178,33 @@ code {
   border: none;
   cursor: pointer;
   transition:
-    background-color 0.15s ease,
+    background-color 0.2s ease,
+    box-shadow 0.2s ease,
     transform 0.1s ease;
 
-  /* Hover only shifts the colour (no grow/glow): in dense toolbars a growing button nudges its
-     neighbours, and the dark-mode shadow reads as a white halo. Mixing toward --c-heading darkens
-     the primary in light mode and lightens it in dark mode. */
+  /* Hover shifts the colour and adds a primary-tinted glow, without growing: a scaled button
+     wobbles (its text re-rasterises) and overlaps its neighbours in dense toolbars, and the old
+     white dark-mode shadow read as a halo. Mixing toward --c-heading darkens the primary in light
+     mode and lightens it in dark mode. */
   &:hover:not(:disabled) {
     background: color-mix(in srgb, var(--color-primary) 70%, var(--color-heading));
+    box-shadow: 0 2px 8px -2px color-mix(in srgb, var(--color-primary) 60%, transparent);
   }
 
-  /* Slight press-in as click feedback */
+  /* Slight press-in as click feedback; the glow drops so the button reads as pushed in */
   &:active:not(:disabled) {
     transform: scale(0.96);
+    box-shadow: none;
   }
 
-  /* Off-states hover to the surface colour instead of the darkened primary */
+  /* Off-states hover to a light primary tint instead of the darkened primary. Not --c-surface:
+     buttons on a surface-coloured card (e.g. the imaging layer cards) would vanish into it. */
   &[aria-pressed='false'] {
     background: var(--color-background);
     color: var(--color-primary);
 
     &:hover:not(:disabled) {
-      background: var(--color-surface);
+      background: color-mix(in srgb, var(--color-primary) 12%, var(--color-background));
     }
   }
 
@@ -208,7 +213,7 @@ code {
     color: var(--color-primary);
 
     &:hover:not(:disabled) {
-      background: var(--color-surface);
+      background: color-mix(in srgb, var(--color-primary) 12%, var(--color-background));
     }
   }
 
@@ -224,7 +229,7 @@ code {
     padding: 1px 9px; /* compensates the 1px border */
 
     &:hover:not(:disabled) {
-      background: var(--color-surface);
+      background: color-mix(in srgb, var(--color-primary) 12%, var(--color-background));
     }
   }
 }
