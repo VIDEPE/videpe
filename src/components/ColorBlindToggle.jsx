@@ -11,7 +11,7 @@ export const ColorBlindToggle = ({ className = '' }) => {
     <button
       type="button"
       onClick={toggleColorBlindMode}
-      className={`${className} p-2 rounded-full cursor-pointer`}
+      className={`${className} button-bare p-2`}
       aria-label={isColorBlindMode ? 'Turn colorblind colormap off' : 'Turn colorblind colormap on'}
       title={
         isColorBlindMode
@@ -20,9 +20,11 @@ export const ColorBlindToggle = ({ className = '' }) => {
       }
       aria-pressed={isColorBlindMode}
     >
-      {/* Highlighted while on (primary), muted while off — same footprint as the ThemeToggle icon */}
+      {/* Highlighted while on (primary), muted while off — same footprint as the ThemeToggle icon.
+          /70 rather than /50: .button-bare already rests the icon at 85% opacity, so this
+          stacks to ~60% — still clearly muted next to the primary-coloured on state. */}
       <EyeDashed
-        className={`h-7 w-7 ${isColorBlindMode ? 'text-primary' : 'text-foreground/50'}`}
+        className={`h-7 w-7 ${isColorBlindMode ? 'text-primary' : 'text-foreground/70'}`}
       />
     </button>
   );

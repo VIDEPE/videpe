@@ -241,6 +241,36 @@ code {
   }
 }
 
+/* Bare variant: icon-only buttons with no fill or border (e.g. the theme and colorblind
+   toggles in the page headers). Feedback is on the icon only — it rests slightly muted and goes
+   to full strength on hover — since a background disc behind these coloured icons read as a
+   halo. Sets no padding, so the element keeps its own (e.g. p-2). */
+.button-bare {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  cursor: pointer;
+  transition: transform 0.1s ease;
+
+  & > svg {
+    opacity: 0.85;
+    transition:
+      opacity 0.2s ease,
+      filter 0.2s ease;
+  }
+
+  /* Full opacity alone isn't bright enough a step up, so brightness() lifts the colour further */
+  &:hover:not(:disabled) > svg {
+    opacity: 1;
+    filter: brightness(1.25);
+  }
+
+  &:active:not(:disabled) {
+    transform: scale(0.96);
+  }
+}
+
 /* Icon-only variant: tighter padding — for dense control toolbars */
 .button-icon {
   padding: 1px 3px; /* +1px transparent border, see .button */
