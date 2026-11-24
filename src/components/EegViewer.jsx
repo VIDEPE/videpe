@@ -1116,7 +1116,7 @@ export const EegViewer = ({
               >
                 <button
                   type="button"
-                  className="button button-icon"
+                  className="button size-icon"
                   title={
                     electrodes?.length > 0
                       ? `${topoEnabled ? 'Close Topograph Map' : 'EEG Topograph Map. If enabled: click EEG plot to generate an EEG Topography map at selected timestamp (requires known electrode positions)'}`
@@ -1141,7 +1141,7 @@ export const EegViewer = ({
               >
                 <button
                   type="button"
-                  className="button button-icon"
+                  className="button size-icon"
                   title={
                     electrodes?.length > 0 && !isStandardElectrodes
                       ? `${electrodeRenderEnabled ? 'Close 3D Electrode Rendering' : 'Open 3D Electrode Rendering'}`
@@ -1168,7 +1168,7 @@ export const EegViewer = ({
               >
                 <button
                   type="button"
-                  className="button button-icon"
+                  className="button size-icon"
                   title={
                     inverseSolutionFileName && isEsiChannelMatchGoodForLed
                       ? `${esiEnabled ? 'Disable Electrical Source Imaging' : 'Electrical Source Imaging. If enabled: click EEG plot to compute source power at selected timestamp'}`
@@ -1197,7 +1197,7 @@ export const EegViewer = ({
                 <div className="flex flex-col items-center gap-1">
                   <button
                     type="button"
-                    className="button button-icon"
+                    className="button size-icon"
                     onClick={() => updateVisibleChannelCount(visibleChannelCount + 10)}
                     title="Show more channels"
                     disabled={eegIsStacked}
@@ -1219,7 +1219,7 @@ export const EegViewer = ({
                   />
                   <button
                     type="button"
-                    className="button button-icon"
+                    className="button size-icon"
                     onClick={() => updateVisibleChannelCount(visibleChannelCount - 10)}
                     title="Show fewer channels"
                     disabled={eegIsStacked}
@@ -1232,7 +1232,7 @@ export const EegViewer = ({
                   <div className="mt-2">
                     <button
                       type="button"
-                      className="button button-icon"
+                      className="button size-icon"
                       title={
                         displayedData.length > 1
                           ? `${eegIsStacked ? 'Unstack' : 'Stack'} EEG Plots`
@@ -1464,7 +1464,7 @@ export const EegViewer = ({
                 <div className="flex items-center gap-1">
                   <button
                     type="button"
-                    className="button button-icon"
+                    className="button size-icon"
                     onClick={() => updateYScale(yScale * 2)}
                     title="Zoom out"
                   >
@@ -1483,7 +1483,7 @@ export const EegViewer = ({
                   />
                   <button
                     type="button"
-                    className="button button-icon"
+                    className="button size-icon"
                     onClick={() => updateYScale(yScale / 2)}
                     title="Zoom in"
                   >
@@ -1500,7 +1500,7 @@ export const EegViewer = ({
                 <div className="flex items-center gap-1">
                   <button
                     type="button"
-                    className="button button-icon"
+                    className="button size-icon"
                     onClick={() => setStartTime(0)}
                     title="Jump to start"
                   >
@@ -1508,7 +1508,7 @@ export const EegViewer = ({
                   </button>
                   <button
                     type="button"
-                    className="button button-icon"
+                    className="button size-icon"
                     onClick={backwardshiftStartTime}
                     title="Shift backward"
                   >
@@ -1528,7 +1528,7 @@ export const EegViewer = ({
                   />
                   <button
                     type="button"
-                    className="button button-icon"
+                    className="button size-icon"
                     onClick={forwardshiftStartTime}
                     title="Shift forward"
                   >
@@ -1536,7 +1536,7 @@ export const EegViewer = ({
                   </button>
                   <button
                     type="button"
-                    className="button button-icon"
+                    className="button size-icon"
                     onClick={() => setStartTime(tMax - windowSize)}
                     title="Jump to end"
                   >
@@ -1553,7 +1553,7 @@ export const EegViewer = ({
                 <div className="flex items-center gap-1">
                   <button
                     type="button"
-                    className="button button-icon"
+                    className="button size-icon"
                     onClick={decreaseWindowSize}
                     title="Decrease window size"
                   >
@@ -1573,7 +1573,7 @@ export const EegViewer = ({
                   />
                   <button
                     type="button"
-                    className="button button-icon"
+                    className="button size-icon"
                     onClick={increaseWindowSize}
                     title="Increase window size"
                   >

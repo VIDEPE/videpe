@@ -348,7 +348,7 @@ function SortableSettingsCard({
         <button
           type="button"
           onClick={() => onSettingChange(layer.url, 'visible', !settings.visible)}
-          className="button button-icon shrink-0"
+          className="button size-icon shrink-0"
           aria-label={`${settings.visible ? 'Hide' : 'Show'} layer: ${label}`}
           title={`${settings.visible ? 'Hide' : 'Show'} layer: ${label}`}
           aria-pressed={settings.visible}
@@ -360,7 +360,7 @@ function SortableSettingsCard({
         <button
           type="button"
           onClick={onToggleExpand}
-          className="button button-icon"
+          className="button size-icon"
           title={isExpanded ? `Collapse layer: ${label}` : `Expand layer: ${label}`}
           aria-label={isExpanded ? `Collapse layer: ${label}` : `Expand layer: ${label}`}
           aria-expanded={isExpanded}

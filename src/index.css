@@ -181,7 +181,7 @@ code {
 
 /* Outline variant: secondary actions (Cancel, Clear all, Reset) next to a filled primary one.
    Combine with .button and optionally a size class: "button button-outline" or
-   "button button-lg button-outline". Every off-state .button uses the same look, so a toggle
+   "button size-lg button-outline". Every off-state .button uses the same look, so a toggle
    is filled when on and outlined when off: aria-pressed (e.g. the Topo/3D/ESI toggles),
    aria-expanded (e.g. the imaging layer expand button) and data-active (e.g. the
    Filters/Montage buttons when inactive). Declared after .button so it overrides its colours. */
@@ -231,7 +231,7 @@ code {
 }
 
 /* Icon-only variant: tighter padding — for dense control toolbars */
-.button-icon {
+.size-icon {
   padding: 1px 3px; /* +1px transparent border, see .button */
 }
 
@@ -239,7 +239,7 @@ code {
    the same 28px circle whether it holds a 16px icon or a short 2-character label ("Ax", "MP").
    Fixed width rather than padding, since padding makes the width follow the label — narrow
    labels came out as ovals and wide ones as pills. */
-.button-circle {
+.size-circle {
   flex-shrink: 0;
   width: 28px;
   height: 28px;
@@ -249,7 +249,7 @@ code {
 
 /* Tiny fixed-size circle for a single small glyph (e.g. the editors' ✓ "set all" buttons next
    to a bulk-value input). No padding: the glyph is centred by .button's flex centring. */
-.button-dot {
+.size-dot {
   flex-shrink: 0;
   width: 1rem;
   height: 1rem;
@@ -258,15 +258,15 @@ code {
 
 /* Large variant for page-level calls to action (e.g. the landing page's Get Started): body-size
    text instead of .button's 12px. Combine with .button so it shares its hover, press, disabled
-   and outline behaviour: "button button-lg". */
-.button-lg {
+   and outline behaviour: "button size-lg". */
+.size-lg {
   padding: 11px 23px; /* +1px transparent border = 12px 24px, see .button */
   font-size: 1rem;
   font-weight: 500;
 }
 
 /* Call-to-action modifier for the one button a page wants clicked (the landing page's Get
-   Started): "button button-lg button-cta". At rest its trailing arrow icon nudges right every
+   Started): "button size-lg button-cta". At rest its trailing arrow icon nudges right every
    few seconds, pointing the way, while a subtle glow swells around the button, to invite the
    click; on hover the button lifts with a strong tinted glow and the arrow slides right and
    stays there. Lifts (translate) rather than grows (scale), so the label doesn't wobble.

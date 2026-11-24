@@ -212,7 +212,7 @@ export const LandingPage = () => {
 
         <button
           type="button"
-          className="button button-lg button-cta w-48 flex justify-center text"
+          className="button size-lg button-cta w-48 flex justify-center text"
           onClick={() => navigate('/patient-view')}
         >
           Get Started

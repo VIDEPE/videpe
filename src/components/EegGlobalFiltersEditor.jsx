@@ -333,7 +333,7 @@ export function EegGlobalFiltersEditor({
                   />
                   <button
                     type="button"
-                    className="button button-dot"
+                    className="button size-dot"
                     data-testid={`bulk-${column.key}-apply-button`}
                     title={`Set every type's ${column.label} to this value`}
                     onClick={() => handleSetAll(column)}

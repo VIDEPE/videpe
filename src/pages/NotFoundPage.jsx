@@ -26,11 +26,11 @@ export const NotFoundPage = () => {
 
         {/* Action Buttons */}
         <div className="mt-12 flex flex-col sm:flex-row gap-4 justify-center">
-          <button onClick={() => navigate('/')} className="button button-lg">
+          <button onClick={() => navigate('/')} className="button size-lg">
             <Home size={18} />
             Back to Home
           </button>
-          <button onClick={() => navigate(-1)} className="button button-lg button-outline">
+          <button onClick={() => navigate(-1)} className="button size-lg button-outline">
             <ArrowLeft size={18} />
             Go Back
           </button>

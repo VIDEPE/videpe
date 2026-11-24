@@ -717,7 +717,7 @@ export const NiiViewer = ({
                 <button
                   key={sliceType}
                   type="button"
-                  className="button button-circle disabled:opacity-40 disabled:pointer-events-none"
+                  className="button size-circle disabled:opacity-40 disabled:pointer-events-none"
                   onClick={() => handleSliceTypeChange(sliceType)}
                   disabled={disabled}
                   title={
@@ -741,11 +741,11 @@ export const NiiViewer = ({
               'rounded-r-md border-r-1 border-t-1 border-b-1 border-border'
             )}
           >
-            {/* Radiological/neurological display convention toggle. button-circle, like the
+            {/* Radiological/neurological display convention toggle. size-circle, like the
               slice-type buttons above, so the whole column is the same 28px circles. */}
             <button
               type="button"
-              className="button button-circle"
+              className="button size-circle"
               onClick={handleRadiologicalConventionToggle}
               title={
                 isRadiologicalConvention
@@ -760,7 +760,7 @@ export const NiiViewer = ({
             {/* Clip plane on/off toggle — only visible in the 3D render view (see handleClipPlaneToggle). */}
             <button
               type="button"
-              className="button button-circle"
+              className="button size-circle"
               onClick={handleClipPlaneToggle}
               title={isClipPlaneOn ? 'Disable clip plane' : 'Enable clip plane (3D view only)'}
               aria-label="Toggle clip plane"
