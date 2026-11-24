@@ -1188,8 +1188,9 @@ export const EegViewer = ({
               </div>
             </div>
 
-            {/* Channel Controls — right-aligned so the box's open side sits next to the plots */}
-            <div className="flex-1 flex flex-row items-start justify-end mt-5 sm:mt-10">
+            {/* Channel Controls — vertically centred between the toggles and Filters/Montage, and
+                right-aligned so the box's open side sits next to the plots */}
+            <div className="flex-1 flex flex-row items-center justify-end my-5 sm:my-10">
               <div className="flex flex-row items-center gap-1 py-1 border-border/50 border-1 border-r-0 rounded-tl-md rounded-bl-md">
                 <span className="text-xs text-foreground/60 whitespace-nowrap [writing-mode:vertical-rl] rotate-180 select-none pointer-events-none">
                   Channels
