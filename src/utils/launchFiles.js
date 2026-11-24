@@ -32,7 +32,7 @@ const isEegIntakeFile = (name) =>
   isElectrodePositionFile(name) ||
   isInverseSolutionFile(name) ||
   isMontageFile(name);
-const isImagingFile = (name) =>
+export const isImagingFile = (name) =>
   LAUNCH_IMAGING_EXTENSIONS.some((ext) => name.toLowerCase().endsWith(ext));
 
 // Base file name of a path — paths (e.g. Shanoir's) can use either separator.

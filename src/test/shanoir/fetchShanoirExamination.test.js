@@ -101,7 +101,7 @@ describe('fetchShanoirExamination', () => {
     // 57 (iEEG) and the more recent 58 (scalp EEG)
     const client = makeClient({
       datasets: fixtureBody('datasets-examination-7.json'),
-      zips: { 58: fixtureDatasetZip(58) },
+      zips: Object.fromEntries([58, 44, 45, 47].map((id) => [id, fixtureDatasetZip(id)])),
     });
     const result = await fetchShanoirExamination({ client, examinationId: 7 });
 
@@ -114,7 +114,8 @@ describe('fetchShanoirExamination', () => {
       'sub-4_ses-7_sub-synth_task-rest_desc-spkavgall_eeg.eeg',
       'sub-4_ses-7_sub-synth_task-rest_desc-spkavgall_eeg.vhdr',
     ]);
-    expect(client.downloadDatasetZip).toHaveBeenCalledTimes(1);
+    // the older recording isn't downloaded
+    expect(client.downloadDatasetZip).not.toHaveBeenCalledWith(57, undefined);
     expect(result.skippedDatasets).toContainEqual({
       id: 57,
       name: 'sub-synth_task-rest_desc-spkavgall_ieeg',
@@ -386,6 +387,151 @@ describe('fetchShanoirExamination', () => {
     await fetchShanoirExamination({ client, examinationId: 7 });
 
     expect(client.listAcquisitionDatasets).not.toHaveBeenCalled();
+  });
+
+  it('routes BIDS datasets by the file name in their dataset name, without downloading what is not loaded (fixture: examination 7)', async () => {
+    // Examination 7's BIDS import: one `BIDS` dataset per file, named after it
+    // ('sub-4_ses-7_T1w_nii_gz' is sub-4_ses-7_T1w.nii.gz). The EEG-tab recording 58 is the
+    // latest, so the two BIDS recordings (ieeg 46/48/49, eeg 52/53/54) are older, and the BIDS
+    // electrode positions and inverse solution belong to those, not to recording 58.
+    const client = createFixtureClient();
+    const result = await fetchShanoirExamination({ client, examinationId: 7 });
+
+    expect(names(result.imagingFiles)).toEqual([
+      'sub-4_ses-7_T1w.nii.gz',
+      'sub-4_ses-7_atlas-L2018_res-scale2_dseg.nii.gz',
+      'sub-4_ses-7_label-WM_dseg.nii.gz',
+    ]);
+    // only the recording 58 and the three images
+    expect(client.downloadDatasetZip.mock.calls.map(([id]) => id).sort()).toEqual([44, 45, 47, 58]);
+    const sameFolderOnly = 'only used with a recording from the same BIDS folder';
+    expect(result.skippedDatasets).toEqual([
+      {
+        id: 57,
+        name: 'sub-synth_task-rest_desc-spkavgall_ieeg',
+        type: 'EEG',
+        reason: 'older EEG recording, using the latest (highest dataset id)',
+      },
+      // a BIDS recording is one line, named after its files
+      {
+        id: 54,
+        name: 'sub-4_ses-7_task-rest_desc-spkavgall_eeg',
+        type: 'BIDS',
+        reason: 'older EEG recording, using the latest (highest dataset id)',
+      },
+      {
+        id: 49,
+        name: 'sub-4_ses-7_task-rest_desc-spkavgall_ieeg',
+        type: 'BIDS',
+        reason: 'older EEG recording, using the latest (highest dataset id)',
+      },
+      { id: 43, name: 'sub-4_ses-7_electrodes_tsv', type: 'BIDS', reason: sameFolderOnly },
+      {
+        id: 50,
+        name: 'sub-4_ses-7_desc-eloreta_inversefilters_mat',
+        type: 'BIDS',
+        reason: sameFolderOnly,
+      },
+      { id: 51, name: 'sub-4_ses-7_electrodes_tsv', type: 'BIDS', reason: sameFolderOnly },
+    ]);
+  });
+
+  it('loads the latest BIDS recording with the electrode positions and inverse solution of its own BIDS folder (fixture: examination 7)', async () => {
+    // Without the EEG-tab recordings 57 and 58, the BIDS eeg recording (52–54, folder eeg =
+    // acquisition 15) is the latest. Its folder's files (50, 51) go with it; the ieeg folder's
+    // electrode positions (43, acquisition 13) don't.
+    const client = createFixtureClient();
+    client.listExaminationDatasets.mockResolvedValue(
+      fixtureBody('datasets-examination-7.json').filter((dataset) => dataset.type === 'BIDS')
+    );
+    const result = await fetchShanoirExamination({ client, examinationId: 7 });
+
+    expect(result.eegDataset).toEqual({
+      id: 54,
+      name: 'sub-4_ses-7_task-rest_desc-spkavgall_eeg',
+      type: 'BIDS',
+    });
+    expect(names(result.eegFiles)).toEqual([
+      'sub-4_ses-7_desc-eloreta_inversefilters.mat',
+      'sub-4_ses-7_electrodes.tsv',
+      'sub-4_ses-7_task-rest_desc-spkavgall_eeg.eeg',
+      'sub-4_ses-7_task-rest_desc-spkavgall_eeg.vhdr',
+    ]);
+    // not the .vmrk (52), which the EEG viewer doesn't read, nor the other folder's files
+    expect(client.downloadDatasetZip.mock.calls.map(([id]) => id).sort()).toEqual([
+      44, 45, 47, 50, 51, 53, 54,
+    ]);
+    expect(result.skippedDatasets).toEqual([
+      {
+        id: 49,
+        name: 'sub-4_ses-7_task-rest_desc-spkavgall_ieeg',
+        type: 'BIDS',
+        reason: 'older EEG recording, using the latest (highest dataset id)',
+      },
+      {
+        id: 43,
+        name: 'sub-4_ses-7_electrodes_tsv',
+        type: 'BIDS',
+        reason: 'only used with a recording from the same BIDS folder',
+      },
+    ]);
+  });
+
+  it("prefers the examination's extra-data over the BIDS folder's files", async () => {
+    const client = makeClient({
+      datasets: [
+        { id: 10, name: 'sub-1_ses-1_task-rest_eeg_vhdr', type: 'BIDS' },
+        { id: 11, name: 'sub-1_ses-1_task-rest_eeg_eeg', type: 'BIDS' },
+        { id: 12, name: 'sub-1_ses-1_electrodes_tsv', type: 'BIDS' },
+      ],
+      zips: {
+        10: makeZip(['sub-1_ses-1_task-rest_eeg.vhdr']),
+        11: makeZip(['sub-1_ses-1_task-rest_eeg.eeg']),
+      },
+      extraDataPaths: ['exam_electrodes.tsv'],
+      acquisitions: [{ id: 15, name: 'eeg (BIDS)', type: 'BIDS', extraDataFilePathList: [] }],
+      acquisitionDatasets: { 15: [{ id: 10 }, { id: 11 }, { id: 12 }] },
+    });
+    const result = await fetchShanoirExamination({ client, examinationId: 7 });
+
+    expect(names(result.eegFiles)).toEqual([
+      'exam_electrodes.tsv',
+      'sub-1_ses-1_task-rest_eeg.eeg',
+      'sub-1_ses-1_task-rest_eeg.vhdr',
+    ]);
+    expect(client.downloadDatasetZip).not.toHaveBeenCalledWith(12, undefined);
+    expect(result.skippedFiles).toEqual([
+      {
+        name: 'sub-1_ses-1_electrodes.tsv',
+        source: "the recording's BIDS folder",
+        reason: 'using exam_electrodes.tsv from the examination',
+      },
+    ]);
+  });
+
+  it('downloads a renamed BIDS dataset once to route it by the file inside, and reports BIDS files VIDEPE does not open', async () => {
+    const client = makeClient({
+      datasets: [
+        { id: 1, name: 'My T1', type: 'BIDS' },
+        { id: 2, name: 'notes', type: 'BIDS' },
+        { id: 3, name: 'sub-1_ses-1_task-rest_channels_tsv', type: 'BIDS' },
+      ],
+      zips: { 1: makeZip(['sub-1_T1w.nii.gz']), 2: makeZip(['notes.txt']) },
+    });
+    const result = await fetchShanoirExamination({ client, examinationId: 7 });
+
+    expect(names(result.imagingFiles)).toEqual(['sub-1_T1w.nii.gz']);
+    // the renamed ones once each; the channels file is known from its name not to be needed
+    expect(client.downloadDatasetZip.mock.calls.map(([id]) => id).sort()).toEqual([1, 2]);
+    expect(result.skippedDatasets).toEqual([
+      { id: 2, name: 'notes', type: 'BIDS', reason: 'unsupported files: .txt' },
+      {
+        id: 3,
+        name: 'sub-1_ses-1_task-rest_channels_tsv',
+        type: 'BIDS',
+        reason: 'unsupported files: .tsv',
+      },
+    ]);
   });
 
   it('passes the abort signal to every request', async () => {
