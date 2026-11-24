@@ -1,5 +1,0 @@
-{
-  "request": "GET datasets/examination/5?output=true",
-  "status": 204,
-  "body": null
-}

@@ -26,7 +26,7 @@ function makeClient({
 }) {
   return {
     listExaminationDatasets: vi.fn().mockResolvedValue(datasets),
-    getExamination: vi.fn().mockResolvedValue({ id: 7, extraDataFilePathList: extraDataPaths }),
+    getExamination: vi.fn().mockResolvedValue({ id: 1, extraDataFilePathList: extraDataPaths }),
     listProcessingsByInputDataset: vi.fn(async (datasetId) => processings[datasetId] ?? []),
     listProcessingOutputDatasets: vi.fn(async (processingId) => outputs[processingId] ?? []),
     listExaminationAcquisitions: vi.fn().mockResolvedValue(acquisitions),
@@ -53,7 +53,7 @@ describe('fetchShanoirExamination', () => {
       ],
       zips: { 1: EEG_ZIP, 2: T1_ZIP, 3: PET_ZIP },
     });
-    const result = await fetchShanoirExamination({ client, examinationId: 7 });
+    const result = await fetchShanoirExamination({ client, examinationId: 1 });
 
     // .vmrk and the .json sidecar are dropped by the per-viewer file selection
     expect(names(result.eegFiles)).toEqual(['rec.eeg', 'rec.vhdr']);
@@ -75,7 +75,7 @@ describe('fetchShanoirExamination', () => {
       ],
       zips: { 9: EEG_ZIP },
     });
-    const result = await fetchShanoirExamination({ client, examinationId: 7 });
+    const result = await fetchShanoirExamination({ client, examinationId: 1 });
 
     expect(result.eegDataset.name).toBe('run-3');
     expect(client.downloadDatasetZip).toHaveBeenCalledTimes(1);
@@ -138,7 +138,7 @@ describe('fetchShanoirExamination', () => {
       ],
       zips: { 1: EEG_ZIP },
     });
-    const result = await fetchShanoirExamination({ client, examinationId: 7 });
+    const result = await fetchShanoirExamination({ client, examinationId: 1 });
 
     expect(client.downloadDatasetZip.mock.calls.map(([id]) => id)).toEqual([1]);
     expect(result.skippedDatasets).toEqual([
@@ -165,9 +165,9 @@ describe('fetchShanoirExamination', () => {
     const client = makeClient({
       datasets: [{ id: 1, name: 'rest', type: 'EEG' }],
       zips: { 1: makeZip(['rec/rec.set', 'rec/rec.json']) },
-      extraDataPaths: ['/data/exam-7/sub-01_electrodes.tsv'],
+      extraDataPaths: ['/data/exam-1/sub-01_electrodes.tsv'],
     });
-    const result = await fetchShanoirExamination({ client, examinationId: 7 });
+    const result = await fetchShanoirExamination({ client, examinationId: 1 });
 
     expect(result.eegDataset).toBeNull();
     expect(result.eegFiles).toEqual([]);
@@ -190,7 +190,7 @@ describe('fetchShanoirExamination', () => {
       ],
       zips: { 2: T1_ZIP, 3: makeZip(['anat/t2.img', 'anat/t2.hdr']) },
     });
-    const result = await fetchShanoirExamination({ client, examinationId: 7 });
+    const result = await fetchShanoirExamination({ client, examinationId: 1 });
 
     expect(names(result.imagingFiles)).toEqual(['sub-01_T1w.nii.gz']);
     expect(result.skippedDatasets).toEqual([
@@ -209,12 +209,12 @@ describe('fetchShanoirExamination', () => {
       datasets: [{ id: 1, name: 'rest', type: 'Eeg' }],
       zips: { 1: EEG_ZIP },
       extraDataPaths: [
-        '/data/exam-7/sub-01_electrodes.tsv',
-        '/data/exam-7/sub-01_inversefilters.mat',
-        '/data/exam-7/report.pdf',
+        '/data/exam-1/sub-01_electrodes.tsv',
+        '/data/exam-1/sub-01_inversefilters.mat',
+        '/data/exam-1/report.pdf',
       ],
     });
-    const result = await fetchShanoirExamination({ client, examinationId: 7 });
+    const result = await fetchShanoirExamination({ client, examinationId: 1 });
 
     expect(names(result.eegFiles)).toEqual([
       'rec.eeg',
@@ -223,7 +223,7 @@ describe('fetchShanoirExamination', () => {
       'sub-01_inversefilters.mat',
     ]);
     expect(client.downloadExtraData).toHaveBeenCalledTimes(2);
-    expect(client.downloadExtraData).not.toHaveBeenCalledWith(7, 'report.pdf', undefined);
+    expect(client.downloadExtraData).not.toHaveBeenCalledWith(1, 'report.pdf', undefined);
   });
 
   it('skips extra-data when the examination has no EEG recording', async () => {
@@ -231,9 +231,9 @@ describe('fetchShanoirExamination', () => {
     const client = makeClient({
       datasets: [{ id: 2, name: 'T1', type: 'Mr' }],
       zips: { 2: T1_ZIP },
-      extraDataPaths: ['/data/exam-7/sub-01_electrodes.tsv'],
+      extraDataPaths: ['/data/exam-1/sub-01_electrodes.tsv'],
     });
-    const result = await fetchShanoirExamination({ client, examinationId: 7 });
+    const result = await fetchShanoirExamination({ client, examinationId: 1 });
 
     expect(result.eegDataset).toBeNull();
     expect(result.eegFiles).toEqual([]);
@@ -242,7 +242,7 @@ describe('fetchShanoirExamination', () => {
 
   it('returns empty results for an examination without datasets', async () => {
     const client = makeClient({ datasets: [] });
-    const result = await fetchShanoirExamination({ client, examinationId: 7 });
+    const result = await fetchShanoirExamination({ client, examinationId: 1 });
     expect(result).toEqual({
       eegDataset: null,
       eegFiles: [],
@@ -252,14 +252,23 @@ describe('fetchShanoirExamination', () => {
     });
   });
 
-  it('loads processed datasets made from the examination datasets as imaging (fixture: examination 4)', async () => {
+  it("loads processed datasets made from the examination datasets as imaging, and the examination's extra-data (fixture: examination 4)", async () => {
     // Examination 4: recording 38, used as input by processings 1–3, whose outputs are the
     // T1 (40, MR), WM mask (41) and atlas (42, both SEGMENTATION). Processed datasets have no
-    // acquisition, so they aren't in the examination's own dataset list.
+    // acquisition, so they aren't in the examination's own dataset list. The electrode
+    // positions are extra-data on the examination itself.
     const client = createFixtureClient();
     const result = await fetchShanoirExamination({ client, examinationId: 4 });
 
     expect(result.eegDataset.id).toBe(38);
+    expect(names(result.eegFiles)).toEqual([
+      'sub-4_ses-4_sub-synth_task-rest_desc-spkavgall_ieeg.eeg',
+      'sub-4_ses-4_sub-synth_task-rest_desc-spkavgall_ieeg.vhdr',
+      'sub-synth_electrodes.tsv',
+    ]);
+    expect(client.downloadExtraData.mock.calls.map(([id, name]) => [id, name])).toEqual([
+      [4, 'sub-synth_electrodes.tsv'],
+    ]);
     expect(names(result.imagingFiles)).toEqual([
       'sub-synth_T1w.nii.gz',
       'sub-synth_atlas-L2018_res-scale2_dseg.nii.gz',
@@ -278,7 +287,7 @@ describe('fetchShanoirExamination', () => {
       processings: { 1: [{ id: 5 }], 2: [{ id: 5 }] },
       outputs: { 5: [{ id: 10, name: 'T1', type: 'MR' }] },
     });
-    const result = await fetchShanoirExamination({ client, examinationId: 7 });
+    const result = await fetchShanoirExamination({ client, examinationId: 1 });
 
     expect(client.listProcessingOutputDatasets).toHaveBeenCalledTimes(1);
     expect(names(result.imagingFiles)).toEqual(['sub-01_T1w.nii.gz']);
@@ -296,7 +305,7 @@ describe('fetchShanoirExamination', () => {
         6: [{ id: 11, name: 'WM', type: 'Segmentation' }],
       },
     });
-    const result = await fetchShanoirExamination({ client, examinationId: 7 });
+    const result = await fetchShanoirExamination({ client, examinationId: 1 });
 
     expect(names(result.imagingFiles)).toEqual([
       'sub-01_T1w.nii.gz',
@@ -336,11 +345,11 @@ describe('fetchShanoirExamination', () => {
     const client = makeClient({
       datasets: [{ id: 1, name: 'rest', type: 'Eeg' }],
       zips: { 1: EEG_ZIP },
-      extraDataPaths: ['/data/exam-7/exam_electrodes.tsv', '/data/exam-7/exam_inversefilters.mat'],
+      extraDataPaths: ['/data/exam-1/exam_electrodes.tsv', '/data/exam-1/exam_inversefilters.mat'],
       acquisitions: [{ id: 3, extraDataFilePathList: ['/data/acq-3/acq_electrodes.tsv'] }],
       acquisitionDatasets: { 3: [{ id: 1 }] },
     });
-    const result = await fetchShanoirExamination({ client, examinationId: 7 });
+    const result = await fetchShanoirExamination({ client, examinationId: 1 });
 
     expect(names(result.eegFiles)).toEqual([
       'acq_electrodes.tsv',
@@ -349,7 +358,7 @@ describe('fetchShanoirExamination', () => {
       'rec.vhdr',
     ]);
     // the file that isn't used isn't downloaded
-    expect(client.downloadExtraData).not.toHaveBeenCalledWith(7, 'exam_electrodes.tsv', undefined);
+    expect(client.downloadExtraData).not.toHaveBeenCalledWith(1, 'exam_electrodes.tsv', undefined);
     expect(result.skippedFiles).toEqual([
       {
         name: 'exam_electrodes.tsv',
@@ -366,7 +375,7 @@ describe('fetchShanoirExamination', () => {
       acquisitions: [{ id: 3, extraDataFilePathList: ['acq_electrodes.tsv'] }],
       acquisitionDatasets: { 3: [{ id: 1 }] },
     });
-    const result = await fetchShanoirExamination({ client, examinationId: 7 });
+    const result = await fetchShanoirExamination({ client, examinationId: 1 });
 
     expect(names(result.eegFiles)).toEqual(['rec.eeg', 'rec.vhdr', 'zip_electrodes.tsv']);
     expect(client.downloadAcquisitionExtraData).not.toHaveBeenCalled();
@@ -385,7 +394,7 @@ describe('fetchShanoirExamination', () => {
       zips: { 1: EEG_ZIP },
       extraDataPaths: ['old_electrodes.tsv', 'new_electrodes.tsv'],
     });
-    const result = await fetchShanoirExamination({ client, examinationId: 7 });
+    const result = await fetchShanoirExamination({ client, examinationId: 1 });
 
     expect(names(result.eegFiles)).toEqual(['new_electrodes.tsv', 'rec.eeg', 'rec.vhdr']);
     expect(result.skippedFiles).toEqual([
@@ -406,7 +415,7 @@ describe('fetchShanoirExamination', () => {
         { id: 4, extraDataFilePathList: [] },
       ],
     });
-    await fetchShanoirExamination({ client, examinationId: 7 });
+    await fetchShanoirExamination({ client, examinationId: 1 });
 
     expect(client.listAcquisitionDatasets).not.toHaveBeenCalled();
   });
@@ -518,7 +527,7 @@ describe('fetchShanoirExamination', () => {
       acquisitions: [{ id: 15, name: 'eeg (BIDS)', type: 'BIDS', extraDataFilePathList: [] }],
       acquisitionDatasets: { 15: [{ id: 10 }, { id: 11 }, { id: 12 }] },
     });
-    const result = await fetchShanoirExamination({ client, examinationId: 7 });
+    const result = await fetchShanoirExamination({ client, examinationId: 1 });
 
     expect(names(result.eegFiles)).toEqual([
       'exam_electrodes.tsv',
@@ -544,7 +553,7 @@ describe('fetchShanoirExamination', () => {
       ],
       zips: { 1: makeZip(['sub-1_T1w.nii.gz']), 2: makeZip(['notes.txt']) },
     });
-    const result = await fetchShanoirExamination({ client, examinationId: 7 });
+    const result = await fetchShanoirExamination({ client, examinationId: 1 });
 
     expect(names(result.imagingFiles)).toEqual(['sub-1_T1w.nii.gz']);
     // the renamed ones once each; the channels file is known from its name not to be needed
@@ -571,16 +580,16 @@ describe('fetchShanoirExamination', () => {
       acquisitionDatasets: { 3: [{ id: 1 }] },
     });
     const { signal } = new AbortController();
-    await fetchShanoirExamination({ client, examinationId: 7, signal });
+    await fetchShanoirExamination({ client, examinationId: 1, signal });
 
-    expect(client.listExaminationDatasets).toHaveBeenCalledWith(7, signal);
-    expect(client.getExamination).toHaveBeenCalledWith(7, signal);
+    expect(client.listExaminationDatasets).toHaveBeenCalledWith(1, signal);
+    expect(client.getExamination).toHaveBeenCalledWith(1, signal);
     expect(client.listProcessingsByInputDataset).toHaveBeenCalledWith(1, signal);
     expect(client.listProcessingOutputDatasets).toHaveBeenCalledWith(5, signal);
-    expect(client.listExaminationAcquisitions).toHaveBeenCalledWith(7, signal);
+    expect(client.listExaminationAcquisitions).toHaveBeenCalledWith(1, signal);
     expect(client.listAcquisitionDatasets).toHaveBeenCalledWith(3, signal);
     expect(client.downloadDatasetZip).toHaveBeenCalledWith(1, signal);
-    expect(client.downloadExtraData).toHaveBeenCalledWith(7, 'sub-01_electrodes.tsv', signal);
+    expect(client.downloadExtraData).toHaveBeenCalledWith(1, 'sub-01_electrodes.tsv', signal);
     expect(client.downloadAcquisitionExtraData).toHaveBeenCalledWith(
       3,
       'sub-01_inversefilters.mat',
@@ -591,7 +600,7 @@ describe('fetchShanoirExamination', () => {
   it('rejects when a download fails, so the caller can show one error', async () => {
     const client = makeClient({ datasets: [{ id: 1, name: 'rest', type: 'Eeg' }] });
     client.downloadDatasetZip.mockRejectedValue(new Error('dataset 1 was not found in Shanoir.'));
-    await expect(fetchShanoirExamination({ client, examinationId: 7 })).rejects.toThrow(
+    await expect(fetchShanoirExamination({ client, examinationId: 1 })).rejects.toThrow(
       'not found'
     );
   });

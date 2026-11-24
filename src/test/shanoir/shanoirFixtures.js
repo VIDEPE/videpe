@@ -4,14 +4,10 @@ import { fileURLToPath } from 'node:url';
 import { vi } from 'vitest';
 import { zipSync, strToU8 } from 'fflate';
 
-// Helpers to use the real Shanoir 2.18.1 responses in src/test/shanoir/fixtures/shanoir-2.18.1/
-// (see the README there for what each examination contains).
+// Helpers to use the real Shanoir responses in src/test/shanoir/fixtures/ (see the README there
+// for the Shanoir version, what each examination contains and how to recreate them).
 
-const FIXTURES_DIR = path.join(
-  path.dirname(fileURLToPath(import.meta.url)),
-  'fixtures',
-  'shanoir-2.18.1'
-);
+const FIXTURES_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures');
 
 /**
  * @param {string} fileName - a fixture file, e.g. 'datasets-examination-7.json'.
