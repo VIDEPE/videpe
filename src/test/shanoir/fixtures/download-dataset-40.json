@@ -1,0 +1,15 @@
+{
+  "request": "GET datasets/download/40?format=nii",
+  "status": 200,
+  "headers": {
+    "content-type": "application/zip",
+    "content-disposition": "attachment;filename=\"Dataset_synth_40_T1_20261123154827.zip\""
+  },
+  "size": 4995715,
+  "zipEntries": [
+    {
+      "name": "sub-synth_T1w.nii.gz",
+      "size": 5090178
+    }
+  ]
+}

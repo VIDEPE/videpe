@@ -21,7 +21,7 @@ All data processing happens entirely in your browser. No files are ever uploaded
 
 ## Shanoir integration
 
-VIDEPE can also be opened from the [Shanoir](https://github.com/fli-iam/shanoir-ng) neuroimaging database: a **View in VIDEPE** button on an examination opens its EEG and imaging directly in VIDEPE, after signing in with the user's Shanoir account (single sign-on). In this mode the data is downloaded from Shanoir over HTTPS and, as always, processed only in the browser; VIDEPE never writes back to Shanoir.
+VIDEPE can also be opened from the [Shanoir](https://github.com/fli-iam/shanoir-ng) neuroimaging database: the **View EEG** button on an examination opens its EEG and imaging directly in VIDEPE, after signing in with the user's Shanoir account (single sign-on). In this mode the data is downloaded from Shanoir over HTTPS and, as always, processed only in the browser; VIDEPE never writes back to Shanoir.
 
 This mode only exists on a Shanoir deployment, which serves VIDEPE from its own server using the [VIDEPE Docker image](https://github.com/VIDEPE/videpe/pkgs/container/videpe). The GitHub Pages version always works with local files only. See [docs/shanoir-integration.md](docs/shanoir-integration.md) for how Shanoir sets it up.
 

@@ -9,12 +9,12 @@
 // - GitHub Pages (this default): `shanoir: null` and `hostApp: null`, so both launch modes are
 //   disabled and VIDEPE is the plain local-files app (no login, no network requests for data).
 // - Shanoir's viewer server: replaced at startup with the Shanoir settings, enabling the
-//   "View in VIDEPE" launch (Keycloak sign-in, then loading the examination):
+//   launch from Shanoir's "View EEG" button (Keycloak sign-in, then loading the examination):
 //
 //   window.videpeConfig = {
 //     shanoir: {
 //       authority: 'https://<shanoir-host>/auth/realms/shanoir-ng', // Keycloak realm URL
-//       clientId: 'videpe', // public OIDC client registered for VIDEPE in that realm
+//       clientId: 'videpe-viewer', // public OIDC client registered for VIDEPE in that realm
 //       apiBase: '/shanoir-ng/datasets', // datasets service, proxied on the same origin
 //     },
 //   };

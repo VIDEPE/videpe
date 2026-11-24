@@ -1,0 +1,19 @@
+{
+  "request": "GET datasets/download/38?format=nii",
+  "status": 200,
+  "headers": {
+    "content-type": "application/zip",
+    "content-disposition": "attachment;filename=\"Dataset_synth_38_sub-synth_task-rest_desc-spkavgall_ieeg_20261123154826.zip\""
+  },
+  "size": 1195914,
+  "zipEntries": [
+    {
+      "name": "sub-4_ses-4_sub-synth_task-rest_desc-spkavgall_ieeg.eeg",
+      "size": 1296648
+    },
+    {
+      "name": "sub-4_ses-4_sub-synth_task-rest_desc-spkavgall_ieeg.vhdr",
+      "size": 3502
+    }
+  ]
+}

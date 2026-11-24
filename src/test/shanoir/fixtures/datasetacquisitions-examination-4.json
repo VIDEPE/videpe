@@ -1,0 +1,16 @@
+{
+  "request": "GET datasetacquisition/examination/4",
+  "status": 200,
+  "body": [
+    {
+      "id": 11,
+      "name": "sub-synth_task-rest_desc-spkavgall_ieeg (Eeg)",
+      "type": "Eeg",
+      "studyId": 1,
+      "examinationId": 4,
+      "sortingIndex": 0,
+      "qualityTag": null,
+      "extraDataFilePathList": []
+    }
+  ]
+}

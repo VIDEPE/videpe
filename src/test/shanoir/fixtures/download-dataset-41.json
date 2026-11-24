@@ -1,0 +1,15 @@
+{
+  "request": "GET datasets/download/41?format=nii",
+  "status": 200,
+  "headers": {
+    "content-type": "application/zip",
+    "content-disposition": "attachment;filename=\"Dataset_synth_41_DSEG_-_White_Matter_Mask_20261123154827.zip\""
+  },
+  "size": 120402,
+  "zipEntries": [
+    {
+      "name": "sub-synth_label-WM_dseg.nii.gz",
+      "size": 177649
+    }
+  ]
+}
