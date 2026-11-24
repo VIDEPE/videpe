@@ -13,15 +13,31 @@ const PET_ZIP = makeZip(['pet/sub-01_pet.nii.gz']);
 const WM_ZIP = makeZip(['sub-01_label-WM_dseg.nii.gz']);
 
 // Fake Shanoir client: datasets and zips are looked up by id, extra-data by file name,
-// processings by their input dataset's id, and output datasets by processing id.
-function makeClient({ datasets, zips = {}, extraDataPaths = [], processings = {}, outputs = {} }) {
+// processings by their input dataset's id, output datasets by processing id, and an
+// acquisition's datasets by acquisition id.
+function makeClient({
+  datasets,
+  zips = {},
+  extraDataPaths = [],
+  processings = {},
+  outputs = {},
+  acquisitions = [],
+  acquisitionDatasets = {},
+}) {
   return {
     listExaminationDatasets: vi.fn().mockResolvedValue(datasets),
     getExamination: vi.fn().mockResolvedValue({ id: 7, extraDataFilePathList: extraDataPaths }),
     listProcessingsByInputDataset: vi.fn(async (datasetId) => processings[datasetId] ?? []),
     listProcessingOutputDatasets: vi.fn(async (processingId) => outputs[processingId] ?? []),
+    listExaminationAcquisitions: vi.fn().mockResolvedValue(acquisitions),
+    listAcquisitionDatasets: vi.fn(
+      async (acquisitionId) => acquisitionDatasets[acquisitionId] ?? []
+    ),
     downloadDatasetZip: vi.fn(async (id) => zips[id]),
     downloadExtraData: vi.fn(async (_examinationId, fileName) => new File(['x'], fileName)),
+    downloadAcquisitionExtraData: vi.fn(
+      async (_acquisitionId, fileName) => new File(['x'], fileName)
+    ),
   };
 }
 
@@ -209,6 +225,7 @@ describe('fetchShanoirExamination', () => {
       eegFiles: [],
       imagingFiles: [],
       skippedDatasets: [],
+      skippedFiles: [],
     });
   });
 
@@ -265,12 +282,120 @@ describe('fetchShanoirExamination', () => {
     expect(client.listProcessingOutputDatasets).toHaveBeenCalledTimes(2);
   });
 
+  it("adds the extra-data of the loaded recording's acquisition, not of another recording's (fixture: examination 7)", async () => {
+    // Examination 7: acquisition 18 (recording 57) has electrode positions, acquisition 19
+    // (recording 58, the one loaded) has electrode positions and an inverse solution. Shanoir's
+    // dataset list doesn't say which acquisition a dataset belongs to, so VIDEPE asks the
+    // acquisitions with usable extra-data for their datasets.
+    const client = createFixtureClient();
+    const result = await fetchShanoirExamination({ client, examinationId: 7 });
+
+    expect(result.eegDataset.id).toBe(58);
+    expect(names(result.eegFiles)).toEqual([
+      'sub-4_ses-7_sub-synth_task-rest_desc-spkavgall_eeg.eeg',
+      'sub-4_ses-7_sub-synth_task-rest_desc-spkavgall_eeg.vhdr',
+      'sub-synth_desc-eloreta_inversefilters.mat',
+      'sub-synth_electrodes.tsv',
+    ]);
+    expect(client.downloadAcquisitionExtraData.mock.calls.map(([id, name]) => [id, name])).toEqual(
+      expect.arrayContaining([
+        [19, 'sub-synth_electrodes.tsv'],
+        [19, 'sub-synth_desc-eloreta_inversefilters.mat'],
+      ])
+    );
+    expect(client.downloadAcquisitionExtraData).toHaveBeenCalledTimes(2);
+    expect(result.skippedFiles).toEqual([]);
+  });
+
+  it("prefers the acquisition's extra-data over the examination's, one file of each kind", async () => {
+    // Most specific to the loaded recording wins. The examination's inverse solution is still
+    // used, since the acquisition has none.
+    const client = makeClient({
+      datasets: [{ id: 1, name: 'rest', type: 'Eeg' }],
+      zips: { 1: EEG_ZIP },
+      extraDataPaths: ['/data/exam-7/exam_electrodes.tsv', '/data/exam-7/exam_inversefilters.mat'],
+      acquisitions: [{ id: 3, extraDataFilePathList: ['/data/acq-3/acq_electrodes.tsv'] }],
+      acquisitionDatasets: { 3: [{ id: 1 }] },
+    });
+    const result = await fetchShanoirExamination({ client, examinationId: 7 });
+
+    expect(names(result.eegFiles)).toEqual([
+      'acq_electrodes.tsv',
+      'exam_inversefilters.mat',
+      'rec.eeg',
+      'rec.vhdr',
+    ]);
+    // the file that isn't used isn't downloaded
+    expect(client.downloadExtraData).not.toHaveBeenCalledWith(7, 'exam_electrodes.tsv', undefined);
+    expect(result.skippedFiles).toEqual([
+      {
+        name: 'exam_electrodes.tsv',
+        source: 'the examination',
+        reason: "using acq_electrodes.tsv from the recording's acquisition",
+      },
+    ]);
+  });
+
+  it("prefers a file in the recording's own dataset over its acquisition's extra-data", async () => {
+    const client = makeClient({
+      datasets: [{ id: 1, name: 'rest', type: 'Eeg' }],
+      zips: { 1: makeZip(['rec/rec.vhdr', 'rec/rec.eeg', 'rec/zip_electrodes.tsv']) },
+      acquisitions: [{ id: 3, extraDataFilePathList: ['acq_electrodes.tsv'] }],
+      acquisitionDatasets: { 3: [{ id: 1 }] },
+    });
+    const result = await fetchShanoirExamination({ client, examinationId: 7 });
+
+    expect(names(result.eegFiles)).toEqual(['rec.eeg', 'rec.vhdr', 'zip_electrodes.tsv']);
+    expect(client.downloadAcquisitionExtraData).not.toHaveBeenCalled();
+    expect(result.skippedFiles).toEqual([
+      {
+        name: 'acq_electrodes.tsv',
+        source: "the recording's acquisition",
+        reason: "using zip_electrodes.tsv from the recording's dataset",
+      },
+    ]);
+  });
+
+  it('uses the last listed file when one place holds several of a kind, like a drop does', async () => {
+    const client = makeClient({
+      datasets: [{ id: 1, name: 'rest', type: 'Eeg' }],
+      zips: { 1: EEG_ZIP },
+      extraDataPaths: ['old_electrodes.tsv', 'new_electrodes.tsv'],
+    });
+    const result = await fetchShanoirExamination({ client, examinationId: 7 });
+
+    expect(names(result.eegFiles)).toEqual(['new_electrodes.tsv', 'rec.eeg', 'rec.vhdr']);
+    expect(result.skippedFiles).toEqual([
+      {
+        name: 'old_electrodes.tsv',
+        source: 'the examination',
+        reason: 'using new_electrodes.tsv from the examination',
+      },
+    ]);
+  });
+
+  it('only asks the acquisitions with usable extra-data for their datasets', async () => {
+    const client = makeClient({
+      datasets: [{ id: 1, name: 'rest', type: 'Eeg' }],
+      zips: { 1: EEG_ZIP },
+      acquisitions: [
+        { id: 3, extraDataFilePathList: ['/data/acq-3/notes.pdf'] },
+        { id: 4, extraDataFilePathList: [] },
+      ],
+    });
+    await fetchShanoirExamination({ client, examinationId: 7 });
+
+    expect(client.listAcquisitionDatasets).not.toHaveBeenCalled();
+  });
+
   it('passes the abort signal to every request', async () => {
     const client = makeClient({
       datasets: [{ id: 1, name: 'rest', type: 'Eeg' }],
       zips: { 1: EEG_ZIP },
       extraDataPaths: ['sub-01_electrodes.tsv'],
       processings: { 1: [{ id: 5 }] },
+      acquisitions: [{ id: 3, extraDataFilePathList: ['sub-01_inversefilters.mat'] }],
+      acquisitionDatasets: { 3: [{ id: 1 }] },
     });
     const { signal } = new AbortController();
     await fetchShanoirExamination({ client, examinationId: 7, signal });
@@ -279,8 +404,15 @@ describe('fetchShanoirExamination', () => {
     expect(client.getExamination).toHaveBeenCalledWith(7, signal);
     expect(client.listProcessingsByInputDataset).toHaveBeenCalledWith(1, signal);
     expect(client.listProcessingOutputDatasets).toHaveBeenCalledWith(5, signal);
+    expect(client.listExaminationAcquisitions).toHaveBeenCalledWith(7, signal);
+    expect(client.listAcquisitionDatasets).toHaveBeenCalledWith(3, signal);
     expect(client.downloadDatasetZip).toHaveBeenCalledWith(1, signal);
     expect(client.downloadExtraData).toHaveBeenCalledWith(7, 'sub-01_electrodes.tsv', signal);
+    expect(client.downloadAcquisitionExtraData).toHaveBeenCalledWith(
+      3,
+      'sub-01_inversefilters.mat',
+      signal
+    );
   });
 
   it('rejects when a download fails, so the caller can show one error', async () => {

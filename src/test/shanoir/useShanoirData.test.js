@@ -33,6 +33,7 @@ const examination = (overrides = {}) => ({
   eegFiles: EEG_FILES,
   imagingFiles: IMAGING_FILES,
   skippedDatasets: [],
+  skippedFiles: [],
   ...overrides,
 });
 
@@ -148,6 +149,38 @@ describe('useShanoirData', () => {
       'Skipped the following datasets:\n' +
         '- first run (older EEG recording, using the latest (highest dataset id))\n' +
         '- report (unsupported dataset type: Measurement)',
+      expect.anything()
+    );
+  });
+
+  it('lists the files not used (another file of the same kind won) in the warning toast too', async () => {
+    fetchShanoirExamination.mockResolvedValue(
+      examination({
+        skippedDatasets: [
+          {
+            id: 3,
+            name: 'report',
+            type: 'Measurement',
+            reason: 'unsupported dataset type: Measurement',
+          },
+        ],
+        skippedFiles: [
+          {
+            name: 'exam_electrodes.tsv',
+            source: 'the examination',
+            reason: "using acq_electrodes.tsv from the recording's acquisition",
+          },
+        ],
+      })
+    );
+    const { hook } = setup();
+    await waitFor(() => expect(hook.result.current.isShanoirLoading).toBe(false));
+
+    expect(toast).toHaveBeenCalledWith(
+      'Skipped the following datasets:\n' +
+        '- report (unsupported dataset type: Measurement)\n' +
+        'Skipped the following files:\n' +
+        "- exam_electrodes.tsv from the examination (using acq_electrodes.tsv from the recording's acquisition)",
       expect.anything()
     );
   });

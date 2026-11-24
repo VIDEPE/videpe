@@ -54,6 +54,17 @@ export function createFakeShanoirClient({ delayMs = 1000 } = {}) {
     async listProcessingOutputDatasets() {
       return [];
     },
+    // No acquisitions in this fake: the demo's extra data is attached to the examination
+    // (getExamination), so downloadAcquisitionExtraData is never called
+    async listExaminationAcquisitions() {
+      return [];
+    },
+    async listAcquisitionDatasets() {
+      return [];
+    },
+    async downloadAcquisitionExtraData() {
+      throw new Error('The demo examination has no acquisition extra data');
+    },
     async getExamination(examinationId) {
       // The examination, with the names of its attached files (electrodes, inverse solution);
       // these are downloaded one by one through downloadExtraData

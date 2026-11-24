@@ -61,6 +61,28 @@ describe('createShanoirClient', () => {
     expect(await client.listProcessingOutputDatasets(1)).toEqual([]);
   });
 
+  it("lists an examination's acquisitions", async () => {
+    const { client, fetchImpl } = makeClient(okJson([{ id: 19, extraDataFilePathList: [] }]));
+    expect(await client.listExaminationAcquisitions(7)).toEqual([
+      { id: 19, extraDataFilePathList: [] },
+    ]);
+    expect(fetchImpl.mock.calls[0][0]).toBe(
+      '/shanoir-ng/datasets/datasetacquisition/examination/7'
+    );
+  });
+
+  it("lists an acquisition's datasets", async () => {
+    const { client, fetchImpl } = makeClient(okJson([{ id: 58, type: 'EEG' }]));
+    expect(await client.listAcquisitionDatasets(19)).toEqual([{ id: 58, type: 'EEG' }]);
+    expect(fetchImpl.mock.calls[0][0]).toBe('/shanoir-ng/datasets/datasets/acquisition/19');
+  });
+
+  it('treats an empty (204) acquisition list as none', async () => {
+    const { client } = makeClient({ ok: true, status: 204 });
+    expect(await client.listExaminationAcquisitions(7)).toEqual([]);
+    expect(await client.listAcquisitionDatasets(19)).toEqual([]);
+  });
+
   it('always downloads datasets as NIfTI (format=nii)', async () => {
     const zip = new Blob(['zip-bytes']);
     const { client, fetchImpl } = makeClient(okBlob(zip));
@@ -76,6 +98,16 @@ describe('createShanoirClient', () => {
     // File names are URL-encoded; the trailing slash matches Shanoir's `{fileName:.+}/` route.
     expect(fetchImpl.mock.calls[0][0]).toBe(
       '/shanoir-ng/datasets/examinations/extra-data-download/7/sub-01%20electrodes.tsv/'
+    );
+  });
+
+  it('downloads an acquisition extra-data file as a named File', async () => {
+    const { client, fetchImpl } = makeClient(okBlob(new Blob(['name\tx\ty\tz\n'])));
+    const file = await client.downloadAcquisitionExtraData(19, 'sub-01 electrodes.tsv');
+    expect(file).toBeInstanceOf(File);
+    expect(file.name).toBe('sub-01 electrodes.tsv');
+    expect(fetchImpl.mock.calls[0][0]).toBe(
+      '/shanoir-ng/datasets/datasetacquisition/extra-data-download/19/sub-01%20electrodes.tsv/'
     );
   });
 

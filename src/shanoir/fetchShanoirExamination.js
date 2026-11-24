@@ -5,7 +5,18 @@ import {
   hasEegRecording,
   listFileExtensions,
 } from '@/utils/launchFiles';
-import { classifyDataset, selectExtraDataFileNames } from './shanoirFiles';
+import {
+  classifyDataset,
+  extraFileKind,
+  pickOneExtraFilePerKind,
+  selectExtraDataFileNames,
+} from './shanoirFiles';
+
+// Where a file for the recording (electrode positions, inverse solution, montage) was found,
+// as named to the user in the "skipped" toast; most specific to the recording first
+const SOURCE_DATASET = "the recording's dataset";
+const SOURCE_ACQUISITION = "the recording's acquisition";
+const SOURCE_EXAMINATION = 'the examination';
 
 // Helper function to get readable name for a Shanoir dataset => used for user-facing messages.
 const datasetLabel = (dataset) => ({
@@ -62,6 +73,102 @@ async function listProcessedOutputs(client, datasets, signal) {
 }
 
 /**
+ * Finds the acquisition a dataset belongs to, among the acquisitions with extra data VIDEPE
+ * uses (the only ones that matter, so an examination without any costs no extra request).
+ * The examination's dataset list doesn't link a dataset to its acquisition, so each of those
+ * acquisitions is asked for its datasets.
+ *
+ * @param {ReturnType<import('./shanoirClient').createShanoirClient>} client
+ * @param {object[]} acquisitions - the examination's acquisitions (DatasetAcquisitionDTOs).
+ * @param {number} datasetId
+ * @param {AbortSignal} [signal]
+ * @returns {Promise<object|null>} the acquisition, or null if the dataset is in none of them
+ *   (e.g. a processed dataset, which has no acquisition).
+ */
+async function findAcquisitionWithExtraData(client, acquisitions, datasetId, signal) {
+  const withExtraData = acquisitions.filter(
+    (acquisition) => selectExtraDataFileNames(acquisition.extraDataFilePathList).length > 0
+  );
+  const datasetLists = await Promise.all(
+    withExtraData.map((acquisition) => client.listAcquisitionDatasets(acquisition.id, signal))
+  );
+  return (
+    withExtraData.find((_acquisition, i) =>
+      datasetLists[i].some((dataset) => dataset.id === datasetId)
+    ) ?? null
+  );
+}
+
+/**
+ * Downloads the EEG recording and the files that go with it: electrode positions, inverse
+ * solution and montage, one of each kind (see pickOneExtraFilePerKind). They can be in the
+ * recording's own dataset zip, attached to its acquisition, or attached to the examination;
+ * the most specific to the recording wins.
+ *
+ * @returns {Promise<{ datasetFiles: File[], eegFiles: File[], skippedFiles: object[] }>}
+ *   `datasetFiles`: everything in the dataset zip; `eegFiles`: the files for the EEG intake,
+ *   empty when the zip holds no recording VIDEPE can read; `skippedFiles`: the files of a kind
+ *   another file won.
+ */
+async function fetchEegRecording({
+  client,
+  eegDataset,
+  examinationId,
+  examination,
+  acquisitions,
+  signal,
+}) {
+  // The zip and the acquisition lookup run in parallel; the extra data waits for both, so only
+  // the files that are used get downloaded
+  const [datasetFiles, acquisition] = await Promise.all([
+    client.downloadDatasetZip(eegDataset.id, signal).then(unzipToFiles),
+    findAcquisitionWithExtraData(client, acquisitions, eegDataset.id, signal),
+  ]);
+
+  // Without a recording there is nothing to show: electrode positions, inverse solutions and
+  // montages only mean something alongside one
+  const intakeFiles = selectEegIntakeFiles(datasetFiles);
+  if (!hasEegRecording(intakeFiles)) return { datasetFiles, eegFiles: [], skippedFiles: [] };
+
+  // Collect the candidate files (electrode positions, inverse solutions, montages) from each
+  // place, as { name, source, load }: `source` names the place for the toast, and `load()`
+  // returns the File. The choice below is made on the names alone, so only the files that
+  // are used get loaded.
+
+  // 1. Files inside the recording's dataset zip: already downloaded, load() just returns them
+  const datasetCandidates = intakeFiles
+    .filter((file) => extraFileKind(file.name) !== null)
+    .map((file) => ({ name: file.name, source: SOURCE_DATASET, load: async () => file }));
+
+  // 2. Files attached to the recording's acquisition (none if it has no acquisition with
+  //    usable extra data): load() downloads the file
+  const acquisitionCandidates = selectExtraDataFileNames(acquisition?.extraDataFilePathList).map(
+    (name) => ({
+      name,
+      source: SOURCE_ACQUISITION,
+      load: () => client.downloadAcquisitionExtraData(acquisition.id, name, signal),
+    })
+  );
+
+  // 3. Files attached to the examination: load() downloads the file
+  const examinationCandidates = selectExtraDataFileNames(examination?.extraDataFilePathList).map(
+    (name) => ({
+      name,
+      source: SOURCE_EXAMINATION,
+      load: () => client.downloadExtraData(examinationId, name, signal),
+    })
+  );
+
+  // Keep one file of each kind: the order of the places sets the precedence, most specific first
+  const candidates = [...datasetCandidates, ...acquisitionCandidates, ...examinationCandidates];
+  const { kept, skipped } = pickOneExtraFilePerKind(candidates);
+  const extraFiles = await Promise.all(kept.map((candidate) => candidate.load()));
+
+  const recordingFiles = intakeFiles.filter((file) => extraFileKind(file.name) === null);
+  return { datasetFiles, eegFiles: [...recordingFiles, ...extraFiles], skippedFiles: skipped };
+}
+
+/**
  * Downloads everything VIDEPE shows for one Shanoir examination, and sorts it into the
  * files for the EEG viewer and the files for the neuroimaging viewer.
  *
@@ -74,8 +181,10 @@ async function listProcessedOutputs(client, datasets, signal) {
  *   dropzone, where the newest drop wins. The EEG intake keeps one file per extension,
  *   so combining two recordings could pair one run's .vhdr with another run's .eeg.
  *   The older recordings are reported back in `skippedDatasets`.
- *   Electrode positions, inverse solutions and montages attached to the examination (extra-data)
- *   are added to the EEG files.
+ *   One electrode positions, inverse solution and montage file each is added to the EEG files,
+ *   the most specific to the recording winning: from its dataset zip, then the extra data
+ *   attached to its acquisition, then the extra data attached to the examination (see
+ *   fetchEegRecording). The others are reported back in `skippedFiles`.
  * - Imaging (MR, PET, …): every dataset is loaded; each becomes one or more layers.
  * - Anything else is not downloaded, and is reported back in `skippedDatasets`.
  * - A downloaded dataset with no file VIDEPE can open (e.g. an EEGLAB recording) is reported
@@ -93,6 +202,7 @@ async function listProcessedOutputs(client, datasets, signal) {
  *   eegFiles: File[],
  *   imagingFiles: File[],
  *   skippedDatasets: { id: number, name: string, type: string, reason: string }[],
+ *   skippedFiles: { name: string, source: string, reason: string }[],
  * }>} the sorted files:
  *   - `eegDataset`: the EEG dataset that was loaded, or null if the examination has none (or
  *     its recording is in a format VIDEPE can't read).
@@ -100,12 +210,15 @@ async function listProcessedOutputs(client, datasets, signal) {
  *     positions, inverse solutions, montages).
  *   - `imagingFiles`: files for filesToLayers (NIfTI/MGH volumes, GIFTI meshes).
  *   - `skippedDatasets`: datasets not loaded, with the reason, so the caller can tell the user.
+ *   - `skippedFiles`: electrode positions, inverse solutions and montages not loaded because
+ *     another file of the same kind was used, with where each was found and the file used.
  * @throws {Error} when any request or unzip fails.
  */
 export async function fetchShanoirExamination({ client, examinationId, signal }) {
-  const [acquisitionDatasets, examination] = await Promise.all([
+  const [acquisitionDatasets, examination, acquisitions] = await Promise.all([
     client.listExaminationDatasets(examinationId, signal),
     client.getExamination(examinationId, signal),
+    client.listExaminationAcquisitions(examinationId, signal),
   ]);
   // Add the processed datasets made from them (e.g. a T1 or segmentation uploaded as a
   // processed dataset), which then follow the same routing rules
@@ -143,25 +256,25 @@ export async function fetchShanoirExamination({ client, examinationId, signal })
     }))
   );
 
-  // Extra-data (electrode positions, inverse solutions, montages) only matters alongside a recording
-  // Note these are names (not file!), but since these are not zipped these can be checked if
-  // they can be used before downloading, unlike the zip files
-  const extraDataNames = eegDataset
-    ? selectExtraDataFileNames(examination?.extraDataFilePathList)
-    : [];
-
   // Helper function to download a dataset's zip and return its files.
   const downloadAndUnzipFiles = async (dataset) =>
     unzipToFiles(await client.downloadDatasetZip(dataset.id, signal));
 
   // Now download zip and unzip the files
-  // All three downloads are started together, then awaited as one
-  const [eegDatasetFiles, imagingDatasetFiles, extraDataFiles] = await Promise.all([
-    eegDataset ? downloadAndUnzipFiles(eegDataset) : [],
+  // The recording (with its electrode positions, inverse solution and montage) and the imaging
+  // are started together, then awaited as one
+  const [eegRecording, imagingDatasetFiles] = await Promise.all([
+    eegDataset
+      ? fetchEegRecording({
+          client,
+          eegDataset,
+          examinationId,
+          examination,
+          acquisitions,
+          signal,
+        })
+      : null,
     Promise.all(imagingDatasets.map((dataset) => downloadAndUnzipFiles(dataset))),
-    Promise.all(
-      extraDataNames.map((name) => client.downloadExtraData(examinationId, name, signal))
-    ),
   ]);
 
   // A dataset of a supported type can still hold only files VIDEPE can't open (e.g. an EEGLAB
@@ -175,15 +288,12 @@ export async function fetchShanoirExamination({ client, examinationId, signal })
     };
   };
 
-  // bundle eegFiles
-  // Without a recording there is nothing to show: electrode positions, inverse solutions and montages
-  // (from the zip or the extra-data) only mean something alongside one.
-  const eegIntakeFiles = selectEegIntakeFiles(eegDatasetFiles);
-  const isEegLoadable = hasEegRecording(eegIntakeFiles);
+  // the EEG files (empty when the recording's dataset holds no recording VIDEPE can read)
+  const eegFiles = eegRecording?.eegFiles ?? [];
+  const isEegLoadable = eegFiles.length > 0;
   if (eegDataset && !isEegLoadable) {
-    skippedDatasets.push(unsupportedFiles(eegDataset, eegDatasetFiles));
+    skippedDatasets.push(unsupportedFiles(eegDataset, eegRecording.datasetFiles));
   }
-  const eegFiles = isEegLoadable ? [...eegIntakeFiles, ...extraDataFiles] : [];
 
   // bundle imagingFiles, selected per dataset so a dataset without image files can be reported
   const imagingFilesPerDataset = imagingDatasetFiles.map(selectImagingFiles);
@@ -199,5 +309,6 @@ export async function fetchShanoirExamination({ client, examinationId, signal })
     eegFiles: eegFiles,
     imagingFiles: imagingFiles,
     skippedDatasets,
+    skippedFiles: eegRecording?.skippedFiles ?? [],
   };
 }

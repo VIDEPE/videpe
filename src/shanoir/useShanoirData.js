@@ -60,18 +60,28 @@ export function useShanoirData({
   const fetchData = useCallback(
     async (signal) => {
       // fetch shanoir examination
-      const { eegDataset, eegFiles, imagingFiles, skippedDatasets } = await fetchShanoirExamination(
-        { client, examinationId, signal }
-      );
+      const { eegDataset, eegFiles, imagingFiles, skippedDatasets, skippedFiles } =
+        await fetchShanoirExamination({ client, examinationId, signal });
 
-      // Toast text for the datasets that have been skipped, one bulleted line per dataset
-      // (react-hot-toast keeps the line breaks)
-      const warning =
-        skippedDatasets.length > 0
-          ? `Skipped the following datasets:\n${skippedDatasets
-              .map((d) => `- ${d.name} (${d.reason})`)
-              .join('\n')}`
-          : null;
+      // Toast text for the datasets and the files (electrode positions, inverse solutions,
+      // montages) that have been skipped, one bulleted line each (react-hot-toast keeps the
+      // line breaks)
+      const sections = [];
+      if (skippedDatasets.length > 0) {
+        sections.push(
+          `Skipped the following datasets:\n${skippedDatasets
+            .map((d) => `- ${d.name} (${d.reason})`)
+            .join('\n')}`
+        );
+      }
+      if (skippedFiles.length > 0) {
+        sections.push(
+          `Skipped the following files:\n${skippedFiles
+            .map((f) => `- ${f.name} from ${f.source} (${f.reason})`)
+            .join('\n')}`
+        );
+      }
+      const warning = sections.length > 0 ? sections.join('\n') : null;
 
       return { eegFiles, imagingFiles, eegName: eegDataset?.name ?? null, warning };
     },

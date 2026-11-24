@@ -20,7 +20,7 @@ Shanoir front ──"View in VIDEPE"──▶ https://<viewer-host>/videpe/?exam
 
 1. The button opens VIDEPE on the viewer host with the examination ID in the URL.
 2. VIDEPE signs the user in through the `shanoir-ng` realm. Users already logged in to Shanoir come straight back through SSO.
-3. VIDEPE lists the examination's datasets, downloads them (and the examination's extra-data files, e.g. *_electrodes.tsv if they are present) with the user's access token, and opens them in its viewers. Everything is processed in the browser; VIDEPE has no server-side code.
+3. VIDEPE lists the examination's datasets, downloads them (and the extra-data files attached to the examination or to the recording's acquisition, e.g. *_electrodes.tsv if they are present) with the user's access token, and opens them in its viewers. Everything is processed in the browser; VIDEPE has no server-side code.
 
 The viewer host proxies the datasets API (as it already does for /dicomweb/), so VIDEPE's API requests stay on its own origin and the datasets service needs no CORS configuration.
 
@@ -28,14 +28,17 @@ The viewer host proxies the datasets API (as it already does for /dicomweb/), so
 
 All requests are `GET` with `Authorization: Bearer <access token>`, under `/shanoir-ng/datasets`. VIDEPE never writes to Shanoir.
 
-| Request                                                        | Purpose                                                                                             |
-| -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `examinations/{examinationId}`                                 | the examination's `extraDataFilePathList` (attached electrode positions, inverse solution, montage) |
-| `datasets/examination/{examinationId}`                         | the examination's datasets, routed by `type` (`Eeg` → EEG viewer, `Mr`, `Pet`, … → imaging viewer)  |
-| `datasetProcessing/inputDataset/{datasetId}`                   | the processings that use each dataset as input (also for their outputs, to follow chains)           |
-| `datasetProcessing/{processingId}/outputDatasets/`             | each processing's output datasets, routed like the examination's own datasets                       |
-| `datasets/download/{datasetId}?format=nii`                     | each dataset as a ZIP (imaging converted to NIfTI; EEG returned as imported)                        |
-| `examinations/extra-data-download/{examinationId}/{fileName}/` | selected extra-data files (`*_electrodes.tsv`, `.elc`, `.mat`, `.mtg`)                              |
+| Request                                                              | Purpose                                                                                             |
+| -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `examinations/{examinationId}`                                       | the examination's `extraDataFilePathList` (attached electrode positions, inverse solution, montage) |
+| `datasets/examination/{examinationId}`                               | the examination's datasets, routed by `type` (`Eeg` → EEG viewer, `Mr`, `Pet`, … → imaging viewer)  |
+| `datasetProcessing/inputDataset/{datasetId}`                         | the processings that use each dataset as input (also for their outputs, to follow chains)           |
+| `datasetProcessing/{processingId}/outputDatasets/`                   | each processing's output datasets, routed like the examination's own datasets                       |
+| `datasetacquisition/examination/{examinationId}`                     | the examination's acquisitions, with each one's `extraDataFilePathList`                             |
+| `datasets/acquisition/{acquisitionId}`                               | the datasets of each acquisition with usable extra data, to find the loaded recording's acquisition |
+| `datasets/download/{datasetId}?format=nii`                           | each dataset as a ZIP (imaging converted to NIfTI; EEG returned as imported)                        |
+| `examinations/extra-data-download/{examinationId}/{fileName}/`       | selected extra-data files (`*_electrodes.tsv`, `.elc`, `.mat`, `.mtg`)                              |
+| `datasetacquisition/extra-data-download/{acquisitionId}/{fileName}/` | the same, attached to the recording's acquisition                                                   |
 
 ### What VIDEPE loads from an examination
 
@@ -45,7 +48,7 @@ An examination's datasets are those of its acquisitions, plus the processed data
 
 - **EEG recording:** one per opening. When the examination holds several EEG datasets, VIDEPE loads the most recently imported one (the highest dataset id) and lists the others as skipped. This matches VIDEPE's own file dropzone, where the newest drop wins.
 - **Imaging** (MR, PET, SPECT, CT, segmentation, mesh): all of them, each as its own layer; users remove layers they don't need in VIDEPE.
-- **Electrode positions, inverse solutions and montages:** from the examination's extra data, loaded together with the recording.
+- **Electrode positions, inverse solutions and montages:** one file of each kind, loaded together with the recording. When several are found, the one most specific to the recording wins: a file in the recording's own dataset, then the extra data attached to the recording's acquisition (uploaded on the acquisition's edit page), then the extra data attached to the examination. Within one of these places, the last listed file wins, like a drop of several files at VIDEPE's dropzone. The files not used are listed to the user as skipped, and are not downloaded. Extra data attached to another recording's acquisition is never used. Shanoir's dataset list doesn't link a dataset to its acquisition, so VIDEPE asks the acquisitions that have usable extra data for their datasets (`datasets/acquisition/{acquisitionId}`); an examination without acquisition extra data costs no extra request.
 - Datasets of any other type are listed to the user as skipped.
 
 ## What VIDEPE provides
@@ -191,7 +194,7 @@ and a **View in VIDEPE** button next to the existing **View** button in the exam
 
 ## Checking the integration
 
-1. Import a BrainVision or EDF EEG and an MR into one examination. Optionally attach a BIDS `*_electrodes.tsv` (and an inverse solution `.mat`) to the examination as extra data.
+1. Import a BrainVision or EDF EEG and an MR into one examination. Optionally attach a BIDS `*_electrodes.tsv` (and an inverse solution `.mat`) to the examination or to the recording's acquisition as extra data.
 2. Click **View in VIDEPE** while logged in to Shanoir. The new tab should open directly on VIDEPE's patient view without a password prompt, with the EEG and the MR loaded (and electrode positions, if attached).
 3. The browser console should show no CSP violations.
 4. Reloading the VIDEPE tab should sign in again (through SSO) and reload the same examination.

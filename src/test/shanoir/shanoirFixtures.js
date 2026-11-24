@@ -64,7 +64,16 @@ export function createFixtureClient() {
     listProcessingOutputDatasets: vi.fn(async (processingId) =>
       fixtureBody(`processing-${processingId}-outputdatasets.json`)
     ),
+    listExaminationAcquisitions: vi.fn(async (examinationId) =>
+      fixtureBody(`datasetacquisitions-examination-${examinationId}.json`)
+    ),
+    listAcquisitionDatasets: vi.fn(async (acquisitionId) =>
+      fixtureBody(`datasets-acquisition-${acquisitionId}.json`)
+    ),
     downloadDatasetZip: vi.fn(async (datasetId) => fixtureDatasetZip(datasetId)),
     downloadExtraData: vi.fn(async (_examinationId, fileName) => new File(['x'], fileName)),
+    downloadAcquisitionExtraData: vi.fn(
+      async (_acquisitionId, fileName) => new File(['x'], fileName)
+    ),
   };
 }
