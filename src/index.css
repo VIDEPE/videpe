@@ -342,6 +342,22 @@ code {
 }
 
 /* ============================================
+   Slider Styles
+   ============================================ */
+
+/* Slider thumb (the round primary-coloured handle of the imaging layer sliders, a Radix
+   Slider.Thumb): on hover it darkens in light mode and lightens in dark mode, the same colour
+   shift as a .button hover. Size, shape and focus ring stay as Tailwind classes on the element.
+   The thumb is a span, so a disabled one is matched by Radix's data-disabled, not :disabled. */
+.slider-thumb {
+  transition: background-color 0.2s ease;
+
+  &:hover:not([data-disabled]) {
+    background: color-mix(in srgb, var(--color-primary) 70%, var(--color-heading));
+  }
+}
+
+/* ============================================
    uPlot overrides
    ============================================ */
 

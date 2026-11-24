@@ -401,7 +401,7 @@ function SortableSettingsCard({
                     <Slider.Range className="absolute h-full rounded bg-primary" />
                   </Slider.Track>
                   <Slider.Thumb
-                    className="block h-3 w-3 rounded-full bg-primary cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    className="slider-thumb block h-3 w-3 rounded-full bg-primary cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/50"
                     aria-label={`${label} opacity slider`}
                     onClick={handleOpacityThumbClick}
                   />
@@ -447,7 +447,7 @@ function SortableSettingsCard({
                     <Slider.Range className="absolute h-full rounded bg-primary" />
                   </Slider.Track>
                   <Slider.Thumb
-                    className="block h-3 w-3 rounded-full bg-primary cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    className="slider-thumb block h-3 w-3 rounded-full bg-primary cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/50"
                     aria-label={`${label} meshXRay slider`}
                     onClick={handleMeshXRayThumbClick}
                   />
@@ -498,7 +498,7 @@ function SortableSettingsCard({
                       />
                     </Slider.Track>
                     <Slider.Thumb
-                      className="block h-3 w-3 rounded-full bg-primary cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:cursor-not-allowed"
+                      className="slider-thumb block h-3 w-3 rounded-full bg-primary cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:cursor-not-allowed"
                       aria-label={`${label} node size slider`}
                       onClick={handleNodeScaleThumbClick}
                     />
@@ -527,7 +527,7 @@ function SortableSettingsCard({
                       />
                     </Slider.Track>
                     <Slider.Thumb
-                      className="block h-3 w-3 rounded-full bg-primary cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:cursor-not-allowed"
+                      className="slider-thumb block h-3 w-3 rounded-full bg-primary cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:cursor-not-allowed"
                       aria-label={`${label} edge size slider`}
                       onClick={handleEdgeScaleThumbClick}
                     />
@@ -610,12 +610,12 @@ function SortableSettingsCard({
                     <Slider.Range className="absolute h-full rounded bg-primary" />
                   </Slider.Track>
                   <Slider.Thumb
-                    className="block h-3 w-3 rounded-full bg-primary cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    className="slider-thumb block h-3 w-3 rounded-full bg-primary cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/50"
                     aria-label={`${label} Threshold minimum slider`}
                     onClick={handleCalMinThumbClick}
                   />
                   <Slider.Thumb
-                    className="block h-3 w-3 rounded-full bg-primary cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    className="slider-thumb block h-3 w-3 rounded-full bg-primary cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/50"
                     aria-label={`${label} Threshold maximum slider`}
                     onClick={handleCalMaxThumbClick}
                   />
