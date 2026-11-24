@@ -173,26 +173,6 @@ code {
     box-shadow: none;
   }
 
-  /* Off-states hover to a light primary tint instead of the darkened primary. Not --c-surface:
-     buttons on a surface-coloured card (e.g. the imaging layer cards) would vanish into it. */
-  &[aria-pressed='false'] {
-    background: var(--color-background);
-    color: var(--color-primary);
-
-    &:hover:not(:disabled) {
-      background: color-mix(in srgb, var(--color-primary) 12%, var(--color-background));
-    }
-  }
-
-  &[aria-expanded='false'] {
-    background: var(--color-background);
-    color: var(--color-primary);
-
-    &:hover:not(:disabled) {
-      background: color-mix(in srgb, var(--color-primary) 12%, var(--color-background));
-    }
-  }
-
   &:disabled {
     opacity: 0.4;
     cursor: not-allowed;
@@ -201,15 +181,20 @@ code {
 
 /* Outline variant: secondary actions (Cancel, Clear all, Reset) next to a filled primary one.
    Combine with .button and optionally a size class: "button button-outline" or
-   "button button-lg button-outline". A data-active='false' .button (e.g. the EEG sidebar's
-   Filters/Montage toggles when inactive) uses the same look. Declared after .button so it
-   overrides its colours. */
+   "button button-lg button-outline". Every off-state .button uses the same look, so a toggle
+   is filled when on and outlined when off: aria-pressed (e.g. the Topo/3D/ESI toggles),
+   aria-expanded (e.g. the imaging layer expand button) and data-active (e.g. the
+   Filters/Montage buttons when inactive). Declared after .button so it overrides its colours. */
+.button[aria-pressed='false'],
+.button[aria-expanded='false'],
 .button[data-active='false'],
 .button-outline {
   background: var(--color-background);
   color: var(--color-heading);
   border-color: var(--color-border);
 
+  /* Hovers to a light primary tint instead of the darkened primary. Not --c-surface: buttons on
+     a surface-coloured card (e.g. the imaging layer cards) would vanish into it. */
   &:hover:not(:disabled) {
     background: color-mix(in srgb, var(--color-primary) 12%, var(--color-background));
   }
@@ -250,17 +235,16 @@ code {
   padding: 1px 3px; /* +1px transparent border, see .button */
 }
 
-/* Extra-small variant: minimal padding and smaller text — for compact sidebars */
-.size-xs {
-  padding: 1px 5px; /* +1px transparent border, see .button */
+/* Fixed-size circle for tight sidebars (e.g. NiiViewer's view-button column): every button is
+   the same 28px circle whether it holds a 16px icon or a short 2-character label ("Ax", "MP").
+   Fixed width rather than padding, since padding makes the width follow the label — narrow
+   labels came out as ovals and wide ones as pills. */
+.button-circle {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  padding: 0;
   font-size: 11px;
-}
-
-/* Icon-only variant sized for tight sidebars (e.g. NiiViewer's slice-button column) — padding
-   is symmetric so a single icon glyph renders as a circle, unlike .size-xs's asymmetric
-   text padding (wider than tall, tuned for 2-character labels). */
-.button-icon-xs {
-  padding: 5px; /* +1px transparent border, see .button */
 }
 
 /* Tiny fixed-size circle for a single small glyph (e.g. the editors' ✓ "set all" buttons next
