@@ -32,12 +32,16 @@ All requests are `GET` with `Authorization: Bearer <access token>`, under `/shan
 | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | `examinations/{examinationId}`                                 | the examination's `extraDataFilePathList` (attached electrode positions, inverse solution, montage) |
 | `datasets/examination/{examinationId}`                         | the examination's datasets, routed by `type` (`Eeg` → EEG viewer, `Mr`, `Pet`, … → imaging viewer)  |
+| `datasetProcessing/inputDataset/{datasetId}`                   | the processings that use each dataset as input (also for their outputs, to follow chains)           |
+| `datasetProcessing/{processingId}/outputDatasets/`             | each processing's output datasets, routed like the examination's own datasets                       |
 | `datasets/download/{datasetId}?format=nii`                     | each dataset as a ZIP (imaging converted to NIfTI; EEG returned as imported)                        |
 | `examinations/extra-data-download/{examinationId}/{fileName}/` | selected extra-data files (`*_electrodes.tsv`, `.elc`, `.mat`, `.mtg`)                              |
 
 ### What VIDEPE loads from an examination
 
 VIDEPE only reads the examination it was opened for, not the subject's other examinations. Data that should be viewed together belongs in one examination.
+
+An examination's datasets are those of its acquisitions, plus the processed datasets made from them: the outputs of processings with one of those datasets as input, and outputs made from those outputs in turn. A T1 or segmentation imported as a processed dataset therefore shows with the recording it was processed from. VIDEPE finds them the way Shanoir's study tree does, through the `datasetProcessing` requests above, because `datasets/examination/{examinationId}?output=true` answers 204 No Content for every examination (Shanoir 2.18.1).
 
 - **EEG recording:** one per opening. When the examination holds several EEG datasets, VIDEPE loads the most recently imported one (the highest dataset id) and lists the others as skipped. This matches VIDEPE's own file dropzone, where the newest drop wins.
 - **Imaging** (MR, PET, SPECT, CT, segmentation, mesh): all of them, each as its own layer; users remove layers they don't need in VIDEPE.

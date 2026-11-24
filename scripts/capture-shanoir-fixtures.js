@@ -22,7 +22,8 @@
 //                                            answers 204 in Shanoir 2.18.1 (inner joins in
 //                                            DatasetRepository.findByIdsWithProcessingAncestorsAndExamination);
 //                                            captured to record that behaviour
-//   datasetProcessing/inputDataset/{datasetId}         processings using each dataset as input
+//   datasetProcessing/inputDataset/{datasetId}         processings using each dataset as input,
+//                                            and (following chains, like VIDEPE) each output
 //   datasetProcessing/{processingId}/outputDatasets/   each processing's output datasets (the
 //                                            route Shanoir's own study tree uses)
 //   datasetacquisition/examination/{id}      the examination's acquisitions, incl. their extra data
@@ -235,24 +236,37 @@ async function captureExamination(capture, examinationId) {
   );
 
   // Processed outputs, found the way Shanoir's study tree finds them: the processings that use
-  // each dataset as input, then each processing's output datasets. A processing with several
-  // inputs is found once per input; it's captured once.
+  // each dataset as input, then each processing's output datasets. Like VIDEPE, it follows
+  // chains: the outputs' own processings are looked up in the next round. A processing with
+  // several inputs is found once per input, and a chain can lead back to a dataset already
+  // seen; each is captured once.
   const outputDatasets = [];
   const capturedProcessingIds = new Set();
-  for (const { id: datasetId } of datasets ?? []) {
-    const processings = await capture.json(
-      `datasetProcessing/inputDataset/${datasetId}`,
-      `processings-inputdataset-${datasetId}.json`
-    );
-    for (const { id: processingId } of processings ?? []) {
-      if (capturedProcessingIds.has(processingId)) continue;
-      capturedProcessingIds.add(processingId);
-      const outputs = await capture.json(
-        `datasetProcessing/${processingId}/outputDatasets/`,
-        `processing-${processingId}-outputdatasets.json`
+  const seenDatasetIds = new Set((datasets ?? []).map((dataset) => dataset.id));
+  let inputs = datasets ?? [];
+  while (inputs.length > 0) {
+    const newOutputs = [];
+    for (const { id: datasetId } of inputs) {
+      const processings = await capture.json(
+        `datasetProcessing/inputDataset/${datasetId}`,
+        `processings-inputdataset-${datasetId}.json`
       );
-      outputDatasets.push(...(outputs ?? []));
+      for (const { id: processingId } of processings ?? []) {
+        if (capturedProcessingIds.has(processingId)) continue;
+        capturedProcessingIds.add(processingId);
+        const outputs = await capture.json(
+          `datasetProcessing/${processingId}/outputDatasets/`,
+          `processing-${processingId}-outputdatasets.json`
+        );
+        for (const output of outputs ?? []) {
+          if (seenDatasetIds.has(output.id)) continue;
+          seenDatasetIds.add(output.id);
+          newOutputs.push(output);
+        }
+      }
     }
+    outputDatasets.push(...newOutputs);
+    inputs = newOutputs; // next round: processings made from these outputs
   }
   const acquisitions = await capture.json(
     `datasetacquisition/examination/${examinationId}`,

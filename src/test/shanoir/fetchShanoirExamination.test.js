@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { zipSync, strToU8 } from 'fflate';
 import { fetchShanoirExamination } from '@/shanoir/fetchShanoirExamination';
-import { fixtureBody, fixtureDatasetZip } from './shanoirFixtures';
+import { createFixtureClient, fixtureBody, fixtureDatasetZip } from './shanoirFixtures';
 
 // Builds an in-memory zip Blob from a list of file paths (content is irrelevant here).
 const makeZip = (paths) =>
@@ -10,12 +10,16 @@ const makeZip = (paths) =>
 const EEG_ZIP = makeZip(['rec/rec.vhdr', 'rec/rec.vmrk', 'rec/rec.eeg']);
 const T1_ZIP = makeZip(['anat/sub-01_T1w.nii.gz', 'anat/sub-01_T1w.json']);
 const PET_ZIP = makeZip(['pet/sub-01_pet.nii.gz']);
+const WM_ZIP = makeZip(['sub-01_label-WM_dseg.nii.gz']);
 
-// Fake Shanoir client: datasets and zips are looked up by id, extra-data by file name.
-function makeClient({ datasets, zips = {}, extraDataPaths = [] }) {
+// Fake Shanoir client: datasets and zips are looked up by id, extra-data by file name,
+// processings by their input dataset's id, and output datasets by processing id.
+function makeClient({ datasets, zips = {}, extraDataPaths = [], processings = {}, outputs = {} }) {
   return {
     listExaminationDatasets: vi.fn().mockResolvedValue(datasets),
     getExamination: vi.fn().mockResolvedValue({ id: 7, extraDataFilePathList: extraDataPaths }),
+    listProcessingsByInputDataset: vi.fn(async (datasetId) => processings[datasetId] ?? []),
+    listProcessingOutputDatasets: vi.fn(async (processingId) => outputs[processingId] ?? []),
     downloadDatasetZip: vi.fn(async (id) => zips[id]),
     downloadExtraData: vi.fn(async (_examinationId, fileName) => new File(['x'], fileName)),
   };
@@ -208,17 +212,73 @@ describe('fetchShanoirExamination', () => {
     });
   });
 
+  it('loads processed datasets made from the examination datasets as imaging (fixture: examination 4)', async () => {
+    // Examination 4: recording 38, used as input by processings 1–3, whose outputs are the
+    // T1 (40, MR), WM mask (41) and atlas (42, both SEGMENTATION). Processed datasets have no
+    // acquisition, so they aren't in the examination's own dataset list.
+    const client = createFixtureClient();
+    const result = await fetchShanoirExamination({ client, examinationId: 4 });
+
+    expect(result.eegDataset.id).toBe(38);
+    expect(names(result.imagingFiles)).toEqual([
+      'sub-synth_T1w.nii.gz',
+      'sub-synth_atlas-L2018_res-scale2_dseg.nii.gz',
+      'sub-synth_label-WM_dseg.nii.gz',
+    ]);
+    expect(result.skippedDatasets).toEqual([]);
+  });
+
+  it("requests each processing's outputs once, even when it has several inputs in the examination", async () => {
+    const client = makeClient({
+      datasets: [
+        { id: 1, name: 'eeg', type: 'Eeg' },
+        { id: 2, name: 'ieeg', type: 'Eeg' },
+      ],
+      zips: { 2: EEG_ZIP, 10: T1_ZIP },
+      processings: { 1: [{ id: 5 }], 2: [{ id: 5 }] },
+      outputs: { 5: [{ id: 10, name: 'T1', type: 'MR' }] },
+    });
+    const result = await fetchShanoirExamination({ client, examinationId: 7 });
+
+    expect(client.listProcessingOutputDatasets).toHaveBeenCalledTimes(1);
+    expect(names(result.imagingFiles)).toEqual(['sub-01_T1w.nii.gz']);
+  });
+
+  it('follows chains of processings: outputs made from processed outputs belong to the examination too', async () => {
+    // recording 1 → processing 5 → T1 (10) → processing 6 → WM mask (11); the WM mask is also
+    // input of processing 5 again, which must not be followed a second time
+    const client = makeClient({
+      datasets: [{ id: 1, name: 'rest', type: 'Eeg' }],
+      zips: { 1: EEG_ZIP, 10: T1_ZIP, 11: WM_ZIP },
+      processings: { 1: [{ id: 5 }], 10: [{ id: 6 }], 11: [{ id: 5 }] },
+      outputs: {
+        5: [{ id: 10, name: 'T1', type: 'MR' }],
+        6: [{ id: 11, name: 'WM', type: 'Segmentation' }],
+      },
+    });
+    const result = await fetchShanoirExamination({ client, examinationId: 7 });
+
+    expect(names(result.imagingFiles)).toEqual([
+      'sub-01_T1w.nii.gz',
+      'sub-01_label-WM_dseg.nii.gz',
+    ]);
+    expect(client.listProcessingOutputDatasets).toHaveBeenCalledTimes(2);
+  });
+
   it('passes the abort signal to every request', async () => {
     const client = makeClient({
       datasets: [{ id: 1, name: 'rest', type: 'Eeg' }],
       zips: { 1: EEG_ZIP },
       extraDataPaths: ['sub-01_electrodes.tsv'],
+      processings: { 1: [{ id: 5 }] },
     });
     const { signal } = new AbortController();
     await fetchShanoirExamination({ client, examinationId: 7, signal });
 
     expect(client.listExaminationDatasets).toHaveBeenCalledWith(7, signal);
     expect(client.getExamination).toHaveBeenCalledWith(7, signal);
+    expect(client.listProcessingsByInputDataset).toHaveBeenCalledWith(1, signal);
+    expect(client.listProcessingOutputDatasets).toHaveBeenCalledWith(5, signal);
     expect(client.downloadDatasetZip).toHaveBeenCalledWith(1, signal);
     expect(client.downloadExtraData).toHaveBeenCalledWith(7, 'sub-01_electrodes.tsv', signal);
   });

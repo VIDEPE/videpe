@@ -1,6 +1,6 @@
 # Shanoir 2.18.1 API fixtures
 
-Real responses from a local Shanoir NG_v2.18.1 instance (Docker), captured on 2026-11-23 with:
+Real responses from a local Shanoir NG_v2.18.1 instance (Docker), captured on 2026-11-23 (the processing lookups of the processed datasets 40–42 on 2026-11-24) with:
 
 ```
 node scripts/capture-shanoir-fixtures.js 4 5 7
@@ -18,7 +18,7 @@ All data is synthetic: study `DemoStudy` (1), subject `synth` (4).
 | **5**, scalp EEG | recording 39 (`EEG`, acquisition 12), imported via the EEG tab                                                                                                                                                                        | examination: `sub-synth_electrodes.tsv`, `sub-synth_desc-eloreta_inversefilters.mat`                                                                         |
 | **7**, mixed     | BIDS import: acquisition 13 `ieeg (BIDS)` → 43, 46, 48, 49; 14 `anat (BIDS)` → 44, 45, 47; 15 `eeg (BIDS)` → 50–54. Then two EEG-tab imports: recording 57 (iEEG, acquisition 18) and 58 (scalp EEG, acquisition 19, the most recent) | acquisition 18: `sub-synth_electrodes.tsv`; acquisition 19: `sub-synth_electrodes.tsv`, `sub-synth_desc-eloreta_inversefilters.mat`; none on the examination |
 
-Processed datasets, each from its own processing (1, 2, 3) with **both** recordings 38 and 39 as input, so they belong to examinations 4 and 5: 40 (`MR`, T1), 41 (`SEGMENTATION`, WM mask), 42 (`SEGMENTATION`, atlas).
+Processed datasets, each from its own processing (1, 2, 3) with **both** recordings 38 and 39 as input, so they belong to examinations 4 and 5: 40 (`MR`, T1), 41 (`SEGMENTATION`, WM mask), 42 (`SEGMENTATION`, atlas). No processing uses 40–42 as input (204), so there are no chains (outputs of outputs).
 
 ## Shanoir behaviour these fixtures record
 

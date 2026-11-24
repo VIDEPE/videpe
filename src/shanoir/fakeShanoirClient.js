@@ -46,6 +46,14 @@ export function createFakeShanoirClient({ delayMs = 1000 } = {}) {
       // (without `files`, which only this fake uses to know what goes in each ZIP)
       return DATASETS.map((d) => ({ id: d.id, name: d.name, type: d.type }));
     },
+    // No processings in this fake: the demo segmentations above are listed as the
+    // examination's own datasets instead of as processed outputs
+    async listProcessingsByInputDataset() {
+      return [];
+    },
+    async listProcessingOutputDatasets() {
+      return [];
+    },
     async getExamination(examinationId) {
       // The examination, with the names of its attached files (electrodes, inverse solution);
       // these are downloaded one by one through downloadExtraData

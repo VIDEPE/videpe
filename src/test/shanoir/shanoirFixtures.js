@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { vi } from 'vitest';
 import { zipSync, strToU8 } from 'fflate';
 
 // Helpers to use the real Shanoir 2.18.1 responses in src/test/shanoir/fixtures/shanoir-2.18.1/
@@ -42,4 +43,28 @@ export function fixtureBody(fileName) {
 export function fixtureDatasetZip(datasetId) {
   const { zipEntries } = loadFixture(`download-dataset-${datasetId}.json`);
   return new Blob([zipSync(Object.fromEntries(zipEntries.map((e) => [e.name, strToU8('x')])))]);
+}
+
+/**
+ * A stand-in for createShanoirClient that answers every request from the fixtures, as the
+ * real Shanoir 2.18.1 answered it. Each method is a vi.fn, so tests can check the calls.
+ * Extra-data downloads return a placeholder File with the requested name.
+ */
+export function createFixtureClient() {
+  return {
+    getExamination: vi.fn(async (examinationId) =>
+      fixtureBody(`examination-${examinationId}.json`)
+    ),
+    listExaminationDatasets: vi.fn(async (examinationId) =>
+      fixtureBody(`datasets-examination-${examinationId}.json`)
+    ),
+    listProcessingsByInputDataset: vi.fn(async (datasetId) =>
+      fixtureBody(`processings-inputdataset-${datasetId}.json`)
+    ),
+    listProcessingOutputDatasets: vi.fn(async (processingId) =>
+      fixtureBody(`processing-${processingId}-outputdatasets.json`)
+    ),
+    downloadDatasetZip: vi.fn(async (datasetId) => fixtureDatasetZip(datasetId)),
+    downloadExtraData: vi.fn(async (_examinationId, fileName) => new File(['x'], fileName)),
+  };
 }

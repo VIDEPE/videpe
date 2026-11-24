@@ -15,8 +15,58 @@ const datasetLabel = (dataset) => ({
 });
 
 /**
+ * Finds the processed datasets that belong to an examination: the outputs of every
+ * processing that uses one of its datasets as input, then (following chains) the outputs of
+ * processings that use those outputs as input, and so on. Processed datasets have no
+ * acquisition, so the examination's own dataset list doesn't include them. This is how
+ * Shanoir's study tree finds them; `datasets/examination/{id}?output=true` would be the
+ * direct route, but it answers 204 for every examination (Shanoir 2.18.1).
+ *
+ * @param {ReturnType<import('./shanoirClient').createShanoirClient>} client
+ * @param {{ id: number }[]} datasets - the examination's own datasets.
+ * @param {AbortSignal} [signal]
+ * @returns {Promise<object[]>} the processed datasets (DatasetDTOs), each once.
+ */
+async function listProcessedOutputs(client, datasets, signal) {
+  // A processing with several inputs in the examination is found once per input, and a chain
+  // can lead back to a dataset already seen: both are only followed once
+  const seenProcessingIds = new Set();
+  const seenDatasetIds = new Set(datasets.map((dataset) => dataset.id));
+  const outputs = [];
+
+  // Breadth-first: each round looks up the processings of the datasets found in the round before
+  let inputs = datasets;
+  while (inputs.length > 0) {
+    const processingLists = await Promise.all(
+      inputs.map((dataset) => client.listProcessingsByInputDataset(dataset.id, signal))
+    );
+    const newProcessings = processingLists.flat().filter((processing) => {
+      if (seenProcessingIds.has(processing.id)) return false;
+      seenProcessingIds.add(processing.id);
+      return true;
+    });
+
+    const outputLists = await Promise.all(
+      newProcessings.map((processing) => client.listProcessingOutputDatasets(processing.id, signal))
+    );
+    const newOutputs = outputLists.flat().filter((dataset) => {
+      if (seenDatasetIds.has(dataset.id)) return false;
+      seenDatasetIds.add(dataset.id);
+      return true;
+    });
+
+    outputs.push(...newOutputs);
+    inputs = newOutputs; // next round: processings made from these outputs
+  }
+  return outputs;
+}
+
+/**
  * Downloads everything VIDEPE shows for one Shanoir examination, and sorts it into the
  * files for the EEG viewer and the files for the neuroimaging viewer.
+ *
+ * The examination's datasets are its acquisitions' datasets plus the processed datasets made
+ * from them (see listProcessedOutputs); both are routed the same way.
  *
  * Datasets are routed by their Shanoir type (DatasetDTO.type), known before downloading —
  * each dataset is one zip, and its files simply follow the dataset's route:
@@ -53,10 +103,14 @@ const datasetLabel = (dataset) => ({
  * @throws {Error} when any request or unzip fails.
  */
 export async function fetchShanoirExamination({ client, examinationId, signal }) {
-  const [datasets, examination] = await Promise.all([
+  const [acquisitionDatasets, examination] = await Promise.all([
     client.listExaminationDatasets(examinationId, signal),
     client.getExamination(examinationId, signal),
   ]);
+  // Add the processed datasets made from them (e.g. a T1 or segmentation uploaded as a
+  // processed dataset), which then follow the same routing rules
+  const processedDatasets = await listProcessedOutputs(client, acquisitionDatasets, signal);
+  const datasets = [...acquisitionDatasets, ...processedDatasets];
 
   // Route every dataset by type before downloading anything
   const imagingDatasets = datasets.filter((dataset) => classifyDataset(dataset) === 'imaging');

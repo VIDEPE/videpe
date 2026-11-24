@@ -38,6 +38,29 @@ describe('createShanoirClient', () => {
     expect(await client.listExaminationDatasets(7)).toEqual([]);
   });
 
+  it('lists the processings that use a dataset as input', async () => {
+    const { client, fetchImpl } = makeClient(okJson([{ id: 1, comment: 'T1' }]));
+    expect(await client.listProcessingsByInputDataset(38)).toEqual([{ id: 1, comment: 'T1' }]);
+    expect(fetchImpl.mock.calls[0][0]).toBe(
+      '/shanoir-ng/datasets/datasetProcessing/inputDataset/38'
+    );
+  });
+
+  it("lists a processing's output datasets", async () => {
+    const { client, fetchImpl } = makeClient(okJson([{ id: 40, type: 'MR' }]));
+    expect(await client.listProcessingOutputDatasets(1)).toEqual([{ id: 40, type: 'MR' }]);
+    expect(fetchImpl.mock.calls[0][0]).toBe(
+      '/shanoir-ng/datasets/datasetProcessing/1/outputDatasets/'
+    );
+  });
+
+  it('treats an empty (204) processing or output list as none', async () => {
+    // Shanoir answers 204 for a dataset that no processing uses as input
+    const { client } = makeClient({ ok: true, status: 204 });
+    expect(await client.listProcessingsByInputDataset(43)).toEqual([]);
+    expect(await client.listProcessingOutputDatasets(1)).toEqual([]);
+  });
+
   it('always downloads datasets as NIfTI (format=nii)', async () => {
     const zip = new Blob(['zip-bytes']);
     const { client, fetchImpl } = makeClient(okBlob(zip));

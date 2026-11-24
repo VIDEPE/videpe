@@ -5,6 +5,8 @@
 // host's nginx proxy — the same paths Shanoir's own Angular front-end uses):
 // - GET examinations/{id}                              → examination (incl. extraDataFilePathList)
 // - GET datasets/examination/{id}                      → the examination's datasets
+// - GET datasetProcessing/inputDataset/{id}            → processings using a dataset as input
+// - GET datasetProcessing/{id}/outputDatasets/         → a processing's output datasets
 // - GET datasets/download/{id}?format=nii              → one dataset as a ZIP
 // - GET examinations/extra-data-download/{id}/{name}/  → one file attached to the examination
 
@@ -41,6 +43,8 @@ function describeHttpError(response, what) {
  * @returns {{
  *   getExamination: (examinationId: number, signal?: AbortSignal) => Promise<object>,
  *   listExaminationDatasets: (examinationId: number, signal?: AbortSignal) => Promise<object[]>,
+ *   listProcessingsByInputDataset: (datasetId: number, signal?: AbortSignal) => Promise<object[]>,
+ *   listProcessingOutputDatasets: (processingId: number, signal?: AbortSignal) => Promise<object[]>,
  *   downloadDatasetZip: (datasetId: number, signal?: AbortSignal) => Promise<Blob>,
  *   downloadExtraData: (examinationId: number, fileName: string, signal?: AbortSignal) => Promise<File>,
  * }} the client. Every method rejects with a readable Error on a non-2xx response, and
@@ -69,6 +73,14 @@ export function createShanoirClient({ apiBase, getAccessToken, fetchImpl = fetch
     return response;
   };
 
+  // Authenticated GET of a JSON list. Shanoir answers 204 No Content (no body) instead of an
+  // empty list, e.g. for an examination without datasets or a dataset no processing uses.
+  const getList = async (path, what, signal) => {
+    const response = await get(path, what, signal);
+    if (response.status === 204) return [];
+    return response.json();
+  };
+
   // The client: one method per Shanoir endpoint VIDEPE uses (all read-only).
   return {
     // Examination details as JSON — VIDEPE uses its extraDataFilePathList (files
@@ -84,15 +96,34 @@ export function createShanoirClient({ apiBase, getAccessToken, fetchImpl = fetch
 
     // Metadata of every dataset in the examination (id, name, type: 'EEG', 'MR', …),
     // used to decide what to download — no data files yet.
+    // Only datasets of the examination's acquisitions: processed datasets have no acquisition,
+    // see the two processing methods below.
     async listExaminationDatasets(examinationId, signal) {
-      const response = await get(
+      return getList(
         `datasets/examination/${examinationId}`,
         `the datasets of examination ${examinationId}`,
         signal
       );
-      // Shanoir answers 204 No Content (no body) when the examination has no datasets
-      if (response.status === 204) return [];
-      return response.json();
+    },
+
+    // The processings that use a dataset as input (id, comment, …), as Shanoir's study tree
+    // lists them under a dataset. Their output datasets come from listProcessingOutputDatasets:
+    // the list leaves each processing's outputDatasets empty.
+    async listProcessingsByInputDataset(datasetId, signal) {
+      return getList(
+        `datasetProcessing/inputDataset/${datasetId}`,
+        `the processings of dataset ${datasetId}`,
+        signal
+      );
+    },
+
+    // Metadata of a processing's output datasets (id, name, type), like listExaminationDatasets.
+    async listProcessingOutputDatasets(processingId, signal) {
+      return getList(
+        `datasetProcessing/${processingId}/outputDatasets/`,
+        `the output datasets of processing ${processingId}`,
+        signal
+      );
     },
 
     // Downloads one dataset's files as a ZIP Blob (Shanoir offers no per-file download);
