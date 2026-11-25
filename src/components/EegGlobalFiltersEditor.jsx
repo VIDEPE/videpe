@@ -333,7 +333,7 @@ export function EegGlobalFiltersEditor({
                   />
                   <button
                     type="button"
-                    className="shrink-0 w-4 h-4 rounded-full bg-primary text-background flex items-center justify-center disabled:opacity-40 cursor-pointer"
+                    className="button size-dot"
                     data-testid={`bulk-${column.key}-apply-button`}
                     title={`Set every type's ${column.label} to this value`}
                     onClick={() => handleSetAll(column)}
@@ -442,7 +442,7 @@ export function EegGlobalFiltersEditor({
           ) : (
             <button
               type="button"
-              className="shrink-0 text-xs border border-border rounded-full px-2 py-0.5 bg-surface hover:bg-background disabled:opacity-40 disabled:cursor-not-allowed"
+              className="button button-outline shrink-0"
               data-testid="reset-row-filters-button"
               title={
                 montageEditorOpen
@@ -464,7 +464,7 @@ export function EegGlobalFiltersEditor({
       <div className="shrink-0 flex items-center justify-end gap-2 px-3 py-2 border-t border-border bg-surface">
         <button
           type="button"
-          className="mr-auto text-xs border border-border rounded-full px-2 py-1 bg-surface hover:bg-background"
+          className="button button-outline mr-auto"
           data-testid="clear-all-filters-button"
           title="Turn every global filter off (the montage rows' own filters stay)"
           onClick={() => setDraftGlobalFilters(DEFAULT_GLOBAL_FILTERS)}
@@ -474,20 +474,12 @@ export function EegGlobalFiltersEditor({
         <button type="button" className="button" onClick={handleOk}>
           OK
         </button>
-        <button
-          type="button"
-          className="text-xs border border-border rounded-full px-2 py-1 bg-surface hover:bg-background"
-          onClick={onClose}
-        >
+        <button type="button" className="button button-outline" onClick={onClose}>
           Cancel
         </button>
         <button
           type="button"
-          className={
-            isModified
-              ? 'button'
-              : 'text-xs border border-border rounded-full px-2 py-1 bg-surface hover:bg-background'
-          }
+          className={cn('button', !isModified && 'button-outline')}
           onClick={handleApply}
         >
           Apply

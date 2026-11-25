@@ -831,7 +831,7 @@ export function EegMontageEditor({
                     </select>
                     <button
                       type="button"
-                      className="shrink-0 w-4 h-4 rounded-full bg-primary text-background flex items-center justify-center cursor-pointer"
+                      className="button size-dot"
                       data-testid="bulk-type-apply-button"
                       title="Set every channel to this type"
                       onClick={handleSetAllType}
@@ -967,7 +967,7 @@ export function EegMontageEditor({
       {/* Add button */}
       <button
         type="button"
-        className="button button-icon"
+        className="button size-icon"
         data-testid="add-selected-button"
         disabled={selectedChannels.size === 0}
         onClick={handleAddSelectedChannels}
@@ -994,7 +994,7 @@ export function EegMontageEditor({
             window's Clear all, so clearing reads as a secondary action */}
         <button
           type="button"
-          className="text-xs border border-border rounded-full px-2 py-1 bg-surface hover:bg-background cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+          className="button button-outline"
           data-testid="clear-all-button"
           onClick={handleClearAllMontageRows}
           disabled={draftMontageChannels.length === 0}
@@ -1139,7 +1139,7 @@ export function EegMontageEditor({
                     </select>
                     <button
                       type="button"
-                      className="shrink-0 w-4 h-4 rounded-full bg-primary text-background flex items-center justify-center disabled:opacity-40 cursor-pointer"
+                      className="button size-dot"
                       data-testid="bulk-reference-apply-button"
                       title="Set every row to this reference"
                       disabled={draftMontageChannels.length === 0}
@@ -1172,7 +1172,7 @@ export function EegMontageEditor({
                     </select>
                     <button
                       type="button"
-                      className="shrink-0 w-4 h-4 rounded-full bg-primary text-background flex items-center justify-center disabled:opacity-40 cursor-pointer"
+                      className="button size-dot"
                       data-testid="bulk-color-apply-button"
                       title="Set every row to this color"
                       disabled={draftMontageChannels.length === 0}
@@ -1212,7 +1212,7 @@ export function EegMontageEditor({
                     />
                     <button
                       type="button"
-                      className="shrink-0 w-4 h-4 rounded-full bg-primary text-background flex items-center justify-center disabled:opacity-40 cursor-pointer"
+                      className="button size-dot"
                       data-testid="bulk-highpass-apply-button"
                       title="Set every row's High Pass to this value"
                       disabled={draftMontageChannels.length === 0}
@@ -1248,7 +1248,7 @@ export function EegMontageEditor({
                     />
                     <button
                       type="button"
-                      className="shrink-0 w-4 h-4 rounded-full bg-primary text-background flex items-center justify-center disabled:opacity-40 cursor-pointer"
+                      className="button size-dot"
                       data-testid="bulk-lowpass-apply-button"
                       title="Set every row's Low Pass to this value"
                       disabled={draftMontageChannels.length === 0}
@@ -1284,7 +1284,7 @@ export function EegMontageEditor({
                     />
                     <button
                       type="button"
-                      className="shrink-0 w-4 h-4 rounded-full bg-primary text-background flex items-center justify-center disabled:opacity-40 cursor-pointer"
+                      className="button size-dot"
                       data-testid="bulk-notch-apply-button"
                       title="Set every row's Notch to this value"
                       disabled={draftMontageChannels.length === 0}
@@ -1623,7 +1623,7 @@ export function EegMontageEditor({
               <div className="flex items-center gap-2 shrink-0 ml-auto overflow-hidden p-1">
                 <button
                   type="button"
-                  className="button button-icon"
+                  className="button size-icon"
                   data-testid="move-up-button"
                   disabled={selectedMontageRows.size === 0}
                   onClick={handleMoveSelectedUp}
@@ -1637,7 +1637,7 @@ export function EegMontageEditor({
                 </button>
                 <button
                   type="button"
-                  className="button button-icon"
+                  className="button size-icon"
                   data-testid="move-down-button"
                   disabled={selectedMontageRows.size === 0}
                   onClick={handleMoveSelectedDown}
@@ -1719,20 +1719,12 @@ export function EegMontageEditor({
         <button type="button" className="button" onClick={handleOk}>
           OK
         </button>
-        <button
-          type="button"
-          className="text-xs border border-border rounded-full px-2 py-1 bg-surface hover:bg-background"
-          onClick={onClose}
-        >
+        <button type="button" className="button button-outline" onClick={onClose}>
           Cancel
         </button>
         <button
           type="button"
-          className={
-            isModified
-              ? 'button'
-              : 'text-xs border border-border rounded-full px-2 py-1 bg-surface hover:bg-background'
-          }
+          className={cn('button', !isModified && 'button-outline')}
           onClick={handleApply}
         >
           Apply
@@ -1762,7 +1754,7 @@ export function EegMontageEditor({
             <div className="flex justify-end gap-2">
               <button
                 type="button"
-                className="text-xs border border-border rounded-full px-3 py-1 bg-surface hover:bg-background"
+                className="button button-outline"
                 data-testid="keep-monopolar-yes"
                 onClick={() => commitSeegBipolarMontage(pendingSeegBipolarBuild, true)}
               >

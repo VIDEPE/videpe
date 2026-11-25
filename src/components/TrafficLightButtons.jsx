@@ -1,6 +1,9 @@
 import { Maximize2, Minimize2, ArrowLeftRight, X } from 'lucide-react';
 
-const ICON_SIZE = 13;
+// Even size so the icon's inset in the w-4 circle (16px or 18px, depending on the root font
+// size) is a whole pixel on each side: an odd size leaves a half-pixel inset that renders the
+// X off-centre and lets Maximize2's arrow corners touch the circle edge.
+const ICON_SIZE = 12;
 
 const btn =
   'inline-flex items-center justify-center w-4 h-4 rounded-full border-none cursor-pointer transition-all text-foreground/50 hover:text-black/70 bg-border';

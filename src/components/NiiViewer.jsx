@@ -701,52 +701,46 @@ export const NiiViewer = ({
           )}
           <canvas ref={canvasRef} className="absolute inset-0" />
         </div>
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col">
           <div
             className={cn(
-              'flex flex-col w-8 gap-0.5 pt-2 items-center',
+              'flex flex-col gap-3 px-1 py-2 items-center',
               'rounded-r-md border-r-1 border-t-1 border-b-1 border-border'
             )}
           >
             {/* Viewer controls with Ax, Co, Sa, MP and 3D buttons — the 2D ones are greyed
                 out and inert without an image volume loaded (3D/connectome-only scenes
-                have no slices to show), per the hasImageVolumes effect above. */}
-            {SLICE_TYPE_OPTIONS.map(({ sliceType, label, buttonLabel }) => {
-              const disabled = sliceType !== SLICE_TYPE.RENDER && !hasImageVolumes;
-              return (
-                <button
-                  key={sliceType}
-                  type="button"
-                  className="button size-xs disabled:opacity-40 disabled:pointer-events-none"
-                  onClick={() => handleSliceTypeChange(sliceType)}
-                  disabled={disabled}
-                  title={
-                    disabled
-                      ? 'No image volume loaded — only the 3D view is available'
-                      : `${label} view`
-                  }
-                  aria-label={`${label} view`}
-                  aria-pressed={activeSliceType === sliceType}
-                >
-                  {buttonLabel}
-                </button>
-              );
-            })}
-          </div>
+                have no slices to show), per the hasImageVolumes effect above. Grouped in one
+                outline, as only one view can be active at a time. */}
+            <div className="button-group" role="group" aria-label="View">
+              {SLICE_TYPE_OPTIONS.map(({ sliceType, label, buttonLabel }) => {
+                const disabled = sliceType !== SLICE_TYPE.RENDER && !hasImageVolumes;
+                return (
+                  <button
+                    key={sliceType}
+                    type="button"
+                    className="button size-circle disabled:opacity-40 disabled:pointer-events-none"
+                    onClick={() => handleSliceTypeChange(sliceType)}
+                    disabled={disabled}
+                    title={
+                      disabled
+                        ? 'No image volume loaded — only the 3D view is available'
+                        : `${label} view`
+                    }
+                    aria-label={`${label} view`}
+                    aria-pressed={activeSliceType === sliceType}
+                  >
+                    {buttonLabel}
+                  </button>
+                );
+              })}
+            </div>
 
-          {/* Radio/Clip buttons */}
-          <div
-            className={cn(
-              'flex flex-col w-8 gap-0.5 py-2 items-center',
-              'rounded-r-md border-r-1 border-t-1 border-b-1 border-border'
-            )}
-          >
-            {/* Radiological/neurological display convention toggle. button-icon-xs (rather than
-              size-xs) keeps a single icon glyph circular — size-xs's padding is asymmetric,
-              tuned for the 2-character text labels in the slice-type group above. */}
+            {/* Radiological/neurological display convention toggle. size-circle, like the
+              slice-type buttons above, so the whole column is the same 28px circles. */}
             <button
               type="button"
-              className="button button-icon-xs"
+              className="button size-circle"
               onClick={handleRadiologicalConventionToggle}
               title={
                 isRadiologicalConvention
@@ -761,7 +755,7 @@ export const NiiViewer = ({
             {/* Clip plane on/off toggle — only visible in the 3D render view (see handleClipPlaneToggle). */}
             <button
               type="button"
-              className="button button-icon-xs"
+              className="button size-circle"
               onClick={handleClipPlaneToggle}
               title={isClipPlaneOn ? 'Disable clip plane' : 'Enable clip plane (3D view only)'}
               aria-label="Toggle clip plane"

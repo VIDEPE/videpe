@@ -17,7 +17,8 @@ export const NotFoundPage = () => {
           <h2 className="text-3xl md:text-5xl font-bold">
             Page Not <span className="text-primary">Found</span>
           </h2>
-          <p className="text-foreground text-lg max-w-md mx-auto">
+          {/* ! is needed to override the global p { margin: 0 } in index.css */}
+          <p className="text-foreground text-lg max-w-md !mx-auto">
             Oops! It looks like you've wandered into uncharted territory. The page you're looking
             for doesn't exist.
           </p>
@@ -25,17 +26,11 @@ export const NotFoundPage = () => {
 
         {/* Action Buttons */}
         <div className="mt-12 flex flex-col sm:flex-row gap-4 justify-center">
-          <button
-            onClick={() => navigate('/')}
-            className="cosmic-button inline-flex items-center gap-2"
-          >
+          <button onClick={() => navigate('/')} className="button size-lg">
             <Home size={18} />
             Back to Home
           </button>
-          <button
-            onClick={() => navigate(-1)}
-            className="cosmic-button-inverted inline-flex items-center gap-2"
-          >
+          <button onClick={() => navigate(-1)} className="button size-lg button-outline">
             <ArrowLeft size={18} />
             Go Back
           </button>

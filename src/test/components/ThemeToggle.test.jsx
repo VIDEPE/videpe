@@ -29,6 +29,18 @@ describe('ThemeToggle', () => {
     expect(screen.getByRole('button', { name: /switch to dark mode/i })).toBeInTheDocument();
   });
 
+  it('shows a hover tooltip saying what clicking does, in both modes', () => {
+    // title is the native hover tooltip — the icon alone doesn't say what the toggle does
+    useTheme.mockReturnValue({ isDarkMode: true });
+    const { unmount } = render(<ThemeToggle />);
+    expect(screen.getByRole('button')).toHaveAttribute('title', 'Switch to light mode');
+    unmount();
+
+    useTheme.mockReturnValue({ isDarkMode: false });
+    render(<ThemeToggle />);
+    expect(screen.getByRole('button')).toHaveAttribute('title', 'Switch to dark mode');
+  });
+
   it('calls toggleTheme when clicked', () => {
     // Create a mock function for toggleTheme so we can check if it was called
     const toggleTheme = vi.fn();
