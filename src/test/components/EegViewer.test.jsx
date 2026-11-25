@@ -2703,7 +2703,7 @@ describe('EegViewer — montage template dropdown', () => {
   it('does not offer CAR for an SEEG recording', async () => {
     await renderViewer(makeIntracranialProvider());
 
-    expect(dropdownOptions()).toEqual(['none']);
+    expect(dropdownOptions()).toEqual(['none', 'custom']);
   });
 
   // An average-referenced montage can still be built in the editor — the dropdown then has
@@ -2721,7 +2721,7 @@ describe('EegViewer — montage template dropdown', () => {
     expect(screen.getByTestId('montage-template-select')).toHaveValue('average');
   });
 
-  it('defaults to "No montage" with no "Custom" option, before any montage has been built', async () => {
+  it('defaults to "No montage", with "Custom montage" disabled before any montage has been built', async () => {
     await renderViewer();
 
     expect(screen.getByTestId('montage-template-select')).toHaveValue('none');
@@ -2730,7 +2730,9 @@ describe('EegViewer — montage template dropdown', () => {
     const options = Array.from(screen.getByTestId('montage-template-select').options).map(
       (option) => option.value
     );
-    expect(options).toEqual(['none', 'average']);
+    expect(options).toEqual(['none', 'custom', 'average']);
+    // listed so it can be found, but there's nothing to restore yet — and it says so
+    expect(screen.getByRole('option', { name: 'Custom montage (none set)' })).toBeDisabled();
   });
 
   it('disables the template select while the montage editor is open, and re-enables it once closed', async () => {
@@ -2762,7 +2764,7 @@ describe('EegViewer — montage template dropdown', () => {
     channelNames.forEach((name) => expect(screen.getByText(name)).toBeTruthy());
   });
 
-  it('adds a "Custom" option once a hand-built montage is applied via the editor, and restores it after switching to a template', async () => {
+  it('enables "Custom montage" once a hand-built montage is applied via the editor, and restores it after switching to a template', async () => {
     await renderViewer();
     // change montage
     await userEvent.click(screen.getByRole('button', { name: 'Montage' }));
@@ -2773,6 +2775,7 @@ describe('EegViewer — montage template dropdown', () => {
     expect(screen.getByText('EEG1')).toBeTruthy();
     expect(screen.queryByText('EEG2')).toBeNull();
     expect(screen.getByTestId('montage-template-select')).toHaveValue('custom');
+    expect(screen.getByRole('option', { name: 'Custom montage' })).toBeEnabled();
     // set to average and confirm channel names
     await userEvent.selectOptions(screen.getByTestId('montage-template-select'), 'average');
     channelNames.forEach((name) => expect(screen.getByText(`${name} - Avg`)).toBeTruthy());

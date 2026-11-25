@@ -1313,7 +1313,17 @@ export const EegViewer = ({
                 disabled={montageVisible}
               >
                 <option value="none">No montage</option>
-                {customMontageChannels && <option value="custom">Custom</option>}
+                {/* always listed so it can be found, but disabled until a montage has been
+                    built in the editor — before that there's nothing to restore. The browser's
+                    own disabled grey is meant for light backgrounds, so the theme colour is used
+                    instead (a cursor can't be set: browsers ignore it on options) */}
+                <option
+                  value="custom"
+                  disabled={!customMontageChannels}
+                  className="disabled:text-foreground/50"
+                >
+                  {customMontageChannels ? 'Custom montage' : 'Custom montage (none set)'}
+                </option>
                 {(!detectedIsSeeg || montageTemplate === 'average') && (
                   <option value="average">CAR (Common Average Reference)</option>
                 )}
