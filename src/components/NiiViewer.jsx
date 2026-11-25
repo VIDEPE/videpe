@@ -701,7 +701,7 @@ export const NiiViewer = ({
           )}
           <canvas ref={canvasRef} className="absolute inset-0" />
         </div>
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col">
           <div
             className={cn(
               'flex flex-col gap-3 px-1 py-2 items-center',

@@ -353,7 +353,7 @@ export const PatientView = () => {
               href={`${import.meta.env.BASE_URL}#/about`}
               target="_blank"
               rel="noopener noreferrer"
-              className="button button-neutral flex items-center gap-2 px-3 py-1 whitespace-nowrap"
+              className="button button-neutral flex items-center gap-2 whitespace-nowrap"
               title="Opens in a new tab"
             >
               <Info size={16} /> About VIDEPE
@@ -361,7 +361,7 @@ export const PatientView = () => {
           ) : (
             <Link
               to="/"
-              className="button button-neutral flex items-center gap-2 px-3 py-1 whitespace-nowrap"
+              className="button button-neutral flex items-center gap-2 whitespace-nowrap"
             >
               <ArrowLeft size={16} /> Back
             </Link>
@@ -407,7 +407,7 @@ export const PatientView = () => {
                stay until the whole demo has loaded */
             <button
               type="button"
-              className="button px-3 py-1 whitespace-nowrap"
+              className="button whitespace-nowrap"
               onClick={handleReset}
               disabled={isLoading || isShanoirLoading || isHostAppLoading}
               title="Reset both viewers"
@@ -423,7 +423,7 @@ export const PatientView = () => {
                   key={key}
                   type="button"
                   className={cn(
-                    'button px-3 py-1 whitespace-nowrap',
+                    'button whitespace-nowrap',
                     loadingDemo !== key && 'button-neutral'
                   )}
                   onClick={() => handleLoadDemo(key)}
