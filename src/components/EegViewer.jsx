@@ -1312,7 +1312,7 @@ export const EegViewer = ({
                 onChange={(e) => applyTemplateSelection(e.target.value)}
                 disabled={montageVisible}
               >
-                <option value="none">None</option>
+                <option value="none">No montage</option>
                 {customMontageChannels && <option value="custom">Custom</option>}
                 {(!detectedIsSeeg || montageTemplate === 'average') && (
                   <option value="average">CAR (Common Average Reference)</option>

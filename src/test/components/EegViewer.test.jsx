@@ -2707,7 +2707,7 @@ describe('EegViewer — montage template dropdown', () => {
   });
 
   // An average-referenced montage can still be built in the editor — the dropdown then has
-  // to be able to show it, or it would read "None" for a montage that isn't.
+  // to be able to show it, or it would read "No montage" for a montage that isn't.
   it('still shows CAR for an SEEG recording while that is the active montage', async () => {
     await renderViewer(makeIntracranialProvider());
 
@@ -2721,10 +2721,12 @@ describe('EegViewer — montage template dropdown', () => {
     expect(screen.getByTestId('montage-template-select')).toHaveValue('average');
   });
 
-  it('defaults to "None" with no "Custom" option, before any montage has been built', async () => {
+  it('defaults to "No montage" with no "Custom" option, before any montage has been built', async () => {
     await renderViewer();
 
     expect(screen.getByTestId('montage-template-select')).toHaveValue('none');
+    // the closed dropdown shows only this text, so it has to say what the dropdown is for
+    expect(screen.getByRole('option', { name: 'No montage' }).selected).toBe(true);
     const options = Array.from(screen.getByTestId('montage-template-select').options).map(
       (option) => option.value
     );
