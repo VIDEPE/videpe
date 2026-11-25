@@ -214,6 +214,33 @@ code {
   }
 }
 
+/* Group: a vertical stack of buttons in one shared outline (the NiiViewer view buttons), for
+   mutually exclusive options where exactly one is on. The group draws the page-coloured pill with
+   the grey border; its off buttons drop their own fill and border, so the strip reads as one
+   control, and the "on" option shows as a primary circle inside the outline. Off buttons still
+   get the light primary tint on hover. */
+.button-group {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 1px;
+  border-radius: 9999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-background);
+
+  & > .button[aria-pressed='false'] {
+    background: transparent;
+    border-color: transparent;
+  }
+
+  /* Circles shrink to 24px, so the whole pill (24 + 2px padding + 2px border) is as wide as a
+     standalone 28px size-circle button next to it */
+  & > .size-circle {
+    width: 24px;
+    height: 24px;
+  }
+}
+
 /* Bare: icon-only button with no fill or border (the theme and colorblind toggles in the page
    headers). Feedback is on the icon itself: it rests slightly muted and brightens on hover — a
    background disc behind these coloured icons looked like a halo. Sets no padding, so the

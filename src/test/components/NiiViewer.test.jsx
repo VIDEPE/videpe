@@ -1,6 +1,6 @@
 import { StrictMode } from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, act, fireEvent, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {
   getInitialLayerSettings,
@@ -1628,6 +1628,16 @@ describe('NiiViewer', () => {
       expect(screen.getByRole('button', { name: 'Sagittal view' })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Multiplanar view' })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: '3D view' })).toBeInTheDocument();
+    });
+
+    it('groups the slice type buttons together, as only one view can be active', async () => {
+      await setup();
+      const group = screen.getByRole('group', { name: 'View' });
+      expect(
+        within(group)
+          .getAllByRole('button')
+          .map((b) => b.getAttribute('aria-label'))
+      ).toEqual(SLICE_TYPE_OPTIONS.map((option) => option.ariaLabel));
     });
 
     it.each(SLICE_TYPE_OPTIONS.map((option) => [option.ariaLabel]))(
