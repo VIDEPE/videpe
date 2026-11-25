@@ -1198,7 +1198,7 @@ export const EegViewer = ({
                 <div className="flex flex-col items-center gap-1">
                   <button
                     type="button"
-                    className="button size-icon"
+                    className="button button-neutral size-icon"
                     onClick={() => updateVisibleChannelCount(visibleChannelCount + 10)}
                     title="Show more channels"
                     disabled={eegIsStacked}
@@ -1220,7 +1220,7 @@ export const EegViewer = ({
                   />
                   <button
                     type="button"
-                    className="button size-icon"
+                    className="button button-neutral size-icon"
                     onClick={() => updateVisibleChannelCount(visibleChannelCount - 10)}
                     title="Show fewer channels"
                     disabled={eegIsStacked}
@@ -1463,7 +1463,7 @@ export const EegViewer = ({
                 <div className="flex items-center gap-1">
                   <button
                     type="button"
-                    className="button size-icon"
+                    className="button button-neutral size-icon"
                     onClick={() => updateYScale(yScale * 2)}
                     title="Zoom out"
                   >
@@ -1482,7 +1482,7 @@ export const EegViewer = ({
                   />
                   <button
                     type="button"
-                    className="button size-icon"
+                    className="button button-neutral size-icon"
                     onClick={() => updateYScale(yScale / 2)}
                     title="Zoom in"
                   >
@@ -1499,7 +1499,7 @@ export const EegViewer = ({
                 <div className="flex items-center gap-1">
                   <button
                     type="button"
-                    className="button size-icon"
+                    className="button button-neutral size-icon"
                     onClick={() => setStartTime(0)}
                     title="Jump to start"
                   >
@@ -1507,7 +1507,7 @@ export const EegViewer = ({
                   </button>
                   <button
                     type="button"
-                    className="button size-icon"
+                    className="button button-neutral size-icon"
                     onClick={backwardshiftStartTime}
                     title="Shift backward"
                   >
@@ -1527,7 +1527,7 @@ export const EegViewer = ({
                   />
                   <button
                     type="button"
-                    className="button size-icon"
+                    className="button button-neutral size-icon"
                     onClick={forwardshiftStartTime}
                     title="Shift forward"
                   >
@@ -1535,7 +1535,7 @@ export const EegViewer = ({
                   </button>
                   <button
                     type="button"
-                    className="button size-icon"
+                    className="button button-neutral size-icon"
                     onClick={() => setStartTime(tMax - windowSize)}
                     title="Jump to end"
                   >
@@ -1552,7 +1552,7 @@ export const EegViewer = ({
                 <div className="flex items-center gap-1">
                   <button
                     type="button"
-                    className="button size-icon"
+                    className="button button-neutral size-icon"
                     onClick={decreaseWindowSize}
                     title="Decrease window size"
                   >
@@ -1572,7 +1572,7 @@ export const EegViewer = ({
                   />
                   <button
                     type="button"
-                    className="button size-icon"
+                    className="button button-neutral size-icon"
                     onClick={increaseWindowSize}
                     title="Increase window size"
                   >

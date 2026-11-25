@@ -198,6 +198,22 @@ code {
   }
 }
 
+/* Neutral: a grey (--c-surface) fill with a heading-coloured icon or label and no visible
+   border, for one-shot actions (EEG zoom, time step and channel count, the top bar's Back, About
+   and demo buttons). Primary is kept for
+   state: toggles are grey-outlined when off and primary-filled when on, so an action button is
+   never blue and can't be mistaken for an "on" toggle. Exception: dialog footers (OK, Apply) stay
+   primary, as a grey fill would vanish against their surface-coloured edge. */
+.button-neutral {
+  background: var(--color-surface);
+  color: var(--color-heading);
+
+  /* Hover: the light primary tint used by the outline buttons, plus the shared .button glow */
+  &:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--color-primary) 12%, var(--color-background));
+  }
+}
+
 /* Bare: icon-only button with no fill or border (the theme and colorblind toggles in the page
    headers). Feedback is on the icon itself: it rests slightly muted and brightens on hover — a
    background disc behind these coloured icons looked like a halo. Sets no padding, so the
