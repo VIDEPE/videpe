@@ -1363,29 +1363,26 @@ export function EegMontageEditor({
                       borderBottom: `1px solid ${channelDividerColor}`,
                     }}
                     className={cn(
-                      'relative flex items-center gap-2 pl-3 pr-1 py-0.5 cursor-pointer select-none',
+                      // isolate keeps the stripe's -z-10 inside the row
+                      'relative isolate flex items-center gap-2 pl-3 pr-1 py-0.5 cursor-pointer select-none',
                       // The background is only for status — the row's own colour is the stripe
                       // below. Full class names (not built from statusTint) so Tailwind finds them
                       statusTint === 'bg-error' && (isDarkMode ? 'bg-error/20' : 'bg-error/30'),
                       statusTint === 'bg-alert' && (isDarkMode ? 'bg-alert/20' : 'bg-alert/30'),
                       isChannelMissing && 'opacity-50',
-                      // An outline (not a background) marks the row selected for Move Up/Down —
-                      // background is already spoken for by the status tints above. An outline,
-                      // not a ring: a ring is an inset box-shadow, which is drawn under the
-                      // row's children, so the colour stripe would cover its left edge.
+                      // Selected for Move Up/Down. Outline, not ring: a ring is painted with the
+                      // background, under the stripe
                       selectedMontageRows.has(row.id) &&
                         'outline-2 -outline-offset-2 outline-primary'
                     )}
                     title="Click row to select for Move Up/Down"
                     onClick={(e) => handleMontageRowClick(e, row.id)}
                   >
-                    {/* Row colour — a stripe on the left edge in the trace's own, full colour.
-                        Absolute, inside the row's pl-3 padding, so it takes no space: rows with
-                        and without one line up. None for the default colour, which follows the
-                        theme. */}
+                    {/* Row colour stripe, in the left padding so rows line up; -z-10 keeps it
+                        under the selection outline */}
                     {row.color && (
                       <span
-                        className="absolute left-0 inset-y-0 w-[5px]"
+                        className="absolute left-0 inset-y-0 w-[6px] -z-10"
                         style={{ backgroundColor: row.color }}
                         data-testid={`color-stripe-${row.id}`}
                       />

@@ -809,7 +809,8 @@ describe('EegMontageEditor', () => {
       expect(screen.getByTestId('color-stripe-FP2').style.backgroundColor).toBe('red');
     });
 
-    it('marks a selected row with an outline, which is drawn over the stripe (a ring would be under it)', async () => {
+    // jsdom doesn't paint, so this checks the classes that set the paint order
+    it('marks a selected row with an outline, drawn over the stripe', async () => {
       render(<EegMontageEditor {...defaultProps} />);
       await userEvent.selectOptions(screen.getByTestId('color-FP1'), 'red');
       await userEvent.click(screen.getByTestId('montage-channel-FP1'));
@@ -817,6 +818,8 @@ describe('EegMontageEditor', () => {
       const row = screen.getByTestId('montage-channel-FP1').closest('div');
       expect(row.className).toContain('outline-primary');
       expect(row.className).not.toContain('ring-primary');
+      expect(row.className).toContain('isolate');
+      expect(screen.getByTestId('color-stripe-FP1').className).toContain('-z-10');
     });
   });
 
