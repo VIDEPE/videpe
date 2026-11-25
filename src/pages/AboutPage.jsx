@@ -386,6 +386,10 @@ export const AboutPage = () => {
                     (auto-detected), save as AnyWave with each row's effective filters (its own or
                     the global ones) included
                   </li>
+                  <li>
+                    <strong>Montages in the recording</strong> — the montages saved in a Micromed
+                    TRC file are offered in the montage dropdown, under &quot;From recording&quot;
+                  </li>
                 </ul>
               </div>
             </div>

@@ -34,6 +34,7 @@ import {
   filterMontageRows,
   computeAutoYScale,
   remapMontageToRecording,
+  buildRecordingMontageTemplates,
   formatTimelineTime,
   clampTooltipCenter,
 } from '@/utils/eegViewerUtils';
@@ -413,6 +414,18 @@ export const EegViewer = ({
     standardTemplateId,
     detectedIsSeeg,
   });
+  // Montages saved in the recording itself (only TRC files have them), listed in the dropdown
+  // under "From recording". None is applied on load: they're often general montages that name
+  // channels this recording doesn't have, so there's no telling which one (if any) fits.
+  const recordingMontages = useMemo(
+    () => buildRecordingMontageTemplates(provider.montages, channelNames),
+    [provider.montages, channelNames]
+  );
+  // Every file-backed montage the dropdown offers: the recording's own and the bundled ones
+  const fileMontages = useMemo(
+    () => [...recordingMontages, ...montageTemplates],
+    [recordingMontages, montageTemplates]
+  );
 
   // Montage row list (reference/color per displayed trace), edited via the same window's
   // montage-settings pane — kept separate from channelSettings since it's an array (can
@@ -423,7 +436,7 @@ export const EegViewer = ({
     montageTemplate,
     customMontageChannels,
     applyMontageTemplate,
-  } = useMontageChannels(channelNames, montageTemplates);
+  } = useMontageChannels(channelNames, fileMontages);
 
   // Global frequency filters per channel type, edited via the Filter window. A montage row's own
   // filter value overrides these per field (see buildMontageDisplayRows / resolveRowFilters).
@@ -532,9 +545,9 @@ export const EegViewer = ({
   }, [droppedMontage]);
 
   // Routes the sidebar template <select>'s value to the right apply function — a template id
-  // (looked up in montageTemplates) or one of the built-in preset strings.
+  // (looked up in fileMontages) or one of the built-in preset strings.
   const applyTemplateSelection = (value) => {
-    const template = montageTemplates.find((t) => t.id === value);
+    const template = fileMontages.find((t) => t.id === value);
     if (template) applyMontageFile(template);
     else applyMontageTemplate(value);
   };
@@ -1299,8 +1312,18 @@ export const EegViewer = ({
                 onChange={(e) => applyTemplateSelection(e.target.value)}
                 disabled={montageVisible}
               >
-                <option value="none">None</option>
-                {customMontageChannels && <option value="custom">Custom</option>}
+                <option value="none">No montage</option>
+                {/* always listed so it can be found, but disabled until a montage has been
+                    built in the editor — before that there's nothing to restore. The browser's
+                    own disabled grey is meant for light backgrounds, so the theme colour is used
+                    instead (a cursor can't be set: browsers ignore it on options) */}
+                <option
+                  value="custom"
+                  disabled={!customMontageChannels}
+                  className="disabled:text-foreground/50"
+                >
+                  {customMontageChannels ? 'Custom montage' : 'Custom montage (none set)'}
+                </option>
                 {(!detectedIsSeeg || montageTemplate === 'average') && (
                   <option value="average">CAR (Common Average Reference)</option>
                 )}
@@ -1309,6 +1332,15 @@ export const EegViewer = ({
                     {template.name}
                   </option>
                 ))}
+                {recordingMontages.length > 0 && (
+                  <optgroup label="From recording">
+                    {recordingMontages.map((montage) => (
+                      <option key={montage.id} value={montage.id}>
+                        {montage.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
               </select>
             </div>
           </div>

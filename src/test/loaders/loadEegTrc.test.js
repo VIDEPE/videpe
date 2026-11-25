@@ -29,6 +29,7 @@ const ZONE_NAMES = [
 ];
 const ORDER_POSITION = 640; // as in real files: the first zone starts right after the fixed header
 const ELECTRODE_BYTES = 128; // one LABCOD electrode record
+const MONTAGE_BYTES = 4096; // one MONTAGE record
 
 // Writes text at a fixed width, padded with null bytes (latin-1: one byte per character)
 function writeText(view, offset, text, width) {
@@ -53,6 +54,13 @@ function writeText(view, offset, text, width) {
  * @param {number} [options.headerType=4]
  * @param {number[]} [options.order] - LABCOD electrode index of each channel (defaults to 0, 1, 2, ...).
  * @param {Array<[number, number]>} [options.cuts=[]] - TRONCA entries, written before the (0, 0) terminator.
+ * @param {Array<{ index: number, label: string }>} [options.extraElectrodes=[]] - LABCOD
+ *   electrodes that aren't recorded (not in ORDER), e.g. ones only a montage names.
+ * @param {Array<{ description?: string, lines: Array<{ inputs: [number, number],
+ *   highPass?: number, lowPass?: number }> }>} [options.montages=[]] - MONTAGE zone records, in
+ *   the file's raw values: `inputs` are the two LABCOD indices of a trace, in file order;
+ *   `highPass` (mHz) and `lowPass` (Hz × 100) default to 0.
+ * @param {number} [options.montageCount=montages.length] - the header's montage count (byte 152).
  */
 function makeTrc({
   channels,
@@ -61,6 +69,9 @@ function makeTrc({
   headerType = 4,
   order = channels.map((_, i) => i),
   cuts = [],
+  extraElectrodes = [],
+  montages = [],
+  montageCount = montages.length,
 }) {
   const nChannels = channels.length;
   const electrodes = channels.map((c) => ({
@@ -75,13 +86,17 @@ function makeTrc({
     ...c,
   }));
 
-  // zone positions: ORDER, then LABCOD (large enough for the highest electrode index), then TRONCA
+  // zone positions: ORDER, then LABCOD (large enough for the highest electrode index), then
+  // TRONCA, then MONTAGE
   const orderBytes = nChannels * 2;
   const labcodPosition = ORDER_POSITION + orderBytes;
-  const labcodBytes = (Math.max(-1, ...order) + 1) * ELECTRODE_BYTES;
+  const extraIndices = extraElectrodes.map((e) => e.index);
+  const labcodBytes = (Math.max(-1, ...order, ...extraIndices) + 1) * ELECTRODE_BYTES;
   const troncaPosition = labcodPosition + labcodBytes;
   const troncaBytes = (cuts.length + 1) * 8; // the cuts, then the (0, 0) terminator
-  const dataStart = troncaPosition + troncaBytes;
+  const montagePosition = troncaPosition + troncaBytes;
+  const montageBytes = montages.length * MONTAGE_BYTES;
+  const dataStart = montagePosition + montageBytes;
 
   const header = new DataView(new ArrayBuffer(dataStart));
   writeText(header, 0, '* MICROMED  Brain-Quick file *', 32);
@@ -93,12 +108,14 @@ function makeTrc({
   header.setUint16(144, nChannels * bytesPerSample, true); // multiplexer
   header.setUint16(146, rateMin, true);
   header.setUint16(148, bytesPerSample, true);
+  header.setUint16(152, montageCount, true);
   header.setUint8(175, headerType);
 
   const zones = {
     ORDER: [ORDER_POSITION, orderBytes],
     LABCOD: [labcodPosition, labcodBytes],
     TRONCA: [troncaPosition, troncaBytes],
+    MONTAGE: [montagePosition, montageBytes],
   };
   ZONE_NAMES.forEach((name, i) => {
     const at = 176 + i * 16;
@@ -121,10 +138,29 @@ function makeTrc({
     header.setInt16(at + 34, e.unitCode, true);
     header.setUint16(at + 44, e.rateCoefficient, true);
   });
+  extraElectrodes.forEach(({ index, label }) => {
+    const at = labcodPosition + index * ELECTRODE_BYTES;
+    writeText(header, at + 2, label, 6);
+    writeText(header, at + 8, 'G2', 6);
+  });
 
   cuts.forEach(([a, b], i) => {
     header.setUint32(troncaPosition + i * 8, a, true);
     header.setUint32(troncaPosition + i * 8 + 4, b, true);
+  });
+
+  // MONTAGE records: lines at +0, description at +264, the input pairs from +328 (2 × uint16
+  // per trace), high-pass from +840 and low-pass from +1352 (uint32 per trace)
+  montages.forEach(({ description = '', lines }, m) => {
+    const at = montagePosition + m * MONTAGE_BYTES;
+    header.setUint16(at, lines.length, true);
+    writeText(header, at + 264, description, 64);
+    lines.forEach(({ inputs, highPass = 0, lowPass = 0 }, i) => {
+      header.setUint16(at + 328 + i * 4, inputs[0], true);
+      header.setUint16(at + 328 + i * 4 + 2, inputs[1], true);
+      header.setUint32(at + 840 + i * 4, highPass, true);
+      header.setUint32(at + 1352 + i * 4, lowPass, true);
+    });
   });
 
   const nSamples = channels[0]?.values.length ?? 0;
@@ -239,6 +275,162 @@ describe('loadEegTrc — header', () => {
 
   it('rejects a recording with cuts (TRONCA) — sample / fs is no longer the real time after a cut', async () => {
     await expect(loadEegTrc(twoChannels({ cuts: [[2, 10]] }))).rejects.toThrow(/^TRC: .*cut/i);
+  });
+});
+
+// Montages stored in the file (MONTAGE zone), as the montage dropdown's rows. The recorded
+// electrodes are Fp1, Fp2 and F4 (LABCOD 1, 2, 4); G2 (0, the recording reference) and F3 (3)
+// are only in LABCOD. rateMin 512 Hz puts Nyquist at 256 Hz.
+describe('loadEegTrc — montages', () => {
+  const G2 = 0;
+  const [FP1, FP2, F3, F4] = [1, 2, 3, 4];
+  const withMontages = (montages, overrides = {}) =>
+    makeTrc({
+      channels: [
+        { label: 'Fp1', values: [1] },
+        { label: 'Fp2', values: [1] },
+        { label: 'F4', values: [1] },
+      ],
+      order: [FP1, FP2, F4],
+      extraElectrodes: [
+        { index: G2, label: 'G2' },
+        { index: F3, label: 'F3' },
+      ],
+      rateMin: 512,
+      montages,
+      ...overrides,
+    });
+  // a row without filters, as the montage dropdown expects it
+  const row = (channel, reference = null) => ({
+    channel,
+    reference,
+    color: null,
+    highPass: null,
+    lowPass: null,
+    notch: null,
+  });
+
+  it('returns no montages when the header stores none', async () => {
+    const { montages } = await loadEegTrc(twoChannels());
+    expect(montages).toEqual([]);
+  });
+
+  it('reads a montage: its description as name, each input pair as a row (second input − first input)', async () => {
+    const file = withMontages([
+      {
+        description: 'Bipolar',
+        lines: [{ inputs: [F4, FP2] }, { inputs: [FP2, FP1] }],
+      },
+    ]);
+    const { montages } = await loadEegTrc(file);
+    expect(montages).toEqual([
+      { name: 'Bipolar', rows: [row('Fp2', 'F4'), row('Fp1', 'Fp2')], channelTypes: {} },
+    ]);
+  });
+
+  it('reads a trace with G2 (electrode 0) on either side as referential', async () => {
+    const file = withMontages([{ lines: [{ inputs: [G2, FP1] }, { inputs: [FP2, G2] }] }]);
+    const { montages } = await loadEegTrc(file);
+    expect(montages[0].rows).toEqual([row('Fp1'), row('Fp2')]);
+  });
+
+  it('names electrodes by their LABCOD label, also those that are not recorded', async () => {
+    const file = withMontages([{ lines: [{ inputs: [G2, F3] }] }]);
+    const { montages } = await loadEegTrc(file);
+    expect(montages[0].rows).toEqual([row('F3')]);
+  });
+
+  it("skips traces without inputs: both G2, or an unused electrode slot ('.....')", async () => {
+    // electrode 5 holds Micromed's placeholder label for an unused input
+    const file = withMontages(
+      [{ lines: [{ inputs: [G2, G2] }, { inputs: [G2, 5] }, { inputs: [G2, FP1] }] }],
+      {
+        extraElectrodes: [
+          { index: G2, label: 'G2' },
+          { index: 5, label: '.....' },
+        ],
+      }
+    );
+    const { montages } = await loadEegTrc(file);
+    expect(montages[0].rows).toEqual([row('Fp1')]);
+  });
+
+  it('reads all traces of a montage with more than 64 (the input pairs fill 512 bytes)', async () => {
+    const lines = [
+      ...Array.from({ length: 64 }, () => ({ inputs: [G2, FP1] })),
+      { inputs: [G2, F4] },
+    ];
+    const { montages } = await loadEegTrc(withMontages([{ lines }]));
+    expect(montages[0].rows).toHaveLength(65);
+    expect(montages[0].rows[64]).toEqual(row('F4'));
+  });
+
+  it('converts filters to Hz (high-pass in mHz, low-pass in Hz × 100), 0 meaning off', async () => {
+    const file = withMontages([
+      {
+        lines: [
+          { inputs: [G2, FP1], highPass: 530, lowPass: 7000 }, // 0.53 Hz, 70 Hz
+          { inputs: [G2, FP2], highPass: 0, lowPass: 0 }, // both off
+        ],
+      },
+    ]);
+    const { montages } = await loadEegTrc(file);
+    expect(montages[0].rows).toEqual([{ ...row('Fp1'), highPass: 0.53, lowPass: 70 }, row('Fp2')]);
+  });
+
+  it('drops a filter at or above Nyquist — it would have no effect (and be unstable)', async () => {
+    // Nyquist is 256 Hz: a 300 Hz low-pass and a 256 Hz high-pass are dropped
+    const file = withMontages([
+      { lines: [{ inputs: [G2, FP1], highPass: 256000, lowPass: 30000 }] },
+    ]);
+    const { montages } = await loadEegTrc(file);
+    expect(montages[0].rows).toEqual([row('Fp1')]);
+  });
+
+  it("names a montage without a description 'Montage <number>'", async () => {
+    const file = withMontages([
+      { description: 'First', lines: [{ inputs: [G2, FP1] }] },
+      { lines: [{ inputs: [G2, FP2] }] },
+    ]);
+    const { montages } = await loadEegTrc(file);
+    expect(montages.map((m) => m.name)).toEqual(['First', 'Montage 2']);
+  });
+
+  it('skips montages without traces, and exact copies of an earlier montage', async () => {
+    const file = withMontages([
+      { description: 'Default', lines: [{ inputs: [G2, FP1] }] },
+      { description: 'Empty', lines: [] },
+      { description: 'Default', lines: [{ inputs: [G2, FP1] }] },
+      { description: 'Default', lines: [{ inputs: [G2, FP2] }] }, // same name, other traces: kept
+    ]);
+    const { montages } = await loadEegTrc(file);
+    expect(montages.map((m) => m.rows)).toEqual([[row('Fp1')], [row('Fp2')]]);
+  });
+
+  it("reads only as many montages as the header's count says", async () => {
+    const file = withMontages(
+      [
+        { description: 'Stored', lines: [{ inputs: [G2, FP1] }] },
+        { description: 'Leftover', lines: [{ inputs: [G2, FP2] }] },
+      ],
+      { montageCount: 1 }
+    );
+    const { montages } = await loadEegTrc(file);
+    expect(montages.map((m) => m.name)).toEqual(['Stored']);
+  });
+
+  it('still loads the recording when the montage zone is broken, without montages', async () => {
+    // a count higher than the zone holds
+    const tooMany = withMontages([{ lines: [{ inputs: [G2, FP1] }] }], { montageCount: 3 });
+    expect((await loadEegTrc(tooMany)).montages).toHaveLength(1);
+
+    // a zone that lies outside the file: MONTAGE is zone 7, its position at byte 176 + 7 × 16 + 8
+    const file = withMontages([{ lines: [{ inputs: [G2, FP1] }] }]);
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    new DataView(bytes.buffer).setUint32(176 + 7 * 16 + 8, bytes.length + 1, true);
+    const { channelNames, montages } = await loadEegTrc(new File([bytes], 'test.trc'));
+    expect(channelNames).toEqual(['Fp1', 'Fp2', 'F4']);
+    expect(montages).toEqual([]);
   });
 });
 
