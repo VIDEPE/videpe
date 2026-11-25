@@ -48,6 +48,7 @@ High-performance multichannel viewer built on [uPlot](https://github.com/leeoniy
   - Build referenced or bipolar montage rows with custom per-row colors, reorder and sort them, and the waveform view switches to showing exactly those rows.
   - Per-row filter overrides — a row's own high-pass, low-pass or notch wins over the global filter of its channel type (e.g. for an ECG channel); empty fields show the global value greyed out.
   - Import montage files in AnyWave (XML) or Cartool (plain-text) format — auto-detected from file content, loaded in the editor or by dropping them on the EEG panel — and export back out as AnyWave XML, with each row's effective filters (its own or the global ones) included, and global filters saved this way load back as global filters.
+  - Montages saved in a Micromed TRC recording are listed under "From recording" in the montage dropdown, ready to pick (none is applied on load).
 
 - EEG topography — a resizable panel showing a 3D voltage map at the selected time point using [NiiVue](https://niivue.com/) mesh rendering
   - Automatically selects the best-matching bundled electrode-position template; load custom positions via `.elc` or `*_electrodes.tsv` (BIDS specifications) file

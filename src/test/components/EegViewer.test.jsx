@@ -2966,6 +2966,87 @@ describe('EegViewer — dropped montage files', () => {
 // A loaded montage's filters that are shared by every row of a channel type become that type's
 // global filters (see extractGlobalFilters). Cutoffs stay below the test recording's Nyquist
 // (fs = 1 → 0.5 Hz), so the filtering they switch on stays stable.
+// Montages saved in the recording itself (TRC files, see loadEegTrc) arrive on the provider —
+// in the file's own spelling, written in lowercase here to check they're converted.
+describe("EegViewer — the recording's own montages", () => {
+  const row = (channel, reference = null) => ({
+    channel,
+    reference,
+    color: null,
+    highPass: null,
+    lowPass: null,
+    notch: null,
+  });
+  const RECORDING_MONTAGES = [
+    { name: 'Bipolar', rows: [row('eeg1'), row('eeg2', 'eeg1')], channelTypes: {} },
+    { name: 'Only EEG3', rows: [row('eeg3')], channelTypes: {} },
+  ];
+  const makeTrcProvider = () => ({ ...makeProvider(), montages: RECORDING_MONTAGES });
+
+  // a montage file dropped with the recording (see useEegFileIntake): EEG3 - EEG1
+  const DROPPED_MONTAGE = {
+    fileName: 'my_montage.mtg',
+    rows: [row('EEG3', 'EEG1')],
+    channelTypes: {},
+  };
+
+  const flush = () =>
+    act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+  it("applies none of the recording's montages on load — they may not fit the recording", async () => {
+    await renderViewer(makeTrcProvider());
+
+    expect(screen.getByTestId('montage-template-select')).toHaveValue('none');
+    channelNames.forEach((name) => expect(screen.getByText(name)).toBeTruthy());
+  });
+
+  it("lists all of the recording's montages in the dropdown, grouped under 'From recording'", async () => {
+    await renderViewer(makeTrcProvider());
+
+    const group = screen.getByRole('group', { name: 'From recording' });
+    const values = Array.from(group.querySelectorAll('option')).map((o) => o.value);
+    expect(values).toEqual(['recording-montage-0', 'recording-montage-1']);
+  });
+
+  it("applies another of the recording's montages picked in the dropdown", async () => {
+    await renderViewer(makeTrcProvider());
+
+    await userEvent.selectOptions(
+      screen.getByTestId('montage-template-select'),
+      'recording-montage-1'
+    );
+
+    expect(screen.getByText('EEG3')).toBeTruthy();
+    expect(screen.queryByText('EEG1')).toBeNull();
+    expect(screen.getByTestId('montage-template-select')).toHaveValue('recording-montage-1');
+  });
+
+  it("applies a montage file dropped with the recording, and keeps the recording's own in the dropdown", async () => {
+    const provider = makeTrcProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        droppedMontage={DROPPED_MONTAGE}
+      />
+    );
+    await flush();
+
+    expect(screen.getByText('EEG3 - EEG1')).toBeTruthy();
+    expect(screen.queryByText('EEG2')).toBeNull();
+    expect(screen.getByRole('group', { name: 'From recording' })).toBeTruthy();
+  });
+
+  it("shows no 'From recording' group for a recording without montages", async () => {
+    await renderViewer();
+
+    expect(screen.queryByRole('group', { name: 'From recording' })).toBeNull();
+  });
+});
+
 describe('EegViewer — global filters from a loaded montage', () => {
   // EEG1 and EEG2 (both EEG) share high-pass 0.1 and low-pass 0.4; neither has a notch
   const FILTERS_MTG_TEXT = `<!DOCTYPE AnyWaveMontage>

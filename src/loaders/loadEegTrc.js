@@ -23,6 +23,7 @@ import { createFrameBudget } from '@/utils/frameBudget';
 // - 144: uint16 multiplexer — bytes per sample frame (nChannels × bytesPerSample)
 // - 146: uint16 rateMin — base sampling rate (Hz)
 // - 148: uint16 bytesPerSample — 1, 2 or 4
+// - 152: uint16 nMontages — how many montages the MONTAGE zone holds (0 to 30)
 // - 175: uint8  headerType — must be 4 (older types 2 and 3 are not supported)
 // - 176: zone table — 15 entries of 16 bytes: name (8 chars), position (uint32), length (uint32)
 //        in this order: ORDER, LABCOD, NOTE, FLAGS, TRONCA, IMPED_B, IMPED_E, MONTAGE,
@@ -42,6 +43,18 @@ import { createFrameBudget } from '@/utils/frameBudget';
 // - NOTE:    uint32 sample + 40 chars text, per note
 // - TRIGGER: uint32 sample + uint16 code, per trigger
 // - EVENT A / EVENT B: uint32 label, start sample, stop sample, per event
+// - MONTAGE: nMontages × 4096-byte records, one per montage saved in Micromed's software
+//            +0    uint16 number of traces (max 128)
+//            +264  description (64 chars) — the montage's name
+//            +328  128 × 2 uint16 inputs: per trace, the LABCOD indices of its two inputs, as pairs
+//                  [reference, channel] — electrode 0 (G2, the recording reference) means a
+//                  referential trace, on either side of the pair
+//            +840  128 × uint32 high-pass per trace, in mHz (0 = off)
+//            +1352 128 × uint32 low-pass per trace, in Hz × 100 (0 = off)
+//            The notch (an on/off flag at +6, without a frequency), colours, display
+//            sensitivities and the rest of the record are not read.
+//            Readers like wonambi split the inputs into two separate 128-entry arrays; real files
+//            (e.g. a "Longitudinal" montage decoding to Fp2-F4, F4-C4, C4-P4, ...) show they're pairs.
 //
 // Things that differ from BrainVision and EDF
 // 1. The header is binary, not text: fields sit at fixed byte offsets and are read with a DataView.
@@ -80,13 +93,15 @@ const ZONE_NAMES = [
   'TRIGGER',
 ];
 
-// Fixed header fields from byte 138: [fieldName, width in bytes, fieldType], in file order (12 bytes in total)
+// Fixed header fields from byte 138: [fieldName, width in bytes, fieldType], in file order (16 bytes in total)
 const headerFields = [
   ['dataStartOffset', 4, 'uint32'], // byte where the samples begin
   ['nChannels', 2, 'uint16'],
   ['multiplexer', 2, 'uint16'], // bytes per sample frame (nChannels × bytesPerSample)
   ['rateMin', 2, 'uint16'], // base sampling rate (Hz)
   ['bytesPerSample', 2, 'uint16'], // 1, 2 or 4
+  ['compression', 2, 'skip'], // not used
+  ['nMontages', 2, 'uint16'], // montages in the MONTAGE zone
 ];
 
 // Each zone table entry: [fieldName, width in bytes, fieldType], in file order (16 bytes in total)
@@ -178,8 +193,8 @@ async function parseTrcHeader(file, start, end) {
 
   // fixed header fields: all unsigned numbers, so readNumber picks the getter from the width
   let iByte = 138;
-  for (const [fieldName, fieldLength] of headerFields) {
-    header[fieldName] = readNumber(view, iByte, fieldLength);
+  for (const [fieldName, fieldLength, fieldType] of headerFields) {
+    if (fieldType !== 'skip') header[fieldName] = readNumber(view, iByte, fieldLength);
     iByte += fieldLength;
   }
 
@@ -226,6 +241,122 @@ function parseTrcElectrode(labcod, electrodeIndex) {
     iByte += fieldLength;
   }
   return electrode;
+}
+
+// ─── Montages ─────────────────────────────────────────────────────────────────
+
+const MONTAGE_BYTES = 4096; // byte length of each montage record in the MONTAGE zone
+const MAX_MONTAGE_TRACES = 128; // each record has room for 128 traces
+
+// Byte offsets inside a montage record (see the MONTAGE zone in the layout above)
+const MONTAGE_OFFSETS = {
+  nTraces: 0,
+  description: 264,
+  inputs: 328, // per trace: 2 × uint16, [reference, channel]
+  highPass: 840, // per trace: uint32, mHz
+  lowPass: 1352, // per trace: uint32, Hz × 100
+};
+const DESCRIPTION_BYTES = 64;
+
+// Raw filter values per Hz: high-pass is stored in mHz, low-pass in Hz × 100
+const HIGH_PASS_UNITS_PER_HZ = 1000;
+const LOW_PASS_UNITS_PER_HZ = 100;
+
+// LABCOD label of the electrode on a montage input, or null for an input without an electrode:
+// electrode 0 (G2, the recording reference), Micromed's placeholder label for an unused input
+// ('.....'), or an index outside LABCOD
+function readInputLabel(labcod, electrodeIndex) {
+  if (electrodeIndex === 0 || (electrodeIndex + 1) * ELECTRODE_BYTES > labcod.byteLength) {
+    return null;
+  }
+  const label = readText(labcod, electrodeIndex * ELECTRODE_BYTES + 2, 6);
+  return /^\.*$/.test(label) ? null : label; // empty or only dots: unused
+}
+
+// A raw filter value in Hz, or null when it's off (0) or at/above Nyquist, where a filter has no
+// effect and its coefficients are unstable (see buildFilterSections)
+function toFilterHz(raw, unitsPerHz, fs) {
+  const hz = raw / unitsPerHz;
+  return raw > 0 && hz < fs / 2 ? hz : null;
+}
+
+/**
+ * Reads one montage record into the montage dropdown's shape (as parseMontageText returns it).
+ * Electrodes are named by their LABCOD label — like a montage file, the montage is matched to
+ * the recording by name, so it can also name electrodes that aren't recorded.
+ *
+ * @param {DataView} zone - the montages read from the MONTAGE zone.
+ * @param {number} offset - the record's first byte in `zone`.
+ * @param {DataView} labcod - the whole LABCOD zone.
+ * @param {number} fs - sampling frequency (Hz), to drop filters at or above Nyquist.
+ * @returns {{ name: string, rows: Array<{ channel: string, reference: string|null,
+ *   color: null, highPass: number|null, lowPass: number|null, notch: null }> }}
+ *   `name` is '' when the record has no description. Traces without an electrode are skipped.
+ */
+function parseTrcMontage(zone, offset, labcod, fs) {
+  const nTraces = Math.min(
+    readNumber(zone, offset + MONTAGE_OFFSETS.nTraces, 2),
+    MAX_MONTAGE_TRACES
+  );
+
+  // the description ends at its first null byte; what follows can be leftovers
+  const description = readText(zone, offset + MONTAGE_OFFSETS.description, DESCRIPTION_BYTES);
+  const name = description.split('\0')[0].trim();
+
+  const rows = [];
+  for (let i = 0; i < nTraces; i++) {
+    const inputsAt = offset + MONTAGE_OFFSETS.inputs + i * 4;
+    const first = readInputLabel(labcod, readNumber(zone, inputsAt, 2));
+    const second = readInputLabel(labcod, readNumber(zone, inputsAt + 2, 2));
+    // bipolar when both inputs have an electrode (second − first); otherwise referential, on
+    // whichever side the electrode is — Micromed uses both orders for referential traces
+    const channel = second ?? first;
+    if (!channel) continue; // no electrode on either input
+    const reference = first && second ? first : null;
+
+    const highPassRaw = readNumber(zone, offset + MONTAGE_OFFSETS.highPass + i * 4, 4);
+    const lowPassRaw = readNumber(zone, offset + MONTAGE_OFFSETS.lowPass + i * 4, 4);
+    rows.push({
+      channel,
+      reference,
+      color: null, // Micromed's colour codes index a palette that isn't documented
+      highPass: toFilterHz(highPassRaw, HIGH_PASS_UNITS_PER_HZ, fs),
+      lowPass: toFilterHz(lowPassRaw, LOW_PASS_UNITS_PER_HZ, fs),
+      notch: null, // the file only stores an on/off flag, not the frequency
+    });
+  }
+  return { name, rows };
+}
+
+/**
+ * Reads the montages stored in the MONTAGE zone. They are optional extras, so a zone that
+ * doesn't fit in the file gives no montages instead of rejecting the recording.
+ *
+ * @returns {Promise<Array<{ name: string, rows: Array, channelTypes: {} }>>} in file order,
+ *   without montages that have no traces or are exact copies of an earlier one. A montage
+ *   without a description is named 'Montage <its number in the file>'. `channelTypes` is
+ *   always empty (the montages carry no types), as parseMontageText returns for Cartool files.
+ */
+async function readTrcMontages(file, header, labcod, fs) {
+  const { position, length } = header.MONTAGE;
+  // the header's count, but never more records than the zone holds
+  const nMontages = Math.min(header.nMontages, Math.floor(length / MONTAGE_BYTES));
+  const end = position + nMontages * MONTAGE_BYTES;
+  if (nMontages === 0 || end > file.size) return [];
+
+  const zone = await readAsDataView(file, position, end);
+  const montages = [];
+  const seen = new Set(); // name + rows of each montage kept, to skip exact copies
+  for (let m = 0; m < nMontages; m++) {
+    const { name, rows } = parseTrcMontage(zone, m * MONTAGE_BYTES, labcod, fs);
+    if (rows.length === 0) continue;
+    const montageName = name || `Montage ${m + 1}`;
+    const key = JSON.stringify([montageName, rows]);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    montages.push({ name: montageName, rows, channelTypes: {} });
+  }
+  return montages;
 }
 
 // ─── Samples: scaling and demuxing ────────────────────────────────────────────
@@ -302,7 +433,8 @@ async function demuxTrc(stored, scales, nChannels, nSamples, sampleOffset, fs, s
  *   fs: number,
  *   tMax: number,
  *   getChunk: (startTime: number, endTime: number, signal?: AbortSignal) =>
- *     Promise<{ timestamps: Float32Array, channels: Float32Array[] }>
+ *     Promise<{ timestamps: Float32Array, channels: Float32Array[] }>,
+ *   montages: Array<{ name: string, rows: Array, channelTypes: {} }>
  * }>} the provider:
  *   - `channelNames`: channel labels in data order (the positive input of each electrode).
  *   - `fs`: sampling frequency in Hz.
@@ -312,6 +444,9 @@ async function demuxTrc(stored, scales, nChannels, nSamples, sampleOffset, fs, s
  *     for non-voltage signals), and `timestamps`, absolute times in seconds (so `timestamps[0]`
  *     is the chunk's real start time). The optional `signal` (from an AbortController) cancels
  *     the request: once aborted, getChunk stops at its next check and rejects with an AbortError.
+ *   - `montages`: the montages saved in the file (see readTrcMontages), in the shape
+ *     parseMontageText returns, in the file's channel spelling; empty when there are none.
+ *     Only TRC providers have this field.
  * @throws {Error} when the file isn't a valid header type 4 TRC (too small, or zones or data
  *   outside the file), holds no channels, has an unsupported number of bytes per sample, has
  *   cuts (TRONCA), or its channels have different sampling rates.
@@ -384,6 +519,9 @@ export async function loadEegTrc(file) {
   const [rateCoefficient] = rates; // the single rate left after the check above
   const fs = header.rateMin * rateCoefficient; // sampling frequency (Hz)
 
+  // MONTAGE: the montages saved with the recording, for the montage dropdown
+  const montages = await readTrcMontages(file, header, labcod, fs);
+
   const channelNames = electrodes.map((elec) => elec.label);
   // gain and offset per channel, to convert stored integers to µV
   // computed once per file, not per chunk
@@ -436,5 +574,5 @@ export async function loadEegTrc(file) {
     );
   };
 
-  return { channelNames, fs, tMax, getChunk };
+  return { channelNames, fs, tMax, getChunk, montages };
 }

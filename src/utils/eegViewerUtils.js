@@ -259,6 +259,27 @@ export function remapMontageToRecording({ rows, channelTypes }, channelNames, ch
 }
 
 /**
+ * Turns the montages saved in a recording (provider.montages, only TRC files have them, see
+ * loadEegTrc) into montage dropdown entries, like useMontageTemplates does for the bundled
+ * ones: in the recording's spelling, and only those with at least one row that can be drawn.
+ * Unlike the bundled templates they're also offered for SEEG: they were made for this recording.
+ *
+ * @param {Array<{name: string, rows: Array, channelTypes: Object}>|undefined} montages
+ * @param {string[]} channelNames - the recording's channel names.
+ * @returns {Array<{id: string, name: string, rows: Array, channelTypes: Object}>} `id` is
+ *   'recording-montage-<position in montages>', so it doesn't change when others are left out.
+ */
+export function buildRecordingMontageTemplates(montages = [], channelNames) {
+  return montages
+    .map((montage, i) => ({
+      id: `recording-montage-${i}`,
+      name: montage.name,
+      ...remapMontageToRecording(montage, channelNames),
+    }))
+    .filter(({ rows }) => rows.some((row) => isMontageRowDrawable(row, channelNames)));
+}
+
+/**
  * Builds the rows to render in the EEG channel-plot area, resolving channel/reference
  * indices for deriveMontageRowSamples. Drops rows that are bad, or (only reachable via a
  * loaded montage file) name a channel not in channelNames — indexOf would return -1 there,
