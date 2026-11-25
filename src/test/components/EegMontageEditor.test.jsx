@@ -783,28 +783,40 @@ describe('EegMontageEditor', () => {
       ]);
     });
 
-    it("tints (not fully saturates) a montage row's background with its selected color", async () => {
+    // The row background colour is kept for status (bad/missing tints), so a muted colour tint
+    // can't be mistaken for one — the row's colour is a stripe on its left edge in the trace's
+    // own, full colour instead
+    it("shows a montage row's selected color as a full-color stripe on its left edge, not a background tint", async () => {
       render(<EegMontageEditor {...defaultProps} />);
       await userEvent.selectOptions(screen.getByTestId('color-FP1'), 'red');
-      const background = screen.getByTestId('reference-FP1').closest('div').style.backgroundColor;
-      // isDarkMode: false in this file's mock → the 20% (light-mode) tint strength
-      expect(background).toContain('color-mix');
-      expect(background).toContain('red');
-      expect(background).toContain('40%');
-    });
 
-    it('leaves a default-colored (unset) row background untouched', () => {
-      render(<EegMontageEditor {...defaultProps} />);
+      expect(screen.getByTestId('color-stripe-FP1').style.backgroundColor).toBe('red');
       expect(screen.getByTestId('reference-FP1').closest('div').style.backgroundColor).toBe('');
     });
 
-    it('lets the bad-row bg-alert highlight override a selected color', async () => {
+    it('shows no stripe for a default-colored (unset) row', () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      expect(screen.queryByTestId('color-stripe-FP1')).toBeNull();
+      expect(screen.getByTestId('reference-FP1').closest('div').style.backgroundColor).toBe('');
+    });
+
+    it('shows a bad row both ways: the bg-alert tint for its status, the stripe for its color', async () => {
       // FP2 is bad per CHANNEL_SETTINGS
       render(<EegMontageEditor {...defaultProps} />);
       await userEvent.selectOptions(screen.getByTestId('color-FP2'), 'red');
-      const row = screen.getByTestId('reference-FP2').closest('div');
-      expect(row.style.backgroundColor).toBe('');
-      expect(row.className).toContain('bg-alert');
+
+      expect(screen.getByTestId('reference-FP2').closest('div').className).toContain('bg-alert');
+      expect(screen.getByTestId('color-stripe-FP2').style.backgroundColor).toBe('red');
+    });
+
+    it('marks a selected row with an outline, which is drawn over the stripe (a ring would be under it)', async () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      await userEvent.selectOptions(screen.getByTestId('color-FP1'), 'red');
+      await userEvent.click(screen.getByTestId('montage-channel-FP1'));
+
+      const row = screen.getByTestId('montage-channel-FP1').closest('div');
+      expect(row.className).toContain('outline-primary');
+      expect(row.className).not.toContain('ring-primary');
     });
   });
 
@@ -1625,18 +1637,21 @@ describe('EegMontageEditor', () => {
       );
       // the other options keep their own colour, instead of inheriting the select's red
       // (FP3: FP2 is bad in CHANNEL_SETTINGS, so it's text-alert)
-      const normalOption = Array.from(referenceSelect.options).find((o) => o.value === 'FP3');
-      expect(normalOption.className).toContain('text-foreground');
-      expect(normalOption.className).not.toContain('text-error');
+      // and so do n/a, Average and Median
+      for (const value of ['FP3', '', 'average', 'median']) {
+        const option = Array.from(referenceSelect.options).find((o) => o.value === value);
+        expect(option.className).toContain('text-foreground');
+        expect(option.className).not.toContain('text-error');
+      }
     });
 
-    it("shows the red tint instead of the row's own colour while its reference is missing", () => {
+    it("keeps the row's colour stripe next to the red tint while its reference is missing", () => {
       const montageChannels = [{ id: 'row-1', channel: 'FP1', reference: 'GHOST', color: 'blue' }];
       render(<EegMontageEditor {...defaultProps} montageChannels={montageChannels} />);
 
-      // an inline background would win over the bg-error class
       const row = screen.getByTestId('montage-channel-row-1').closest('div');
-      expect(row.style.backgroundColor).toBe('');
+      expect(row.className).toContain('bg-error/');
+      expect(screen.getByTestId('color-stripe-row-1').style.backgroundColor).toBe('blue');
     });
 
     it('leaves the reference select and row untinted when the reference is present', () => {

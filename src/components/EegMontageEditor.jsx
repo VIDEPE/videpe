@@ -740,17 +740,17 @@ export function EegMontageEditor({
   // the bad one.
   const referenceOptions = useMemo(
     () => [
-      <option key="none" value="">
+      // every option sets its own colour, so a select tinted red for a missing reference
+      // (see the per-row Reference select) doesn't pass that red on to them
+      <option key="none" value="" className="text-foreground">
         — n/a —
       </option>,
-      <option key="average" value="average">
+      <option key="average" value="average" className="text-foreground">
         Average
       </option>,
-      <option key="median" value="median">
+      <option key="median" value="median" className="text-foreground">
         Median
       </option>,
-      // each channel option sets its own colour, so a select tinted red for a missing
-      // reference (see the per-row Reference select) doesn't pass that red on to them
       ...channelNames.map((refName) => (
         <option
           key={refName}
@@ -881,7 +881,7 @@ export function EegMontageEditor({
                     }}
                     className={cn(
                       'relative flex items-center gap-2 px-1 py-0.5',
-                      settings.bad ? (isDarkMode ? 'bg-alert/10' : 'bg-alert/20') : '',
+                      settings.bad ? (isDarkMode ? 'bg-alert/20' : 'bg-alert/30') : '',
                       selectedChannels.has(name) && (isDarkMode ? 'bg-primary/15' : 'bg-primary/20')
                     )}
                   >
@@ -1361,30 +1361,35 @@ export function EegMontageEditor({
                     style={{
                       overflow: 'visible',
                       borderBottom: `1px solid ${channelDividerColor}`,
-                      // The row's selected color tints its background, but gives way to the status
-                      // tint (applied via className, so the inline style is left out then, as it
-                      // always wins)
-                      // color-mix keeps this a subtle tint rather than the fully-saturated color used in uPlot
-                      ...(!statusTint && row.color
-                        ? {
-                            backgroundColor: `color-mix(in srgb, ${row.color} ${isDarkMode ? 30 : 40}%, transparent)`,
-                          }
-                        : {}),
                     }}
                     className={cn(
                       'relative flex items-center gap-2 pl-3 pr-1 py-0.5 cursor-pointer select-none',
-                      // full class names (not built from statusTint) so Tailwind finds them
+                      // The background is only for status — the row's own colour is the stripe
+                      // below. Full class names (not built from statusTint) so Tailwind finds them
                       statusTint === 'bg-error' && (isDarkMode ? 'bg-error/20' : 'bg-error/30'),
                       statusTint === 'bg-alert' && (isDarkMode ? 'bg-alert/20' : 'bg-alert/30'),
                       isChannelMissing && 'opacity-50',
-                      // A ring (not a background) marks the row selected for Move Up/Down —
-                      // background is already spoken for by the bad/color tints above, and an
-                      // inline style (row.color) would win over a background className anyway.
-                      selectedMontageRows.has(row.id) && 'ring-2 ring-inset ring-primary'
+                      // An outline (not a background) marks the row selected for Move Up/Down —
+                      // background is already spoken for by the status tints above. An outline,
+                      // not a ring: a ring is an inset box-shadow, which is drawn under the
+                      // row's children, so the colour stripe would cover its left edge.
+                      selectedMontageRows.has(row.id) &&
+                        'outline-2 -outline-offset-2 outline-primary'
                     )}
                     title="Click row to select for Move Up/Down"
                     onClick={(e) => handleMontageRowClick(e, row.id)}
                   >
+                    {/* Row colour — a stripe on the left edge in the trace's own, full colour.
+                        Absolute, inside the row's pl-3 padding, so it takes no space: rows with
+                        and without one line up. None for the default colour, which follows the
+                        theme. */}
+                    {row.color && (
+                      <span
+                        className="absolute left-0 inset-y-0 w-[5px]"
+                        style={{ backgroundColor: row.color }}
+                        data-testid={`color-stripe-${row.id}`}
+                      />
+                    )}
                     {/* Channel name */}
                     <span
                       className={cn(
