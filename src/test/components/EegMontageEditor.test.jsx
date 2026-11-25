@@ -1554,11 +1554,23 @@ describe('EegMontageEditor', () => {
       render(<EegMontageEditor {...defaultProps} montageChannels={montageChannels} />);
 
       const name = screen.getByTestId('montage-channel-row-1');
-      expect(name.className).toContain('text-red-500');
+      expect(name.className).toContain('text-error');
       expect(name.title).toBe('Channel not found in this recording');
       expect(name.closest('div').className).toContain('opacity-50');
+      // tinted like every row that can't be drawn: error (red) for missing
+      expect(name.closest('div').className).toContain('bg-error/');
       expect(screen.getByTestId('reference-row-1')).toBeDisabled();
       expect(screen.getByTestId('color-row-1')).toBeDisabled();
+    });
+
+    it('tints a row that is both bad and missing something as missing (the one to fix)', () => {
+      // FP2 is bad in CHANNEL_SETTINGS; GHOST isn't in the recording
+      const montageChannels = [{ id: 'row-1', channel: 'FP2', reference: 'GHOST', color: null }];
+      render(<EegMontageEditor {...defaultProps} montageChannels={montageChannels} />);
+
+      const row = screen.getByTestId('montage-channel-row-1').closest('div');
+      expect(row.className).toContain('bg-error/');
+      expect(row.className).not.toContain('bg-alert');
     });
 
     it('shows "—" for a missing channel\'s type instead of a misleading default', () => {
@@ -1587,22 +1599,55 @@ describe('EegMontageEditor', () => {
       render(<EegMontageEditor {...defaultProps} montageChannels={montageChannels} />);
 
       const name = screen.getByTestId('montage-channel-row-1');
-      expect(name.className).not.toContain('text-red-500');
+      expect(name.className).not.toContain('text-error');
       expect(name.closest('div').className).not.toContain('opacity-50');
 
       const referenceSelect = screen.getByTestId('reference-row-1');
       expect(referenceSelect).not.toBeDisabled();
       expect(referenceSelect).toHaveValue('GHOST');
-      // The <select> itself stays uncolored — only the injected "missing" <option> turns
-      // red, so the rest of the dropdown's channel names aren't tinted along with it.
-      expect(referenceSelect.className).not.toContain('text-red-500');
       expect(referenceSelect.title).toBe('Reference channel not found in this recording');
       const injectedOption = Array.from(referenceSelect.options).find((o) => o.value === 'GHOST');
       expect(injectedOption.textContent).toBe('GHOST (missing)');
-      expect(injectedOption.className).toContain('text-red-500');
-      const normalOption = Array.from(referenceSelect.options).find((o) => o.value === 'FP2');
-      expect(normalOption.className).not.toContain('text-red-500');
+      expect(injectedOption.className).toContain('text-error');
       expect(screen.getByTestId('color-row-1')).not.toBeDisabled();
+    });
+
+    it('makes a missing reference stand out without opening its dropdown: red row tint, red select', () => {
+      const montageChannels = [{ id: 'row-1', channel: 'FP1', reference: 'GHOST', color: null }];
+      render(<EegMontageEditor {...defaultProps} montageChannels={montageChannels} />);
+
+      const referenceSelect = screen.getByTestId('reference-row-1');
+      // a closed <select> shows its selected option in the select's own colour, not the option's
+      expect(referenceSelect.className).toContain('text-error');
+      expect(referenceSelect.className).toContain('border-error');
+      expect(screen.getByTestId('montage-channel-row-1').closest('div').className).toContain(
+        'bg-error/'
+      );
+      // the other options keep their own colour, instead of inheriting the select's red
+      // (FP3: FP2 is bad in CHANNEL_SETTINGS, so it's text-alert)
+      const normalOption = Array.from(referenceSelect.options).find((o) => o.value === 'FP3');
+      expect(normalOption.className).toContain('text-foreground');
+      expect(normalOption.className).not.toContain('text-error');
+    });
+
+    it("shows the red tint instead of the row's own colour while its reference is missing", () => {
+      const montageChannels = [{ id: 'row-1', channel: 'FP1', reference: 'GHOST', color: 'blue' }];
+      render(<EegMontageEditor {...defaultProps} montageChannels={montageChannels} />);
+
+      // an inline background would win over the bg-error class
+      const row = screen.getByTestId('montage-channel-row-1').closest('div');
+      expect(row.style.backgroundColor).toBe('');
+    });
+
+    it('leaves the reference select and row untinted when the reference is present', () => {
+      const montageChannels = [{ id: 'row-1', channel: 'FP1', reference: 'FP3', color: null }];
+      render(<EegMontageEditor {...defaultProps} montageChannels={montageChannels} />);
+
+      const referenceSelect = screen.getByTestId('reference-row-1');
+      expect(referenceSelect.className).not.toContain('error');
+      expect(screen.getByTestId('montage-channel-row-1').closest('div').className).not.toContain(
+        'bg-error'
+      );
     });
 
     it('shows a tooltip on a bad (not missing) channel name and reference too', () => {

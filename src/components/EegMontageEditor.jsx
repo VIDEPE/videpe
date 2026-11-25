@@ -749,11 +749,13 @@ export function EegMontageEditor({
       <option key="median" value="median">
         Median
       </option>,
+      // each channel option sets its own colour, so a select tinted red for a missing
+      // reference (see the per-row Reference select) doesn't pass that red on to them
       ...channelNames.map((refName) => (
         <option
           key={refName}
           value={refName}
-          className={draftChannelSettings[refName]?.bad ? 'text-alert' : undefined}
+          className={draftChannelSettings[refName]?.bad ? 'text-alert' : 'text-foreground'}
         >
           {refName}
         </option>
@@ -1348,16 +1350,22 @@ export function EegMontageEditor({
                 // or the global one — rows have no harmonics setting of their own
                 const notchHarmonicsApply =
                   typeFilters?.notchHarmonics === true && (row.notch ?? typeFilters?.notch) != null;
+                // One status tint for every row that can't be drawn: error (red) when something
+                // is missing — data to fix — over alert (orange) when it's bad — the user's own
+                // choice. Same strengths for both, so only the hue tells them apart.
+                const isRowMissing = isChannelMissing || isReferenceMissing;
+                const statusTint = isRowMissing ? 'bg-error' : isRowBad ? 'bg-alert' : null;
                 return (
                   <div
                     key={row.id}
                     style={{
                       overflow: 'visible',
                       borderBottom: `1px solid ${channelDividerColor}`,
-                      // The row's selected color tints its background, but is overwrited by bg-alert when
-                      // the channel is bad (applied via className, not inline style, which always wins)
+                      // The row's selected color tints its background, but gives way to the status
+                      // tint (applied via className, so the inline style is left out then, as it
+                      // always wins)
                       // color-mix keeps this a subtle tint rather than the fully-saturated color used in uPlot
-                      ...(!isRowBad && !isChannelMissing && row.color
+                      ...(!statusTint && row.color
                         ? {
                             backgroundColor: `color-mix(in srgb, ${row.color} ${isDarkMode ? 30 : 40}%, transparent)`,
                           }
@@ -1365,7 +1373,9 @@ export function EegMontageEditor({
                     }}
                     className={cn(
                       'relative flex items-center gap-2 pl-3 pr-1 py-0.5 cursor-pointer select-none',
-                      isRowBad && (isDarkMode ? 'bg-alert/20' : 'bg-alert/30'),
+                      // full class names (not built from statusTint) so Tailwind finds them
+                      statusTint === 'bg-error' && (isDarkMode ? 'bg-error/20' : 'bg-error/30'),
+                      statusTint === 'bg-alert' && (isDarkMode ? 'bg-alert/20' : 'bg-alert/30'),
                       isChannelMissing && 'opacity-50',
                       // A ring (not a background) marks the row selected for Move Up/Down —
                       // background is already spoken for by the bad/color tints above, and an
@@ -1381,7 +1391,7 @@ export function EegMontageEditor({
                         CHANNEL_NAME_COL_CLASS,
                         'truncate text-sm',
                         isChannelBad && 'text-alert',
-                        isChannelMissing && 'text-red-500'
+                        isChannelMissing && 'text-error'
                       )}
                       title={
                         isChannelMissing
@@ -1409,15 +1419,17 @@ export function EegMontageEditor({
                         When a channel is referenced that isn't in the current recording (only reachable
                         via a loaded montage file), gets its own injected option so it can display this 
                         this channel as missing (instead of falling back to blank "— n/a —"). a missing 
-                        reference alone is fixable by picking another one. 
-                        Bad/missing coloring lives on the individual <option> elements below (not
-                        this <select>'s own className) — a color class here would cascade onto
-                        every option in the dropdown instead of just the one that's actually bad
-                        or missing. */}
+                        reference alone is fixable by picking another one.
+                        A missing reference also colours the <select> itself red (border, ring and
+                        text): a closed select shows its selected option in its own colour, so the
+                        option's red alone is only seen once the dropdown is opened. The other
+                        options set their own colour (see referenceOptions), so the red doesn't
+                        cascade onto them. */}
                     <select
                       className={cn(
                         REF_COL_CLASS,
-                        'text-xs border border-border rounded bg-surface cursor-default'
+                        'text-xs border border-border rounded bg-surface cursor-default',
+                        isReferenceMissing && 'border-error ring-1 ring-error text-error'
                       )}
                       title={
                         isReferenceMissing
@@ -1432,7 +1444,7 @@ export function EegMontageEditor({
                       onChange={(e) => setDraftMontageRowReference(row.id, e.target.value)}
                     >
                       {isReferenceMissing && (
-                        <option value={row.reference} className="text-red-500">
+                        <option value={row.reference} className="text-error">
                           {row.reference} (missing)
                         </option>
                       )}

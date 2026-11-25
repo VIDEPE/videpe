@@ -10,6 +10,8 @@
   --c-primary: rgb(84, 127, 219); /* brand / accent color */
   --c-secondary: rgb(18, 74, 196); /* outlines */
   --c-alert: rgb(250, 111, 18); /* warning messages, nondestructive actions */
+  /* missing data that needs fixing, e.g. a montage channel not in the recording (red-700) */
+  --c-error: rgb(185, 28, 28);
   --c-shadow:
     rgba(0, 0, 0, 0.4) 0 6px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 8px -2px; /* box shadows */
 
@@ -40,6 +42,7 @@
   --c-primary: rgba(132, 204, 252, 1); /* brand / accent color */
   --c-secondary: rgb(16, 56, 199); /* outlines */
   --c-alert: rgb(250, 111, 18); /* warning messages, nondestructive actions */
+  --c-error: rgb(185, 28, 28); /* missing data that needs fixing (red-700) */
   --c-shadow:
     rgba(255, 255, 255, 0.4) 0 6px 15px -3px, rgba(255, 255, 255, 0.25) 0 4px 8px -2px; /* box shadows color x y blur spread*/
 }
@@ -54,6 +57,7 @@
   --color-primary: var(--c-primary);
   --color-secondary: var(--c-secondary);
   --color-alert: var(--c-alert);
+  --color-error: var(--c-error);
   --font-sans: system-ui, 'Segoe UI', Roboto, sans-serif;
   --font-mono: ui-monospace, Consolas, monospace;
 }
