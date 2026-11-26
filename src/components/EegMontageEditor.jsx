@@ -1708,24 +1708,30 @@ export function EegMontageEditor({
       </div>
 
       {/* Resize handles — hidden while maximized since the window already fills the screen.
-          Rendered last so they paint above the title/footer content and stay grabbable at the edges. */}
+          z-20 keeps them above the montage rows and the z-10 column headers at the edges. */}
       {!isMaximized &&
         RESIZE_DIRECTIONS.map((direction) => (
           <div
             key={direction}
             data-testid={`montage-resize-${direction}`}
-            className={`absolute ${resizePosition[direction]} ${resizeCursor[direction]}`}
+            className={`absolute z-20 ${resizePosition[direction]} ${resizeCursor[direction]}`}
             onMouseDown={(e) => handleResizeStart(e, direction)}
           />
         ))}
-      <SplitPane
-        leftLabel={<span className={PANEL_TITLE_CLASS}>Channel Selection</span>}
-        rightLabel={<span className={PANEL_TITLE_CLASS}>Montage Settings</span>}
-        onSwapChange={setIsPanesSwapped}
-        left={channelSelectionPane}
-        right={montageSelectionPane}
-        defaultSplitPercent={DEFAULT_SPLIT_PERCENT}
-      />
+      {/* px-1.5: empty strips as wide as the side handles, so they don't cover the panes' scrollbars */}
+      <div
+        data-testid="montage-editor-body"
+        className={`flex-1 min-h-0 flex flex-col ${isMaximized ? '' : 'px-1.5'}`}
+      >
+        <SplitPane
+          leftLabel={<span className={PANEL_TITLE_CLASS}>Channel Selection</span>}
+          rightLabel={<span className={PANEL_TITLE_CLASS}>Montage Settings</span>}
+          onSwapChange={setIsPanesSwapped}
+          left={channelSelectionPane}
+          right={montageSelectionPane}
+          defaultSplitPercent={DEFAULT_SPLIT_PERCENT}
+        />
+      </div>
 
       {/* Footer — Apply/OK commit the draft to EegViewer's live channelSettings; Cancel (and
           the title bar's red X, via onClose) discard it by simply closing without committing. */}

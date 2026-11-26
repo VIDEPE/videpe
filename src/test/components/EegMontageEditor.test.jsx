@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import toast from 'react-hot-toast';
 import { downloadTextFile } from '@/utils/fileDownload';
@@ -2053,6 +2053,31 @@ describe('EegMontageEditor', () => {
       const byValue = Object.fromEntries(options.map((option) => [option.value, option]));
 
       PRESET_COLORS.forEach((color) => expect(byValue[color].style.color).toBe(color));
+    });
+  });
+
+  // jsdom doesn't paint, so these check the classes that keep the edges grabbable
+  describe('window resize handles', () => {
+    // the montage rows are positioned and the column headers are z-10, so without a higher
+    // z-index they're drawn over the handles at the window's edges
+    it('draws the resize handles above the window content', () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'].forEach((direction) =>
+        expect(screen.getByTestId(`montage-resize-${direction}`).className).toContain('z-20')
+      );
+    });
+
+    // so the left and right handles don't cover the panes' content or scrollbars
+    it('keeps an empty strip along the left and right edges for the resize handles', () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      expect(screen.getByTestId('montage-editor-body').className).toContain('px-1.5');
+    });
+
+    it('drops the strips when maximized, where there are no resize handles', async () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      await userEvent.click(within(screen.getByTestId('montage-title-bar')).getByTitle('Maximize'));
+      expect(screen.queryByTestId('montage-resize-e')).not.toBeInTheDocument();
+      expect(screen.getByTestId('montage-editor-body').className).not.toContain('px-1.5');
     });
   });
 });
