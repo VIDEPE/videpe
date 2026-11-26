@@ -15,6 +15,8 @@ import { usePointerDrag } from './usePointerDrag';
  *   - `isDragging` (boolean) — true while a drag is in progress, so the handle can stay
  *     highlighted even when the pointer or finger moves off it. Only changes at the start and
  *     end of a drag, so it doesn't re-render on every move.
+ *   - `handleResetSize` (Function) — attach to the drag handle's onDoubleClick; resets the
+ *     row's height to minHeight
  */
 export function useRowResize(minHeight) {
   const rowRef = useRef();
@@ -22,7 +24,7 @@ export function useRowResize(minHeight) {
   const startResize = useCallback(
     ({ clientY: startY }) => {
       const row = rowRef.current;
-      if (!row) return null;
+      if (!row) return null; // null guard
       const startHeight = row.getBoundingClientRect().height;
       return {
         onMove: ({ clientY }) => {
@@ -34,6 +36,12 @@ export function useRowResize(minHeight) {
     [minHeight]
   );
 
+  const handleResetSize = useCallback(() => {
+    const row = rowRef.current;
+    if (!row) return null; // null guard
+    row.style.minHeight = `${minHeight}px`;
+  }, [minHeight]);
+
   const { handleDragStart: handleResizeStart, isDragging } = usePointerDrag(startResize);
-  return { rowRef, handleResizeStart, isDragging };
+  return { rowRef, handleResizeStart, isDragging, handleResetSize };
 }

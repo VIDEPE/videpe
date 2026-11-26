@@ -1771,6 +1771,18 @@ describe('eeg plot resize handle', () => {
 
     expect(row.style.minHeight).toBe('550px'); // 400 (starting height) + 150 (drag delta)
   });
+
+  it('eegviewer is reset to minHeight when double clicking the resize handle bar', async () => {
+    const row = await setup();
+    const handle = screen.getByTestId('eeg-plot-resize-handle');
+    // drag the handle to (to 700px (400 = 300))
+    fireEvent.mouseDown(handle, { clientY: 0 });
+    fireEvent.mouseMove(window, { clientY: 300 });
+    fireEvent.mouseUp(window);
+    // double-click the handle to reset it
+    fireEvent.doubleClick(handle);
+    expect(row.style.minHeight).toBe('350px');
+  });
 });
 
 describe('EegViewer — topography always uses the common-average reference', () => {

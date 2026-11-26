@@ -257,7 +257,12 @@ export const NiiViewer = ({
   // Tracks the canvas container's size and switches nv between AUTO/GRID multiplanar layout.
   const { canvasContainerRef } = useCanvasAutoLayout({ nvRef });
   // Drag-to-resize for the canvas row's min-height.
-  const { rowRef, handleResizeStart, isDragging: isRowResizing } = useRowResize(MIN_CANVAS_HEIGHT);
+  const {
+    rowRef,
+    handleResizeStart,
+    isDragging: isRowResizing,
+    handleResetSize,
+  } = useRowResize(MIN_CANVAS_HEIGHT);
   // Attaches the shared NiiVue instance to the canvas on mount, and clears it on unmount.
   const { canvasRef } = useSharedNiiVueInstance({
     nvRef,
@@ -769,13 +774,14 @@ export const NiiViewer = ({
 
       {/* Resize handle — drag down to grow canvas past flex size, drag up to shrink back.
           Once it reaches the row's natural flex size, further upward dragging has no effect,
-          since min-height never shrinks a flex item below what it'd render at anyway. See handleCanvasResizeStart*/}
+          since min-height never shrinks a flex item below what it'd render at anyway. See useRowResize*/}
       <div
         data-testid="nii-canvas-resize-handle"
         className={`h-1.5 pointer-coarse:h-3 w-full shrink-0 cursor-row-resize rounded-sm select-none touch-none ${isRowResizing ? 'bg-primary' : 'bg-border hover:bg-secondary'}`}
-        title="Drag to resize the canvas"
+        title="Drag to resize the canvas, double-click to reset"
         onMouseDown={handleResizeStart}
         onTouchStart={handleResizeStart}
+        onDoubleClick={handleResetSize}
       />
     </div>
   );
