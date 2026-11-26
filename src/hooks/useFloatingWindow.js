@@ -1,4 +1,5 @@
 import { useRef, useState, useCallback } from 'react';
+import { usePointerDrag } from './usePointerDrag';
 
 // The window's opening layout, fitted to the screen: shrunk to fit and moved fully on screen,
 // and maximized when the screen is smaller than the minimum size (e.g. a phone), so the title
@@ -30,7 +31,8 @@ function fitToScreen({ defaultPosition, defaultSize, minSize }) {
  * @returns {Object}
  *   - `isMaximized` (boolean) and `toggleMaximize` (Function) — for the title bar's maximize button.
  *   - `windowProps` ({className, style}) — spread onto the window's outer element.
- *   - `handleDragStart` (Function) — attach to the title bar's `onMouseDown`.
+ *   - `handleDragStart` (Function) — attach to the title bar's `onMouseDown` and `onTouchStart`
+ *     (and give it touch-none, so dragging it doesn't scroll the page).
  *   - `handleResizeStart` (Function) — `(event, direction)`, for WindowResizeHandles' `onResizeStart`.
  */
 export function useFloatingWindow({ defaultPosition, defaultSize, minSize }) {
@@ -44,69 +46,60 @@ export function useFloatingWindow({ defaultPosition, defaultSize, minSize }) {
 
   // Drag the floating window by its title bar. Position is clamped to the viewport so the
   // window (and its title bar drag handle) can never be dragged out of view and get stranded.
-  const handleDragStart = useCallback(
-    (e) => {
-      dragOffset.current = { x: e.clientX - position.x, y: e.clientY - position.y };
-      const onMove = (e) => {
-        const maxX = Math.max(0, window.innerWidth - size.width);
-        const maxY = Math.max(0, window.innerHeight - size.height);
-        setPosition({
-          x: Math.min(Math.max(e.clientX - dragOffset.current.x, 0), maxX),
-          y: Math.min(Math.max(e.clientY - dragOffset.current.y, 0), maxY),
-        });
+  // Mouse/touch handling is in usePointerDrag.
+  const startMove = useCallback(
+    ({ clientX, clientY }) => {
+      dragOffset.current = { x: clientX - position.x, y: clientY - position.y };
+      return {
+        onMove: ({ clientX, clientY }) => {
+          const maxX = Math.max(0, window.innerWidth - size.width);
+          const maxY = Math.max(0, window.innerHeight - size.height);
+          setPosition({
+            x: Math.min(Math.max(clientX - dragOffset.current.x, 0), maxX),
+            y: Math.min(Math.max(clientY - dragOffset.current.y, 0), maxY),
+          });
+        },
       };
-      const onUp = () => {
-        window.removeEventListener('mousemove', onMove);
-        window.removeEventListener('mouseup', onUp);
-      };
-      window.addEventListener('mousemove', onMove);
-      window.addEventListener('mouseup', onUp);
     },
     [position, size]
   );
+  const { handleDragStart } = usePointerDrag(startMove);
 
   // Resize the floating window by dragging an edge or corner. direction is a combination of
   // 'n'/'s'/'e'/'w' identifying which edges move; dragging n/w also shifts position so the
   // opposite edge stays anchored in place, matching how OS window resizing behaves.
-  const handleResizeStart = useCallback(
-    (e, direction) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const startX = e.clientX;
-      const startY = e.clientY;
+  const startResize = useCallback(
+    ({ clientX: startX, clientY: startY }, direction) => {
       const startWidth = size.width;
       const startHeight = size.height;
       const startPosition = position;
 
-      const onMove = (e) => {
-        const dx = e.clientX - startX;
-        const dy = e.clientY - startY;
-        const nextSize = { width: startWidth, height: startHeight };
-        const nextPosition = { ...startPosition };
+      return {
+        onMove: ({ clientX, clientY }) => {
+          const dx = clientX - startX;
+          const dy = clientY - startY;
+          const nextSize = { width: startWidth, height: startHeight };
+          const nextPosition = { ...startPosition };
 
-        if (direction.includes('e')) nextSize.width = Math.max(minSize.width, startWidth + dx);
-        if (direction.includes('s')) nextSize.height = Math.max(minSize.height, startHeight + dy);
-        if (direction.includes('w')) {
-          nextSize.width = Math.max(minSize.width, startWidth - dx);
-          nextPosition.x = startPosition.x + (startWidth - nextSize.width);
-        }
-        if (direction.includes('n')) {
-          nextSize.height = Math.max(minSize.height, startHeight - dy);
-          nextPosition.y = startPosition.y + (startHeight - nextSize.height);
-        }
+          if (direction.includes('e')) nextSize.width = Math.max(minSize.width, startWidth + dx);
+          if (direction.includes('s')) nextSize.height = Math.max(minSize.height, startHeight + dy);
+          if (direction.includes('w')) {
+            nextSize.width = Math.max(minSize.width, startWidth - dx);
+            nextPosition.x = startPosition.x + (startWidth - nextSize.width);
+          }
+          if (direction.includes('n')) {
+            nextSize.height = Math.max(minSize.height, startHeight - dy);
+            nextPosition.y = startPosition.y + (startHeight - nextSize.height);
+          }
 
-        setSize(nextSize);
-        setPosition(nextPosition);
+          setSize(nextSize);
+          setPosition(nextPosition);
+        },
       };
-      const onUp = () => {
-        window.removeEventListener('mousemove', onMove);
-        window.removeEventListener('mouseup', onUp);
-      };
-      window.addEventListener('mousemove', onMove);
-      window.addEventListener('mouseup', onUp);
     },
     [size, position, minSize.width, minSize.height]
   );
+  const { handleDragStart: handleResizeStart } = usePointerDrag(startResize);
 
   const windowProps = isMaximized
     ? { className: 'fixed inset-0 z-50 flex flex-col bg-surface', style: { boxShadow: 'none' } }

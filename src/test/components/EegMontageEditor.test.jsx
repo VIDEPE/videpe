@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, within, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import toast from 'react-hot-toast';
 import { downloadTextFile } from '@/utils/fileDownload';
@@ -2090,6 +2090,17 @@ describe('EegMontageEditor', () => {
       } finally {
         window.innerWidth = innerWidth;
       }
+    });
+
+    // the drag itself is tested in useFloatingWindow.test.jsx
+    it('moves when its title bar is dragged with a finger', () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      const titleBar = screen.getByTestId('montage-title-bar');
+      const startLeft = parseInt(titleBar.parentElement.style.left);
+      fireEvent.touchStart(titleBar, { touches: [{ clientX: 0, clientY: 0 }] });
+      fireEvent.touchMove(window, { touches: [{ clientX: -10, clientY: 0 }] });
+      fireEvent.touchEnd(window);
+      expect(parseInt(titleBar.parentElement.style.left)).toBe(startLeft - 10);
     });
 
     // the fitting itself is tested in useFloatingWindow.test.jsx

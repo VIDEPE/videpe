@@ -1590,8 +1590,9 @@ export function EegMontageEditor({
       {/* Title bar — drag handle; explicit bg-surface so NiiVue's black canvas doesn't bleed through */}
       <div
         data-testid="montage-title-bar"
-        className="flex items-center justify-between px-2 py-1 border-b border-border cursor-grab select-none shrink-0 bg-surface"
+        className="flex items-center justify-between px-2 py-1 border-b border-border cursor-grab select-none touch-none shrink-0 bg-surface"
         onMouseDown={handleDragStart}
+        onTouchStart={handleDragStart}
       >
         <span className="text-sm font-medium text-heading">
           {isModified ? 'Montage Editor *' : 'Montage Editor'}

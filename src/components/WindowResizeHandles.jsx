@@ -29,15 +29,25 @@ const RESIZE_POSITION = {
  * keeps them above the window's content at the edges, e.g. sticky z-10 column headers.
  *
  * @param {string} testIdPrefix - each handle's data-testid is `${testIdPrefix}-resize-${direction}`.
- * @param {Function} onResizeStart - `(event, direction)`, e.g. useFloatingWindow's handleResizeStart.
+ * @param {Function} onResizeStart - `(event, direction)` on mouse down or touch start, e.g.
+ *   useFloatingWindow's handleResizeStart.
  */
 export function WindowResizeHandles({ testIdPrefix, onResizeStart }) {
-  return RESIZE_DIRECTIONS.map((direction) => (
-    <div
-      key={direction}
-      data-testid={`${testIdPrefix}-resize-${direction}`}
-      className={`absolute z-20 ${RESIZE_POSITION[direction]} ${RESIZE_CURSOR[direction]}`}
-      onMouseDown={(e) => onResizeStart(e, direction)}
-    />
-  ));
+  return RESIZE_DIRECTIONS.map((direction) => {
+    // stopPropagation: a resize shouldn't also start whatever the window's parents do on a press
+    const startResize = (e) => {
+      e.stopPropagation();
+      onResizeStart(e, direction);
+    };
+    return (
+      <div
+        key={direction}
+        data-testid={`${testIdPrefix}-resize-${direction}`}
+        // touch-none: dragging a handle with a finger doesn't scroll the page
+        className={`absolute z-20 touch-none ${RESIZE_POSITION[direction]} ${RESIZE_CURSOR[direction]}`}
+        onMouseDown={startResize}
+        onTouchStart={startResize}
+      />
+    );
+  });
 }

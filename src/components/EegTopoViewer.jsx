@@ -257,8 +257,9 @@ export function EegTopoViewer({
       {/* Title bar — drag handle; explicit bg-surface so NiiVue's black canvas doesn't bleed through */}
       <div
         data-testid="topo-title-bar"
-        className="flex items-center justify-between px-2 border-b border-border cursor-grab select-none shrink-0 bg-surface"
+        className="flex items-center justify-between px-2 border-b border-border cursor-grab select-none touch-none shrink-0 bg-surface"
         onMouseDown={handleDragStart}
+        onTouchStart={handleDragStart}
       >
         {/* Underlined tabs, flush with the title bar's own bottom border — the active tab's
             indicator overlays it so the tab reads as attached to the panel below. */}

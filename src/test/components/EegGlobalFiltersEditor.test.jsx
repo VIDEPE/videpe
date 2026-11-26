@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, within, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { EegGlobalFiltersEditor } from '@/components/EegGlobalFiltersEditor';
 import { TYPE_LIST, DEFAULT_GLOBAL_FILTERS } from '@/utils/channelTypes';
@@ -521,6 +521,17 @@ describe('EegGlobalFiltersEditor', () => {
     it('keeps an empty strip along the left and right edges for the resize handles', () => {
       render(<EegGlobalFiltersEditor {...defaultProps} />);
       expect(screen.getByTestId('global-filters-body').className).toContain('px-1.5');
+    });
+
+    // the drag itself is tested in useFloatingWindow.test.jsx
+    it('moves when its title bar is dragged with a finger', () => {
+      render(<EegGlobalFiltersEditor {...defaultProps} />);
+      const titleBar = screen.getByTestId('global-filters-title-bar');
+      fireEvent.touchStart(titleBar, { touches: [{ clientX: 0, clientY: 0 }] });
+      fireEvent.touchMove(window, { touches: [{ clientX: 30, clientY: 20 }] });
+      fireEvent.touchEnd(window);
+      expect(titleBar.parentElement.style.left).toBe('130px'); // default x 100 + 30
+      expect(titleBar.parentElement.style.top).toBe('270px'); // default y 250 + 20
     });
 
     // the fitting itself is tested in useFloatingWindow.test.jsx

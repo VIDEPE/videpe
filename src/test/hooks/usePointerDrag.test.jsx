@@ -126,6 +126,18 @@ describe('usePointerDrag', () => {
     });
   });
 
+  // e.g. which edge of a window was grabbed, when several handles share one handler
+  it('passes extra arguments of the start handler on to onDragStart', () => {
+    const { onDragStart } = makeDrag();
+    function Edge() {
+      const { handleDragStart } = usePointerDrag(onDragStart);
+      return <div data-testid="edge" onMouseDown={(e) => handleDragStart(e, 'ne')} />;
+    }
+    render(<Edge />);
+    fireEvent.mouseDown(screen.getByTestId('edge'), { clientX: 1, clientY: 2 });
+    expect(onDragStart).toHaveBeenCalledWith({ clientX: 1, clientY: 2 }, 'ne');
+  });
+
   it('stops listening when the component unmounts mid-drag', () => {
     const { drag, onDragStart } = makeDrag();
     const { unmount } = render(<TestComponent onDragStart={onDragStart} />);
