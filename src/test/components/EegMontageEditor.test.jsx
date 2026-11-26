@@ -2073,6 +2073,25 @@ describe('EegMontageEditor', () => {
       expect(screen.getByTestId('montage-editor-body').className).toContain('px-1.5');
     });
 
+    // side by side, the channel list needs less room than the montage rows; stacked on a phone,
+    // both get half the height
+    it('splits the panes 27/73 side by side, and 50/50 when stacked on a phone', () => {
+      const channelPane = () =>
+        screen.getByRole('heading', { name: 'Channel Selection' }).parentElement.parentElement;
+      const { unmount } = render(<EegMontageEditor {...defaultProps} />);
+      expect(channelPane().style.width).toBe('27%');
+      unmount();
+
+      const { innerWidth } = window;
+      window.innerWidth = 390;
+      try {
+        render(<EegMontageEditor {...defaultProps} />);
+        expect(channelPane().style.flexGrow).toBe('50');
+      } finally {
+        window.innerWidth = innerWidth;
+      }
+    });
+
     // the fitting itself is tested in useFloatingWindow.test.jsx
     it('opens maximized on a phone, which is narrower than its minimum size', () => {
       const { innerWidth, innerHeight } = window;

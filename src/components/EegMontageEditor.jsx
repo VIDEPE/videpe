@@ -1,6 +1,6 @@
 import { useRef, useMemo, useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
-import { SplitPane } from '@/components/SplitPane';
+import { SplitPane, COLUMN_BREAKPOINT } from '@/components/SplitPane';
 import { useTheme } from '@/hooks/useTheme';
 import { TrafficLightButtons } from '@/components/TrafficLightButtons';
 import { WindowResizeHandles } from '@/components/WindowResizeHandles';
@@ -35,7 +35,10 @@ const WINDOW_LAYOUT = {
   defaultSize: { width: 1000, height: 600 },
   minSize: { width: 600, height: 450 },
 };
+// Side by side the channel list needs less room than the montage rows; stacked on a narrow
+// screen (see SplitPane) both get half the height
 const DEFAULT_SPLIT_PERCENT = 27;
+const STACKED_SPLIT_PERCENT = 50;
 
 // ─── EEG Montage settings ────────────────────────────────────────
 // Preset options offered by each row's Color <select>. A loaded montage file (AnyWave) can
@@ -629,6 +632,10 @@ export function EegMontageEditor({
   // Whether SplitPane's two panes are currently swapped — used to flip the montage pane's
   // own internal add-row-controls/row-list layout so the controls stay on the outer edge.
   const [isPanesSwapped, setIsPanesSwapped] = useState(false);
+  // Picked once on open, from the same breakpoint at which SplitPane stacks the panes
+  const [defaultSplitPercent] = useState(() =>
+    window.innerWidth < COLUMN_BREAKPOINT ? STACKED_SPLIT_PERCENT : DEFAULT_SPLIT_PERCENT
+  );
 
   // Channel name → matched electrode label, for the Pos checkbox's hover tooltip below.
   // A Map (not a Set of names) so each row's tooltip can name which electrode it matched,
@@ -1612,7 +1619,7 @@ export function EegMontageEditor({
           onSwapChange={setIsPanesSwapped}
           left={channelSelectionPane}
           right={montageSelectionPane}
-          defaultSplitPercent={DEFAULT_SPLIT_PERCENT}
+          defaultSplitPercent={defaultSplitPercent}
         />
       </div>
 
