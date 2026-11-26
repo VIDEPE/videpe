@@ -2071,6 +2071,8 @@ describe('EegMontageEditor', () => {
     it('keeps an empty strip along the left and right edges for the resize handles', () => {
       render(<EegMontageEditor {...defaultProps} />);
       expect(screen.getByTestId('montage-editor-body').className).toContain('px-1.5');
+      // as wide as the side handles on touchscreens too
+      expect(screen.getByTestId('montage-editor-body').className).toContain('pointer-coarse:px-3');
     });
 
     // side by side, the channel list needs less room than the montage rows; stacked on a phone,

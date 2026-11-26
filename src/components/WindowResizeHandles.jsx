@@ -12,16 +12,17 @@ const RESIZE_CURSOR = {
 };
 
 // Edge handles run the full length of their side; corner handles are small squares
-// layered on top so diagonal resizing takes priority right at the corners.
+// layered on top so diagonal resizing takes priority right at the corners. Twice as wide on
+// touchscreens (pointer-coarse), except along the top, where they'd cover the title bar's buttons.
 const RESIZE_POSITION = {
   n: 'inset-x-0 top-0 h-1.5',
-  s: 'inset-x-0 bottom-0 h-1.5',
-  e: 'inset-y-0 right-0 w-1.5',
-  w: 'inset-y-0 left-0 w-1.5',
+  s: 'inset-x-0 bottom-0 h-1.5 pointer-coarse:h-3',
+  e: 'inset-y-0 right-0 w-1.5 pointer-coarse:w-3',
+  w: 'inset-y-0 left-0 w-1.5 pointer-coarse:w-3',
   ne: 'top-0 right-0 w-2.5 h-2.5',
   nw: 'top-0 left-0 w-2.5 h-2.5',
-  se: 'bottom-0 right-0 w-2.5 h-2.5',
-  sw: 'bottom-0 left-0 w-2.5 h-2.5',
+  se: 'bottom-0 right-0 w-2.5 h-2.5 pointer-coarse:w-5 pointer-coarse:h-5',
+  sw: 'bottom-0 left-0 w-2.5 h-2.5 pointer-coarse:w-5 pointer-coarse:h-5',
 };
 
 /**

@@ -521,6 +521,8 @@ describe('EegGlobalFiltersEditor', () => {
     it('keeps an empty strip along the left and right edges for the resize handles', () => {
       render(<EegGlobalFiltersEditor {...defaultProps} />);
       expect(screen.getByTestId('global-filters-body').className).toContain('px-1.5');
+      // as wide as the side handles on touchscreens too
+      expect(screen.getByTestId('global-filters-body').className).toContain('pointer-coarse:px-3');
     });
 
     // the drag itself is tested in useFloatingWindow.test.jsx

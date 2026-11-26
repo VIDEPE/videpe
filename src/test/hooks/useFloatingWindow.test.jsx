@@ -223,6 +223,20 @@ describe('WindowResizeHandles', () => {
     expect(onResizeStart).toHaveBeenCalledWith(expect.anything(), 'sw');
   });
 
+  // the top edge and corners stay narrow, so they don't cover the title bar's buttons
+  it('makes the sides, bottom and bottom corners wider on touchscreens', () => {
+    render(<WindowResizeHandles testIdPrefix="win" onResizeStart={vi.fn()} />);
+    const classOf = (direction) => screen.getByTestId(`win-resize-${direction}`).className;
+    ['e', 'w'].forEach((direction) => expect(classOf(direction)).toContain('pointer-coarse:w-3'));
+    expect(classOf('s')).toContain('pointer-coarse:h-3');
+    ['se', 'sw'].forEach((direction) =>
+      expect(classOf(direction)).toContain('pointer-coarse:w-5 pointer-coarse:h-5')
+    );
+    ['n', 'ne', 'nw'].forEach((direction) =>
+      expect(classOf(direction)).not.toContain('pointer-coarse')
+    );
+  });
+
   it('also starts a resize on touch, without the page scrolling along', () => {
     const onResizeStart = vi.fn();
     render(<WindowResizeHandles testIdPrefix="win" onResizeStart={onResizeStart} />);

@@ -1612,7 +1612,7 @@ export function EegMontageEditor({
       {/* px-1.5: empty strips as wide as the side handles, so they don't cover the panes' scrollbars */}
       <div
         data-testid="montage-editor-body"
-        className={`flex-1 min-h-0 flex flex-col ${isMaximized ? '' : 'px-1.5'}`}
+        className={`flex-1 min-h-0 flex flex-col ${isMaximized ? '' : 'px-1.5 pointer-coarse:px-3'}`}
       >
         <SplitPane
           leftLabel={<span className={PANEL_TITLE_CLASS}>Channel Selection</span>}
