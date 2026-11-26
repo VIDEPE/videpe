@@ -1,6 +1,6 @@
 # VIDEPE
 
-![Version](https://img.shields.io/badge/version-0.25.0-blue)
+![Version](https://img.shields.io/badge/version-0.26.0-blue)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23312820.svg)](https://doi.org/10.5281/zenodo.23312820)
 
 **V**isualization & **I**ntegration of **D**ata for **E**pilepsy **P**resurgical **E**valuation
@@ -82,7 +82,7 @@ Hit **EEG Demo** to instantly load a synthetic scalp EEG recording with its elec
 ### Additional features:
 
 - **Drag & drop file loading** — drop files directly onto either viewer panel. VIDEPE detects the format automatically and guides you when multiple files are required.
-- **Side-by-side split view** — EEG and neuroimaging panels with a draggable divider. Each panel can be independently maximised, restored, or reset, and the two panels can be swapped without reloading any data.
+- **Side-by-side split view** — EEG and neuroimaging panels with a draggable divider. Each panel can be independently maximised, restored, or reset, and the two panels can be swapped without reloading any data. Double-click or double-tap a resize bar (the divider, or the EEG plot and imaging canvas row handles) to reset it.
 - **Cross-platform** — runs entirely in the browser, no installation or plugins required. Works on modern desktop and mobile browsers. Dark/light mode follows OS preference, with a manual toggle always available.
 - **Open source** — licensed under [AGPL-3.0](LICENSE). The source code is publicly available on [GitHub](https://github.com/VIDEPE/videpe). All derivative works must remain open source. Bug reports, feature requests, and pull requests are welcome.
 
