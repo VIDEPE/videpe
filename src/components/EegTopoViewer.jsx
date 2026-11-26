@@ -562,13 +562,13 @@ export function EegTopoViewer({
       )}
 
       {/* Resize handles — hidden while maximized since the window already fills the screen.
-          Rendered last so they paint above the title/footer content and stay grabbable at the edges. */}
+          z-20 keeps them above the content at the edges, as in the other floating windows. */}
       {!isMaximized &&
         RESIZE_DIRECTIONS.map((direction) => (
           <div
             key={direction}
             data-testid={`topo-resize-${direction}`}
-            className={`absolute ${resizePosition[direction]} ${resizeCursor[direction]}`}
+            className={`absolute z-20 ${resizePosition[direction]} ${resizeCursor[direction]}`}
             onMouseDown={(e) => handleResizeStart(e, direction)}
           />
         ))}

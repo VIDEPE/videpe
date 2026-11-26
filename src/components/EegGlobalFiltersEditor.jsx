@@ -294,9 +294,12 @@ export function EegGlobalFiltersEditor({
         />
       </div>
 
-      {/* Header + one row per channel type — bg-background fills the whole area between the
-          title bar and the footer, without a bg-surface border around it. */}
-      <div className="flex-1 min-h-0 flex flex-col bg-background">
+      {/* Header + one row per channel type. px-1.5: empty strips as wide as the side handles, so
+          they don't cover the rows or their scrollbar */}
+      <div
+        data-testid="global-filters-body"
+        className={`flex-1 min-h-0 flex flex-col ${isMaximized ? '' : 'px-1.5'}`}
+      >
         <div className="flex-1 min-h-0 overflow-auto bg-background">
           {/* Column headers — sticky so they stay visible if the window is made very short.
               pl-3/pr-3: the same padding on both sides, so the last column doesn't touch the edge */}
@@ -487,13 +490,13 @@ export function EegGlobalFiltersEditor({
       </div>
 
       {/* Resize handles — hidden while maximized since the window already fills the screen.
-          Rendered last so they paint above the title/footer content and stay grabbable at the edges. */}
+          z-20 keeps them above the content, including the z-10 column headers, at the edges. */}
       {!isMaximized &&
         RESIZE_DIRECTIONS.map((direction) => (
           <div
             key={direction}
             data-testid={`global-filters-resize-${direction}`}
-            className={`absolute ${resizePosition[direction]} ${resizeCursor[direction]}`}
+            className={`absolute z-20 ${resizePosition[direction]} ${resizeCursor[direction]}`}
             onMouseDown={(e) => handleResizeStart(e, direction)}
           />
         ))}
