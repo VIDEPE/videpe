@@ -112,6 +112,12 @@ export const SplitPane = ({
   const { handleDragStart: handleSplitDragStart, isDragging: isSplitResizing } =
     usePointerDrag(startSplitDrag);
 
+  // Back to the default split; the ref too, or a later still click restores the dragged split
+  const handleSplitReset = () => {
+    splitPercentRef.current = defaultSplitPercent;
+    setSplitPercent(defaultSplitPercent);
+  };
+
   const toggleMaximize = (side) => setMaximized((prev) => (prev === side ? null : side));
 
   // Compute the share of space each panel gets (0–100).
@@ -179,9 +185,10 @@ export const SplitPane = ({
               ? `h-1.5 pointer-coarse:h-4 w-full shrink-0 cursor-row-resize rounded-sm my-1 transition-colors select-none touch-none ${isSplitResizing ? 'bg-primary' : 'bg-border hover:bg-secondary'}`
               : `w-1.5 pointer-coarse:w-4 shrink-0 cursor-col-resize rounded-sm mx-1 transition-colors select-none touch-none ${isSplitResizing ? 'bg-primary' : 'bg-border hover:bg-secondary'}`
           }
-          title="Drag to resize the split view"
+          title="Drag to resize the split view, double-click to reset"
           onMouseDown={handleSplitDragStart}
           onTouchStart={handleSplitDragStart}
+          onDoubleClick={handleSplitReset}
         />
       )}
 

@@ -228,6 +228,27 @@ describe('SplitPane — mouse drag', () => {
     expect(getLeftPanel().style.width).toBe('27%');
   });
 
+  it('resets to the default split when the divider is double-clicked', () => {
+    setupDrag({ defaultSplitPercent: 27 });
+    fireEvent.mouseDown(getDivider());
+    fireEvent.mouseMove(window, { clientX: 600 });
+    fireEvent.mouseUp(window);
+    fireEvent.doubleClick(getDivider());
+    expect(getLeftPanel().style.width).toBe('27%');
+  });
+
+  // the drag state must be reset too, or a still click would bring back the dragged split
+  it('keeps the default split after a reset when the divider is clicked without moving', () => {
+    setupDrag({ defaultSplitPercent: 27 });
+    fireEvent.mouseDown(getDivider());
+    fireEvent.mouseMove(window, { clientX: 600 });
+    fireEvent.mouseUp(window);
+    fireEvent.doubleClick(getDivider());
+    fireEvent.mouseDown(getDivider());
+    fireEvent.mouseUp(window);
+    expect(getLeftPanel().style.width).toBe('27%');
+  });
+
   it('stops following the pointer once the drag ends', () => {
     setupDrag();
     fireEvent.mouseDown(getDivider());
