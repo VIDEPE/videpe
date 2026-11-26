@@ -2047,18 +2047,18 @@ describe('NiiViewer', () => {
 
       expect(row.style.minHeight).toBe('550px'); // 400 (starting height) + 150 (drag delta)
     });
-  });
 
-  it('resets the canvas row to its minimum height when the resize handle is double-clicked', async () => {
-    const row = await setup();
-    const handle = screen.getByTestId('nii-canvas-resize-handle');
-    // drag the row to 700px (400 + 300)
-    fireEvent.mouseDown(handle, { clientY: 0 });
-    fireEvent.mouseMove(window, { clientY: 300 });
-    fireEvent.mouseUp(window);
-    // double-click the handle to reset it
-    fireEvent.doubleClick(handle);
-    expect(row.style.minHeight).toBe('350px'); // MIN_CANVAS_HEIGHT
+    it('resets the canvas row to its minimum height when the resize handle is double-clicked', async () => {
+      const row = await setup();
+      const handle = screen.getByTestId('nii-canvas-resize-handle');
+      // drag the row to 700px (400 + 300)
+      fireEvent.mouseDown(handle, { clientY: 0 });
+      fireEvent.mouseMove(window, { clientY: 300 });
+      fireEvent.mouseUp(window);
+      // double-click the handle to reset it
+      fireEvent.doubleClick(handle);
+      expect(row.style.minHeight).toBe('350px'); // MIN_CANVAS_HEIGHT
+    });
   });
 
   describe('connectome layer (electrodes)', () => {
