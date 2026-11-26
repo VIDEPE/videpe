@@ -1,20 +1,22 @@
-import { useRef, useMemo, useState, useCallback } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import { Check } from 'lucide-react';
 
 import { useTheme } from '@/hooks/useTheme';
 import { TrafficLightButtons } from '@/components/TrafficLightButtons';
+import { WindowResizeHandles } from '@/components/WindowResizeHandles';
+import { useFloatingWindow } from '@/hooks/useFloatingWindow';
 import { TYPE_LIST, TYPE_ORDER, DEFAULT_GLOBAL_FILTERS } from '@/utils/channelTypes';
 import { hasActiveFilters } from '@/utils/eegFilters';
 import { cn } from '@/utils/utils';
 
 // ─── Window sizing constants ────────────────────────────────────────────────
-// Default/minimum window size in px — much smaller than the montage editor, since this window
-// only holds one row per channel type
-const START_WINDOW_POS = { x: 100, y: 250 };
-const DEFAULT_WINDOW_SIZE = { width: 440, height: 300 }; // wide enough for the harmonics column too
-const MIN_WINDOW_WIDTH = 300;
-const MIN_WINDOW_HEIGHT = 245;
-const RESIZE_DIRECTIONS = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
+// Default position and default/minimum window size in px — much smaller than the montage
+// editor, since this window only holds one row per channel type
+const WINDOW_LAYOUT = {
+  defaultPosition: { x: 100, y: 250 },
+  defaultSize: { width: 440, height: 300 }, // wide enough for the harmonics column too
+  minSize: { width: 300, height: 245 },
+};
 
 // ─── Shared styling settings ────────────────────────────────────────
 // Shared column-width classes — the header cell (with its bulk "set all" control) and each
@@ -40,13 +42,10 @@ export function EegGlobalFiltersEditor({
   const rowDividerColor = isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
   const nyquist = fs / 2;
 
-  // ─── Refs ───────────────────────────────────────────────────────────────────
-  const dragOffset = useRef(null);
-
   // ─── State ──────────────────────────────────────────────────────────────────
-  const [isMaximized, setIsMaximized] = useState(false);
-  const [position, setPosition] = useState({ x: START_WINDOW_POS.x, y: START_WINDOW_POS.y });
-  const [size, setSize] = useState(DEFAULT_WINDOW_SIZE);
+  // Floating window position, size and maximize state, with title bar drag and edge resize
+  const { isMaximized, toggleMaximize, windowProps, handleDragStart, handleResizeStart } =
+    useFloatingWindow(WINDOW_LAYOUT);
 
   // Draft globalFilters — this component remounts fresh every time it's opened (EegViewer
   // conditionally renders it), so seeding draft state from the live props here naturally
@@ -132,99 +131,7 @@ export function EegGlobalFiltersEditor({
     );
   };
 
-  // ─── Window drag/resize ───────────────────────────────────────────────────────────────
-  // Drag the floating window by its title bar. Position is clamped to the viewport so the
-  // window (and its title bar drag handle) can never be dragged out of view and get stranded.
-  const handleDragStart = useCallback(
-    (e) => {
-      dragOffset.current = { x: e.clientX - position.x, y: e.clientY - position.y };
-      const onMove = (e) => {
-        const maxX = Math.max(0, window.innerWidth - size.width);
-        const maxY = Math.max(0, window.innerHeight - size.height);
-        setPosition({
-          x: Math.min(Math.max(e.clientX - dragOffset.current.x, 0), maxX),
-          y: Math.min(Math.max(e.clientY - dragOffset.current.y, 0), maxY),
-        });
-      };
-      const onUp = () => {
-        window.removeEventListener('mousemove', onMove);
-        window.removeEventListener('mouseup', onUp);
-      };
-      window.addEventListener('mousemove', onMove);
-      window.addEventListener('mouseup', onUp);
-    },
-    [position, size]
-  );
-
-  // Resize the floating window by dragging an edge or corner. direction is a combination of
-  // 'n'/'s'/'e'/'w' identifying which edges move; dragging n/w also shifts position so the
-  // opposite edge stays anchored in place, matching how OS window resizing behaves.
-  const handleResizeStart = useCallback(
-    (e, direction) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const startX = e.clientX;
-      const startY = e.clientY;
-      const startWidth = size.width;
-      const startHeight = size.height;
-      const startPosition = position;
-
-      const onMove = (e) => {
-        const dx = e.clientX - startX;
-        const dy = e.clientY - startY;
-        const nextSize = { width: startWidth, height: startHeight };
-        const nextPosition = { ...startPosition };
-
-        if (direction.includes('e')) nextSize.width = Math.max(MIN_WINDOW_WIDTH, startWidth + dx);
-        if (direction.includes('s'))
-          nextSize.height = Math.max(MIN_WINDOW_HEIGHT, startHeight + dy);
-        if (direction.includes('w')) {
-          nextSize.width = Math.max(MIN_WINDOW_WIDTH, startWidth - dx);
-          nextPosition.x = startPosition.x + (startWidth - nextSize.width);
-        }
-        if (direction.includes('n')) {
-          nextSize.height = Math.max(MIN_WINDOW_HEIGHT, startHeight - dy);
-          nextPosition.y = startPosition.y + (startHeight - nextSize.height);
-        }
-
-        setSize(nextSize);
-        setPosition(nextPosition);
-      };
-      const onUp = () => {
-        window.removeEventListener('mousemove', onMove);
-        window.removeEventListener('mouseup', onUp);
-      };
-      window.addEventListener('mousemove', onMove);
-      window.addEventListener('mouseup', onUp);
-    },
-    [size, position]
-  );
-
   // ─── Render helpers ─────────────────────────────────────────────────────────
-  const resizeCursor = {
-    n: 'cursor-ns-resize',
-    s: 'cursor-ns-resize',
-    e: 'cursor-ew-resize',
-    w: 'cursor-ew-resize',
-    ne: 'cursor-nesw-resize',
-    sw: 'cursor-nesw-resize',
-    nw: 'cursor-nwse-resize',
-    se: 'cursor-nwse-resize',
-  };
-
-  // Edge handles run the full length of their side; corner handles are small squares
-  // layered on top so diagonal resizing takes priority right at the corners.
-  const resizePosition = {
-    n: 'inset-x-0 top-0 h-1.5',
-    s: 'inset-x-0 bottom-0 h-1.5',
-    e: 'inset-y-0 right-0 w-1.5',
-    w: 'inset-y-0 left-0 w-1.5',
-    ne: 'top-0 right-0 w-2.5 h-2.5',
-    nw: 'top-0 left-0 w-2.5 h-2.5',
-    se: 'bottom-0 right-0 w-2.5 h-2.5',
-    sw: 'bottom-0 left-0 w-2.5 h-2.5',
-  };
-
   // The three filter columns share the same header layout (label + bulk input + checkmark)
   // and differ only in their state, setter and clamp rule, so they're described once here
   // and mapped over in both the header and the type rows.
@@ -260,24 +167,7 @@ export function EegGlobalFiltersEditor({
 
   // ─── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div
-      className={
-        isMaximized
-          ? 'fixed inset-0 z-50 flex flex-col bg-surface'
-          : 'fixed z-50 flex flex-col rounded-lg border border-border bg-surface'
-      }
-      style={
-        isMaximized
-          ? { boxShadow: 'none' }
-          : {
-              left: position.x,
-              top: position.y,
-              width: size.width,
-              height: size.height,
-              boxShadow: 'var(--c-shadow)',
-            }
-      }
-    >
+    <div {...windowProps}>
       {/* Title bar — drag handle; explicit bg-surface so NiiVue's black canvas doesn't bleed through */}
       <div
         data-testid="global-filters-title-bar"
@@ -288,7 +178,7 @@ export function EegGlobalFiltersEditor({
           {isModified ? 'Global EEG Filters *' : 'Global EEG Filters'}
         </span>
         <TrafficLightButtons
-          onMaximize={() => setIsMaximized((v) => !v)}
+          onMaximize={toggleMaximize}
           isMaximized={isMaximized}
           onClose={onClose}
         />
@@ -490,16 +380,10 @@ export function EegGlobalFiltersEditor({
       </div>
 
       {/* Resize handles — hidden while maximized since the window already fills the screen.
-          z-20 keeps them above the content, including the z-10 column headers, at the edges. */}
-      {!isMaximized &&
-        RESIZE_DIRECTIONS.map((direction) => (
-          <div
-            key={direction}
-            data-testid={`global-filters-resize-${direction}`}
-            className={`absolute z-20 ${resizePosition[direction]} ${resizeCursor[direction]}`}
-            onMouseDown={(e) => handleResizeStart(e, direction)}
-          />
-        ))}
+          Drawn above the content, including the z-10 column headers, at the edges. */}
+      {!isMaximized && (
+        <WindowResizeHandles testIdPrefix="global-filters" onResizeStart={handleResizeStart} />
+      )}
     </div>
   );
 }

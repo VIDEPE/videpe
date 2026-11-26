@@ -3,7 +3,7 @@ import { TrafficLightButtons } from './TrafficLightButtons';
 import { usePointerDrag } from '@/hooks/usePointerDrag';
 import { useDoubleClickToDefault } from '@/hooks/useSingleAndDoubleClick';
 
-const COLUMN_BREAKPOINT = 640; // px — matches Tailwind's 'sm' breakpoint; below this the panels stack vertically
+export const COLUMN_BREAKPOINT = 640; // px — matches Tailwind's 'sm' breakpoint; below this the panels stack vertically
 const MIN_PANEL_PX = 150; // minimum panel height in column mode — clamp tightens on short screens automatically
 const ROW_MIN_PCT = 25; // minimum panel width % in row mode
 const ROW_MAX_PCT = 100 - ROW_MIN_PCT; // = 75
