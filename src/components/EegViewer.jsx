@@ -230,6 +230,7 @@ export const EegViewer = ({
     rowRef,
     handleResizeStart,
     isDragging: isRowResizing,
+    handleResetSize,
   } = useRowResize(MIN_PLOT_ROW_HEIGHT);
 
   // Channel count / x-range / time-step / y-range controls, plus their input handlers
@@ -1696,13 +1697,14 @@ export const EegViewer = ({
 
         {/* Resize handle — drag down to grow the EEG plot area past flex size, drag up to shrink back.
           Once it reaches the row's natural flex size, further upward dragging has no effect,
-          since min-height never shrinks a flex item below what it'd render at anyway. See handleCanvasResizeStart*/}
+          since min-height never shrinks a flex item below what it'd render at anyway. See useRowResize*/}
         <div
           data-testid="eeg-plot-resize-handle"
           className={`h-1.5 pointer-coarse:h-3 w-full shrink-0 cursor-row-resize rounded-sm select-none touch-none ${isRowResizing ? 'bg-primary' : 'bg-border hover:bg-secondary'}`}
-          title="Drag to resize the EEG plot area"
+          title="Drag to resize the EEG plot area, double-click to reset"
           onMouseDown={handleResizeStart}
           onTouchStart={handleResizeStart}
+          onClick={handleResetSize}
         />
       </div>
 

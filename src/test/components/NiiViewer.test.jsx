@@ -2036,7 +2036,7 @@ describe('NiiViewer', () => {
     });
 
     // The drag/clamp math itself (raise/lower, floor clamping, stopping after mouseup) is
-    // unit-tested directly in useCanvasRowResize.test.jsx. This smoke test only confirms
+    // unit-tested directly in useRowResize.test.jsx. This smoke test only confirms
     // NiiViewer actually wires a real drag on its own resize handle through to the row's
     // min-height, with its own MIN_CANVAS_HEIGHT floor.
     it('wires drags on its own resize handle through to the canvas row min-height', async () => {
@@ -2046,6 +2046,19 @@ describe('NiiViewer', () => {
       fireEvent.mouseUp(window);
 
       expect(row.style.minHeight).toBe('550px'); // 400 (starting height) + 150 (drag delta)
+    });
+
+    it('resets the canvas row to its minimum height when the resize handle is double-clicked', async () => {
+      const row = await setup();
+      const handle = screen.getByTestId('nii-canvas-resize-handle');
+      // drag the row to 700px (400 + 300)
+      fireEvent.mouseDown(handle, { clientY: 0 });
+      fireEvent.mouseMove(window, { clientY: 300 });
+      fireEvent.mouseUp(window);
+      // double-click the handle to reset it: two clicks, which a double tap also sends
+      fireEvent.click(handle);
+      fireEvent.click(handle);
+      expect(row.style.minHeight).toBe('350px'); // MIN_CANVAS_HEIGHT
     });
   });
 

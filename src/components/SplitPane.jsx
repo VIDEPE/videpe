@@ -1,5 +1,7 @@
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, useCallback } from 'react';
 import { TrafficLightButtons } from './TrafficLightButtons';
+import { usePointerDrag } from '@/hooks/usePointerDrag';
+import { useDoubleClickToDefault } from '@/hooks/useSingleAndDoubleClick';
 
 const COLUMN_BREAKPOINT = 640; // px — matches Tailwind's 'sm' breakpoint; below this the panels stack vertically
 const MIN_PANEL_PX = 150; // minimum panel height in column mode — clamp tightens on short screens automatically
@@ -20,7 +22,6 @@ export const SplitPane = ({
   const [splitPercent, setSplitPercent] = useState(defaultSplitPercent); // proportion of the first panel (0–100)
   const [maximized, setMaximized] = useState(null); // null | 'left' | 'right'
   const [swapped, setSwapped] = useState(false); // whether the left/right (or top/bottom) content is swapped
-  const [isSplitResizing, setIsSplitResizing] = useState(false); // true while the divider is being dragged — used to highlight it on touch where active: pseudo-class is unreliable
   const [isColumn, setIsColumn] = useState(
     () => typeof window !== 'undefined' && window.innerWidth < COLUMN_BREAKPOINT
   ); // true on narrow viewports — panels stack vertically instead of side by side
@@ -28,9 +29,8 @@ export const SplitPane = ({
   const containerRef = useRef(null); // for measuring dimensions and mouse/touch position during drag
   const leftPanelRef = useRef(null); // for directly updating panel sizes during drag without triggering React re-renders
   const rightPanelRef = useRef(null);
-  const isSplitResizingRef = useRef(false); // tracks whether the divider is currently being dragged
   const rafRef = useRef(null); // stores the pending requestAnimationFrame id so we can cancel it if needed
-  const splitPercentRef = useRef(50); // mirrors splitPercent without triggering re-renders during drag
+  const splitPercentRef = useRef(defaultSplitPercent); // mirrors splitPercent without triggering re-renders during drag
   const swappedRef = useRef(false); // mirrors swapped for use inside rAF callbacks
   const isColumnRef = useRef(isColumn); // mirrors isColumn for use inside rAF callbacks
 
@@ -58,81 +58,68 @@ export const SplitPane = ({
     onSwapChange?.(swapped);
   }, [swapped, onSwapChange]);
 
-  useEffect(() => {
-    // Shared drag update logic — used by both mouse and touch handlers
-    const applyDrag = (clientX, clientY) => {
-      if (!isSplitResizingRef.current || !containerRef.current) return;
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+  // A divider drag. Mouse/touch handling is in usePointerDrag; this only sizes the panels
+  const startSplitDrag = useCallback(
+    () => ({
+      onMove: ({ clientX, clientY }) => {
+        if (!containerRef.current) return;
+        if (rafRef.current) cancelAnimationFrame(rafRef.current);
 
-      // Capture coordinates before the rAF fires — the event object may be recycled by then
-      rafRef.current = requestAnimationFrame(() => {
-        if (!isSplitResizingRef.current || !containerRef.current) return;
-        const rect = containerRef.current.getBoundingClientRect();
-        const isCol = isColumnRef.current;
-        const isSwapped = swappedRef.current;
+        // Capture coordinates before the rAF fires — the event object may be recycled by then
+        rafRef.current = requestAnimationFrame(() => {
+          if (!containerRef.current) return;
+          const rect = containerRef.current.getBoundingClientRect();
+          const isCol = isColumnRef.current;
+          const isSwapped = swappedRef.current;
 
-        // In column mode drag along Y; in row mode drag along X.
-        // Column mode clamps from a minimum pixel height so short screens stay usable.
-        const colMinPct = Math.min(50, (MIN_PANEL_PX / rect.height) * 100);
-        const pct = isCol
-          ? Math.min(
-              100 - colMinPct,
-              Math.max(colMinPct, ((clientY - rect.top) / rect.height) * 100)
-            )
-          : Math.min(
-              ROW_MAX_PCT,
-              Math.max(ROW_MIN_PCT, ((clientX - rect.left) / rect.width) * 100)
-            );
-        splitPercentRef.current = pct;
+          // In column mode drag along Y; in row mode drag along X.
+          // Column mode clamps from a minimum pixel height so short screens stay usable.
+          const colMinPct = Math.min(50, (MIN_PANEL_PX / rect.height) * 100);
+          const pct = isCol
+            ? Math.min(
+                100 - colMinPct,
+                Math.max(colMinPct, ((clientY - rect.top) / rect.height) * 100)
+              )
+            : Math.min(
+                ROW_MAX_PCT,
+                Math.max(ROW_MIN_PCT, ((clientX - rect.left) / rect.width) * 100)
+              );
+          splitPercentRef.current = pct;
 
-        // Directly write the new size into the DOM — skips React render cycle entirely during drag.
-        // Row mode uses width %; column mode uses flex-grow ratios (avoids percentage-height CSS issues).
-        if (isCol) {
-          if (leftPanelRef.current)
-            leftPanelRef.current.style.flexGrow = isSwapped ? 100 - pct : pct;
-          if (rightPanelRef.current)
-            rightPanelRef.current.style.flexGrow = isSwapped ? pct : 100 - pct;
-        } else {
-          if (leftPanelRef.current)
-            leftPanelRef.current.style.width = isSwapped ? `${100 - pct}%` : `${pct}%`;
-          if (rightPanelRef.current)
-            rightPanelRef.current.style.width = isSwapped ? `${pct}%` : `${100 - pct}%`;
-        }
-      });
-    };
+          // Directly write the new size into the DOM — skips React render cycle entirely during drag.
+          // Row mode uses width %; column mode uses flex-grow ratios (avoids percentage-height CSS issues).
+          if (isCol) {
+            if (leftPanelRef.current)
+              leftPanelRef.current.style.flexGrow = isSwapped ? 100 - pct : pct;
+            if (rightPanelRef.current)
+              rightPanelRef.current.style.flexGrow = isSwapped ? pct : 100 - pct;
+          } else {
+            if (leftPanelRef.current)
+              leftPanelRef.current.style.width = isSwapped ? `${100 - pct}%` : `${pct}%`;
+            if (rightPanelRef.current)
+              rightPanelRef.current.style.width = isSwapped ? `${pct}%` : `${100 - pct}%`;
+          }
+        });
+      },
+      onEnd: () => {
+        if (rafRef.current) cancelAnimationFrame(rafRef.current);
+        // Sync React state once at end of drag so subsequent renders use the correct value
+        setSplitPercent(splitPercentRef.current);
+      },
+    }),
+    []
+  );
+  // isSplitResizing highlights the divider while dragged — on touch the active: pseudo-class is unreliable
+  const { handleDragStart: handleSplitDragStart, isDragging: isSplitResizing } =
+    usePointerDrag(startSplitDrag);
 
-    const stopDrag = () => {
-      // Guard: this listener is global (any mouseup in the window), not scoped to the divider,
-      // so without this check releasing an unrelated drag (e.g. a parent window's title bar)
-      // would force-sync splitPercent to the stale splitPercentRef default and clobber it.
-      if (!isSplitResizingRef.current) return;
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      isSplitResizingRef.current = false;
-      setIsSplitResizing(false);
-      // Sync React state once at end of drag so subsequent renders use the correct value
-      setSplitPercent(splitPercentRef.current);
-    };
-
-    const onMouseMove = (e) => applyDrag(e.clientX, e.clientY);
-    const onTouchMove = (e) => {
-      if (!isSplitResizingRef.current) return;
-      e.preventDefault(); // prevent page scroll while dragging the divider
-      applyDrag(e.touches[0].clientX, e.touches[0].clientY);
-    };
-
-    window.addEventListener('mousemove', onMouseMove);
-    window.addEventListener('mouseup', stopDrag);
-    window.addEventListener('touchmove', onTouchMove, { passive: false });
-    window.addEventListener('touchend', stopDrag);
-    window.addEventListener('touchcancel', stopDrag); // interrupted touch (e.g. a system gesture): no touchend follows
-    return () => {
-      window.removeEventListener('mousemove', onMouseMove);
-      window.removeEventListener('mouseup', stopDrag);
-      window.removeEventListener('touchmove', onTouchMove);
-      window.removeEventListener('touchend', stopDrag);
-      window.removeEventListener('touchcancel', stopDrag);
-    };
-  }, []);
+  // Back to the default split; the ref too, or a later still click restores the dragged split
+  const resetSplit = (percent) => {
+    splitPercentRef.current = percent;
+    setSplitPercent(percent);
+  };
+  // Counts clicks instead of using onDoubleClick: a double tap on a touchscreen sends no dblclick
+  const handleSplitReset = useDoubleClickToDefault(resetSplit, defaultSplitPercent);
 
   const toggleMaximize = (side) => setMaximized((prev) => (prev === side ? null : side));
 
@@ -201,18 +188,10 @@ export const SplitPane = ({
               ? `h-1.5 pointer-coarse:h-4 w-full shrink-0 cursor-row-resize rounded-sm my-1 transition-colors select-none touch-none ${isSplitResizing ? 'bg-primary' : 'bg-border hover:bg-secondary'}`
               : `w-1.5 pointer-coarse:w-4 shrink-0 cursor-col-resize rounded-sm mx-1 transition-colors select-none touch-none ${isSplitResizing ? 'bg-primary' : 'bg-border hover:bg-secondary'}`
           }
-          title="Drag to resize the split view"
-          onMouseDown={(e) => {
-            e.preventDefault();
-            isSplitResizingRef.current = true;
-            setIsSplitResizing(true);
-          }}
-          // No preventDefault here: React's touchstart listener is passive, so it would be ignored
-          // (with a console warning). touch-none on the divider and onTouchMove stop the page scroll.
-          onTouchStart={() => {
-            isSplitResizingRef.current = true;
-            setIsSplitResizing(true);
-          }}
+          title="Drag to resize the split view, double-click to reset"
+          onMouseDown={handleSplitDragStart}
+          onTouchStart={handleSplitDragStart}
+          onClick={handleSplitReset}
         />
       )}
 
