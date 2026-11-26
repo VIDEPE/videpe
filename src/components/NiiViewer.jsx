@@ -781,7 +781,7 @@ export const NiiViewer = ({
         title="Drag to resize the canvas, double-click to reset"
         onMouseDown={handleResizeStart}
         onTouchStart={handleResizeStart}
-        onDoubleClick={handleResetSize}
+        onClick={handleResetSize}
       />
     </div>
   );

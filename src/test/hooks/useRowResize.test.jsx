@@ -14,7 +14,7 @@ function TestComponent({ minHeight }) {
       ref={rowRef}
       onMouseDown={handleResizeStart}
       onTouchStart={handleResizeStart}
-      onDoubleClick={handleResetSize}
+      onClick={handleResetSize}
     />
   );
 }
@@ -91,9 +91,19 @@ describe('useRowResize', () => {
     fireEvent.mouseDown(row, { clientY: 0 });
     fireEvent.mouseMove(window, { clientY: 300 });
     fireEvent.mouseUp(window);
-    // double-click the drag bar to reset it
-    fireEvent.doubleClick(row);
+    // double-click the drag bar to reset it: two clicks, which a double tap also sends
+    fireEvent.click(row);
+    fireEvent.click(row);
     expect(row.style.minHeight).toBe('350px');
+  });
+
+  it("doesn't reset on a single click", () => {
+    const row = setup();
+    fireEvent.mouseDown(row, { clientY: 0 });
+    fireEvent.mouseMove(window, { clientY: 300 });
+    fireEvent.mouseUp(window);
+    fireEvent.click(row);
+    expect(row.style.minHeight).toBe('700px');
   });
 
   // Touch screens send touch events instead of mouse events while dragging a finger

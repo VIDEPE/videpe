@@ -2055,8 +2055,9 @@ describe('NiiViewer', () => {
       fireEvent.mouseDown(handle, { clientY: 0 });
       fireEvent.mouseMove(window, { clientY: 300 });
       fireEvent.mouseUp(window);
-      // double-click the handle to reset it
-      fireEvent.doubleClick(handle);
+      // double-click the handle to reset it: two clicks, which a double tap also sends
+      fireEvent.click(handle);
+      fireEvent.click(handle);
       expect(row.style.minHeight).toBe('350px'); // MIN_CANVAS_HEIGHT
     });
   });

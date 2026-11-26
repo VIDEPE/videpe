@@ -1704,7 +1704,7 @@ export const EegViewer = ({
           title="Drag to resize the EEG plot area, double-click to reset"
           onMouseDown={handleResizeStart}
           onTouchStart={handleResizeStart}
-          onDoubleClick={handleResetSize}
+          onClick={handleResetSize}
         />
       </div>
 

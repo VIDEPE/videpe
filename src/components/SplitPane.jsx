@@ -1,6 +1,7 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { TrafficLightButtons } from './TrafficLightButtons';
 import { usePointerDrag } from '@/hooks/usePointerDrag';
+import { useDoubleClickToDefault } from '@/hooks/useSingleAndDoubleClick';
 
 const COLUMN_BREAKPOINT = 640; // px — matches Tailwind's 'sm' breakpoint; below this the panels stack vertically
 const MIN_PANEL_PX = 150; // minimum panel height in column mode — clamp tightens on short screens automatically
@@ -113,10 +114,12 @@ export const SplitPane = ({
     usePointerDrag(startSplitDrag);
 
   // Back to the default split; the ref too, or a later still click restores the dragged split
-  const handleSplitReset = () => {
-    splitPercentRef.current = defaultSplitPercent;
-    setSplitPercent(defaultSplitPercent);
+  const resetSplit = (percent) => {
+    splitPercentRef.current = percent;
+    setSplitPercent(percent);
   };
+  // Counts clicks instead of using onDoubleClick: a double tap on a touchscreen sends no dblclick
+  const handleSplitReset = useDoubleClickToDefault(resetSplit, defaultSplitPercent);
 
   const toggleMaximize = (side) => setMaximized((prev) => (prev === side ? null : side));
 
@@ -188,7 +191,7 @@ export const SplitPane = ({
           title="Drag to resize the split view, double-click to reset"
           onMouseDown={handleSplitDragStart}
           onTouchStart={handleSplitDragStart}
-          onDoubleClick={handleSplitReset}
+          onClick={handleSplitReset}
         />
       )}
 

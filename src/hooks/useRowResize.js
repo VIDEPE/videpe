@@ -1,5 +1,6 @@
 import { useRef, useCallback } from 'react';
 import { usePointerDrag } from './usePointerDrag';
+import { useDoubleClickToDefault } from './useSingleAndDoubleClick';
 
 /**
  * Drag-to-resize for a row element's min-height. Writes to the DOM directly (not React state)
@@ -15,8 +16,8 @@ import { usePointerDrag } from './usePointerDrag';
  *   - `isDragging` (boolean) — true while a drag is in progress, so the handle can stay
  *     highlighted even when the pointer or finger moves off it. Only changes at the start and
  *     end of a drag, so it doesn't re-render on every move.
- *   - `handleResetSize` (Function) — attach to the drag handle's onDoubleClick; resets the
- *     row's height to minHeight
+ *   - `handleResetSize` (Function) — attach to the drag handle's `onClick`; a double click or
+ *     double tap resets the row's height to minHeight
  */
 export function useRowResize(minHeight) {
   const rowRef = useRef();
@@ -36,11 +37,14 @@ export function useRowResize(minHeight) {
     [minHeight]
   );
 
-  const handleResetSize = useCallback(() => {
+  const resetSize = useCallback((height) => {
     const row = rowRef.current;
     if (!row) return null; // null guard
-    row.style.minHeight = `${minHeight}px`;
-  }, [minHeight]);
+    row.style.minHeight = `${height}px`;
+  }, []);
+
+  // Counts clicks instead of using onDoubleClick: a double tap on a touchscreen sends no dblclick
+  const handleResetSize = useDoubleClickToDefault(resetSize, minHeight);
 
   const { handleDragStart: handleResizeStart, isDragging } = usePointerDrag(startResize);
   return { rowRef, handleResizeStart, isDragging, handleResetSize };

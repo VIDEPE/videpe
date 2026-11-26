@@ -233,7 +233,9 @@ describe('SplitPane — mouse drag', () => {
     fireEvent.mouseDown(getDivider());
     fireEvent.mouseMove(window, { clientX: 600 });
     fireEvent.mouseUp(window);
-    fireEvent.doubleClick(getDivider());
+    // two clicks, which a double tap also sends
+    fireEvent.click(getDivider());
+    fireEvent.click(getDivider());
     expect(getLeftPanel().style.width).toBe('27%');
   });
 
@@ -243,7 +245,8 @@ describe('SplitPane — mouse drag', () => {
     fireEvent.mouseDown(getDivider());
     fireEvent.mouseMove(window, { clientX: 600 });
     fireEvent.mouseUp(window);
-    fireEvent.doubleClick(getDivider());
+    fireEvent.click(getDivider());
+    fireEvent.click(getDivider());
     fireEvent.mouseDown(getDivider());
     fireEvent.mouseUp(window);
     expect(getLeftPanel().style.width).toBe('27%');
