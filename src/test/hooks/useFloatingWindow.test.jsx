@@ -17,7 +17,7 @@ function TestWindow(props) {
     useFloatingWindow(props);
   return (
     <div data-testid="window" {...windowProps}>
-      <div data-testid="title-bar" onMouseDown={handleDragStart}>
+      <div data-testid="title-bar" onMouseDown={handleDragStart} onTouchStart={handleDragStart}>
         <button type="button" onClick={toggleMaximize}>
           Maximize
         </button>
@@ -113,6 +113,34 @@ describe('useFloatingWindow', () => {
     });
   });
 
+  // Touch screens send touch events, with the finger position in touches[0]
+  describe('touch', () => {
+    const touchDrag = (el, dx, dy) => {
+      fireEvent.touchStart(el, { touches: [{ clientX: 0, clientY: 0 }] });
+      fireEvent.touchMove(window, { touches: [{ clientX: dx, clientY: dy }] });
+      fireEvent.touchEnd(window);
+    };
+
+    it('moves the window when the title bar is dragged with a finger', () => {
+      const win = setup();
+      touchDrag(screen.getByTestId('title-bar'), 30, 20);
+      expect(box(win)).toMatchObject({ left: 70, top: 70 });
+    });
+
+    it('resizes the window when an edge is dragged with a finger', () => {
+      const win = setup();
+      touchDrag(screen.getByTestId('win-resize-se'), 50, 30);
+      expect(box(win)).toEqual({ left: 40, top: 50, width: 450, height: 330 });
+    });
+
+    it('stops following the finger once it is lifted', () => {
+      const win = setup();
+      touchDrag(screen.getByTestId('title-bar'), 30, 20);
+      fireEvent.touchMove(window, { touches: [{ clientX: 300, clientY: 300 }] });
+      expect(box(win)).toMatchObject({ left: 70, top: 70 });
+    });
+  });
+
   describe('on a screen smaller than the default window', () => {
     const screenSize = { width: window.innerWidth, height: window.innerHeight };
     const setScreen = (width, height) => {
@@ -193,5 +221,28 @@ describe('WindowResizeHandles', () => {
     render(<WindowResizeHandles testIdPrefix="win" onResizeStart={onResizeStart} />);
     fireEvent.mouseDown(screen.getByTestId('win-resize-sw'));
     expect(onResizeStart).toHaveBeenCalledWith(expect.anything(), 'sw');
+  });
+
+  // the top edge and corners stay narrow, so they don't cover the title bar's buttons
+  it('makes the sides, bottom and bottom corners wider on touchscreens', () => {
+    render(<WindowResizeHandles testIdPrefix="win" onResizeStart={vi.fn()} />);
+    const classOf = (direction) => screen.getByTestId(`win-resize-${direction}`).className;
+    ['e', 'w'].forEach((direction) => expect(classOf(direction)).toContain('pointer-coarse:w-3'));
+    expect(classOf('s')).toContain('pointer-coarse:h-3');
+    ['se', 'sw'].forEach((direction) =>
+      expect(classOf(direction)).toContain('pointer-coarse:w-5 pointer-coarse:h-5')
+    );
+    ['n', 'ne', 'nw'].forEach((direction) =>
+      expect(classOf(direction)).not.toContain('pointer-coarse')
+    );
+  });
+
+  it('also starts a resize on touch, without the page scrolling along', () => {
+    const onResizeStart = vi.fn();
+    render(<WindowResizeHandles testIdPrefix="win" onResizeStart={onResizeStart} />);
+    const handle = screen.getByTestId('win-resize-ne');
+    fireEvent.touchStart(handle, { touches: [{ clientX: 0, clientY: 0 }] });
+    expect(onResizeStart).toHaveBeenCalledWith(expect.anything(), 'ne');
+    expect(handle.className).toContain('touch-none');
   });
 });

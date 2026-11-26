@@ -1590,8 +1590,9 @@ export function EegMontageEditor({
       {/* Title bar — drag handle; explicit bg-surface so NiiVue's black canvas doesn't bleed through */}
       <div
         data-testid="montage-title-bar"
-        className="flex items-center justify-between px-2 py-1 border-b border-border cursor-grab select-none shrink-0 bg-surface"
+        className="flex items-center justify-between px-2 py-1 border-b border-border cursor-grab select-none touch-none shrink-0 bg-surface"
         onMouseDown={handleDragStart}
+        onTouchStart={handleDragStart}
       >
         <span className="text-sm font-medium text-heading">
           {isModified ? 'Montage Editor *' : 'Montage Editor'}
@@ -1611,7 +1612,7 @@ export function EegMontageEditor({
       {/* px-1.5: empty strips as wide as the side handles, so they don't cover the panes' scrollbars */}
       <div
         data-testid="montage-editor-body"
-        className={`flex-1 min-h-0 flex flex-col ${isMaximized ? '' : 'px-1.5'}`}
+        className={`flex-1 min-h-0 flex flex-col ${isMaximized ? '' : 'px-1.5 pointer-coarse:px-3'}`}
       >
         <SplitPane
           leftLabel={<span className={PANEL_TITLE_CLASS}>Channel Selection</span>}

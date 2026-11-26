@@ -11,10 +11,12 @@ const pointOf = (e) => {
  * a drag only, so the pointer can leave the handle, and ends the drag on release or a
  * cancelled touch. What the drag does is up to the caller.
  *
- * @param {Function} onDragStart - called with the start point `{ clientX, clientY }`; returns
- *   the drag's handlers `{ onMove(point), onEnd?() }`, or null to not start a drag.
+ * @param {Function} onDragStart - called with the start point `{ clientX, clientY }`, plus any
+ *   extra arguments given to handleDragStart; returns the drag's handlers
+ *   `{ onMove(point), onEnd?() }`, or null to not start a drag.
  * @returns {Object}
- *   - `handleDragStart` (Function) — attach to the handle's `onMouseDown` and `onTouchStart`.
+ *   - `handleDragStart` (Function) — `(event, ...args)`, attach to the handle's `onMouseDown`
+ *     and `onTouchStart`; extra args (e.g. which window edge) are passed on to onDragStart.
  *   - `isDragging` (boolean) — true for the whole drag, so the handle can stay highlighted
  *     when the pointer moves off it. Only changes at the start and end of a drag.
  */
@@ -23,8 +25,8 @@ export function usePointerDrag(onDragStart) {
   const removeListenersRef = useRef(null); // set while a drag is in progress
 
   const handleDragStart = useCallback(
-    (e) => {
-      const drag = onDragStart(pointOf(e));
+    (e, ...args) => {
+      const drag = onDragStart(pointOf(e), ...args);
       if (!drag) return;
       const isTouch = e.type === 'touchstart';
       // Mouse only: stops text selection while dragging. React's touchstart listener is passive,

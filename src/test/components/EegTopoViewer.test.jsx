@@ -519,6 +519,24 @@ describe('EegTopoViewer', () => {
       expect(parseInt(windowEl.style.top)).toBe(startTop + 20);
     });
 
+    it('moves the window when the title bar is dragged with a finger', async () => {
+      const { container } = await act(async () => render(<EegTopoViewer {...defaultProps} />));
+      const windowEl = container.firstChild;
+      const startLeft = parseInt(windowEl.style.left);
+      const startTop = parseInt(windowEl.style.top);
+
+      fireEvent.touchStart(screen.getByTestId('topo-title-bar'), {
+        touches: [{ clientX: 0, clientY: 0 }],
+      });
+      await act(async () => {
+        fireEvent.touchMove(window, { touches: [{ clientX: 30, clientY: 20 }] });
+        fireEvent.touchEnd(window);
+      });
+
+      expect(parseInt(windowEl.style.left)).toBe(startLeft + 30);
+      expect(parseInt(windowEl.style.top)).toBe(startTop + 20);
+    });
+
     it('clamps at the top-left viewport edge instead of dragging the window off-screen', async () => {
       const { container } = await act(async () => render(<EegTopoViewer {...defaultProps} />));
       const windowEl = container.firstChild;
