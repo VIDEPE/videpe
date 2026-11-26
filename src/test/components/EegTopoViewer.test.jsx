@@ -406,6 +406,15 @@ describe('EegTopoViewer', () => {
       });
     });
 
+    // jsdom doesn't paint: checks the class that keeps the handles above the window content,
+    // the same as in the other floating windows
+    it('draws the resize handles above the window content', async () => {
+      await act(async () => render(<EegTopoViewer {...defaultProps} />));
+      ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'].forEach((direction) =>
+        expect(screen.getByTestId(`topo-resize-${direction}`).className).toContain('z-20')
+      );
+    });
+
     it('does not render resize handles while maximized', async () => {
       await act(async () => render(<EegTopoViewer {...defaultProps} />));
       await userEvent.click(screen.getByRole('button', { name: /maximize/i }));
