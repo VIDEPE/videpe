@@ -1,8 +1,27 @@
 import { useRef, useState, useCallback } from 'react';
 
+// The window's opening layout, fitted to the screen: shrunk to fit and moved fully on screen,
+// and maximized when the screen is smaller than the minimum size (e.g. a phone), so the title
+// bar's buttons are never off screen
+function fitToScreen({ defaultPosition, defaultSize, minSize }) {
+  const screen = { width: window.innerWidth, height: window.innerHeight };
+  const size = {
+    width: Math.min(defaultSize.width, screen.width),
+    height: Math.min(defaultSize.height, screen.height),
+  };
+  return {
+    isMaximized: screen.width < minSize.width || screen.height < minSize.height,
+    position: {
+      x: Math.max(0, Math.min(defaultPosition.x, screen.width - size.width)),
+      y: Math.max(0, Math.min(defaultPosition.y, screen.height - size.height)),
+    },
+    size,
+  };
+}
+
 /**
  * Position, size and maximize state of a floating window, with dragging by its title bar and
- * resizing by its edges and corners (see WindowResizeHandles).
+ * resizing by its edges and corners (see WindowResizeHandles). Opens fitted to the screen.
  *
  * @param {Object} options
  * @param {{x: number, y: number}} options.defaultPosition - px, the window's top-left corner on open.
@@ -16,9 +35,10 @@ import { useRef, useState, useCallback } from 'react';
  */
 export function useFloatingWindow({ defaultPosition, defaultSize, minSize }) {
   const dragOffset = useRef(null);
-  const [isMaximized, setIsMaximized] = useState(false);
-  const [position, setPosition] = useState(defaultPosition);
-  const [size, setSize] = useState(defaultSize);
+  const [opening] = useState(() => fitToScreen({ defaultPosition, defaultSize, minSize }));
+  const [isMaximized, setIsMaximized] = useState(opening.isMaximized);
+  const [position, setPosition] = useState(opening.position);
+  const [size, setSize] = useState(opening.size);
 
   const toggleMaximize = useCallback(() => setIsMaximized((v) => !v), []);
 

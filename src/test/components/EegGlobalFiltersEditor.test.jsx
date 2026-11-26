@@ -523,6 +523,22 @@ describe('EegGlobalFiltersEditor', () => {
       expect(screen.getByTestId('global-filters-body').className).toContain('px-1.5');
     });
 
+    // the fitting itself is tested in useFloatingWindow.test.jsx
+    it('opens shrunk to fit on a phone, which is narrower than its default size', () => {
+      const { innerWidth, innerHeight } = window;
+      window.innerWidth = 390;
+      window.innerHeight = 844;
+      try {
+        render(<EegGlobalFiltersEditor {...defaultProps} />);
+        const windowEl = screen.getByTestId('global-filters-title-bar').parentElement;
+        expect(windowEl.style.left).toBe('0px');
+        expect(windowEl.style.width).toBe('390px');
+      } finally {
+        window.innerWidth = innerWidth;
+        window.innerHeight = innerHeight;
+      }
+    });
+
     it('drops the strips when maximized, where there are no resize handles', async () => {
       render(<EegGlobalFiltersEditor {...defaultProps} />);
       await userEvent.click(

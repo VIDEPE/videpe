@@ -2073,6 +2073,22 @@ describe('EegMontageEditor', () => {
       expect(screen.getByTestId('montage-editor-body').className).toContain('px-1.5');
     });
 
+    // the fitting itself is tested in useFloatingWindow.test.jsx
+    it('opens maximized on a phone, which is narrower than its minimum size', () => {
+      const { innerWidth, innerHeight } = window;
+      window.innerWidth = 390;
+      window.innerHeight = 844;
+      try {
+        render(<EegMontageEditor {...defaultProps} />);
+        expect(
+          within(screen.getByTestId('montage-title-bar')).getByTitle('Restore')
+        ).toBeInTheDocument();
+      } finally {
+        window.innerWidth = innerWidth;
+        window.innerHeight = innerHeight;
+      }
+    });
+
     it('drops the strips when maximized, where there are no resize handles', async () => {
       render(<EegMontageEditor {...defaultProps} />);
       await userEvent.click(within(screen.getByTestId('montage-title-bar')).getByTitle('Maximize'));

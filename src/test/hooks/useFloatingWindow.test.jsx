@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { useFloatingWindow } from '@/hooks/useFloatingWindow';
 import { WindowResizeHandles } from '@/components/WindowResizeHandles';
@@ -110,6 +110,52 @@ describe('useFloatingWindow', () => {
       drag(screen.getByTestId('win-resize-nw'), 2000, 2000);
       // right edge 440 and bottom edge 350 stay where they were
       expect(box(win)).toEqual({ left: 240, top: 200, width: 200, height: 150 });
+    });
+  });
+
+  describe('on a screen smaller than the default window', () => {
+    const screenSize = { width: window.innerWidth, height: window.innerHeight };
+    const setScreen = (width, height) => {
+      window.innerWidth = width;
+      window.innerHeight = height;
+    };
+    afterEach(() => setScreen(screenSize.width, screenSize.height));
+
+    it('shrinks the window to the screen and moves it fully on screen', () => {
+      setScreen(390, 844); // phone, portrait
+      // default 400 wide at x 40, minimum 200 wide: fits once shrunk to the screen width
+      expect(box(setup())).toEqual({ left: 0, top: 50, width: 390, height: 300 });
+    });
+
+    it('moves a window that fits but would stick out back on screen', () => {
+      setScreen(700, 500);
+      const props = { ...DEFAULTS, defaultPosition: { x: 400, y: 300 } };
+      expect(box(setup(props))).toEqual({ left: 300, top: 200, width: 400, height: 300 });
+    });
+
+    it('opens maximized when the screen is narrower than the minimum size', () => {
+      setScreen(390, 844);
+      const win = setup({ ...DEFAULTS, minSize: { width: 600, height: 150 } });
+      expect(win.className).toContain('inset-0');
+      expect(screen.queryByTestId('win-resize-e')).not.toBeInTheDocument();
+    });
+
+    it('opens maximized when the screen is lower than the minimum size', () => {
+      setScreen(844, 390); // phone, landscape
+      const win = setup({ ...DEFAULTS, minSize: { width: 200, height: 450 } });
+      expect(win.className).toContain('inset-0');
+    });
+
+    it('restores a window opened maximized to one that fits the screen', () => {
+      setScreen(390, 844);
+      const win = setup({ ...DEFAULTS, minSize: { width: 600, height: 150 } });
+      fireEvent.click(screen.getByRole('button', { name: 'Maximize' }));
+      expect(box(win)).toEqual({ left: 0, top: 50, width: 390, height: 300 });
+    });
+
+    it('keeps the default position and size when the window fits', () => {
+      setScreen(1920, 1080);
+      expect(box(setup())).toEqual({ left: 40, top: 50, width: 400, height: 300 });
     });
   });
 

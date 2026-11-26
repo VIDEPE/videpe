@@ -415,6 +415,21 @@ describe('EegTopoViewer', () => {
       );
     });
 
+    // the fitting itself is tested in useFloatingWindow.test.jsx
+    it('opens shrunk to fit on a phone, which is narrower than its default size', async () => {
+      const { innerWidth, innerHeight } = window;
+      window.innerWidth = 390;
+      window.innerHeight = 844;
+      try {
+        const { container } = await act(async () => render(<EegTopoViewer {...defaultProps} />));
+        expect(container.firstChild.style.left).toBe('0px');
+        expect(container.firstChild.style.width).toBe('390px');
+      } finally {
+        window.innerWidth = innerWidth;
+        window.innerHeight = innerHeight;
+      }
+    });
+
     it('does not render resize handles while maximized', async () => {
       await act(async () => render(<EegTopoViewer {...defaultProps} />));
       await userEvent.click(screen.getByRole('button', { name: /maximize/i }));
