@@ -220,6 +220,14 @@ describe('SplitPane — mouse drag', () => {
     expect(getDivider()).not.toHaveClass('bg-primary');
   });
 
+  // e.g. a touchpad tap on the divider: there's no move to take a position from
+  it('keeps a custom default split when the divider is pressed and released without moving', () => {
+    setupDrag({ defaultSplitPercent: 27 });
+    fireEvent.mouseDown(getDivider());
+    fireEvent.mouseUp(window);
+    expect(getLeftPanel().style.width).toBe('27%');
+  });
+
   it('stops following the pointer once the drag ends', () => {
     setupDrag();
     fireEvent.mouseDown(getDivider());

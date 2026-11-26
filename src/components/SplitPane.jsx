@@ -29,7 +29,7 @@ export const SplitPane = ({
   const leftPanelRef = useRef(null); // for directly updating panel sizes during drag without triggering React re-renders
   const rightPanelRef = useRef(null);
   const rafRef = useRef(null); // stores the pending requestAnimationFrame id so we can cancel it if needed
-  const splitPercentRef = useRef(50); // mirrors splitPercent without triggering re-renders during drag
+  const splitPercentRef = useRef(defaultSplitPercent); // mirrors splitPercent without triggering re-renders during drag
   const swappedRef = useRef(false); // mirrors swapped for use inside rAF callbacks
   const isColumnRef = useRef(isColumn); // mirrors isColumn for use inside rAF callbacks
 
