@@ -1,14 +1,10 @@
-// New src/shanoir/useShanoirData.js: modelled on src/hooks/useDemoData.js (same setIsLoading, the eegReadyResolveRef/niiReadyResolveRef ready promises, one toast.promise).
-// That generic part now lives in src/hooks/useLaunchData.js, shared with the host-app mode; this hook only adds what's specific to Shanoir.
-// For EEG datasets: unzip, then handleEegFiles(files) from src/hooks/useEegFileIntake.js. It already routes .vhdr/.eeg, electrode .tsv/.elc, inverse .mat and montage .mtg in one call, using detectAndLoadEEG in src/loaders/eegFormatRegistry.js. loadEegBrainVision already reads Files with File.slice.
-// Filter .tsv before handing files over. BIDS folders also contain _channels.tsv / _events.tsv, and useEegFileIntake routes every .tsv to the electrode parser (ELEC_POS_EXTENSIONS). Pass only *_electrodes.tsv and .elc, and ignore other .tsv files. .mat goes through unchanged (inverse solution).
-// Examination extra-data: read extraDataFilePathList from GET /shanoir-ng/datasets/examinations/{examinationId}. Download *_electrodes.tsv, .elc, .mat and .mtg entries via GET /shanoir-ng/datasets/examinations/extra-data-download/{examinationId}/{fileName}/ and pass them to handleEegFiles the same way (see "Electrode positions" below).
-// For imaging datasets (Mr, Pet, …): download with format=nii, unzip, then filesToLayers(files) from src/utils/NiiViewer.utils.js (it handles NIfTI and in-browser DICOM), then setLayers.
-// Ignore other types with a toast note.
+// Where this hook sits in the flow from Shanoir's button to the viewers, and what the other
+// files in src/shanoir/ do: see src/shanoir/README.md.
 
-import { useCallback } from 'react';
+import { createElement, useCallback } from 'react';
 import { useLaunchData } from '@/hooks/useLaunchData';
 import { fetchShanoirExamination } from '@/shanoir/fetchShanoirExamination';
+import { ShanoirSkippedWarning } from '@/shanoir/ShanoirSkippedWarning';
 
 /**
  * Loads one Shanoir examination (EEG recording, electrode positions, inverse solution, montage
@@ -28,7 +24,7 @@ import { fetchShanoirExamination } from '@/shanoir/fetchShanoirExamination';
  *   Called with the imaging layers built from the downloaded volumes/meshes.
  * @param {(name: string|null) => void} params.setShanoirEegName
  *   Called with the name of the EEG dataset that was loaded, or null if none. An examination
- *   can hold several EEG recordings but only the first is loaded, so the caller can show the
+ *   can hold several EEG recordings but only the latest imported is loaded, so the caller can show the
  *   user which one is on screen (and clear it when the EEG viewer is reset).
  * @param {{ current: (() => void)|null }} params.eegReadyResolveRef
  *   Ref that the load assigns a resolver function into; EegViewer calls it once its charts
@@ -60,20 +56,22 @@ export function useShanoirData({
   const fetchData = useCallback(
     async (signal) => {
       // fetch shanoir examination
-      const { eegDataset, eegFiles, imagingFiles, skippedDatasets } = await fetchShanoirExamination(
-        { client, examinationId, signal }
-      );
+      const { eegDataset, eegFiles, imagingFiles, skippedDatasets, skippedFiles } =
+        await fetchShanoirExamination({ client, examinationId, signal });
 
-      // Toast text for the datasets that have been skipped, one bulleted line per dataset
-      // (react-hot-toast keeps the line breaks)
+      // Toast message for the datasets and the files (electrode positions, inverse solutions,
+      // montages) that have been skipped, as markup (see ShanoirSkippedWarning). This file
+      // isn't .jsx, so the element is made with createElement instead of <ShanoirSkippedWarning />
       const warning =
-        skippedDatasets.length > 0
-          ? `Skipped the following datasets:\n${skippedDatasets
-              .map((d) => `- ${d.name} (${d.reason})`)
-              .join('\n')}`
+        skippedDatasets.length > 0 || skippedFiles.length > 0
+          ? createElement(ShanoirSkippedWarning, { skippedDatasets, skippedFiles })
           : null;
 
-      return { eegFiles, imagingFiles, eegName: eegDataset?.name ?? null, warning };
+      // The name shown in the EEG panel header, with the Shanoir type: an EEG-tab recording and
+      // a BIDS one can have near-identical names
+      const eegName = eegDataset ? `${eegDataset.name} (${eegDataset.type})` : null;
+
+      return { eegFiles, imagingFiles, eegName, warning };
     },
     [client, examinationId]
   );

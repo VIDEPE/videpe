@@ -16,6 +16,7 @@ import { FileDropZone } from '../components/FileDropZone';
 // Utils
 import { filesToLayers, rotateViews } from '../utils/NiiViewer.utils';
 import { IMAGING_DROPZONE_DESCRIPTION } from '@/utils/imagingFormats';
+import { cn } from '@/utils/utils';
 import { buildElectrodeLayer } from '../utils/eegTopographyUtils';
 import {
   EEG_FORMAT_EXTENSIONS,
@@ -352,13 +353,16 @@ export const PatientView = () => {
               href={`${import.meta.env.BASE_URL}#/about`}
               target="_blank"
               rel="noopener noreferrer"
-              className="button flex items-center gap-2 px-3 py-1 whitespace-nowrap"
+              className="button button-neutral flex items-center gap-2 whitespace-nowrap"
               title="Opens in a new tab"
             >
               <Info size={16} /> About VIDEPE
             </a>
           ) : (
-            <Link to="/" className="button flex items-center gap-2 px-3 py-1 whitespace-nowrap">
+            <Link
+              to="/"
+              className="button button-neutral flex items-center gap-2 whitespace-nowrap"
+            >
               <ArrowLeft size={16} /> Back
             </Link>
           )}
@@ -403,7 +407,7 @@ export const PatientView = () => {
                stay until the whole demo has loaded */
             <button
               type="button"
-              className="button px-3 py-1 whitespace-nowrap"
+              className="button whitespace-nowrap"
               onClick={handleReset}
               disabled={isLoading || isShanoirLoading || isHostAppLoading}
               title="Reset both viewers"
@@ -418,7 +422,10 @@ export const PatientView = () => {
                 <button
                   key={key}
                   type="button"
-                  className="button px-3 py-1 whitespace-nowrap"
+                  className={cn(
+                    'button whitespace-nowrap',
+                    loadingDemo !== key && 'button-neutral'
+                  )}
                   onClick={() => handleLoadDemo(key)}
                   disabled={isLoading || isShanoirLoading || isHostAppLoading}
                   title={loadingDemo === key ? `Loading ${label} data…` : title}

@@ -1,0 +1,15 @@
+{
+  "request": "GET datasets/download/54?format=nii",
+  "status": 200,
+  "headers": {
+    "content-type": "application/zip",
+    "content-disposition": "attachment;filename=\"Dataset_synth_54_sub-4_ses-7_task-rest_desc-spkavgall_eeg_vhdr_20261123154829.zip\""
+  },
+  "size": 1596,
+  "zipEntries": [
+    {
+      "name": "sub-4_ses-7_task-rest_desc-spkavgall_eeg.vhdr",
+      "size": 3739
+    }
+  ]
+}

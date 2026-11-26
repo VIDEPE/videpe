@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { EegGlobalFiltersEditor } from '@/components/EegGlobalFiltersEditor';
 import { TYPE_LIST, DEFAULT_GLOBAL_FILTERS } from '@/utils/channelTypes';
@@ -504,6 +504,61 @@ describe('EegGlobalFiltersEditor', () => {
       await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
 
       expect(onApplyMontageChannels).not.toHaveBeenCalled();
+    });
+  });
+
+  // jsdom doesn't paint, so these check the classes that keep the edges grabbable
+  describe('window resize handles', () => {
+    // the column headers are z-10, so without a higher z-index they're drawn over the handles
+    it('draws the resize handles above the window content', () => {
+      render(<EegGlobalFiltersEditor {...defaultProps} />);
+      ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'].forEach((direction) =>
+        expect(screen.getByTestId(`global-filters-resize-${direction}`).className).toContain('z-20')
+      );
+    });
+
+    // so the left and right handles don't cover the rows or their scrollbar
+    it('keeps an empty strip along the left and right edges for the resize handles', () => {
+      render(<EegGlobalFiltersEditor {...defaultProps} />);
+      expect(screen.getByTestId('global-filters-body').className).toContain('px-1.5');
+      // as wide as the side handles on touchscreens too
+      expect(screen.getByTestId('global-filters-body').className).toContain('pointer-coarse:px-3');
+    });
+
+    // the drag itself is tested in useFloatingWindow.test.jsx
+    it('moves when its title bar is dragged with a finger', () => {
+      render(<EegGlobalFiltersEditor {...defaultProps} />);
+      const titleBar = screen.getByTestId('global-filters-title-bar');
+      fireEvent.touchStart(titleBar, { touches: [{ clientX: 0, clientY: 0 }] });
+      fireEvent.touchMove(window, { touches: [{ clientX: 30, clientY: 20 }] });
+      fireEvent.touchEnd(window);
+      expect(titleBar.parentElement.style.left).toBe('130px'); // default x 100 + 30
+      expect(titleBar.parentElement.style.top).toBe('270px'); // default y 250 + 20
+    });
+
+    // the fitting itself is tested in useFloatingWindow.test.jsx
+    it('opens shrunk to fit on a phone, which is narrower than its default size', () => {
+      const { innerWidth, innerHeight } = window;
+      window.innerWidth = 390;
+      window.innerHeight = 844;
+      try {
+        render(<EegGlobalFiltersEditor {...defaultProps} />);
+        const windowEl = screen.getByTestId('global-filters-title-bar').parentElement;
+        expect(windowEl.style.left).toBe('0px');
+        expect(windowEl.style.width).toBe('390px');
+      } finally {
+        window.innerWidth = innerWidth;
+        window.innerHeight = innerHeight;
+      }
+    });
+
+    it('drops the strips when maximized, where there are no resize handles', async () => {
+      render(<EegGlobalFiltersEditor {...defaultProps} />);
+      await userEvent.click(
+        within(screen.getByTestId('global-filters-title-bar')).getByTitle('Maximize')
+      );
+      expect(screen.queryByTestId('global-filters-resize-e')).not.toBeInTheDocument();
+      expect(screen.getByTestId('global-filters-body').className).not.toContain('px-1.5');
     });
   });
 });

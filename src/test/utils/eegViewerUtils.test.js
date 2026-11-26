@@ -11,6 +11,7 @@ import {
   computeAutoYScale,
   isMontageRowDrawable,
   remapMontageToRecording,
+  buildRecordingMontageTemplates,
   formatTimelineTime,
   clampTooltipCenter,
 } from '@/utils/eegViewerUtils';
@@ -951,5 +952,39 @@ describe('remapMontageToRecording', () => {
     const fullRow = { channel: 'Fp1', reference: null, color: 'red', highPass: 1, lowPass: 70 };
     const { rows } = remapMontageToRecording({ rows: [fullRow], channelTypes: {} }, ['FP1']);
     expect(rows).toEqual([{ ...fullRow, channel: 'FP1' }]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildRecordingMontageTemplates
+// ---------------------------------------------------------------------------
+
+describe('buildRecordingMontageTemplates', () => {
+  const row = (channel, reference = null) => ({ channel, reference, color: null });
+  const montage = (name, rows) => ({ name, rows, channelTypes: {} });
+
+  it('returns no templates for a recording without montages (e.g. not a TRC)', () => {
+    expect(buildRecordingMontageTemplates(undefined, ['FP1'])).toEqual([]);
+    expect(buildRecordingMontageTemplates([], ['FP1'])).toEqual([]);
+  });
+
+  it("gives each montage a dropdown id and rewrites it to the recording's spelling", () => {
+    const templates = buildRecordingMontageTemplates(
+      [montage('Ref', [row('Fp1')]), montage('Bipolar', [row('Fp2', 'Fp1')])],
+      ['FP1', 'FP2']
+    );
+    expect(templates).toEqual([
+      { id: 'recording-montage-0', name: 'Ref', rows: [row('FP1')], channelTypes: {} },
+      { id: 'recording-montage-1', name: 'Bipolar', rows: [row('FP2', 'FP1')], channelTypes: {} },
+    ]);
+  });
+
+  it('leaves out montages of which no row can be drawn for this recording', () => {
+    const templates = buildRecordingMontageTemplates(
+      [montage('Other cap', [row('el065')]), montage('Partly', [row('el066'), row('Fp1')])],
+      ['FP1']
+    );
+    // ids stay the montage's position in the file, so they don't shift when one is left out
+    expect(templates.map((t) => [t.id, t.name])).toEqual([['recording-montage-1', 'Partly']]);
   });
 });

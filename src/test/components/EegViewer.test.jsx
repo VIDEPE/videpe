@@ -1771,6 +1771,19 @@ describe('eeg plot resize handle', () => {
 
     expect(row.style.minHeight).toBe('550px'); // 400 (starting height) + 150 (drag delta)
   });
+
+  it('eegviewer is reset to minHeight when double clicking the resize handle bar', async () => {
+    const row = await setup();
+    const handle = screen.getByTestId('eeg-plot-resize-handle');
+    // drag the handle to (to 700px (400 = 300))
+    fireEvent.mouseDown(handle, { clientY: 0 });
+    fireEvent.mouseMove(window, { clientY: 300 });
+    fireEvent.mouseUp(window);
+    // double-click the handle to reset it: two clicks, which a double tap also sends
+    fireEvent.click(handle);
+    fireEvent.click(handle);
+    expect(row.style.minHeight).toBe('350px');
+  });
 });
 
 describe('EegViewer — topography always uses the common-average reference', () => {
@@ -2703,11 +2716,11 @@ describe('EegViewer — montage template dropdown', () => {
   it('does not offer CAR for an SEEG recording', async () => {
     await renderViewer(makeIntracranialProvider());
 
-    expect(dropdownOptions()).toEqual(['none']);
+    expect(dropdownOptions()).toEqual(['none', 'custom']);
   });
 
   // An average-referenced montage can still be built in the editor — the dropdown then has
-  // to be able to show it, or it would read "None" for a montage that isn't.
+  // to be able to show it, or it would read "No montage" for a montage that isn't.
   it('still shows CAR for an SEEG recording while that is the active montage', async () => {
     await renderViewer(makeIntracranialProvider());
 
@@ -2721,14 +2734,18 @@ describe('EegViewer — montage template dropdown', () => {
     expect(screen.getByTestId('montage-template-select')).toHaveValue('average');
   });
 
-  it('defaults to "None" with no "Custom" option, before any montage has been built', async () => {
+  it('defaults to "No montage", with "Custom montage" disabled before any montage has been built', async () => {
     await renderViewer();
 
     expect(screen.getByTestId('montage-template-select')).toHaveValue('none');
+    // the closed dropdown shows only this text, so it has to say what the dropdown is for
+    expect(screen.getByRole('option', { name: 'No montage' }).selected).toBe(true);
     const options = Array.from(screen.getByTestId('montage-template-select').options).map(
       (option) => option.value
     );
-    expect(options).toEqual(['none', 'average']);
+    expect(options).toEqual(['none', 'custom', 'average']);
+    // listed so it can be found, but there's nothing to restore yet — and it says so
+    expect(screen.getByRole('option', { name: 'Custom montage (none set)' })).toBeDisabled();
   });
 
   it('disables the template select while the montage editor is open, and re-enables it once closed', async () => {
@@ -2760,7 +2777,7 @@ describe('EegViewer — montage template dropdown', () => {
     channelNames.forEach((name) => expect(screen.getByText(name)).toBeTruthy());
   });
 
-  it('adds a "Custom" option once a hand-built montage is applied via the editor, and restores it after switching to a template', async () => {
+  it('enables "Custom montage" once a hand-built montage is applied via the editor, and restores it after switching to a template', async () => {
     await renderViewer();
     // change montage
     await userEvent.click(screen.getByRole('button', { name: 'Montage' }));
@@ -2771,6 +2788,7 @@ describe('EegViewer — montage template dropdown', () => {
     expect(screen.getByText('EEG1')).toBeTruthy();
     expect(screen.queryByText('EEG2')).toBeNull();
     expect(screen.getByTestId('montage-template-select')).toHaveValue('custom');
+    expect(screen.getByRole('option', { name: 'Custom montage' })).toBeEnabled();
     // set to average and confirm channel names
     await userEvent.selectOptions(screen.getByTestId('montage-template-select'), 'average');
     channelNames.forEach((name) => expect(screen.getByText(`${name} - Avg`)).toBeTruthy());
@@ -2966,6 +2984,87 @@ describe('EegViewer — dropped montage files', () => {
 // A loaded montage's filters that are shared by every row of a channel type become that type's
 // global filters (see extractGlobalFilters). Cutoffs stay below the test recording's Nyquist
 // (fs = 1 → 0.5 Hz), so the filtering they switch on stays stable.
+// Montages saved in the recording itself (TRC files, see loadEegTrc) arrive on the provider —
+// in the file's own spelling, written in lowercase here to check they're converted.
+describe("EegViewer — the recording's own montages", () => {
+  const row = (channel, reference = null) => ({
+    channel,
+    reference,
+    color: null,
+    highPass: null,
+    lowPass: null,
+    notch: null,
+  });
+  const RECORDING_MONTAGES = [
+    { name: 'Bipolar', rows: [row('eeg1'), row('eeg2', 'eeg1')], channelTypes: {} },
+    { name: 'Only EEG3', rows: [row('eeg3')], channelTypes: {} },
+  ];
+  const makeTrcProvider = () => ({ ...makeProvider(), montages: RECORDING_MONTAGES });
+
+  // a montage file dropped with the recording (see useEegFileIntake): EEG3 - EEG1
+  const DROPPED_MONTAGE = {
+    fileName: 'my_montage.mtg',
+    rows: [row('EEG3', 'EEG1')],
+    channelTypes: {},
+  };
+
+  const flush = () =>
+    act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+  it("applies none of the recording's montages on load — they may not fit the recording", async () => {
+    await renderViewer(makeTrcProvider());
+
+    expect(screen.getByTestId('montage-template-select')).toHaveValue('none');
+    channelNames.forEach((name) => expect(screen.getByText(name)).toBeTruthy());
+  });
+
+  it("lists all of the recording's montages in the dropdown, grouped under 'From recording'", async () => {
+    await renderViewer(makeTrcProvider());
+
+    const group = screen.getByRole('group', { name: 'From recording' });
+    const values = Array.from(group.querySelectorAll('option')).map((o) => o.value);
+    expect(values).toEqual(['recording-montage-0', 'recording-montage-1']);
+  });
+
+  it("applies another of the recording's montages picked in the dropdown", async () => {
+    await renderViewer(makeTrcProvider());
+
+    await userEvent.selectOptions(
+      screen.getByTestId('montage-template-select'),
+      'recording-montage-1'
+    );
+
+    expect(screen.getByText('EEG3')).toBeTruthy();
+    expect(screen.queryByText('EEG1')).toBeNull();
+    expect(screen.getByTestId('montage-template-select')).toHaveValue('recording-montage-1');
+  });
+
+  it("applies a montage file dropped with the recording, and keeps the recording's own in the dropdown", async () => {
+    const provider = makeTrcProvider();
+    render(
+      <EegViewer
+        provider={provider}
+        channelNames={provider.channelNames}
+        droppedMontage={DROPPED_MONTAGE}
+      />
+    );
+    await flush();
+
+    expect(screen.getByText('EEG3 - EEG1')).toBeTruthy();
+    expect(screen.queryByText('EEG2')).toBeNull();
+    expect(screen.getByRole('group', { name: 'From recording' })).toBeTruthy();
+  });
+
+  it("shows no 'From recording' group for a recording without montages", async () => {
+    await renderViewer();
+
+    expect(screen.queryByRole('group', { name: 'From recording' })).toBeNull();
+  });
+});
+
 describe('EegViewer — global filters from a loaded montage', () => {
   // EEG1 and EEG2 (both EEG) share high-pass 0.1 and low-pass 0.4; neither has a notch
   const FILTERS_MTG_TEXT = `<!DOCTYPE AnyWaveMontage>

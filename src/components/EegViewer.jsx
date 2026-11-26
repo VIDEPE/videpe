@@ -34,6 +34,7 @@ import {
   filterMontageRows,
   computeAutoYScale,
   remapMontageToRecording,
+  buildRecordingMontageTemplates,
   formatTimelineTime,
   clampTooltipCenter,
 } from '@/utils/eegViewerUtils';
@@ -229,6 +230,7 @@ export const EegViewer = ({
     rowRef,
     handleResizeStart,
     isDragging: isRowResizing,
+    handleResetSize,
   } = useRowResize(MIN_PLOT_ROW_HEIGHT);
 
   // Channel count / x-range / time-step / y-range controls, plus their input handlers
@@ -413,6 +415,18 @@ export const EegViewer = ({
     standardTemplateId,
     detectedIsSeeg,
   });
+  // Montages saved in the recording itself (only TRC files have them), listed in the dropdown
+  // under "From recording". None is applied on load: they're often general montages that name
+  // channels this recording doesn't have, so there's no telling which one (if any) fits.
+  const recordingMontages = useMemo(
+    () => buildRecordingMontageTemplates(provider.montages, channelNames),
+    [provider.montages, channelNames]
+  );
+  // Every file-backed montage the dropdown offers: the recording's own and the bundled ones
+  const fileMontages = useMemo(
+    () => [...recordingMontages, ...montageTemplates],
+    [recordingMontages, montageTemplates]
+  );
 
   // Montage row list (reference/color per displayed trace), edited via the same window's
   // montage-settings pane — kept separate from channelSettings since it's an array (can
@@ -423,7 +437,7 @@ export const EegViewer = ({
     montageTemplate,
     customMontageChannels,
     applyMontageTemplate,
-  } = useMontageChannels(channelNames, montageTemplates);
+  } = useMontageChannels(channelNames, fileMontages);
 
   // Global frequency filters per channel type, edited via the Filter window. A montage row's own
   // filter value overrides these per field (see buildMontageDisplayRows / resolveRowFilters).
@@ -532,9 +546,9 @@ export const EegViewer = ({
   }, [droppedMontage]);
 
   // Routes the sidebar template <select>'s value to the right apply function — a template id
-  // (looked up in montageTemplates) or one of the built-in preset strings.
+  // (looked up in fileMontages) or one of the built-in preset strings.
   const applyTemplateSelection = (value) => {
-    const template = montageTemplates.find((t) => t.id === value);
+    const template = fileMontages.find((t) => t.id === value);
     if (template) applyMontageFile(template);
     else applyMontageTemplate(value);
   };
@@ -1116,7 +1130,7 @@ export const EegViewer = ({
               >
                 <button
                   type="button"
-                  className="button button-icon"
+                  className="button size-icon"
                   title={
                     electrodes?.length > 0
                       ? `${topoEnabled ? 'Close Topograph Map' : 'EEG Topograph Map. If enabled: click EEG plot to generate an EEG Topography map at selected timestamp (requires known electrode positions)'}`
@@ -1141,7 +1155,7 @@ export const EegViewer = ({
               >
                 <button
                   type="button"
-                  className="button button-icon"
+                  className="button size-icon"
                   title={
                     electrodes?.length > 0 && !isStandardElectrodes
                       ? `${electrodeRenderEnabled ? 'Close 3D Electrode Rendering' : 'Open 3D Electrode Rendering'}`
@@ -1168,7 +1182,7 @@ export const EegViewer = ({
               >
                 <button
                   type="button"
-                  className="button button-icon"
+                  className="button size-icon"
                   title={
                     inverseSolutionFileName && isEsiChannelMatchGoodForLed
                       ? `${esiEnabled ? 'Disable Electrical Source Imaging' : 'Electrical Source Imaging. If enabled: click EEG plot to compute source power at selected timestamp'}`
@@ -1188,8 +1202,9 @@ export const EegViewer = ({
               </div>
             </div>
 
-            {/* Channel Controls */}
-            <div className="flex-1 flex flex-row items-start mt-5 sm:mt-10">
+            {/* Channel Controls — vertically centred between the toggles and Filters/Montage, and
+                right-aligned so the box's open side sits next to the plots */}
+            <div className="flex-1 flex flex-row items-center justify-end my-5 sm:my-10">
               <div className="flex flex-row items-center gap-1 py-1 border-border/50 border-1 border-r-0 rounded-tl-md rounded-bl-md">
                 <span className="text-xs text-foreground/60 whitespace-nowrap [writing-mode:vertical-rl] rotate-180 select-none pointer-events-none">
                   Channels
@@ -1197,7 +1212,7 @@ export const EegViewer = ({
                 <div className="flex flex-col items-center gap-1">
                   <button
                     type="button"
-                    className="button button-icon"
+                    className="button button-neutral size-icon"
                     onClick={() => updateVisibleChannelCount(visibleChannelCount + 10)}
                     title="Show more channels"
                     disabled={eegIsStacked}
@@ -1219,20 +1234,18 @@ export const EegViewer = ({
                   />
                   <button
                     type="button"
-                    className="button button-icon"
+                    className="button button-neutral size-icon"
                     onClick={() => updateVisibleChannelCount(visibleChannelCount - 10)}
                     title="Show fewer channels"
                     disabled={eegIsStacked}
                   >
                     <ListChevronsDownUp size={ICON_SIZE} />
                   </button>
-                  {/* Stack/Unstack EEG toggle — mt-2 sets it apart from the channel-count
-                      buttons above (gap-1 already spaces those tightly together) since it's a
-                      related-but-distinct control, not a third count-adjustment button */}
-                  <div className="mt-2">
+                  {/* Stack/Unstack EEG toggle — set apart from the channel-count buttons above */}
+                  <div className="mt-2 flex">
                     <button
                       type="button"
-                      className="button button-icon"
+                      className="button size-icon"
                       title={
                         displayedData.length > 1
                           ? `${eegIsStacked ? 'Unstack' : 'Stack'} EEG Plots`
@@ -1280,11 +1293,16 @@ export const EegViewer = ({
                 data-active={montageActive}
                 title={montageActive ? 'Montage (active)' : 'Montage (inactive)'}
               >
-                <TableColumnsSplit size={ICON_SIZE * 0.75} />
+                <TableColumnsSplit className="scale-x-[-1]" size={ICON_SIZE * 0.75} />
                 Montage
               </button>
+              {/* w-26 with -mr-6: the negative margin cancels the extra 1.5rem in the sidebar's
+                  width calculation (it still sizes as w-20), so the select overhangs into the
+                  empty Y_AXIS_WIDTH padding left of the x-axis/scrubber instead of narrowing the
+                  traces. relative z-10 keeps it above the right column, which would otherwise
+                  paint over it and swallow its clicks. */}
               <select
-                className="text-xs w-20 border border-border rounded bg-surface disabled:opacity-40 disabled:cursor-not-allowed"
+                className="relative z-10 text-xs w-26 -mr-6 border border-border rounded bg-surface disabled:opacity-40 disabled:cursor-not-allowed"
                 data-testid="montage-template-select"
                 title={
                   montageVisible
@@ -1295,8 +1313,18 @@ export const EegViewer = ({
                 onChange={(e) => applyTemplateSelection(e.target.value)}
                 disabled={montageVisible}
               >
-                <option value="none">None</option>
-                {customMontageChannels && <option value="custom">Custom</option>}
+                <option value="none">No montage</option>
+                {/* always listed so it can be found, but disabled until a montage has been
+                    built in the editor — before that there's nothing to restore. The browser's
+                    own disabled grey is meant for light backgrounds, so the theme colour is used
+                    instead (a cursor can't be set: browsers ignore it on options) */}
+                <option
+                  value="custom"
+                  disabled={!customMontageChannels}
+                  className="disabled:text-foreground/50"
+                >
+                  {customMontageChannels ? 'Custom montage' : 'Custom montage (none set)'}
+                </option>
                 {(!detectedIsSeeg || montageTemplate === 'average') && (
                   <option value="average">CAR (Common Average Reference)</option>
                 )}
@@ -1305,6 +1333,15 @@ export const EegViewer = ({
                     {template.name}
                   </option>
                 ))}
+                {recordingMontages.length > 0 && (
+                  <optgroup label="From recording">
+                    {recordingMontages.map((montage) => (
+                      <option key={montage.id} value={montage.id}>
+                        {montage.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
               </select>
             </div>
           </div>
@@ -1451,7 +1488,7 @@ export const EegViewer = ({
                 px-8 reserves room matching the keyboard hint icon (absolute bottom-right, see
                 above) on both sides — flex-wrap can't otherwise see that icon, so without this
                 the row stays unwrapped right up until its last button sits behind the icon. */}
-            <div className="shrink-0 flex flex-wrap justify-center gap-4 py-1 px-8">
+            <div className="shrink-0 flex flex-wrap justify-center gap-x-4 gap-y-1 py-1 px-8">
               <div className="flex flex-col items-center gap-0.5 px-1 pb-1 border-border/50 border-1 border-t-0 rounded-bl-md rounded-br-md">
                 <label htmlFor="eeg-range" className="text-xs text-foreground/60 select-none">
                   Range (µV)
@@ -1459,7 +1496,7 @@ export const EegViewer = ({
                 <div className="flex items-center gap-1">
                   <button
                     type="button"
-                    className="button button-icon"
+                    className="button button-neutral size-icon"
                     onClick={() => updateYScale(yScale * 2)}
                     title="Zoom out"
                   >
@@ -1478,7 +1515,7 @@ export const EegViewer = ({
                   />
                   <button
                     type="button"
-                    className="button button-icon"
+                    className="button button-neutral size-icon"
                     onClick={() => updateYScale(yScale / 2)}
                     title="Zoom in"
                   >
@@ -1488,14 +1525,14 @@ export const EegViewer = ({
               </div>
 
               {/* Time Step: move the x-range forward/backward by a user-defined step */}
-              <div className="flex flex-col items-center gap-0.5 px-1 border-border/50 border-1 border-t-0 rounded-bl-md rounded-br-md">
+              <div className="flex flex-col items-center gap-0.5 px-1 pb-1 border-border/50 border-1 border-t-0 rounded-bl-md rounded-br-md">
                 <label htmlFor="eeg-time-step" className="text-xs text-foreground/60 select-none">
                   Time Step (s)
                 </label>
                 <div className="flex items-center gap-1">
                   <button
                     type="button"
-                    className="button button-icon"
+                    className="button button-neutral size-icon"
                     onClick={() => setStartTime(0)}
                     title="Jump to start"
                   >
@@ -1503,7 +1540,7 @@ export const EegViewer = ({
                   </button>
                   <button
                     type="button"
-                    className="button button-icon"
+                    className="button button-neutral size-icon"
                     onClick={backwardshiftStartTime}
                     title="Shift backward"
                   >
@@ -1523,7 +1560,7 @@ export const EegViewer = ({
                   />
                   <button
                     type="button"
-                    className="button button-icon"
+                    className="button button-neutral size-icon"
                     onClick={forwardshiftStartTime}
                     title="Shift forward"
                   >
@@ -1531,7 +1568,7 @@ export const EegViewer = ({
                   </button>
                   <button
                     type="button"
-                    className="button button-icon"
+                    className="button button-neutral size-icon"
                     onClick={() => setStartTime(tMax - windowSize)}
                     title="Jump to end"
                   >
@@ -1548,7 +1585,7 @@ export const EegViewer = ({
                 <div className="flex items-center gap-1">
                   <button
                     type="button"
-                    className="button button-icon"
+                    className="button button-neutral size-icon"
                     onClick={decreaseWindowSize}
                     title="Decrease window size"
                   >
@@ -1568,7 +1605,7 @@ export const EegViewer = ({
                   />
                   <button
                     type="button"
-                    className="button button-icon"
+                    className="button button-neutral size-icon"
                     onClick={increaseWindowSize}
                     title="Increase window size"
                   >
@@ -1660,13 +1697,14 @@ export const EegViewer = ({
 
         {/* Resize handle — drag down to grow the EEG plot area past flex size, drag up to shrink back.
           Once it reaches the row's natural flex size, further upward dragging has no effect,
-          since min-height never shrinks a flex item below what it'd render at anyway. See handleCanvasResizeStart*/}
+          since min-height never shrinks a flex item below what it'd render at anyway. See useRowResize*/}
         <div
           data-testid="eeg-plot-resize-handle"
           className={`h-1.5 pointer-coarse:h-3 w-full shrink-0 cursor-row-resize rounded-sm select-none touch-none ${isRowResizing ? 'bg-primary' : 'bg-border hover:bg-secondary'}`}
-          title="Drag to resize the EEG plot area"
+          title="Drag to resize the EEG plot area, double-click to reset"
           onMouseDown={handleResizeStart}
           onTouchStart={handleResizeStart}
+          onClick={handleResetSize}
         />
       </div>
 

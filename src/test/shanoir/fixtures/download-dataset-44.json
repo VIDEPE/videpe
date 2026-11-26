@@ -1,0 +1,15 @@
+{
+  "request": "GET datasets/download/44?format=nii",
+  "status": 200,
+  "headers": {
+    "content-type": "application/zip",
+    "content-disposition": "attachment;filename=\"Dataset_synth_44_sub-4_ses-7_atlas-L2018_res-scale2_dseg_nii_gz_20261123154828.zip\""
+  },
+  "size": 356239,
+  "zipEntries": [
+    {
+      "name": "sub-4_ses-7_atlas-L2018_res-scale2_dseg.nii.gz",
+      "size": 492418
+    }
+  ]
+}

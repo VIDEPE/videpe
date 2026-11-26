@@ -406,6 +406,30 @@ describe('EegTopoViewer', () => {
       });
     });
 
+    // jsdom doesn't paint: checks the class that keeps the handles above the window content,
+    // the same as in the other floating windows
+    it('draws the resize handles above the window content', async () => {
+      await act(async () => render(<EegTopoViewer {...defaultProps} />));
+      ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'].forEach((direction) =>
+        expect(screen.getByTestId(`topo-resize-${direction}`).className).toContain('z-20')
+      );
+    });
+
+    // the fitting itself is tested in useFloatingWindow.test.jsx
+    it('opens shrunk to fit on a phone, which is narrower than its default size', async () => {
+      const { innerWidth, innerHeight } = window;
+      window.innerWidth = 390;
+      window.innerHeight = 844;
+      try {
+        const { container } = await act(async () => render(<EegTopoViewer {...defaultProps} />));
+        expect(container.firstChild.style.left).toBe('0px');
+        expect(container.firstChild.style.width).toBe('390px');
+      } finally {
+        window.innerWidth = innerWidth;
+        window.innerHeight = innerHeight;
+      }
+    });
+
     it('does not render resize handles while maximized', async () => {
       await act(async () => render(<EegTopoViewer {...defaultProps} />));
       await userEvent.click(screen.getByRole('button', { name: /maximize/i }));
@@ -489,6 +513,24 @@ describe('EegTopoViewer', () => {
       await act(async () => {
         fireEvent.mouseMove(window, { clientX: 30, clientY: 20 });
         fireEvent.mouseUp(window);
+      });
+
+      expect(parseInt(windowEl.style.left)).toBe(startLeft + 30);
+      expect(parseInt(windowEl.style.top)).toBe(startTop + 20);
+    });
+
+    it('moves the window when the title bar is dragged with a finger', async () => {
+      const { container } = await act(async () => render(<EegTopoViewer {...defaultProps} />));
+      const windowEl = container.firstChild;
+      const startLeft = parseInt(windowEl.style.left);
+      const startTop = parseInt(windowEl.style.top);
+
+      fireEvent.touchStart(screen.getByTestId('topo-title-bar'), {
+        touches: [{ clientX: 0, clientY: 0 }],
+      });
+      await act(async () => {
+        fireEvent.touchMove(window, { touches: [{ clientX: 30, clientY: 20 }] });
+        fireEvent.touchEnd(window);
       });
 
       expect(parseInt(windowEl.style.left)).toBe(startLeft + 30);

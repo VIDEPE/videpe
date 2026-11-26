@@ -378,13 +378,18 @@ export const AboutPage = () => {
                     Longitudal/Transversal BipPolar — from the EEG sidebar
                   </li>
                   <li>
-                    <strong>Safety check</strong> — warns before applying a montage that uses a bad
-                    or missing channel
+                    <strong>Safety check</strong> — rows with a missing channel or reference are
+                    tinted red, bad ones orange, and you're warned before applying a montage that
+                    uses either
                   </li>
                   <li>
                     <strong>Import/export</strong> — load AnyWave or Cartool montages
                     (auto-detected), save as AnyWave with each row's effective filters (its own or
                     the global ones) included
+                  </li>
+                  <li>
+                    <strong>Montages in the recording</strong> — the montages saved in a Micromed
+                    TRC file are offered in the montage dropdown, under &quot;From recording&quot;
                   </li>
                 </ul>
               </div>
@@ -553,7 +558,8 @@ export const AboutPage = () => {
                 <p className="text-sm mt-1" style={{ color: 'var(--c-foreground)' }}>
                   EEG and neuroimaging panels sit side by side with a draggable divider. Each panel
                   can be independently maximised, restored, or reset, and the two panels can be
-                  swapped without reloading any data.
+                  swapped without reloading any data. Double-click or double-tap a resize bar to
+                  reset it.
                 </p>
               </div>
             </div>
@@ -569,8 +575,9 @@ export const AboutPage = () => {
                 <p className="text-sm mt-1" style={{ color: 'var(--c-foreground)' }}>
                   VIDEPE runs entirely in the browser — no installation, no plugins. It works on
                   modern desktop and mobile browsers alike. The interface adapts to the available
-                  screen space, and dark or light mode is picked up from your OS preference
-                  automatically, with a manual toggle always available.
+                  screen space, floating windows can be dragged and resized by touch, and dark or
+                  light mode is picked up from your OS preference automatically, with a manual
+                  toggle always available.
                 </p>
               </div>
             </div>

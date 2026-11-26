@@ -1,8 +1,10 @@
 import { useRef, useMemo, useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
-import { SplitPane } from '@/components/SplitPane';
+import { SplitPane, COLUMN_BREAKPOINT } from '@/components/SplitPane';
 import { useTheme } from '@/hooks/useTheme';
 import { TrafficLightButtons } from '@/components/TrafficLightButtons';
+import { WindowResizeHandles } from '@/components/WindowResizeHandles';
+import { useFloatingWindow } from '@/hooks/useFloatingWindow';
 import {
   compareChannelNamesNaturally,
   buildSeegBipolarReferences,
@@ -27,13 +29,16 @@ import {
 import { extractGlobalFilters, resolveRowFilters } from '../utils/eegFilters';
 
 // ─── Window sizing constants ────────────────────────────────────────────────
-// Default/minimum window size in px — default matches the previous fixed w-96 h-80 (24rem x 20rem)
-const START_WINDOW_POS = { x: 40, y: 50 };
-const DEFAULT_WINDOW_SIZE = { width: 1000, height: 600 };
-const MIN_WINDOW_WIDTH = 600;
-const MIN_WINDOW_HEIGHT = 450;
+// Default position and default/minimum window size in px
+const WINDOW_LAYOUT = {
+  defaultPosition: { x: 40, y: 50 },
+  defaultSize: { width: 1000, height: 600 },
+  minSize: { width: 600, height: 450 },
+};
+// Side by side the channel list needs less room than the montage rows; stacked on a narrow
+// screen (see SplitPane) both get half the height
 const DEFAULT_SPLIT_PERCENT = 27;
-const RESIZE_DIRECTIONS = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
+const STACKED_SPLIT_PERCENT = 50;
 
 // ─── EEG Montage settings ────────────────────────────────────────
 // Preset options offered by each row's Color <select>. A loaded montage file (AnyWave) can
@@ -619,110 +624,18 @@ export function EegMontageEditor({
 
   // ─── Refs ───────────────────────────────────────────────────────────────────
   const fileInputRef = useRef(null);
-  const dragOffset = useRef(null);
 
   // ─── State ──────────────────────────────────────────────────────────────────
-  const [isMaximized, setIsMaximized] = useState(false);
-  const [position, setPosition] = useState({ x: START_WINDOW_POS.x, y: START_WINDOW_POS.y });
-  const [size, setSize] = useState(DEFAULT_WINDOW_SIZE);
+  // Floating window position, size and maximize state, with title bar drag and edge resize
+  const { isMaximized, toggleMaximize, windowProps, handleDragStart, handleResizeStart } =
+    useFloatingWindow(WINDOW_LAYOUT);
   // Whether SplitPane's two panes are currently swapped — used to flip the montage pane's
   // own internal add-row-controls/row-list layout so the controls stay on the outer edge.
   const [isPanesSwapped, setIsPanesSwapped] = useState(false);
-
-  // ─── Handlers  ─────────────────────────────────────────────────────────────
-
-  //  window drag/resize
-  // Drag the floating window by its title bar. Position is clamped to the viewport so the
-  // window (and its title bar drag handle) can never be dragged out of view and get stranded.
-  const handleDragStart = useCallback(
-    (e) => {
-      dragOffset.current = { x: e.clientX - position.x, y: e.clientY - position.y };
-      const onMove = (e) => {
-        const maxX = Math.max(0, window.innerWidth - size.width);
-        const maxY = Math.max(0, window.innerHeight - size.height);
-        setPosition({
-          x: Math.min(Math.max(e.clientX - dragOffset.current.x, 0), maxX),
-          y: Math.min(Math.max(e.clientY - dragOffset.current.y, 0), maxY),
-        });
-      };
-      const onUp = () => {
-        window.removeEventListener('mousemove', onMove);
-        window.removeEventListener('mouseup', onUp);
-      };
-      window.addEventListener('mousemove', onMove);
-      window.addEventListener('mouseup', onUp);
-    },
-    [position, size]
+  // Picked once on open, from the same breakpoint at which SplitPane stacks the panes
+  const [defaultSplitPercent] = useState(() =>
+    window.innerWidth < COLUMN_BREAKPOINT ? STACKED_SPLIT_PERCENT : DEFAULT_SPLIT_PERCENT
   );
-
-  // Resize the floating window by dragging an edge or corner. direction is a combination of
-  // 'n'/'s'/'e'/'w' identifying which edges move; dragging n/w also shifts position so the
-  // opposite edge stays anchored in place, matching how OS window resizing behaves.
-  const handleResizeStart = useCallback(
-    (e, direction) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const startX = e.clientX;
-      const startY = e.clientY;
-      const startWidth = size.width;
-      const startHeight = size.height;
-      const startPosition = position;
-
-      const onMove = (e) => {
-        const dx = e.clientX - startX;
-        const dy = e.clientY - startY;
-        const nextSize = { width: startWidth, height: startHeight };
-        const nextPosition = { ...startPosition };
-
-        if (direction.includes('e')) nextSize.width = Math.max(MIN_WINDOW_WIDTH, startWidth + dx);
-        if (direction.includes('s'))
-          nextSize.height = Math.max(MIN_WINDOW_HEIGHT, startHeight + dy);
-        if (direction.includes('w')) {
-          nextSize.width = Math.max(MIN_WINDOW_WIDTH, startWidth - dx);
-          nextPosition.x = startPosition.x + (startWidth - nextSize.width);
-        }
-        if (direction.includes('n')) {
-          nextSize.height = Math.max(MIN_WINDOW_HEIGHT, startHeight - dy);
-          nextPosition.y = startPosition.y + (startHeight - nextSize.height);
-        }
-
-        setSize(nextSize);
-        setPosition(nextPosition);
-      };
-      const onUp = () => {
-        window.removeEventListener('mousemove', onMove);
-        window.removeEventListener('mouseup', onUp);
-      };
-      window.addEventListener('mousemove', onMove);
-      window.addEventListener('mouseup', onUp);
-    },
-    [size, position]
-  );
-
-  // ─── Render helpers ─────────────────────────────────────────────────────────
-  const resizeCursor = {
-    n: 'cursor-ns-resize',
-    s: 'cursor-ns-resize',
-    e: 'cursor-ew-resize',
-    w: 'cursor-ew-resize',
-    ne: 'cursor-nesw-resize',
-    sw: 'cursor-nesw-resize',
-    nw: 'cursor-nwse-resize',
-    se: 'cursor-nwse-resize',
-  };
-
-  // Edge handles run the full length of their side; corner handles are small squares
-  // layered on top so diagonal resizing takes priority right at the corners.
-  const resizePosition = {
-    n: 'inset-x-0 top-0 h-1.5',
-    s: 'inset-x-0 bottom-0 h-1.5',
-    e: 'inset-y-0 right-0 w-1.5',
-    w: 'inset-y-0 left-0 w-1.5',
-    ne: 'top-0 right-0 w-2.5 h-2.5',
-    nw: 'top-0 left-0 w-2.5 h-2.5',
-    se: 'bottom-0 right-0 w-2.5 h-2.5',
-    sw: 'bottom-0 left-0 w-2.5 h-2.5',
-  };
 
   // Channel name → matched electrode label, for the Pos checkbox's hover tooltip below.
   // A Map (not a Set of names) so each row's tooltip can name which electrode it matched,
@@ -740,20 +653,22 @@ export function EegMontageEditor({
   // the bad one.
   const referenceOptions = useMemo(
     () => [
-      <option key="none" value="">
+      // every option sets its own colour, so a select tinted red for a missing reference
+      // (see the per-row Reference select) doesn't pass that red on to them
+      <option key="none" value="" className="text-foreground">
         — n/a —
       </option>,
-      <option key="average" value="average">
+      <option key="average" value="average" className="text-foreground">
         Average
       </option>,
-      <option key="median" value="median">
+      <option key="median" value="median" className="text-foreground">
         Median
       </option>,
       ...channelNames.map((refName) => (
         <option
           key={refName}
           value={refName}
-          className={draftChannelSettings[refName]?.bad ? 'text-alert' : undefined}
+          className={draftChannelSettings[refName]?.bad ? 'text-alert' : 'text-foreground'}
         >
           {refName}
         </option>
@@ -831,7 +746,7 @@ export function EegMontageEditor({
                     </select>
                     <button
                       type="button"
-                      className="shrink-0 w-4 h-4 rounded-full bg-primary text-background flex items-center justify-center cursor-pointer"
+                      className="button size-dot"
                       data-testid="bulk-type-apply-button"
                       title="Set every channel to this type"
                       onClick={handleSetAllType}
@@ -879,7 +794,7 @@ export function EegMontageEditor({
                     }}
                     className={cn(
                       'relative flex items-center gap-2 px-1 py-0.5',
-                      settings.bad ? (isDarkMode ? 'bg-alert/10' : 'bg-alert/20') : '',
+                      settings.bad ? (isDarkMode ? 'bg-alert/20' : 'bg-alert/30') : '',
                       selectedChannels.has(name) && (isDarkMode ? 'bg-primary/15' : 'bg-primary/20')
                     )}
                   >
@@ -967,7 +882,7 @@ export function EegMontageEditor({
       {/* Add button */}
       <button
         type="button"
-        className="button button-icon"
+        className="button size-icon"
         data-testid="add-selected-button"
         disabled={selectedChannels.size === 0}
         onClick={handleAddSelectedChannels}
@@ -994,7 +909,7 @@ export function EegMontageEditor({
             window's Clear all, so clearing reads as a secondary action */}
         <button
           type="button"
-          className="text-xs border border-border rounded-full px-2 py-1 bg-surface hover:bg-background cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+          className="button button-outline"
           data-testid="clear-all-button"
           onClick={handleClearAllMontageRows}
           disabled={draftMontageChannels.length === 0}
@@ -1139,7 +1054,7 @@ export function EegMontageEditor({
                     </select>
                     <button
                       type="button"
-                      className="shrink-0 w-4 h-4 rounded-full bg-primary text-background flex items-center justify-center disabled:opacity-40 cursor-pointer"
+                      className="button size-dot"
                       data-testid="bulk-reference-apply-button"
                       title="Set every row to this reference"
                       disabled={draftMontageChannels.length === 0}
@@ -1172,7 +1087,7 @@ export function EegMontageEditor({
                     </select>
                     <button
                       type="button"
-                      className="shrink-0 w-4 h-4 rounded-full bg-primary text-background flex items-center justify-center disabled:opacity-40 cursor-pointer"
+                      className="button size-dot"
                       data-testid="bulk-color-apply-button"
                       title="Set every row to this color"
                       disabled={draftMontageChannels.length === 0}
@@ -1212,7 +1127,7 @@ export function EegMontageEditor({
                     />
                     <button
                       type="button"
-                      className="shrink-0 w-4 h-4 rounded-full bg-primary text-background flex items-center justify-center disabled:opacity-40 cursor-pointer"
+                      className="button size-dot"
                       data-testid="bulk-highpass-apply-button"
                       title="Set every row's High Pass to this value"
                       disabled={draftMontageChannels.length === 0}
@@ -1248,7 +1163,7 @@ export function EegMontageEditor({
                     />
                     <button
                       type="button"
-                      className="shrink-0 w-4 h-4 rounded-full bg-primary text-background flex items-center justify-center disabled:opacity-40 cursor-pointer"
+                      className="button size-dot"
                       data-testid="bulk-lowpass-apply-button"
                       title="Set every row's Low Pass to this value"
                       disabled={draftMontageChannels.length === 0}
@@ -1284,7 +1199,7 @@ export function EegMontageEditor({
                     />
                     <button
                       type="button"
-                      className="shrink-0 w-4 h-4 rounded-full bg-primary text-background flex items-center justify-center disabled:opacity-40 cursor-pointer"
+                      className="button size-dot"
                       data-testid="bulk-notch-apply-button"
                       title="Set every row's Notch to this value"
                       disabled={draftMontageChannels.length === 0}
@@ -1348,40 +1263,50 @@ export function EegMontageEditor({
                 // or the global one — rows have no harmonics setting of their own
                 const notchHarmonicsApply =
                   typeFilters?.notchHarmonics === true && (row.notch ?? typeFilters?.notch) != null;
+                // One status tint for every row that can't be drawn: error (red) when something
+                // is missing — data to fix — over alert (orange) when it's bad — the user's own
+                // choice. Same strengths for both, so only the hue tells them apart.
+                const isRowMissing = isChannelMissing || isReferenceMissing;
+                const statusTint = isRowMissing ? 'bg-error' : isRowBad ? 'bg-alert' : null;
                 return (
                   <div
                     key={row.id}
                     style={{
                       overflow: 'visible',
                       borderBottom: `1px solid ${channelDividerColor}`,
-                      // The row's selected color tints its background, but is overwrited by bg-alert when
-                      // the channel is bad (applied via className, not inline style, which always wins)
-                      // color-mix keeps this a subtle tint rather than the fully-saturated color used in uPlot
-                      ...(!isRowBad && !isChannelMissing && row.color
-                        ? {
-                            backgroundColor: `color-mix(in srgb, ${row.color} ${isDarkMode ? 30 : 40}%, transparent)`,
-                          }
-                        : {}),
                     }}
                     className={cn(
-                      'relative flex items-center gap-2 pl-3 pr-1 py-0.5 cursor-pointer select-none',
-                      isRowBad && (isDarkMode ? 'bg-alert/20' : 'bg-alert/30'),
+                      // isolate keeps the stripe's -z-10 inside the row
+                      'relative isolate flex items-center gap-2 pl-3 pr-1 py-0.5 cursor-pointer select-none',
+                      // The background is only for status — the row's own colour is the stripe
+                      // below. Full class names (not built from statusTint) so Tailwind finds them
+                      statusTint === 'bg-error' && (isDarkMode ? 'bg-error/20' : 'bg-error/30'),
+                      statusTint === 'bg-alert' && (isDarkMode ? 'bg-alert/20' : 'bg-alert/30'),
                       isChannelMissing && 'opacity-50',
-                      // A ring (not a background) marks the row selected for Move Up/Down —
-                      // background is already spoken for by the bad/color tints above, and an
-                      // inline style (row.color) would win over a background className anyway.
-                      selectedMontageRows.has(row.id) && 'ring-2 ring-inset ring-primary'
+                      // Selected for Move Up/Down. Outline, not ring: a ring is painted with the
+                      // background, under the stripe
+                      selectedMontageRows.has(row.id) &&
+                        'outline-2 -outline-offset-2 outline-primary'
                     )}
                     title="Click row to select for Move Up/Down"
                     onClick={(e) => handleMontageRowClick(e, row.id)}
                   >
+                    {/* Row colour stripe, in the left padding so rows line up; -z-10 keeps it
+                        under the selection outline */}
+                    {row.color && (
+                      <span
+                        className="absolute left-0 inset-y-0 w-[6px] -z-10"
+                        style={{ backgroundColor: row.color }}
+                        data-testid={`color-stripe-${row.id}`}
+                      />
+                    )}
                     {/* Channel name */}
                     <span
                       className={cn(
                         CHANNEL_NAME_COL_CLASS,
                         'truncate text-sm',
                         isChannelBad && 'text-alert',
-                        isChannelMissing && 'text-red-500'
+                        isChannelMissing && 'text-error'
                       )}
                       title={
                         isChannelMissing
@@ -1409,15 +1334,17 @@ export function EegMontageEditor({
                         When a channel is referenced that isn't in the current recording (only reachable
                         via a loaded montage file), gets its own injected option so it can display this 
                         this channel as missing (instead of falling back to blank "— n/a —"). a missing 
-                        reference alone is fixable by picking another one. 
-                        Bad/missing coloring lives on the individual <option> elements below (not
-                        this <select>'s own className) — a color class here would cascade onto
-                        every option in the dropdown instead of just the one that's actually bad
-                        or missing. */}
+                        reference alone is fixable by picking another one.
+                        A missing reference also colours the <select> itself red (border, ring and
+                        text): a closed select shows its selected option in its own colour, so the
+                        option's red alone is only seen once the dropdown is opened. The other
+                        options set their own colour (see referenceOptions), so the red doesn't
+                        cascade onto them. */}
                     <select
                       className={cn(
                         REF_COL_CLASS,
-                        'text-xs border border-border rounded bg-surface cursor-default'
+                        'text-xs border border-border rounded bg-surface cursor-default',
+                        isReferenceMissing && 'border-error ring-1 ring-error text-error'
                       )}
                       title={
                         isReferenceMissing
@@ -1432,7 +1359,7 @@ export function EegMontageEditor({
                       onChange={(e) => setDraftMontageRowReference(row.id, e.target.value)}
                     >
                       {isReferenceMissing && (
-                        <option value={row.reference} className="text-red-500">
+                        <option value={row.reference} className="text-error">
                           {row.reference} (missing)
                         </option>
                       )}
@@ -1623,7 +1550,7 @@ export function EegMontageEditor({
               <div className="flex items-center gap-2 shrink-0 ml-auto overflow-hidden p-1">
                 <button
                   type="button"
-                  className="button button-icon"
+                  className="button size-icon"
                   data-testid="move-up-button"
                   disabled={selectedMontageRows.size === 0}
                   onClick={handleMoveSelectedUp}
@@ -1637,7 +1564,7 @@ export function EegMontageEditor({
                 </button>
                 <button
                   type="button"
-                  className="button button-icon"
+                  className="button size-icon"
                   data-testid="move-down-button"
                   disabled={selectedMontageRows.size === 0}
                   onClick={handleMoveSelectedDown}
@@ -1659,59 +1586,43 @@ export function EegMontageEditor({
 
   // ─── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div
-      className={
-        isMaximized
-          ? 'fixed inset-0 z-50 flex flex-col bg-surface'
-          : 'fixed z-50 flex flex-col rounded-lg border border-border bg-surface'
-      }
-      style={
-        isMaximized
-          ? { boxShadow: 'none' }
-          : {
-              left: position.x,
-              top: position.y,
-              width: size.width,
-              height: size.height,
-              boxShadow: 'var(--c-shadow)',
-            }
-      }
-    >
+    <div {...windowProps}>
       {/* Title bar — drag handle; explicit bg-surface so NiiVue's black canvas doesn't bleed through */}
       <div
         data-testid="montage-title-bar"
-        className="flex items-center justify-between px-2 py-1 border-b border-border cursor-grab select-none shrink-0 bg-surface"
+        className="flex items-center justify-between px-2 py-1 border-b border-border cursor-grab select-none touch-none shrink-0 bg-surface"
         onMouseDown={handleDragStart}
+        onTouchStart={handleDragStart}
       >
         <span className="text-sm font-medium text-heading">
           {isModified ? 'Montage Editor *' : 'Montage Editor'}
         </span>
         <TrafficLightButtons
-          onMaximize={() => setIsMaximized((v) => !v)}
+          onMaximize={toggleMaximize}
           isMaximized={isMaximized}
           onClose={onClose}
         />
       </div>
 
       {/* Resize handles — hidden while maximized since the window already fills the screen.
-          Rendered last so they paint above the title/footer content and stay grabbable at the edges. */}
-      {!isMaximized &&
-        RESIZE_DIRECTIONS.map((direction) => (
-          <div
-            key={direction}
-            data-testid={`montage-resize-${direction}`}
-            className={`absolute ${resizePosition[direction]} ${resizeCursor[direction]}`}
-            onMouseDown={(e) => handleResizeStart(e, direction)}
-          />
-        ))}
-      <SplitPane
-        leftLabel={<span className={PANEL_TITLE_CLASS}>Channel Selection</span>}
-        rightLabel={<span className={PANEL_TITLE_CLASS}>Montage Settings</span>}
-        onSwapChange={setIsPanesSwapped}
-        left={channelSelectionPane}
-        right={montageSelectionPane}
-        defaultSplitPercent={DEFAULT_SPLIT_PERCENT}
-      />
+          Drawn above the montage rows and the z-10 column headers at the edges. */}
+      {!isMaximized && (
+        <WindowResizeHandles testIdPrefix="montage" onResizeStart={handleResizeStart} />
+      )}
+      {/* px-1.5: empty strips as wide as the side handles, so they don't cover the panes' scrollbars */}
+      <div
+        data-testid="montage-editor-body"
+        className={`flex-1 min-h-0 flex flex-col ${isMaximized ? '' : 'px-1.5 pointer-coarse:px-3'}`}
+      >
+        <SplitPane
+          leftLabel={<span className={PANEL_TITLE_CLASS}>Channel Selection</span>}
+          rightLabel={<span className={PANEL_TITLE_CLASS}>Montage Settings</span>}
+          onSwapChange={setIsPanesSwapped}
+          left={channelSelectionPane}
+          right={montageSelectionPane}
+          defaultSplitPercent={defaultSplitPercent}
+        />
+      </div>
 
       {/* Footer — Apply/OK commit the draft to EegViewer's live channelSettings; Cancel (and
           the title bar's red X, via onClose) discard it by simply closing without committing. */}
@@ -1719,20 +1630,12 @@ export function EegMontageEditor({
         <button type="button" className="button" onClick={handleOk}>
           OK
         </button>
-        <button
-          type="button"
-          className="text-xs border border-border rounded-full px-2 py-1 bg-surface hover:bg-background"
-          onClick={onClose}
-        >
+        <button type="button" className="button button-outline" onClick={onClose}>
           Cancel
         </button>
         <button
           type="button"
-          className={
-            isModified
-              ? 'button'
-              : 'text-xs border border-border rounded-full px-2 py-1 bg-surface hover:bg-background'
-          }
+          className={cn('button', !isModified && 'button-outline')}
           onClick={handleApply}
         >
           Apply
@@ -1762,7 +1665,7 @@ export function EegMontageEditor({
             <div className="flex justify-end gap-2">
               <button
                 type="button"
-                className="text-xs border border-border rounded-full px-3 py-1 bg-surface hover:bg-background"
+                className="button button-outline"
                 data-testid="keep-monopolar-yes"
                 onClick={() => commitSeegBipolarMontage(pendingSeegBipolarBuild, true)}
               >

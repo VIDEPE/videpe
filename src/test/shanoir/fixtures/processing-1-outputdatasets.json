@@ -1,0 +1,51 @@
+{
+  "request": "GET datasetProcessing/1/outputDatasets/",
+  "status": 200,
+  "body": [
+    {
+      "creationDate": "2026-11-23",
+      "groupOfSubjectsId": null,
+      "id": 40,
+      "originMetadata": {
+        "cardinalityOfRelatedSubjects": null,
+        "comment": null,
+        "datasetModalityType": "MR_DATASET",
+        "exploredEntity": null,
+        "id": 40,
+        "name": "T1",
+        "processedDatasetType": "RECONSTRUCTEDDATASET"
+      },
+      "studyId": 1,
+      "subjectId": 4,
+      "centerId": null,
+      "updatedMetadata": {
+        "cardinalityOfRelatedSubjects": null,
+        "comment": null,
+        "datasetModalityType": "MR_DATASET",
+        "exploredEntity": null,
+        "id": 40,
+        "name": "T1",
+        "processedDatasetType": "RECONSTRUCTEDDATASET"
+      },
+      "name": "T1",
+      "type": "MR",
+      "inPacs": true,
+      "tags": null,
+      "source": null,
+      "copies": null,
+      "datasetProcessing": {
+        "id": 1,
+        "comment": null,
+        "datasetProcessingType": null,
+        "outputDatasets": null,
+        "inputDatasets": null,
+        "processingDate": null,
+        "studyId": null,
+        "parentId": null,
+        "processingStatus": null,
+        "monitoringIndex": null
+      },
+      "datasetAcquisition": null
+    }
+  ]
+}

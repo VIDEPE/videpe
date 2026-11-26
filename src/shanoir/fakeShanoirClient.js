@@ -31,7 +31,7 @@ const DATASETS = [
   },
   // Unsupported type: skipped before downloading, so its file is never fetched (and doesn't exist)
   { id: 3, name: 'Shanoir dummy demo', type: 'DUMMY', files: ['dummy.bak'] },
-  // more: a second EEG dataset, to trigger the "additional EEG recording" reason in the "skipped" toast
+  // more: a second EEG dataset (with a lower id), to trigger the "older EEG recording" reason in the "skipped" toast
 ];
 
 // a Promise that resolves after `ms` milliseconds, so it can be awaited
@@ -45,6 +45,25 @@ export function createFakeShanoirClient({ delayMs = 1000 } = {}) {
       // The examination's datasets as { id, name, type }, like Shanoir's DatasetDTOs
       // (without `files`, which only this fake uses to know what goes in each ZIP)
       return DATASETS.map((d) => ({ id: d.id, name: d.name, type: d.type }));
+    },
+    // No processings in this fake: the demo segmentations above are listed as the
+    // examination's own datasets instead of as processed outputs
+    async listProcessingsByInputDataset() {
+      return [];
+    },
+    async listProcessingOutputDatasets() {
+      return [];
+    },
+    // No acquisitions in this fake: the demo's extra data is attached to the examination
+    // (getExamination), so downloadAcquisitionExtraData is never called
+    async listExaminationAcquisitions() {
+      return [];
+    },
+    async listAcquisitionDatasets() {
+      return [];
+    },
+    async downloadAcquisitionExtraData() {
+      throw new Error('The demo examination has no acquisition extra data');
     },
     async getExamination(examinationId) {
       // The examination, with the names of its attached files (electrodes, inverse solution);

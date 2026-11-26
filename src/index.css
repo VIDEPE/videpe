@@ -10,6 +10,8 @@
   --c-primary: rgb(84, 127, 219); /* brand / accent color */
   --c-secondary: rgb(18, 74, 196); /* outlines */
   --c-alert: rgb(250, 111, 18); /* warning messages, nondestructive actions */
+  /* missing data that needs fixing, e.g. a montage channel not in recording */
+  --c-error: rgb(170, 28, 28);
   --c-shadow:
     rgba(0, 0, 0, 0.4) 0 6px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 8px -2px; /* box shadows */
 
@@ -40,6 +42,7 @@
   --c-primary: rgba(132, 204, 252, 1); /* brand / accent color */
   --c-secondary: rgb(16, 56, 199); /* outlines */
   --c-alert: rgb(250, 111, 18); /* warning messages, nondestructive actions */
+  --c-error: rgb(185, 28, 28); /* missing data that needs fixing (red-700) */
   --c-shadow:
     rgba(255, 255, 255, 0.4) 0 6px 15px -3px, rgba(255, 255, 255, 0.25) 0 4px 8px -2px; /* box shadows color x y blur spread*/
 }
@@ -54,6 +57,7 @@
   --color-primary: var(--c-primary);
   --color-secondary: var(--c-secondary);
   --color-alert: var(--c-alert);
+  --color-error: var(--c-error);
   --font-sans: system-ui, 'Segoe UI', Roboto, sans-serif;
   --font-mono: ui-monospace, Consolas, monospace;
 }
@@ -137,112 +141,267 @@ code {
    Button Styles
    ============================================ */
 
-.button-lg {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 24px;
-  border-radius: 9999px;
-  font-weight: 500;
-  color: var(--color-background);
-  background: var(--color-primary);
-  border: none;
-  cursor: pointer;
-  transition:
-    background-color 0.15s ease,
-    box-shadow 0.15s ease,
-    transform 0.1s ease;
-
-  &:hover {
-    box-shadow: var(--c-shadow);
-    transform: scale(1.06);
-  }
-
-  &:active {
-    transform: scale(0.93);
-    box-shadow: none;
-  }
-}
-
+/* Base button: a filled primary-coloured pill with bold 12px text. Combine with a style class
+   (button-outline, button-cta) and/or a size class (size-*). */
 .button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 2px 10px;
+  /* Every button has a 1px transparent border (padding is 1px less to compensate), so filled
+     and outline buttons are exactly the same size — the outline style only colours the border */
+  padding: 1px 9px;
   border-radius: 9999px;
   font-weight: bold;
   font-size: 12px;
   color: var(--color-background);
   background: var(--color-primary);
-  border: none;
+  border: 1px solid transparent;
   cursor: pointer;
   transition:
-    background-color 0.15s ease,
-    box-shadow 0.15s ease,
+    background-color 0.2s ease,
+    box-shadow 0.2s ease,
     transform 0.1s ease;
 
-  &:hover {
-    box-shadow: var(--c-shadow);
-    transform: scale(1.06);
+  /* Hover: the fill darkens in light mode and lightens in dark mode (mixed toward --c-heading),
+     and a soft primary-tinted glow appears. No scaling: a growing button wobbles and overlaps
+     its neighbours in dense toolbars. */
+  &:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--color-primary) 70%, var(--color-heading));
+    box-shadow: 0 2px 8px -2px color-mix(in srgb, var(--color-primary) 60%, transparent);
   }
 
-  &:active {
-    transform: scale(0.93);
+  /* Press: shrinks slightly and the glow drops, so it reads as pushed in */
+  &:active:not(:disabled) {
+    transform: scale(0.96);
     box-shadow: none;
-  }
-
-  &[aria-pressed='false'] {
-    background: var(--color-background);
-    color: var(--color-primary);
-  }
-
-  &[aria-expanded='false'] {
-    background: var(--color-background);
-    color: var(--color-primary);
   }
 
   &:disabled {
     opacity: 0.4;
     cursor: not-allowed;
-
-    &:hover {
-      box-shadow: none;
-      transform: none;
-    }
-  }
-
-  &[data-active='false'] {
-    background: var(--color-background);
-    color: var(--color-heading);
-    border: 1px solid var(--color-border);
-    padding: 1px 9px; /* compensates the 1px border */
   }
 }
 
-/* Icon-only variant: tighter padding, no shadow — for dense control toolbars */
-.button-icon {
-  padding: 2px 4px;
+/* Outline: page-colour fill, grey border and heading-coloured text. Used for secondary actions
+   next to a filled primary one (Cancel, Clear all, Reset), and for every toggle's off-state
+   (aria-pressed, aria-expanded or data-active false), so toggles are filled when on and
+   outlined when off. Declared after .button so it overrides its colours. */
+.button[aria-pressed='false'],
+.button[aria-expanded='false'],
+.button[data-active='false'],
+.button-outline {
+  background: var(--color-background);
+  color: var(--color-heading);
+  border-color: var(--color-border);
 
-  &:hover {
-    box-shadow: none;
-  }
-  &:active {
-    box-shadow: none;
+  /* Hover: a light primary tint. Not --c-surface: on surface-coloured cards (e.g. the imaging
+     layer cards) the button would vanish into the card. */
+  &:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--color-primary) 12%, var(--color-background));
   }
 }
 
-/* Extra-small variant: minimal padding and smaller text — for compact sidebars */
-.size-xs {
-  padding: 2px 6px;
+/* Neutral: a grey (--c-surface) fill with a heading-coloured icon or label and no visible
+   border, for one-shot actions (EEG zoom, time step and channel count, the top bar's Back, About
+   and demo buttons). Primary is kept for
+   state: toggles are grey-outlined when off and primary-filled when on, so an action button is
+   never blue and can't be mistaken for an "on" toggle. Exception: dialog footers (OK, Apply) stay
+   primary, as a grey fill would vanish against their surface-coloured edge. */
+.button-neutral {
+  background: var(--color-surface);
+  color: var(--color-heading);
+
+  /* Hover: the light primary tint used by the outline buttons, plus the shared .button glow */
+  &:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--color-primary) 12%, var(--color-background));
+  }
+}
+
+/* Group: a vertical stack of buttons in one shared outline (the NiiViewer view buttons), for
+   mutually exclusive options where exactly one is on. The group draws the page-coloured pill with
+   the grey border; its off buttons drop their own fill and border, so the strip reads as one
+   control, and the "on" option shows as a primary circle inside the outline. Off buttons still
+   get the light primary tint on hover. */
+.button-group {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 1px;
+  border-radius: 9999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-background);
+
+  & > .button[aria-pressed='false'] {
+    background: transparent;
+    border-color: transparent;
+  }
+
+  /* Circles shrink to 24px, so the whole pill (24 + 2px padding + 2px border) is as wide as a
+     standalone 28px size-circle button next to it */
+  & > .size-circle {
+    width: 24px;
+    height: 24px;
+  }
+}
+
+/* Bare: icon-only button with no fill or border (the theme and colorblind toggles in the page
+   headers). Feedback is on the icon itself: it rests slightly muted and brightens on hover — a
+   background disc behind these coloured icons looked like a halo. Sets no padding, so the
+   element keeps its own (e.g. p-2). */
+.button-bare {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  cursor: pointer;
+  transition: transform 0.1s ease;
+
+  & > svg {
+    opacity: 0.85;
+    transition:
+      opacity 0.2s ease,
+      filter 0.2s ease;
+  }
+
+  /* Hover: full opacity plus brightness(), since full opacity alone is too small a step */
+  &:hover:not(:disabled) > svg {
+    opacity: 1;
+    filter: brightness(1.25);
+  }
+
+  &:active:not(:disabled) {
+    transform: scale(0.96);
+  }
+}
+
+/* Sizes: only set dimensions (padding, width/height, font size), never colours or behaviour.
+   Combine with .button, e.g. "button size-icon". Paddings are 1px less than they look, to make
+   room for .button's transparent border. */
+
+/* Tighter padding for icon buttons in dense toolbars (EEG viewer, montage editor) */
+.size-icon {
+  padding: 1px 3px;
+}
+
+/* Fixed 28px circle holding a 16px icon or a 2-letter label (NiiViewer's view-button column).
+   Fixed width rather than padding: with padding the width follows the label, so narrow labels
+   came out as ovals and wide ones as pills. */
+.size-circle {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  padding: 0;
   font-size: 11px;
 }
 
-/* Icon-only variant sized for tight sidebars (e.g. NiiViewer's slice-button column) — padding
-   is symmetric so a single icon glyph renders as a circle, unlike .size-xs's asymmetric
-   text padding (wider than tall, tuned for 2-character labels). */
-.button-icon-xs {
-  padding: 6px;
+/* Tiny fixed-size circle for a single small glyph (e.g. the editors' ✓ "set all" buttons next
+   to a bulk-value input). No padding: the glyph is centred by .button's flex centring. */
+.size-dot {
+  flex-shrink: 0;
+  width: 1rem;
+  height: 1rem;
+  padding: 0;
+}
+
+/* Large variant for page-level calls to action (e.g. the landing page's Get Started): body-size
+   text instead of .button's 12px. Combine with .button so it shares its hover, press, disabled
+   and outline behaviour: "button size-lg". */
+.size-lg {
+  padding: 11px 23px; /* +1px transparent border = 12px 24px, see .button */
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+/* Call-to-action modifier for the one button a page wants clicked (the landing page's Get
+   Started): "button size-lg button-cta". At rest its trailing arrow icon nudges right every
+   few seconds, pointing the way, while a subtle glow swells around the button, to invite the
+   click; on hover the button lifts with a strong tinted glow and the arrow slides right and
+   stays there. Lifts (translate) rather than grows (scale), so the label doesn't wobble.
+   Declared after .button so its hover/press override the shared ones. */
+.button-cta {
+  /* Same 3s cycle as the arrow's cta-nudge, and both start on page load, so they stay in sync */
+  animation: cta-nudge-glow 3s ease-in-out infinite;
+  transition:
+    background-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
+
+  & > svg {
+    animation: cta-nudge 3s ease-in-out infinite;
+    transition: transform 0.2s ease;
+  }
+
+  /* animation: none — a running animation overrides box-shadow/transform, so the nudge glow
+     would hide the hover glow, and the nudge would fight the hover slide */
+  &:hover:not(:disabled) {
+    animation: none;
+    transform: translateY(-2px);
+    box-shadow: 0 10px 28px -6px color-mix(in srgb, var(--color-primary) 80%, transparent);
+
+    & > svg {
+      animation: none;
+      transform: translateX(4px);
+    }
+  }
+
+  &:active:not(:disabled) {
+    transform: translateY(0) scale(0.97);
+    box-shadow: 0 4px 12px -4px color-mix(in srgb, var(--color-primary) 60%, transparent);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+
+    & > svg {
+      animation: none;
+    }
+  }
+}
+
+/* Two quick nudges in the first ~30% of the cycle (~0.9s), then rests for the remaining ~2.1s */
+@keyframes cta-nudge {
+  0%,
+  30%,
+  100% {
+    transform: translateX(0);
+  }
+  8%,
+  22% {
+    transform: translateX(4px);
+  }
+  15% {
+    transform: translateX(1px);
+  }
+}
+
+/* Glow on the button that swells with the nudge (peak at 15%, ~0.45s) and then fades out slowly
+   until 75% (~1.8s fade), leaving a short dark pause before the next nudge */
+@keyframes cta-nudge-glow {
+  0%,
+  75%,
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+  15% {
+    box-shadow: 0 0 18px 1px color-mix(in srgb, var(--c-primary) 50%, transparent);
+  }
+}
+
+/* ============================================
+   Slider Styles
+   ============================================ */
+
+/* Slider thumb (the round primary-coloured handle of the imaging layer sliders, a Radix
+   Slider.Thumb): on hover it darkens in light mode and lightens in dark mode, the same colour
+   shift as a .button hover. Size, shape and focus ring stay as Tailwind classes on the element.
+   The thumb is a span, so a disabled one is matched by Radix's data-disabled, not :disabled. */
+.slider-thumb {
+  transition: background-color 0.2s ease;
+
+  &:hover:not([data-disabled]) {
+    background: color-mix(in srgb, var(--color-primary) 70%, var(--color-heading));
+  }
 }
 
 /* ============================================

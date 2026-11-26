@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { SplitPane } from '@/components/SplitPane';
 
@@ -58,10 +58,8 @@ describe('SplitPane — initial render', () => {
 });
 
 describe('SplitPane — unrelated mouseup', () => {
-  // Regression test: the divider-drag-end handler is registered on window (so it can catch
-  // a mouseup anywhere), not scoped to the divider itself. It must ignore a mouseup that
-  // wasn't preceded by a mousedown on the divider — e.g. releasing a drag on some unrelated
-  // element elsewhere on the page — instead of resetting the split to a stale default.
+  // Regression test: the drag-end handler listens on window, so it must ignore a mouseup
+  // without a divider drag (e.g. releasing an unrelated drag) instead of resetting the split
   it('does not change the split when a mouseup fires without a prior divider drag', () => {
     renderPane({ defaultSplitPercent: 35 });
     fireEvent.mouseUp(window);
@@ -164,6 +162,118 @@ describe('SplitPane — reset buttons', () => {
   it('does not show a reset button on the right when onRightReset is not provided', () => {
     renderPane({ onLeftReset: vi.fn() });
     expect(within(getRightHeader()).queryByTitle('Reset viewer')).not.toBeInTheDocument();
+  });
+});
+
+describe('SplitPane — mouse drag', () => {
+  // The container is 1000×800 at the origin, so a clientX/clientY maps straight to a percentage
+  const setupDrag = (props) => {
+    renderPane(props);
+    vi.spyOn(getLeftPanel().parentElement, 'getBoundingClientRect').mockReturnValue({
+      left: 0,
+      top: 0,
+      width: 1000,
+      height: 800,
+    });
+    // run the drag's animation frame right away
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+      cb();
+      return 1;
+    });
+  };
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it('resizes the panels to follow the pointer', () => {
+    setupDrag();
+    fireEvent.mouseDown(getDivider());
+    fireEvent.mouseMove(window, { clientX: 300 });
+    fireEvent.mouseUp(window);
+    expect(getLeftPanel().style.width).toBe('30%');
+    expect(getRightPanel().style.width).toBe('70%');
+  });
+
+  it('keeps each panel at 25% or more', () => {
+    setupDrag();
+    fireEvent.mouseDown(getDivider());
+    fireEvent.mouseMove(window, { clientX: 50 });
+    fireEvent.mouseUp(window);
+    expect(getLeftPanel().style.width).toBe('25%');
+  });
+
+  it('sizes the panels the other way round when they are swapped', () => {
+    setupDrag();
+    fireEvent.click(within(getLeftHeader()).getByTitle('Swap panels'));
+    fireEvent.mouseDown(getDivider());
+    fireEvent.mouseMove(window, { clientX: 300 });
+    fireEvent.mouseUp(window);
+    // the right panel is shown first, so it gets the 30%
+    expect(getRightPanel().style.width).toBe('30%');
+    expect(getLeftPanel().style.width).toBe('70%');
+  });
+
+  it('highlights the divider while it is dragged', () => {
+    setupDrag();
+    fireEvent.mouseDown(getDivider());
+    expect(getDivider()).toHaveClass('bg-primary');
+    fireEvent.mouseUp(window);
+    expect(getDivider()).not.toHaveClass('bg-primary');
+  });
+
+  // e.g. a touchpad tap on the divider: there's no move to take a position from
+  it('keeps a custom default split when the divider is pressed and released without moving', () => {
+    setupDrag({ defaultSplitPercent: 27 });
+    fireEvent.mouseDown(getDivider());
+    fireEvent.mouseUp(window);
+    expect(getLeftPanel().style.width).toBe('27%');
+  });
+
+  it('resets to the default split when the divider is double-clicked', () => {
+    setupDrag({ defaultSplitPercent: 27 });
+    fireEvent.mouseDown(getDivider());
+    fireEvent.mouseMove(window, { clientX: 600 });
+    fireEvent.mouseUp(window);
+    // two clicks, which a double tap also sends
+    fireEvent.click(getDivider());
+    fireEvent.click(getDivider());
+    expect(getLeftPanel().style.width).toBe('27%');
+  });
+
+  // the drag state must be reset too, or a still click would bring back the dragged split
+  it('keeps the default split after a reset when the divider is clicked without moving', () => {
+    setupDrag({ defaultSplitPercent: 27 });
+    fireEvent.mouseDown(getDivider());
+    fireEvent.mouseMove(window, { clientX: 600 });
+    fireEvent.mouseUp(window);
+    fireEvent.click(getDivider());
+    fireEvent.click(getDivider());
+    fireEvent.mouseDown(getDivider());
+    fireEvent.mouseUp(window);
+    expect(getLeftPanel().style.width).toBe('27%');
+  });
+
+  it('stops following the pointer once the drag ends', () => {
+    setupDrag();
+    fireEvent.mouseDown(getDivider());
+    fireEvent.mouseMove(window, { clientX: 300 });
+    fireEvent.mouseUp(window);
+    fireEvent.mouseMove(window, { clientX: 600 });
+    expect(getLeftPanel().style.width).toBe('30%');
+  });
+
+  it('drags along the height when the panels are stacked on a narrow screen', () => {
+    const innerWidth = window.innerWidth;
+    window.innerWidth = 500;
+    try {
+      setupDrag();
+      fireEvent.mouseDown(document.querySelector('.cursor-row-resize'));
+      fireEvent.mouseMove(window, { clientY: 200 });
+      fireEvent.mouseUp(window);
+      expect(getLeftPanel().style.flexGrow).toBe('25');
+      expect(getRightPanel().style.flexGrow).toBe('75');
+    } finally {
+      window.innerWidth = innerWidth;
+    }
   });
 });
 

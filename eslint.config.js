@@ -28,4 +28,11 @@ export default defineConfig([
       globals: { ...globals.browser, ...globals.node },
     },
   },
+  {
+    // Developer scripts run in Node only (e.g. capturing Shanoir test fixtures).
+    files: ['scripts/**/*.js'],
+    languageOptions: {
+      globals: globals.node,
+    },
+  },
 ]);

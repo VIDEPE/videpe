@@ -5,8 +5,13 @@
 // host's nginx proxy — the same paths Shanoir's own Angular front-end uses):
 // - GET examinations/{id}                              → examination (incl. extraDataFilePathList)
 // - GET datasets/examination/{id}                      → the examination's datasets
+// - GET datasetProcessing/inputDataset/{id}            → processings using a dataset as input
+// - GET datasetProcessing/{id}/outputDatasets/         → a processing's output datasets
+// - GET datasetacquisition/examination/{id}            → the examination's acquisitions (incl. extraDataFilePathList)
+// - GET datasets/acquisition/{id}                      → an acquisition's datasets
 // - GET datasets/download/{id}?format=nii              → one dataset as a ZIP
 // - GET examinations/extra-data-download/{id}/{name}/  → one file attached to the examination
+// - GET datasetacquisition/extra-data-download/{id}/{name}/ → one file attached to an acquisition
 
 // Always request format=nii: NiiVue reads NIfTI directly.
 // `format` only changes imaging datasets that Shanoir stores as DICOM — those are converted
@@ -41,8 +46,13 @@ function describeHttpError(response, what) {
  * @returns {{
  *   getExamination: (examinationId: number, signal?: AbortSignal) => Promise<object>,
  *   listExaminationDatasets: (examinationId: number, signal?: AbortSignal) => Promise<object[]>,
+ *   listProcessingsByInputDataset: (datasetId: number, signal?: AbortSignal) => Promise<object[]>,
+ *   listProcessingOutputDatasets: (processingId: number, signal?: AbortSignal) => Promise<object[]>,
+ *   listExaminationAcquisitions: (examinationId: number, signal?: AbortSignal) => Promise<object[]>,
+ *   listAcquisitionDatasets: (acquisitionId: number, signal?: AbortSignal) => Promise<object[]>,
  *   downloadDatasetZip: (datasetId: number, signal?: AbortSignal) => Promise<Blob>,
  *   downloadExtraData: (examinationId: number, fileName: string, signal?: AbortSignal) => Promise<File>,
+ *   downloadAcquisitionExtraData: (acquisitionId: number, fileName: string, signal?: AbortSignal) => Promise<File>,
  * }} the client. Every method rejects with a readable Error on a non-2xx response, and
  *   with an AbortError once `signal` is aborted.
  */
@@ -69,6 +79,14 @@ export function createShanoirClient({ apiBase, getAccessToken, fetchImpl = fetch
     return response;
   };
 
+  // Authenticated GET of a JSON list. Shanoir answers 204 No Content (no body) instead of an
+  // empty list, e.g. for an examination without datasets or a dataset no processing uses.
+  const getList = async (path, what, signal) => {
+    const response = await get(path, what, signal);
+    if (response.status === 204) return [];
+    return response.json();
+  };
+
   // The client: one method per Shanoir endpoint VIDEPE uses (all read-only).
   return {
     // Examination details as JSON — VIDEPE uses its extraDataFilePathList (files
@@ -84,15 +102,55 @@ export function createShanoirClient({ apiBase, getAccessToken, fetchImpl = fetch
 
     // Metadata of every dataset in the examination (id, name, type: 'EEG', 'MR', …),
     // used to decide what to download — no data files yet.
+    // Only datasets of the examination's acquisitions: processed datasets have no acquisition,
+    // see the two processing methods below.
     async listExaminationDatasets(examinationId, signal) {
-      const response = await get(
+      return getList(
         `datasets/examination/${examinationId}`,
         `the datasets of examination ${examinationId}`,
         signal
       );
-      // Shanoir answers 204 No Content (no body) when the examination has no datasets
-      if (response.status === 204) return [];
-      return response.json();
+    },
+
+    // The processings that use a dataset as input (id, comment, …), as Shanoir's study tree
+    // lists them under a dataset. Their output datasets come from listProcessingOutputDatasets:
+    // the list leaves each processing's outputDatasets empty.
+    async listProcessingsByInputDataset(datasetId, signal) {
+      return getList(
+        `datasetProcessing/inputDataset/${datasetId}`,
+        `the processings of dataset ${datasetId}`,
+        signal
+      );
+    },
+
+    // Metadata of a processing's output datasets (id, name, type), like listExaminationDatasets.
+    async listProcessingOutputDatasets(processingId, signal) {
+      return getList(
+        `datasetProcessing/${processingId}/outputDatasets/`,
+        `the output datasets of processing ${processingId}`,
+        signal
+      );
+    },
+
+    // The examination's acquisitions (id, name, type, extraDataFilePathList: the files
+    // attached to each acquisition, e.g. electrode positions uploaded on its edit page).
+    async listExaminationAcquisitions(examinationId, signal) {
+      return getList(
+        `datasetacquisition/examination/${examinationId}`,
+        `the acquisitions of examination ${examinationId}`,
+        signal
+      );
+    },
+
+    // Metadata of an acquisition's datasets, like listExaminationDatasets. This is how VIDEPE
+    // links a dataset to its acquisition: listExaminationDatasets leaves datasetAcquisition
+    // empty (Shanoir 2.18.1).
+    async listAcquisitionDatasets(acquisitionId, signal) {
+      return getList(
+        `datasets/acquisition/${acquisitionId}`,
+        `the datasets of acquisition ${acquisitionId}`,
+        signal
+      );
     },
 
     // Downloads one dataset's files as a ZIP Blob (Shanoir offers no per-file download);
@@ -112,6 +170,17 @@ export function createShanoirClient({ apiBase, getAccessToken, fetchImpl = fetch
       // Trailing slash matches Shanoir's route `extra-data-download/{examinationId}/{fileName:.+}/`
       const response = await get(
         `examinations/extra-data-download/${examinationId}/${encodeURIComponent(fileName)}/`,
+        `file ${fileName}`,
+        signal
+      );
+      return new File([await response.blob()], fileName);
+    },
+
+    // Downloads one file attached to an acquisition (not zipped), like downloadExtraData.
+    async downloadAcquisitionExtraData(acquisitionId, fileName, signal) {
+      // Trailing slash matches Shanoir's route, as for the examination's extra data
+      const response = await get(
+        `datasetacquisition/extra-data-download/${acquisitionId}/${encodeURIComponent(fileName)}/`,
         `file ${fileName}`,
         signal
       );

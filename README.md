@@ -1,6 +1,6 @@
 # VIDEPE
 
-![Version](https://img.shields.io/badge/version-0.25.0-blue)
+![Version](https://img.shields.io/badge/version-0.26.0-blue)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23312820.svg)](https://doi.org/10.5281/zenodo.23312820)
 
 **V**isualization & **I**ntegration of **D**ata for **E**pilepsy **P**resurgical **E**valuation
@@ -21,7 +21,7 @@ All data processing happens entirely in your browser. No files are ever uploaded
 
 ## Shanoir integration
 
-VIDEPE can also be opened from the [Shanoir](https://github.com/fli-iam/shanoir-ng) neuroimaging database: a **View in VIDEPE** button on an examination opens its EEG and imaging directly in VIDEPE, after signing in with the user's Shanoir account (single sign-on). In this mode the data is downloaded from Shanoir over HTTPS and, as always, processed only in the browser; VIDEPE never writes back to Shanoir.
+VIDEPE can also be opened from the [Shanoir](https://github.com/fli-iam/shanoir-ng) neuroimaging database: the **View EEG** button on an examination opens its EEG and imaging directly in VIDEPE, after signing in with the user's Shanoir account (single sign-on). In this mode the data is downloaded from Shanoir over HTTPS and, as always, processed only in the browser; VIDEPE never writes back to Shanoir.
 
 This mode only exists on a Shanoir deployment, which serves VIDEPE from its own server using the [VIDEPE Docker image](https://github.com/VIDEPE/videpe/pkgs/container/videpe). The GitHub Pages version always works with local files only. See [docs/shanoir-integration.md](docs/shanoir-integration.md) for how Shanoir sets it up.
 
@@ -48,6 +48,7 @@ High-performance multichannel viewer built on [uPlot](https://github.com/leeoniy
   - Build referenced or bipolar montage rows with custom per-row colors, reorder and sort them, and the waveform view switches to showing exactly those rows.
   - Per-row filter overrides — a row's own high-pass, low-pass or notch wins over the global filter of its channel type (e.g. for an ECG channel); empty fields show the global value greyed out.
   - Import montage files in AnyWave (XML) or Cartool (plain-text) format — auto-detected from file content, loaded in the editor or by dropping them on the EEG panel — and export back out as AnyWave XML, with each row's effective filters (its own or the global ones) included, and global filters saved this way load back as global filters.
+  - Montages saved in a Micromed TRC recording are listed under "From recording" in the montage dropdown, ready to pick (none is applied on load).
 
 - EEG topography — a resizable panel showing a 3D voltage map at the selected time point using [NiiVue](https://niivue.com/) mesh rendering
   - Automatically selects the best-matching bundled electrode-position template; load custom positions via `.elc` or `*_electrodes.tsv` (BIDS specifications) file
@@ -81,7 +82,7 @@ Hit **EEG Demo** to instantly load a synthetic scalp EEG recording with its elec
 ### Additional features:
 
 - **Drag & drop file loading** — drop files directly onto either viewer panel. VIDEPE detects the format automatically and guides you when multiple files are required.
-- **Side-by-side split view** — EEG and neuroimaging panels with a draggable divider. Each panel can be independently maximised, restored, or reset, and the two panels can be swapped without reloading any data.
+- **Side-by-side split view** — EEG and neuroimaging panels with a draggable divider. Each panel can be independently maximised, restored, or reset, and the two panels can be swapped without reloading any data. Double-click or double-tap a resize bar (the divider, or the EEG plot and imaging canvas row handles) to reset it.
 - **Cross-platform** — runs entirely in the browser, no installation or plugins required. Works on modern desktop and mobile browsers. Dark/light mode follows OS preference, with a manual toggle always available.
 - **Open source** — licensed under [AGPL-3.0](LICENSE). The source code is publicly available on [GitHub](https://github.com/VIDEPE/videpe). All derivative works must remain open source. Bug reports, feature requests, and pull requests are welcome.
 

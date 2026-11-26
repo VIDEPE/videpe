@@ -1,0 +1,59 @@
+{
+  "request": "GET datasetacquisition/examination/7",
+  "status": 200,
+  "body": [
+    {
+      "id": 13,
+      "name": "ieeg (BIDS)",
+      "type": "BIDS",
+      "studyId": 1,
+      "examinationId": 7,
+      "sortingIndex": null,
+      "qualityTag": null,
+      "extraDataFilePathList": []
+    },
+    {
+      "id": 14,
+      "name": "anat (BIDS)",
+      "type": "BIDS",
+      "studyId": 1,
+      "examinationId": 7,
+      "sortingIndex": null,
+      "qualityTag": null,
+      "extraDataFilePathList": []
+    },
+    {
+      "id": 15,
+      "name": "eeg (BIDS)",
+      "type": "BIDS",
+      "studyId": 1,
+      "examinationId": 7,
+      "sortingIndex": null,
+      "qualityTag": null,
+      "extraDataFilePathList": []
+    },
+    {
+      "id": 18,
+      "name": "sub-synth_task-rest_desc-spkavgall_ieeg (Eeg)",
+      "type": "Eeg",
+      "studyId": 1,
+      "examinationId": 7,
+      "sortingIndex": 0,
+      "qualityTag": null,
+      "extraDataFilePathList": ["sub-synth_electrodes.tsv"]
+    },
+    {
+      "id": 19,
+      "name": "sub-synth_task-rest_desc-spkavgall_eeg (Eeg)",
+      "type": "Eeg",
+      "studyId": 1,
+      "examinationId": 7,
+      "sortingIndex": 0,
+      "qualityTag": null,
+      "extraDataFilePathList": [
+        "sub-synth_electrodes.tsv",
+        "sub-synth_desc-eloreta_inversefilters.mat"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "request": "GET examinations/4",
+  "status": 200,
+  "body": {
+    "id": 4,
+    "centerId": 2,
+    "comment": "",
+    "dataReuseAgreement": false,
+    "examinationDate": "2026-11-23",
+    "note": null,
+    "studyId": 1,
+    "subject": {
+      "id": 4,
+      "name": "synth"
+    },
+    "subjectWeight": null,
+    "weightUnitOfMeasure": "KG",
+    "preclinical": false,
+    "instrumentBasedAssessmentList": [],
+    "extraDataFilePathList": ["sub-synth_electrodes.tsv"],
+    "source": null,
+    "copies": [],
+    "studyInstanceUID": null
+  }
+}

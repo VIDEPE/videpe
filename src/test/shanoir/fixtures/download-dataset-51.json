@@ -1,0 +1,15 @@
+{
+  "request": "GET datasets/download/51?format=nii",
+  "status": 200,
+  "headers": {
+    "content-type": "application/zip",
+    "content-disposition": "attachment;filename=\"Dataset_synth_51_sub-4_ses-7_electrodes_tsv_20261123154829.zip\""
+  },
+  "size": 7737,
+  "zipEntries": [
+    {
+      "name": "sub-4_ses-7_electrodes.tsv",
+      "size": 14585
+    }
+  ]
+}

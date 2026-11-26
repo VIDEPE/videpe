@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import toast from 'react-hot-toast';
 import { downloadTextFile } from '@/utils/fileDownload';
@@ -783,28 +783,43 @@ describe('EegMontageEditor', () => {
       ]);
     });
 
-    it("tints (not fully saturates) a montage row's background with its selected color", async () => {
+    // The row background colour is kept for status (bad/missing tints), so a muted colour tint
+    // can't be mistaken for one — the row's colour is a stripe on its left edge in the trace's
+    // own, full colour instead
+    it("shows a montage row's selected color as a full-color stripe on its left edge, not a background tint", async () => {
       render(<EegMontageEditor {...defaultProps} />);
       await userEvent.selectOptions(screen.getByTestId('color-FP1'), 'red');
-      const background = screen.getByTestId('reference-FP1').closest('div').style.backgroundColor;
-      // isDarkMode: false in this file's mock → the 20% (light-mode) tint strength
-      expect(background).toContain('color-mix');
-      expect(background).toContain('red');
-      expect(background).toContain('40%');
-    });
 
-    it('leaves a default-colored (unset) row background untouched', () => {
-      render(<EegMontageEditor {...defaultProps} />);
+      expect(screen.getByTestId('color-stripe-FP1').style.backgroundColor).toBe('red');
       expect(screen.getByTestId('reference-FP1').closest('div').style.backgroundColor).toBe('');
     });
 
-    it('lets the bad-row bg-alert highlight override a selected color', async () => {
+    it('shows no stripe for a default-colored (unset) row', () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      expect(screen.queryByTestId('color-stripe-FP1')).toBeNull();
+      expect(screen.getByTestId('reference-FP1').closest('div').style.backgroundColor).toBe('');
+    });
+
+    it('shows a bad row both ways: the bg-alert tint for its status, the stripe for its color', async () => {
       // FP2 is bad per CHANNEL_SETTINGS
       render(<EegMontageEditor {...defaultProps} />);
       await userEvent.selectOptions(screen.getByTestId('color-FP2'), 'red');
-      const row = screen.getByTestId('reference-FP2').closest('div');
-      expect(row.style.backgroundColor).toBe('');
-      expect(row.className).toContain('bg-alert');
+
+      expect(screen.getByTestId('reference-FP2').closest('div').className).toContain('bg-alert');
+      expect(screen.getByTestId('color-stripe-FP2').style.backgroundColor).toBe('red');
+    });
+
+    // jsdom doesn't paint, so this checks the classes that set the paint order
+    it('marks a selected row with an outline, drawn over the stripe', async () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      await userEvent.selectOptions(screen.getByTestId('color-FP1'), 'red');
+      await userEvent.click(screen.getByTestId('montage-channel-FP1'));
+
+      const row = screen.getByTestId('montage-channel-FP1').closest('div');
+      expect(row.className).toContain('outline-primary');
+      expect(row.className).not.toContain('ring-primary');
+      expect(row.className).toContain('isolate');
+      expect(screen.getByTestId('color-stripe-FP1').className).toContain('-z-10');
     });
   });
 
@@ -1554,11 +1569,23 @@ describe('EegMontageEditor', () => {
       render(<EegMontageEditor {...defaultProps} montageChannels={montageChannels} />);
 
       const name = screen.getByTestId('montage-channel-row-1');
-      expect(name.className).toContain('text-red-500');
+      expect(name.className).toContain('text-error');
       expect(name.title).toBe('Channel not found in this recording');
       expect(name.closest('div').className).toContain('opacity-50');
+      // tinted like every row that can't be drawn: error (red) for missing
+      expect(name.closest('div').className).toContain('bg-error/');
       expect(screen.getByTestId('reference-row-1')).toBeDisabled();
       expect(screen.getByTestId('color-row-1')).toBeDisabled();
+    });
+
+    it('tints a row that is both bad and missing something as missing (the one to fix)', () => {
+      // FP2 is bad in CHANNEL_SETTINGS; GHOST isn't in the recording
+      const montageChannels = [{ id: 'row-1', channel: 'FP2', reference: 'GHOST', color: null }];
+      render(<EegMontageEditor {...defaultProps} montageChannels={montageChannels} />);
+
+      const row = screen.getByTestId('montage-channel-row-1').closest('div');
+      expect(row.className).toContain('bg-error/');
+      expect(row.className).not.toContain('bg-alert');
     });
 
     it('shows "—" for a missing channel\'s type instead of a misleading default', () => {
@@ -1587,22 +1614,58 @@ describe('EegMontageEditor', () => {
       render(<EegMontageEditor {...defaultProps} montageChannels={montageChannels} />);
 
       const name = screen.getByTestId('montage-channel-row-1');
-      expect(name.className).not.toContain('text-red-500');
+      expect(name.className).not.toContain('text-error');
       expect(name.closest('div').className).not.toContain('opacity-50');
 
       const referenceSelect = screen.getByTestId('reference-row-1');
       expect(referenceSelect).not.toBeDisabled();
       expect(referenceSelect).toHaveValue('GHOST');
-      // The <select> itself stays uncolored — only the injected "missing" <option> turns
-      // red, so the rest of the dropdown's channel names aren't tinted along with it.
-      expect(referenceSelect.className).not.toContain('text-red-500');
       expect(referenceSelect.title).toBe('Reference channel not found in this recording');
       const injectedOption = Array.from(referenceSelect.options).find((o) => o.value === 'GHOST');
       expect(injectedOption.textContent).toBe('GHOST (missing)');
-      expect(injectedOption.className).toContain('text-red-500');
-      const normalOption = Array.from(referenceSelect.options).find((o) => o.value === 'FP2');
-      expect(normalOption.className).not.toContain('text-red-500');
+      expect(injectedOption.className).toContain('text-error');
       expect(screen.getByTestId('color-row-1')).not.toBeDisabled();
+    });
+
+    it('makes a missing reference stand out without opening its dropdown: red row tint, red select', () => {
+      const montageChannels = [{ id: 'row-1', channel: 'FP1', reference: 'GHOST', color: null }];
+      render(<EegMontageEditor {...defaultProps} montageChannels={montageChannels} />);
+
+      const referenceSelect = screen.getByTestId('reference-row-1');
+      // a closed <select> shows its selected option in the select's own colour, not the option's
+      expect(referenceSelect.className).toContain('text-error');
+      expect(referenceSelect.className).toContain('border-error');
+      expect(screen.getByTestId('montage-channel-row-1').closest('div').className).toContain(
+        'bg-error/'
+      );
+      // the other options keep their own colour, instead of inheriting the select's red
+      // (FP3: FP2 is bad in CHANNEL_SETTINGS, so it's text-alert)
+      // and so do n/a, Average and Median
+      for (const value of ['FP3', '', 'average', 'median']) {
+        const option = Array.from(referenceSelect.options).find((o) => o.value === value);
+        expect(option.className).toContain('text-foreground');
+        expect(option.className).not.toContain('text-error');
+      }
+    });
+
+    it("keeps the row's colour stripe next to the red tint while its reference is missing", () => {
+      const montageChannels = [{ id: 'row-1', channel: 'FP1', reference: 'GHOST', color: 'blue' }];
+      render(<EegMontageEditor {...defaultProps} montageChannels={montageChannels} />);
+
+      const row = screen.getByTestId('montage-channel-row-1').closest('div');
+      expect(row.className).toContain('bg-error/');
+      expect(screen.getByTestId('color-stripe-row-1').style.backgroundColor).toBe('blue');
+    });
+
+    it('leaves the reference select and row untinted when the reference is present', () => {
+      const montageChannels = [{ id: 'row-1', channel: 'FP1', reference: 'FP3', color: null }];
+      render(<EegMontageEditor {...defaultProps} montageChannels={montageChannels} />);
+
+      const referenceSelect = screen.getByTestId('reference-row-1');
+      expect(referenceSelect.className).not.toContain('error');
+      expect(screen.getByTestId('montage-channel-row-1').closest('div').className).not.toContain(
+        'bg-error'
+      );
     });
 
     it('shows a tooltip on a bad (not missing) channel name and reference too', () => {
@@ -1990,6 +2053,79 @@ describe('EegMontageEditor', () => {
       const byValue = Object.fromEntries(options.map((option) => [option.value, option]));
 
       PRESET_COLORS.forEach((color) => expect(byValue[color].style.color).toBe(color));
+    });
+  });
+
+  // jsdom doesn't paint, so these check the classes that keep the edges grabbable
+  describe('window resize handles', () => {
+    // the montage rows are positioned and the column headers are z-10, so without a higher
+    // z-index they're drawn over the handles at the window's edges
+    it('draws the resize handles above the window content', () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'].forEach((direction) =>
+        expect(screen.getByTestId(`montage-resize-${direction}`).className).toContain('z-20')
+      );
+    });
+
+    // so the left and right handles don't cover the panes' content or scrollbars
+    it('keeps an empty strip along the left and right edges for the resize handles', () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      expect(screen.getByTestId('montage-editor-body').className).toContain('px-1.5');
+      // as wide as the side handles on touchscreens too
+      expect(screen.getByTestId('montage-editor-body').className).toContain('pointer-coarse:px-3');
+    });
+
+    // side by side, the channel list needs less room than the montage rows; stacked on a phone,
+    // both get half the height
+    it('splits the panes 27/73 side by side, and 50/50 when stacked on a phone', () => {
+      const channelPane = () =>
+        screen.getByRole('heading', { name: 'Channel Selection' }).parentElement.parentElement;
+      const { unmount } = render(<EegMontageEditor {...defaultProps} />);
+      expect(channelPane().style.width).toBe('27%');
+      unmount();
+
+      const { innerWidth } = window;
+      window.innerWidth = 390;
+      try {
+        render(<EegMontageEditor {...defaultProps} />);
+        expect(channelPane().style.flexGrow).toBe('50');
+      } finally {
+        window.innerWidth = innerWidth;
+      }
+    });
+
+    // the drag itself is tested in useFloatingWindow.test.jsx
+    it('moves when its title bar is dragged with a finger', () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      const titleBar = screen.getByTestId('montage-title-bar');
+      const startLeft = parseInt(titleBar.parentElement.style.left);
+      fireEvent.touchStart(titleBar, { touches: [{ clientX: 0, clientY: 0 }] });
+      fireEvent.touchMove(window, { touches: [{ clientX: -10, clientY: 0 }] });
+      fireEvent.touchEnd(window);
+      expect(parseInt(titleBar.parentElement.style.left)).toBe(startLeft - 10);
+    });
+
+    // the fitting itself is tested in useFloatingWindow.test.jsx
+    it('opens maximized on a phone, which is narrower than its minimum size', () => {
+      const { innerWidth, innerHeight } = window;
+      window.innerWidth = 390;
+      window.innerHeight = 844;
+      try {
+        render(<EegMontageEditor {...defaultProps} />);
+        expect(
+          within(screen.getByTestId('montage-title-bar')).getByTitle('Restore')
+        ).toBeInTheDocument();
+      } finally {
+        window.innerWidth = innerWidth;
+        window.innerHeight = innerHeight;
+      }
+    });
+
+    it('drops the strips when maximized, where there are no resize handles', async () => {
+      render(<EegMontageEditor {...defaultProps} />);
+      await userEvent.click(within(screen.getByTestId('montage-title-bar')).getByTitle('Maximize'));
+      expect(screen.queryByTestId('montage-resize-e')).not.toBeInTheDocument();
+      expect(screen.getByTestId('montage-editor-body').className).not.toContain('px-1.5');
     });
   });
 });

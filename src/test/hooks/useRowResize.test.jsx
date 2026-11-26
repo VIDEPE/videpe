@@ -6,7 +6,7 @@ import { useRowResize } from '@/hooks/useRowResize';
 // NiiViewer.test.jsx and EegViewer.test.jsx keeps one smoke test confirming the hook is actually wired up to the real resize handle.
 
 function TestComponent({ minHeight }) {
-  const { rowRef, handleResizeStart, isDragging } = useRowResize(minHeight);
+  const { rowRef, handleResizeStart, isDragging, handleResetSize } = useRowResize(minHeight);
   return (
     <div
       data-testid="row"
@@ -14,6 +14,7 @@ function TestComponent({ minHeight }) {
       ref={rowRef}
       onMouseDown={handleResizeStart}
       onTouchStart={handleResizeStart}
+      onClick={handleResetSize}
     />
   );
 }
@@ -82,6 +83,27 @@ describe('useRowResize', () => {
     expect(row.dataset.dragging).toBe('true');
     fireEvent.mouseUp(window);
     expect(row.dataset.dragging).toBe('false');
+  });
+
+  it('resets to minHeight on double-click', () => {
+    const row = setup(); // minHeight 350
+    // drag the row up to 650px (350+300)
+    fireEvent.mouseDown(row, { clientY: 0 });
+    fireEvent.mouseMove(window, { clientY: 300 });
+    fireEvent.mouseUp(window);
+    // double-click the drag bar to reset it: two clicks, which a double tap also sends
+    fireEvent.click(row);
+    fireEvent.click(row);
+    expect(row.style.minHeight).toBe('350px');
+  });
+
+  it("doesn't reset on a single click", () => {
+    const row = setup();
+    fireEvent.mouseDown(row, { clientY: 0 });
+    fireEvent.mouseMove(window, { clientY: 300 });
+    fireEvent.mouseUp(window);
+    fireEvent.click(row);
+    expect(row.style.minHeight).toBe('700px');
   });
 
   // Touch screens send touch events instead of mouse events while dragging a finger

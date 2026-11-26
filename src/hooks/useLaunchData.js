@@ -18,12 +18,13 @@ import { filesToLayers } from '@/utils/NiiViewer.utils';
  * @param {string} params.sourceName - names the source in the toasts, e.g. 'Shanoir' →
  *   "Loading Shanoir data…".
  * @param {(signal: AbortSignal) => Promise<{ eegFiles: File[], imagingFiles: File[],
- *   eegName: string|null, warning: string|null }>} params.fetchData
+ *   eegName: string|null, warning: import('react').ReactNode|null }>} params.fetchData
  *   Gets the mode's files, sorted for the two viewers:
  *   - `eegFiles`: for handleEegFiles (recording, electrode positions, inverse solution).
  *   - `imagingFiles`: for filesToLayers (volumes, surface meshes and connectomes).
  *   - `eegName`: the loaded recording's name, for the EEG panel header, or null.
- *   - `warning`: a finished message for a warning toast (e.g. what was skipped), or null.
+ *   - `warning`: a finished message for a warning toast (e.g. what was skipped): text, or
+ *     React markup for more than plain lines; or null.
  *   Must stay the same function between renders (wrap it in useCallback): a new fetchData
  *   starts a new load.
  * @param {(files: File[]) => Promise<boolean>} params.handleEegFiles
